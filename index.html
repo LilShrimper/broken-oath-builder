@@ -1832,7 +1832,10 @@ window.BOStartApp = function () {
   function logCheck() {
     if (!st.log || !st.ch) return null;
     const name = (st.chOrig || st.ch).name;
-    const all = st.log.guardians.filter(g => g.life > 0 && g.engaged > 0);
+    // Fight time = engage to kill (wall clock). The game's own "engaged" seconds leave out part of the
+    // fight: casts per engaged second come out above what the skill can do (checked on a Conduit build).
+    const fightTime = g => g.wall > 0 ? g.wall : g.engaged;
+    const all = st.log.guardians.filter(g => g.life > 0 && fightTime(g) > 0);
     const mine = all.filter(g => st.ch.fromCode || !g.hero || g.hero.name === name);
     const skill = st.skill, sim = {};
     const fights = mine.map(g => {
@@ -1841,7 +1844,7 @@ window.BOStartApp = function () {
       const s = sim[key], casts = g.casts[skill] || 0;
       const save = st.chOrig || st.ch;
       const gear = g.hero && save.weaponId && g.hero.weapon && g.hero.weapon !== save.weaponId;
-      return { g, s, real: g.life / g.engaged, simDps: s.totalDps, casts, castRate: g.wall > 0 ? casts / g.wall : NaN,
+      return { g, s, time: fightTime(g), real: g.life / fightTime(g), simDps: s.totalDps, casts, castRate: casts / fightTime(g),
         perCastReal: casts ? g.life / casts : NaN, perCastSim: s.speed && s.speed.usesPerSec ? s.totalDps / s.speed.usesPerSec : NaN,
         levelDiff: g.hero && g.hero.level !== save.level ? g.hero.level : null, gear };
     });
@@ -1862,7 +1865,7 @@ window.BOStartApp = function () {
     if (!c.fights.length) return '<div class="card"><h2>Your fights vs the sim</h2><p class="hint">This log has no Guardian kills by ' + esc(c.name) + (c.others ? ' (' + c.others + ' by other characters)' : '') + '. Kill a Guardian, then load the log again (the game writes it as you play).</p></div>';
     const ratio = c.realMed / c.simMed;
     const verdict = !isFinite(ratio) ? '' : Math.abs(ratio - 1) <= 0.15 ? 'The sheet matches your kills (within 15%).' : ratio > 1 ? 'You kill Guardians ' + pct(ratio - 1) + ' faster than the sheet says: something adds damage it does not count (see below).' : 'You kill Guardians ' + pct(1 - ratio).replace('+', '') + ' slower than the sheet: likely time spent moving or dodging, or a rule the sheet gets wrong.';
-    const rows = c.fights.map(f => '<tr' + (f.gear ? ' class="dim"' : '') + '><td>' + esc(f.g.name.replace(/_/g, ' ')) + (f.gear ? ' <span class="hint">(other weapon)</span>' : '') + (f.levelDiff ? ' <span class="hint">(you were ' + f.levelDiff + ')</span>' : '') + '</td><td>' + (f.g.rupture || '–') + '</td><td>' + num(f.g.life) + '</td><td>' + num(f.g.engaged, 1) + ' s</td><td><b>' + num(f.real) + '</b></td><td>' + num(f.simDps) + '</td><td>' + (f.casts ? num(f.castRate, 2) : '–') + '</td><td>' + (f.casts ? num(f.perCastReal / f.perCastSim, 2) + '×' : '–') + '</td></tr>').join('');
+    const rows = c.fights.map(f => '<tr' + (f.gear ? ' class="dim"' : '') + '><td>' + esc(f.g.name.replace(/_/g, ' ')) + (f.gear ? ' <span class="hint">(other weapon)</span>' : '') + (f.levelDiff ? ' <span class="hint">(you were ' + f.levelDiff + ')</span>' : '') + '</td><td>' + (f.g.rupture || '–') + '</td><td>' + num(f.g.life) + '</td><td>' + num(f.time, 1) + ' s</td><td><b>' + num(f.real) + '</b></td><td>' + num(f.simDps) + '</td><td>' + (f.casts ? num(f.castRate, 2) : '–') + '</td><td>' + (f.casts ? num(f.perCastReal / f.perCastSim, 2) + '×' : '–') + '</td></tr>').join('');
     const notes = [];
     if (isFinite(c.rateMed) && isFinite(c.simRate)) notes.push('In fights you cast ' + c.skillName + ' ' + num(c.rateMed, 2) + ' times a second, against the sheet\'s ' + num(c.simRate, 2) + ' (' + Math.round(c.rateMed / c.simRate * 100) + '%): moving, dodging and phase changes take the rest.' + (c.cast && c.cast.recentGap ? ' While spinning, your recent casts land every ' + c.cast.recentGap + ' ms (' + num(1000 / c.cast.recentGap, 2) + '/s).' : ''));
     if (isFinite(c.perCastRatio)) notes.push('Damage per cast, real ÷ sheet: ' + num(c.perCastRatio, 2) + '×. Real kills also include ' + (r.conduit ? r.conduit.hostName + '\'s own hits, ' : '') + 'Herald kill effects, shocks, freezes and anything else that hit the boss, so a little above 1× is expected.');
@@ -1872,7 +1875,7 @@ window.BOStartApp = function () {
     const rateBtn = isFinite(c.rateMed) && c.rateMed > 0 ? (st.hps ? '<button class="btn small ghost" type="button" id="clearFightRate">Back to the sheet\'s cast rate</button>' : '<button class="btn small" type="button" id="useFightRate" data-rate="' + (Math.round(c.rateMed * 100) / 100) + '">Use my fight cast rate (' + num(c.rateMed, 2) + '/s)</button>') : '';
     const report = reportText(r, c);
     return '<div class="card"><h2>Your fights vs the sim <span class="hint">' + c.fights.length + ' Guardian kill' + (c.fights.length > 1 ? 's' : '') + ' in the log</span></h2>' +
-      '<div class="headline small">' + stat('Real boss DPS (median)', num(c.realMed), '', 'main', 'Boss life ÷ time engaged') + stat('Sheet vs a Guardian', num(c.simMed), '', '', 'Same Rupture levels, settings on the left') + stat('Real ÷ sheet', isFinite(ratio) ? num(ratio, 2) + '×' : '–', '', '', verdict) + '</div>' +
+      '<div class="headline small">' + stat('Real boss DPS (median)', num(c.realMed), '', 'main', 'Boss life ÷ time from engaging it to the kill') + stat('Sheet vs a Guardian', num(c.simMed), '', '', 'Same Rupture levels, settings on the left') + stat('Real ÷ sheet', isFinite(ratio) ? num(ratio, 2) + '×' : '–', '', '', verdict) + '</div>' +
       '<div class="table-wrap"><table class="tbl"><thead><tr><th>Guardian</th><th>Rupture</th><th>Life</th><th>Fight</th><th>Real DPS</th><th>Sheet</th><th>Casts/s</th><th>Per cast</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '<ul class="notes">' + notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul>' +
       '<div class="pinbar">' + rateBtn + '<a class="btn small ghost" target="_blank" rel="noopener" href="' + REPORT_URL + '?title=' + encodeURIComponent('Check report: ' + c.skillName + ' (' + st.ch.classId + ' ' + st.ch.level + ')') + '&body=' + encodeURIComponent(report) + '">Send a check report</a><span>Opens a GitHub issue with only the numbers below, for improving the sim. You can edit it before posting.</span></div>' +
@@ -1889,8 +1892,8 @@ window.BOStartApp = function () {
       '- Supports: ' + (sup.join(', ') || 'none'),
       '- Uniques worn: ' + (uniq.join(', ') || 'none'),
       '- Sheet settings: enemy boss, ' + (st.hps ? 'cast rate set by hand ' + st.hps + '/s' : 'sheet cast rate'),
-      '', '| Guardian | Rupture | Life | Engaged s | Casts | Real DPS | Sheet DPS | Per cast real/sheet |', '|---|---|---|---|---|---|---|---|',
-      ...c.fights.filter(f => !f.gear).map(f => '| ' + f.g.name + ' | ' + (f.g.rupture || '') + ' | ' + f.g.life + ' | ' + f.g.engaged + ' | ' + f.casts + ' | ' + Math.round(f.real) + ' | ' + Math.round(f.simDps) + ' | ' + (f.casts ? (f.perCastReal / f.perCastSim).toFixed(2) : '') + ' |'),
+      '', '| Guardian | Rupture | Life | Fight s (engage to kill) | Game engaged s | Casts | Real DPS | Sheet DPS | Per cast real/sheet |', '|---|---|---|---|---|---|---|---|---|',
+      ...c.fights.filter(f => !f.gear).map(f => '| ' + f.g.name + ' | ' + (f.g.rupture || '') + ' | ' + f.g.life + ' | ' + f.time.toFixed(1) + ' | ' + f.g.engaged + ' | ' + f.casts + ' | ' + Math.round(f.real) + ' | ' + Math.round(f.simDps) + ' | ' + (f.casts ? (f.perCastReal / f.perCastSim).toFixed(2) : '') + ' |'),
       '', '- Median real / sheet: ' + (c.realMed / c.simMed).toFixed(2) + ', fight cast rate ' + (isFinite(c.rateMed) ? c.rateMed.toFixed(2) : 'n/a') + '/s' + (c.cast && c.cast.recentGap ? ', spinning cast gap ' + c.cast.recentGap + ' ms' : ''),
       c.skyfall && c.skyfall.falls ? '- Skyfall repeats: ' + c.skyfall.falls + ' fell, ' + c.skyfall.hits + ' hits, ' + c.skyfall.blocked + ' skipped (target already struck)' : '',
     ];

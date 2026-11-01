@@ -935,7 +935,11 @@ window.CHARS = [];
   // Stats this model uses.
   const HANDLED = new Set(['MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
     'Cooldown', 'Repeats', 'Projectiles', 'Penetration', 'SkillLevel', 'PoisonChance', 'PoisonDamage', 'IgniteChance', 'IgniteDamage',
-    'DotMulti', 'AilmentDuration', 'CurseEffect', 'Str', 'Dex', 'Int', 'Attributes', 'GrantSupport']);
+    'DotMulti', 'AilmentDuration', 'CurseEffect', 'Str', 'Dex', 'Int', 'Attributes', 'GrantSupport', 'SkyfallRepeat']);
+  // Skyfall second fall: "falls again 0.4 seconds later for X% of their Damage". The game caps the sum at
+  // 100% (log 1 Nov: 190% of sources -> "second fall for 100%", "SkyfallSheet68 ... on the sheet (x2.00)")
+  // and the second fall strikes each enemy once per cast (one boss hit per cast in every Guardian fight).
+  const SKYFALL_REPEAT_CAP = 100;
 
   // ---------- character extraction (from a parsed GVAS save) ----------
   function extractCharacter(save) {
@@ -1524,12 +1528,20 @@ window.CHARS = [];
       projWeight = orbitOn ? 1 + (projOnTarget - 1) * (isAttack ? 0.1 : 0.4) : projOnTarget;
       if (orbitOn && projOnTarget > 1) res.notes.push('Orbit: all ' + projOnTarget + ' projectiles strike this enemy; each after the first deals ' + (isAttack ? '90' : '60') + '% less (worth ' + projWeight.toFixed(2) + ' full hits per cast).');
     }
-    const perHitFactor = projWeight / projOnTarget; // average share of a full hit per projectile hit
+    // Skyfall second fall: one more strike on the target per cast at the repeat's share of the damage.
+    let skyRep = 0;
+    if (sk.Delivery === 'Skyfall' || shape === 'skyfall') {
+      for (const m of pickMods(mods, 'SkyfallRepeat', 'Flat')) if (applies(ctx, m)) { skyRep += m.v; use(m); }
+      skyRep = Math.min(SKYFALL_REPEAT_CAP, skyRep) / 100;
+      if (skyRep > 0) res.notes.push('Skyfall falls again 0.4 s later for ' + Math.round(skyRep * 100) + '% of the damage' + (skyRep >= SKYFALL_REPEAT_CAP / 100 ? ' (the game caps this at ' + SKYFALL_REPEAT_CAP + '%)' : '') + ': the target is struck a second time each cast.');
+    }
+    const falls = skyRep > 0 ? 2 : 1;
+    const perHitFactor = projWeight / projOnTarget * (1 + skyRep) / falls; // average share of a full hit per hit
     const strikes = typeof sk.Strikes === 'object' && sk.Strikes ? (sk.Strikes.Count || 1) : (+sk.Strikes || 1);
     if (strikes > 1) res.notes.push(sk.Name + ' strikes ' + strikes + ' times per use; every strike is counted at the full hit (a stronger finisher is not modelled).');
-    const hitsPerUse = o.hitsPerSecOverride > 0 ? 1 : (1 + repeats) * projOnTarget * strikes;
+    const hitsPerUse = o.hitsPerSecOverride > 0 ? 1 : (1 + repeats) * projOnTarget * strikes * falls;
     const hitsPerSec = usesPerSec * hitsPerUse;
-    res.hits = { repeats, projectiles, projOnTarget, projWeight, perHitFactor, orbit: orbitOn, strikes, hitsPerUse, hitsPerSec, fullHitsPerSec: hitsPerSec * perHitFactor };
+    res.hits = { repeats, projectiles, projOnTarget, projWeight, perHitFactor, orbit: orbitOn, strikes, skyfallRepeat: skyRep, hitsPerUse, hitsPerSec, fullHitsPerSec: hitsPerSec * perHitFactor };
 
     // ----- the hit -----
     const hit = {}; let hitAvg = 0;
@@ -2111,13 +2123,18 @@ window.BOStartApp = function () {
         perCastReal: casts ? g.life / casts : NaN, perCastSim: s.speed && s.speed.usesPerSec ? s.totalDps / s.speed.usesPerSec : NaN,
         levelDiff: g.hero && g.hero.level !== save.level ? g.hero.level : null, gear };
     });
-    const clean = fights.filter(f => !f.gear);
-    const use = clean.length ? clean : fights;
+    // The sheet uses today's save, so fights from well below its level (older gear, fewer points) read low:
+    // use the fights within 2 levels when there are at least 2 of them.
+    const save = st.chOrig || st.ch;
+    fights.forEach(f => { f.old = !!(f.g.hero && f.g.hero.level < save.level - 2); });
+    const clean = fights.filter(f => !f.gear), recent = clean.filter(f => !f.old);
+    const use = recent.length >= 2 ? recent : clean.length ? clean : fights;
+    fights.forEach(f => { f.skip = !use.includes(f); });
     return {
       name, fights, others: all.length - mine.length, skillName: (GD.skills[String(skill).toLowerCase()] || {}).Name || skill,
       realMed: median(use.map(f => f.real)), simMed: median(use.map(f => f.simDps)),
       rateMed: median(use.filter(f => f.casts).map(f => f.castRate)), simRate: use[0] && use[0].s.speed ? use[0].s.speed.usesPerSec : NaN,
-      perCastRatio: median(use.filter(f => f.casts).map(f => f.perCastReal / f.perCastSim)), used: use.length, gearSkipped: fights.length - use.length,
+      perCastRatio: median(use.filter(f => f.casts).map(f => f.perCastReal / f.perCastSim)), used: use.length, gearSkipped: fights.filter(f => f.skip && f.gear).length, oldSkipped: fights.filter(f => f.skip && !f.gear).length,
       cast: st.log.casts[skill] || null, skyfall: st.log.skyfall,
     };
   }
@@ -2128,12 +2145,14 @@ window.BOStartApp = function () {
     if (!c.fights.length) return '<div class="card"><h2>Your fights vs the sim</h2><p class="hint">This log has no Guardian kills by ' + esc(c.name) + (c.others ? ' (' + c.others + ' by other characters)' : '') + '. Kill a Guardian, then load the log again (the game writes it as you play).</p></div>';
     const ratio = c.realMed / c.simMed;
     const verdict = !isFinite(ratio) ? '' : Math.abs(ratio - 1) <= 0.15 ? 'The sheet matches your kills (within 15%).' : ratio > 1 ? 'You kill Guardians ' + pct(ratio - 1) + ' faster than the sheet says: something adds damage it does not count (see below).' : 'You kill Guardians ' + pct(1 - ratio).replace('+', '') + ' slower than the sheet: likely time spent moving or dodging, or a rule the sheet gets wrong.';
-    const rows = c.fights.map(f => '<tr' + (f.gear ? ' class="dim"' : '') + '><td>' + esc(f.g.name.replace(/_/g, ' ')) + (f.gear ? ' <span class="hint">(other weapon)</span>' : '') + (f.levelDiff ? ' <span class="hint">(you were ' + f.levelDiff + ')</span>' : '') + '</td><td>' + (f.g.rupture || '–') + '</td><td>' + num(f.g.life) + '</td><td>' + num(f.time, 1) + ' s</td><td><b>' + num(f.real) + '</b></td><td>' + num(f.simDps) + '</td><td>' + (f.casts ? num(f.castRate, 2) : '–') + '</td><td>' + (f.casts ? num(f.perCastReal / f.perCastSim, 2) + '×' : '–') + '</td></tr>').join('');
+    const rows = c.fights.map(f => '<tr' + (f.skip ? ' class="dim"' : '') + '><td>' + esc(f.g.name.replace(/_/g, ' ')) + (f.gear ? ' <span class="hint">(other weapon)</span>' : '') + (f.levelDiff ? ' <span class="hint">(you were ' + f.levelDiff + ')</span>' : '') + '</td><td>' + (f.g.rupture || '–') + '</td><td>' + num(f.g.life) + '</td><td>' + num(f.time, 1) + ' s</td><td><b>' + num(f.real) + '</b></td><td>' + num(f.simDps) + '</td><td>' + (f.casts ? num(f.castRate, 2) : '–') + '</td><td>' + (f.casts ? num(f.perCastReal / f.perCastSim, 2) + '×' : '–') + '</td></tr>').join('');
     const notes = [];
     if (isFinite(c.rateMed) && isFinite(c.simRate)) notes.push('In fights you cast ' + c.skillName + ' ' + num(c.rateMed, 2) + ' times a second, against the sheet\'s ' + num(c.simRate, 2) + ' (' + Math.round(c.rateMed / c.simRate * 100) + '%): moving, dodging and phase changes take the rest.' + (c.cast && c.cast.recentGap ? ' While spinning, your recent casts land every ' + c.cast.recentGap + ' ms (' + num(1000 / c.cast.recentGap, 2) + '/s).' : ''));
     if (isFinite(c.perCastRatio)) notes.push('Damage per cast, real ÷ sheet: ' + num(c.perCastRatio, 2) + '×. Real kills also include ' + (r.conduit ? r.conduit.hostName + '\'s own hits, ' : '') + 'Herald kill effects, shocks, freezes and anything else that hit the boss, so a little above 1× is expected.');
-    if (c.skyfall && c.skyfall.falls) notes.push('Skyfall repeat strikes: ' + num(c.skyfall.falls) + ' fell, ' + num(c.skyfall.hits) + ' hit something; ' + num(c.skyfall.blocked) + ' were skipped because the target was already struck that cast. The sheet does not count repeats.');
+    if (c.skyfall && c.skyfall.falls) notes.push('Skyfall repeat strikes: ' + num(c.skyfall.falls) + ' fell, ' + num(c.skyfall.hits) + ' hit something; ' + num(c.skyfall.blocked) + ' were skipped because the target was already struck that cast. ' +
+      (r.hits && r.hits.skyfallRepeat > 0 ? 'The sheet counts one second fall on the target per cast at ' + Math.round(r.hits.skyfallRepeat * 100) + '% (the game\'s own sheet does the same).' : 'This skill has no second fall on the sheet.'));
     if (c.gearSkipped) notes.push(c.gearSkipped + ' fight' + (c.gearSkipped > 1 ? 's' : '') + ' with a different weapon than your save (greyed) left out of the medians.');
+    if (c.oldSkipped) notes.push(c.oldSkipped + ' fight' + (c.oldSkipped > 1 ? 's' : '') + ' from more than 2 levels below your save (greyed) left out of the medians: the sheet uses today\'s gear and points.');
     if (!c.fights.some(f => f.casts) && r.conduit) notes.push('No ' + c.skillName + ' casts during these fights: was it linked then?');
     const rateBtn = isFinite(c.rateMed) && c.rateMed > 0 ? (st.hps ? '<button class="btn small ghost" type="button" id="clearFightRate">Back to the sheet\'s cast rate</button>' : '<button class="btn small" type="button" id="useFightRate" data-rate="' + (Math.round(c.rateMed * 100) / 100) + '">Use my fight cast rate (' + num(c.rateMed, 2) + '/s)</button>') : '';
     const report = reportText(r, c);

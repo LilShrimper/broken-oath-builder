@@ -140,6 +140,8 @@ summary .count { color: var(--faint); font-weight: 400; }
 .foot { color: var(--faint); font-size: 12px; text-align: center; padding: 10px 20px 30px; }
 .drop-hint { position: fixed; inset: 0; background: color-mix(in srgb, var(--bg) 80%, transparent); display: none; align-items: center; justify-content: center; font-size: 20px; color: var(--accent); z-index: 20; border: 3px dashed var(--accent); }
 body.dragging .drop-hint { display: flex; }
+.check-row { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin: 2px 0 8px; cursor: pointer; }
+.check-row input { margin-top: 3px; }
 .setup { max-width: 720px; margin: 24px auto; }
 .setup h2 { margin-top: 0; }
 .setup ol { padding-left: 20px; }
@@ -192,6 +194,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
         <label class="field"><span>Gem level</span><input type="number" id="gemLevel" min="1" max="40"></label>
         <div class="field"><span>From gear</span><output id="gemBonus" class="readout">+0</output></div>
       </div>
+      <label class="check-row" id="conduitRow" hidden><input type="checkbox" id="conduitToggle"><span id="conduitLabel">Cast by Channel Conduit</span></label>
       <p class="skill-desc" id="skillDesc"></p>
     </section>
 
@@ -544,7 +547,7 @@ window.CHARS = [];
         affixes: (i.Affixes || []).map(a => ({ id: a.AffixId, tier: a.Tier, v: a.Value, v2: a.Value2 })), runes: i.Runes || [],
       })),
       passives: R.PassiveNodeIds || [], gems: R.Gems || [], gemLevels: R.GemLevels || {},
-      sockets: (R.Sockets || []).map(s => ({ skill: s.SkillId, supports: (s.Supports || []).filter(Boolean) })),
+      sockets: (R.Sockets || []).map(s => ({ skill: s.SkillId, supports: (s.Supports || []).filter(Boolean), conduit: s.ConduitLink || '' })),
       hotbar: R.Hotbar || [], weaponId: R.WeaponId, dragonNodes: R.DragonlingNodes || [], dragonAspect: R.DragonlingAspect || '',
       mainSkill: R.MainSkillPin || '',
       supportGems: R.SupportGems || [], // spare support gems in the inventory
@@ -756,6 +759,30 @@ window.CHARS = [];
 
   function pickMods(mods, stat, mode) { return mods.filter(m => m.stat === stat && (!mode || m.mode === mode) && !m.local); }
 
+  // ---------- Channel Conduit ----------
+  // A spell dropped on a channelling skill's Conduit "casts itself at the nearest enemy every 0.5 seconds
+  // ... with this skill's other supports". The game log shows the casts land on the channel's ticks, and a
+  // cast waits for the next tick once the interval has passed (no carry-over), so a cast comes every
+  // ceil(interval / tick) ticks. force: true = use the first channel with a Conduit even without a saved
+  // link (build codes do not record links), false = never.
+  function conduitHost(GD, ch, skillId, mods, force) {
+    if (force === false) return null;
+    const sk = GD.skills[lc(skillId)];
+    if (!sk || !(sk.Tags || []).includes('Spell') || (sk.Tags || []).includes('Attack')) return null;
+    const granted = (mods || []).some(m => m.stat === 'GrantSupport' && (m.tags || []).some(t => lc(t) === 'channel_conduit'));
+    const hosts = ch.sockets.filter(s => { const hs = GD.skills[lc(s.skill)]; return hs && hs.Channel && lc(s.skill) !== lc(skillId) && (granted || s.supports.some(x => lc(x) === 'channel_conduit')); });
+    const linked = hosts.find(s => s.conduit && lc(s.conduit) === lc(skillId));
+    const s = linked || (force === true ? hosts[0] : null);
+    if (!s) return null;
+    return { skill: s.skill, name: (GD.skills[lc(s.skill)] || {}).Name || s.skill, linked: !!linked, supports: s.supports.filter(x => lc(x) !== 'channel_conduit') };
+  }
+  // Seconds between Conduit casts before ticks: the support's interval x every "ConduitInterval More" line.
+  function conduitInterval(GD, mods) {
+    const cc = GD.supports.channel_conduit || {};
+    const base = ((cc.Mods || []).find(m => m.Stat === 'ConduitInterval') || {}).Value || 0.5;
+    return mods.filter(m => m.stat === 'ConduitInterval' && m.mode === 'More').reduce((t, m) => t * Math.max(0.05, 1 + m.v / 100), base);
+  }
+
   // ---------- the calculation ----------
   function calcSkill(GD, ch, skillId, o) {
     o = o || {};
@@ -781,7 +808,11 @@ window.CHARS = [];
     res.sources = col.sources;
     let mods = col.mods.slice();
     const socket = ch.sockets.find(s => s.skill === skillId);
-    const supportList = (o.supportsOverride || (socket ? socket.supports : [])).slice();
+    const host = conduitHost(GD, ch, skillId, col.mods, o.conduit);
+    if (host) ctx.tags.add('conduit'); // Wake of Spells: "Conduit spells deal 10% less damage"
+    const hostSk = host && GD.skills[lc(host.skill)];
+    const hostTags = hostSk ? new Set([...(hostSk.Tags || []), hostSk.Delivery].map(lc)) : null;
+    const supportList = (o.supportsOverride || (host ? host.supports : (socket ? socket.supports : []))).slice();
     for (const m of mods) if (m.stat === 'GrantSupport') {
       const sid = (m.tags || []).find(t => GD.supports[lc(t)]);
       if (sid && !supportList.some(s => lc(s) === lc(sid))) supportList.push(sid + '@granted');
@@ -794,6 +825,12 @@ window.CHARS = [];
       if (!sd) { res.supports.push({ id, key, name: id, ok: false, why: 'unknown support' }); continue; }
       const req = sd.RequiresAnyTag || []; const ex = sd.ExcludeTags || [];
       const ok = (!req.length || req.some(t => ctx.tags.has(lc(t)))) && !ex.some(t => ctx.tags.has(lc(t)));
+      // In a Conduit, a support that only fits the channel (Faster Attacks on Cyclone) still works there:
+      // it changes the channel's ticks, which sets the cast rate below.
+      const fitsHost = hostTags && (!req.length || req.some(t => hostTags.has(lc(t)))) && !ex.some(t => hostTags.has(lc(t)));
+      if (hostTags && !granted && !fitsHost) { res.supports.push({ id, key, name: sd.Name, ok: false, why: 'cannot be socketed in ' + host.name + ' (needs ' + req.join(' or ') + ')', desc: sd.Description }); continue; }
+      const onHost = !ok && fitsHost && !granted;
+      if (onHost) { res.supports.push({ id, key, name: sd.Name + ' (on ' + host.name + ')', ok: true, hostOnly: true, why: '', desc: 'Works on ' + host.name + ' itself; for this spell it only matters through ' + host.name + '\'s ticks. ' + sd.Description }); continue; }
       res.supports.push({ id, key, name: sd.Name + (granted ? ' (granted)' : ''), ok, why: ok ? '' : 'does not support this skill (needs ' + req.join(' or ') + ')', desc: sd.Description });
       if (!ok || (o.off && o.off.has(key))) continue;
       for (const m of sd.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: m.Value || 0, v2: m.Value2 || 0, local: false, src: 'Support · ' + sd.Name, key });
@@ -1041,6 +1078,17 @@ window.CHARS = [];
       if (ev) { usesPerSec = 1 / +ev[1]; useTime = +ev[1]; res.notes.push('Brand: one spark on the target strikes every ' + ev[1] + ' s (from the skill text). More sparks on one boss = set "hits per second" by hand.'); }
     } else if (['Orb', 'Orbit', 'Ground', 'Skyfall', 'Rain', 'Totem'].includes(sk.Delivery)) {
       res.notes.push(sk.Delivery + ' skills hit on their own pattern; this sheet counts one hit per cast. Set "hits per second" by hand if you know the real rate.');
+    }
+    if (host) {
+      const hostSup = supportList.map(s => s.replace('@granted', '')).filter(s => lc(s) !== 'channel_conduit');
+      const hr = calcSkill(GD, ch, host.skill, { _col: col, off: o.off, supportsOverride: hostSup, conduit: false, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity });
+      const interval = conduitInterval(GD, col.mods);
+      if (hr.speed && hr.speed.usesPerSec > 0) {
+        const tick = 1 / hr.speed.usesPerSec, ticks = Math.max(1, Math.ceil(interval / tick - 1e-9));
+        usesPerSec = 1 / (tick * ticks); if (cooldown > 0) usesPerSec = Math.min(usesPerSec, 1 / cooldown); useTime = 1 / usesPerSec;
+        res.conduit = { host: host.skill, hostName: host.name, linked: host.linked, tick, interval, ticks };
+        res.notes.push('Cast by ' + host.name + '\'s Channel Conduit' + (host.linked ? '' : ' (no saved link: assumed)') + ' with ' + host.name + '\'s supports: one cast every ' + ticks + ' ' + host.name + ' tick' + (ticks > 1 ? 's' : '') + ' (tick ' + Math.round(tick * 1000) + ' ms, Conduit interval ' + Math.round(interval * 1000) + ' ms) = ' + usesPerSec.toFixed(2) + ' casts a second while you channel. Faster ' + host.name + ' (attack speed) means more casts until a tick is shorter than the interval.');
+      }
     }
     if (o.hitsPerSecOverride > 0) { usesPerSec = o.hitsPerSecOverride; useTime = 1 / usesPerSec; res.notes.push('Hits per second set by hand: ' + o.hitsPerSecOverride + '.'); }
     res.speed = { inc: speedInc, more: speedMore, rateMult, usesPerSec, useTime, cooldown, stat: speedStat, hitFactor };
@@ -1350,11 +1398,16 @@ window.CHARS = [];
   function supportSearch(GD, ch, skillId, o, opt) {
     opt = opt || {};
     const sk = GD.skills[lc(skillId)];
-    const tags = new Set([...(sk.Tags || []), sk.Delivery].map(lc));
+    const host = conduitHost(GD, ch, skillId, collectMods(GD, ch, o).mods, o.conduit);
+    const tagSets = [new Set([...(sk.Tags || []), sk.Delivery].map(lc))];
+    if (host) { const hs = GD.skills[lc(host.skill)]; tagSets.push(new Set([...(hs.Tags || []), hs.Delivery].map(lc))); }
+    const fitsTags = (s, tags) => (!(s.RequiresAnyTag || []).length || s.RequiresAnyTag.some(t => tags.has(lc(t)))) && !(s.ExcludeTags || []).some(t => tags.has(lc(t)));
     const owned = ownedSupports(ch);
-    const fits = Object.values(GD.supports).filter(s => (!(s.RequiresAnyTag || []).length || s.RequiresAnyTag.some(t => tags.has(lc(t)))) && !(s.ExcludeTags || []).some(t => tags.has(lc(t))));
+    // A Conduit spell's supports sit in the channel's sockets, so they must fit the channel.
+    const fits = Object.values(GD.supports).filter(s => host ? fitsTags(s, tagSets[1]) : fitsTags(s, tagSets[0]));
     const pool = fits.map(s => lc(s.Id)).filter(id => !NO_SINGLE_TARGET.has(id) && (opt.pool === 'all' || owned.has(id)));
-    const k = Math.min(opt.sockets || socketsFor(GD, ch, skillId, o.gemLevel), pool.length);
+    // A Conduit spell rides in the channel's sockets (the granted Conduit takes none).
+    const k = Math.min(opt.sockets || (host ? socketsFor(GD, ch, host.skill) : socketsFor(GD, ch, skillId, o.gemLevel)), pool.length);
     const base = Object.assign({}, o); delete base.supportsOverride;
     base.off = new Set([...(o.off || [])].filter(x => !String(x).startsWith('support:')));
     base._col = collectMods(GD, ch, base);
@@ -1388,7 +1441,7 @@ window.CHARS = [];
     return job;
   }
 
-  const api = { extractCharacter, characterFromCode, collectMods, calcSkill, listSkills, statWeights, modText, splitTags, DT, supportSearch, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  const api = { extractCharacter, characterFromCode, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, statWeights, modText, splitTags, DT, supportSearch, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -1460,9 +1513,17 @@ window.BOStartApp = function () {
     if (st.ch) store.set('skill:' + st.ch.id, id);
     const sk = GD.skills[String(id).toLowerCase()];
     $('#skillDesc').textContent = sk ? sk.Description.replace(/\{[^}]+\}\|plural\([^)]*\)/g, '').replace(/\{(\w+)\}/g, '$1') : '';
-    const sock = st.ch.sockets.find(s => s.skill === id);
-    st.supports = sock ? sock.supports.slice() : [];
+    st.conduit = null; // auto: follow the save's Conduit link
+    resetSupports();
     render();
+  }
+
+  // A spell on a channel's Conduit uses the channel's supports; otherwise its own sockets.
+  function conduitHostNow(force) { return S.conduitHost(GD, st.ch, st.skill, S.collectMods(GD, st.ch, { off: st.off }).mods, force); }
+  function resetSupports() {
+    const host = conduitHostNow(st.conduit);
+    const sock = st.ch.sockets.find(s => s.skill === st.skill);
+    st.supports = host ? host.supports.slice() : (sock ? sock.supports.slice() : []);
   }
 
   function opts(extra) {
@@ -1472,6 +1533,7 @@ window.BOStartApp = function () {
       off: st.off, vowbreak: st.vowbreak, charges: st.charges, supportsOverride: st.supports, gemLevel: st.gemLevel || undefined,
       enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0,
       projOnTarget: +st.projOnTarget || undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, penFloor: st.penFloor,
+      conduit: st.conduit == null ? undefined : st.conduit,
     }, extra || {});
   }
 
@@ -1480,6 +1542,15 @@ window.BOStartApp = function () {
     const ch = st.ch;
     $('#gemLevel').placeholder = r.gem ? r.gem.own : '';
     $('#gemBonus').textContent = r.gem ? '+' + r.gem.bonus + ' → ' + r.gem.total : '–';
+    // Channel Conduit: offered when this spell could ride a channel's Conduit.
+    const possible = conduitHostNow(true);
+    $('#conduitRow').hidden = !possible;
+    if (possible) {
+      $('#conduitToggle').checked = !!r.conduit;
+      $('#conduitLabel').textContent = r.conduit
+        ? 'Cast by ' + r.conduit.hostName + '\'s Channel Conduit: ' + num(r.speed.usesPerSec, 2) + ' casts/s (every ' + r.conduit.ticks + ' tick' + (r.conduit.ticks > 1 ? 's' : '') + ' of ' + Math.round(r.conduit.tick * 1000) + ' ms), with ' + r.conduit.hostName + '\'s supports'
+        : 'Cast by ' + possible.name + '\'s Channel Conduit (off: cast by hand with this spell\'s own supports)';
+    }
     // Supports
     const sup = r.supports || [];
     $('#supportCount').textContent = sup.length ? sup.filter(s => s.ok && !st.off.has(s.key)).length + ' active' : '';
@@ -1671,6 +1742,7 @@ window.BOStartApp = function () {
   $('#extraTaken').addEventListener('input', e => { st.extraTaken = e.target.value; render(); });
   $('#projOnTarget').addEventListener('input', e => { st.projOnTarget = e.target.value; render(); });
   $('#hpsOverride').addEventListener('input', e => { st.hps = +e.target.value || null; render(); });
+  $('#conduitToggle').addEventListener('change', e => { st.conduit = e.target.checked; st.pinned = null; stopSearch(); st.opt = null; resetSupports(); render(); });
   $('#optBtn').addEventListener('click', runSearch);
   $('#penNeg').addEventListener('change', e => { st.penFloor = !e.target.checked; render(); });
   $('#ingameDps').addEventListener('input', e => { st.ingame = +e.target.value || null; render(); });

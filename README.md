@@ -28,7 +28,8 @@ GoatCounter (no cookies, no personal data, never your files).
    Guardian kills (boss life ÷ fight time), your cast rate and damage per cast, and can use your
    measured cast rate. The log is read in your browser only. *Send a check report* opens a GitHub
    issue with just the numbers (no names, no IDs) so the sim can be improved; you see and can edit it
-   before posting.
+   before posting. It includes what the log knew about each fight (time the Guardian was away, damage lost at its
+   held life marks, volleys on target, boss hits, ailment totals), so it can be checked without your log.
 6. Open the **Skill tree** tab to see your passive tree with every node's DPS value for that skill
    (heat map, hover, and a best-next-picks list). Click nodes to try changes; *Copy build code*
    gives a code you can follow in game. **Optimize tree** takes your main damage skill and moves

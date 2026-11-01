@@ -689,18 +689,28 @@ window.CHARS = [];
   const time = l => { const m = TS.exec(l); return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6], +m[7]).getTime() : null; };
 
   function parseLog(text) {
-    const out = { heroes: [], guardians: [], casts: {}, skyfall: { falls: 0, hits: 0, blocked: 0 }, gems: {}, start: null, end: null };
-    let hero = null, cur = null;
-    const rupture = {}, element = {}, ward = {};
+    const out = { heroes: [], guardians: [], casts: {}, skyfall: { falls: 0, hits: 0, blocked: 0 }, gems: {}, start: null, end: null, panel: {}, poisonCheck: null };
+    let hero = null, cur = null, ail = null;
+    const rupture = {}, element = {}, ward = {}, hitMult = {};
     const self = {}, conduitSkills = new Set();
+    // Running ailment totals ("AilmentStats: t=.. ignites N shocks N poisons N freezes N ticks N dot N ... bleeds N (dot N"):
+    // the change across a fight is what ailments did then (to everything, adds too).
+    const AIL = /AilmentStats: t=[\d.]+ ignites (\d+) shocks (\d+) poisons (\d+) freezes (\d+) ticks (\d+) dot (\d+) dotkills (\d+).*?bleeds (\d+) \(dot (\d+)/;
+    const ailKeys = ['ignites', 'shocks', 'poisons', 'freezes', 'ticks', 'dot', 'dotkills', 'bleeds', 'bleedDot'];
     for (const l of String(text).split(/\r?\n/)) {
       let m;
       // Projectile releases (one line a volley, held attacks included; LogTemp, not LogBrokenOath): the
       // cast count for skills you use yourself. Skills seen in Conduit lines keep the Conduit count.
-      if ((m = /LogTemp: OrbitCast: release (\w+) /.exec(l))) {
+      if ((m = /LogTemp: OrbitCast: release (\w+) spheres=(\d+) arrows=(\d+) same-target=(\d+)/.exec(l)) || (m = /LogTemp: OrbitCast: release (\w+) /.exec(l))) {
         const t = time(l); if (t == null) continue;
         (self[m[1]] = self[m[1]] || []).push(t);
-        if (cur) { cur.self = cur.self || {}; cur.self[m[1]] = (cur.self[m[1]] || 0) + 1; }
+        if (cur) {
+          cur.self = cur.self || {}; cur.self[m[1]] = (cur.self[m[1]] || 0) + 1;
+          if (m[3] != null) { // per volley: projectiles and how many others struck the same target
+            const n = +m[2] + +m[3], same = +m[4], v = (cur.volleys = cur.volleys || {})[m[1]] = cur.volleys[m[1]] || { n: 0, proj: 0, full: 0, none: 0, sameSum: 0 };
+            v.n++; v.proj += n; v.sameSum += same; if (n > 1 && same >= n - 1) v.full++; if (same === 0) v.none++;
+          }
+        }
         continue;
       }
       if (!l.includes('LogBrokenOath')) continue;
@@ -717,23 +727,50 @@ window.CHARS = [];
         hero = { name: m[1], cls: m[2], level: +m[3], weapon: m[4], t }; out.heroes.push(hero);
       } else if ((m = /(?:Harder59|BossMech): (\w+) at Rupture (\d+)/.exec(l))) {
         rupture[m[1]] = +m[2]; if (cur && cur.name === m[1]) cur.rupture = +m[2];
+        const hx = /hit x([\d.]+)/.exec(l); // Harder59: the Guardian's own hit multiplier at this Rupture
+        if (hx) { hitMult[m[1]] = +hx[1]; if (cur && cur.name === m[1]) cur.hitMult = +hx[1]; }
       } else if ((m = /Guardian: (\w+) element signature [^(]*\((\w+)/.exec(l))) {
         element[m[1]] = m[2]; if (cur && cur.name === m[1] && !cur.t1) cur.element = m[2];
       } else if ((m = /Guardian: (\w+) gate mechanics .*\bward (\d+)/.exec(l))) {
         ward[m[1]] = +m[2]; if (cur && cur.name === m[1] && !cur.t1) cur.ward = +m[2];
+      } else if ((m = AIL.exec(l))) {
+        ail = Object.fromEntries(ailKeys.map((k, i) => [k, +m[i + 1]]));
+      } else if ((m = /EnemyTakenTip66: (\w+) DPS (\d+)(.*?)= x([\d.]+) on the enemy/.exec(l))) {
+        // The game's own skill panel DPS (written when a skill is hovered with a curse on the bar).
+        out.panel[m[1]] = { dps: +m[2], mult: +m[4], extra: m[3].replace(/^\s*\+\s*/, '').trim(), t, hero: hero ? hero.level : null };
+      } else if ((m = /Mech70Check: (.+)/.exec(l))) {
+        out.poisonCheck = m[1].slice(0, 200);
       } else if ((m = /Guardian: (\w+) engaged\s*$/.exec(l))) {
-        if (!cur || cur.name !== m[1]) cur = { name: m[1], rupture: rupture[m[1]] || null, t0: t, hero, life: null, hits: [], casts: {}, element: element[m[1]] || null, ward: ward[m[1]] || 0 };
+        if (!cur || cur.name !== m[1]) cur = { name: m[1], rupture: rupture[m[1]] || null, t0: t, hero, life: null, hits: [], casts: {}, element: element[m[1]] || null, ward: ward[m[1]] || 0, ail0: ail, marks: [], interrupts: 0, refunds: 0, kills: 0, phases: 0, leaves: 0 };
         delete element[m[1]]; delete ward[m[1]];
+      } else if (cur && (m = /Skill: \w+ \w+ (?:Attack|Spell) interrupted by/.exec(l))) {
+        cur.interrupts++;
+      } else if (cur && /Cast refund: /.test(l)) {
+        cur.refunds++;
+      } else if (cur && /Trigger: Kill -> /.test(l)) {
+        cur.kills++;
+      } else if (cur && (m = /Guardian: (\w+) phase \d+ at/.exec(l)) && m[1] === cur.name) {
+        cur.phases++;
+      } else if (cur && (m = /ArenaPhase: (\w+) leaves/.exec(l)) && m[1] === cur.name) {
+        cur.leaves++;
       } else if ((m = /BossPain60: (\w+) \S+ \(hit (\d+) of (\d+), crit (\d)\)/.exec(l))) {
         if (cur && cur.name === m[1]) { cur.life = +m[3]; cur.hits.push({ v: +m[2], crit: m[4] === '1' }); }
       } else if ((m = /ArenaPhase: (\w+) returns after ([\d.]+) s away/.exec(l))) {
         if (cur && cur.name === m[1]) cur.away = (cur.away || 0) + +m[2];
       } else if ((m = /GateBeat71: (\w+) mark \d+ played - held ([\d.]+) s, stored hits land ([\d.]+)% of its life \(stored ([\d.]+)%\)/.exec(l))) {
         // At a life mark the Guardian holds: hits are stored and only part lands; the rest is damage dealt but lost.
-        if (cur && cur.name === m[1]) { cur.held = (cur.held || 0) + +m[2]; cur.lostPct = (cur.lostPct || 0) + Math.max(0, +m[4] - +m[3]); }
+        if (cur && cur.name === m[1]) { cur.held = (cur.held || 0) + +m[2]; cur.lostPct = (cur.lostPct || 0) + Math.max(0, +m[4] - +m[3]); cur.marks.push({ held: +m[2], landed: +m[3], stored: +m[4] }); }
       } else if ((m = /Guardian: (\w+) model - ([\d.]+) s.*engaged ([\d.]+) s, hero raw boss DPS (\d+)/.exec(l))) {
         if (cur && cur.name === m[1]) {
           cur.engaged = +m[3]; cur.gameRaw = +m[4]; cur.t1 = t; cur.wall = (t - cur.t0) / 1000;
+          // The game's own fight model: "(target 75, held 45-112) ... vs median 1050 (x1.69), taken x1.00-x1.00".
+          const tg = /target ([\d.]+), held ([\d.]+)-([\d.]+)/.exec(l), md = /vs median (\d+)/.exec(l), tk = /taken x([\d.]+)-x([\d.]+)/.exec(l);
+          if (tg) { cur.target = +tg[1]; cur.heldRange = [+tg[2], +tg[3]]; }
+          if (md) cur.gameMedian = +md[1];
+          if (tk) cur.taken = [+tk[1], +tk[2]];
+          if (cur.hitMult == null && hitMult[m[1]] != null) cur.hitMult = hitMult[m[1]];
+          if (cur.ail0 && ail) cur.ailments = Object.fromEntries(ailKeys.map(k => [k, Math.max(0, ail[k] - cur.ail0[k])]));
+          delete cur.ail0;
           out.guardians.push(cur);
         }
         cur = null;
@@ -2464,6 +2501,10 @@ window.BOStartApp = function () {
     const ur = $('#useFightRate'); if (ur) ur.onclick = () => { st.cps = +ur.dataset.rate; render(); };
     const cfr = $('#clearFightRate'); if (cfr) cfr.onclick = () => { st.cps = null; render(); };
     const lb = $('#logLoadInline'); if (lb) lb.onclick = () => $('#logInput').click();
+    const crb = $('#copyReport'); if (crb) crb.onclick = async () => {
+      const pre = out.querySelector('details.report pre');
+      try { await navigator.clipboard.writeText(pre ? pre.textContent : ''); crb.textContent = 'Copied'; } catch (e) { crb.textContent = 'Copy failed: select the text below'; }
+    };
   }
 
   // ---------- checking the sim against the game log ----------
@@ -2488,8 +2529,11 @@ window.BOStartApp = function () {
       // Damage dealt = life + what was lost at held life marks (stored hits that never landed); time it could be
       // hit = fight time minus the time it was away (flying off the field). Both from the log, per fight.
       const dealt = g.life * (1 + (g.lostPct || 0) / 100), hitTime = Math.max(1, fightTime(g) - (g.away || 0));
-      return { g, s, time: fightTime(g), hitTime, dealt, real: dealt / hitTime, simDps: s.totalDps, casts, castRate: casts / hitTime,
-        perCastReal: casts ? dealt / casts : NaN, perCastSim: s.speed && s.speed.usesPerSec ? s.totalDps / s.speed.usesPerSec : NaN,
+      // You keep casting while it is away (at its summons), so the cast rate uses the whole fight and per cast
+      // counts only the share of casts made while it could be hit.
+      const castsOnBoss = casts * hitTime / Math.max(1, fightTime(g));
+      return { g, s, time: fightTime(g), hitTime, dealt, real: dealt / hitTime, simDps: s.totalDps, casts, castRate: casts / fightTime(g),
+        perCastReal: casts ? dealt / castsOnBoss : NaN, perCastSim: s.speed && s.speed.usesPerSec ? s.totalDps / s.speed.usesPerSec : NaN,
         levelDiff: g.hero && g.hero.level !== save.level ? g.hero.level : null, gear };
     });
     // The sheet uses today's save, so fights from well below its level (older gear, fewer points) read low:
@@ -2531,26 +2575,60 @@ window.BOStartApp = function () {
       '<div class="headline small">' + stat('Real boss DPS (median)', num(c.realMed), '', 'main', 'Boss life ÷ time from engaging it to the kill') + stat('Sheet vs a Guardian', num(c.simMed), '', '', 'Same Rupture levels, settings on the left') + stat('Real ÷ sheet', isFinite(ratio) ? num(ratio, 2) + '×' : '–', '', '', verdict) + '</div>' +
       '<div class="table-wrap"><table class="tbl"><thead><tr><th>Guardian</th><th>Rupture</th><th>Life</th><th>Fight</th><th>Real DPS</th><th>Sheet</th><th>Casts/s</th><th>Per cast</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       '<ul class="notes">' + notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul>' +
-      '<div class="pinbar">' + rateBtn + '<a class="btn small ghost" target="_blank" rel="noopener" href="' + REPORT_URL + '?title=' + encodeURIComponent('Check report: ' + c.skillName + ' (' + st.ch.classId + ' ' + st.ch.level + ')') + '&body=' + encodeURIComponent(report) + '">Send a check report</a><span>Opens a GitHub issue with only the numbers below, for improving the sim. You can edit it before posting.</span></div>' +
+      '<div class="pinbar">' + rateBtn + '<a class="btn small ghost" target="_blank" rel="noopener" href="' + esc(reportLink(r, c)) + '">Send a check report</a><button class="btn small ghost" type="button" id="copyReport">Copy full report</button><span>Opens a GitHub issue with only the numbers below (no names, no IDs), for improving the sim. You can edit it before posting.</span></div>' +
       '<details class="report"><summary>What the report contains</summary><pre>' + esc(report) + '</pre></details></div>';
   }
   // Anonymous numbers only: no character name, no Steam ID, no file paths.
-  function reportText(r, c) {
+  // maxFights: how many fights (most recent first) get a detail line; the link version trims it to fit.
+  function reportText(r, c, maxFights) {
     const sup = (r.supports || []).filter(s => s.ok && !st.off.has(s.key)).map(s => s.id);
     const uniq = (st.ch.items || []).filter(i => i.unique && i.unique !== 'None').map(i => i.unique);
+    const f2 = (v, d) => (isFinite(v) ? (+v).toFixed(d == null ? 2 : d) : '');
+    const panel = st.log && st.log.panel && st.log.panel[st.skill];
+    const fights = c.fights.filter(f => !f.gear);
     const lines = [
       'Anonymous check report from the Broken Oath Damage Sim (game data ' + String(GD.builtAt).slice(0, 10) + ').', '',
-      '- Class / level: ' + st.ch.classId + ' ' + st.ch.level,
-      '- Skill: ' + st.skill + ' gem ' + (r.gem ? r.gem.own + '+' + r.gem.bonus : '?') + (r.conduit ? ', cast by ' + r.conduit.host + ' Channel Conduit (' + num(r.speed.usesPerSec, 2) + '/s, tick ' + Math.round(r.conduit.tick * 1000) + ' ms, interval ' + Math.round(r.conduit.interval * 1000) + ' ms)' : ''),
+      '- Class / level: ' + st.ch.classId + ' ' + st.ch.level + (r.attr ? ' (Str ' + r.attr.Str + ', Dex ' + r.attr.Dex + ', Int ' + r.attr.Int + ')' : ''),
+      '- Skill: ' + st.skill + ' gem ' + (r.gem ? r.gem.own + '+' + r.gem.bonus : '?') + (r.conduit ? ', cast by ' + r.conduit.host + ' Channel Conduit (' + num(r.speed.usesPerSec, 2) + '/s, tick ' + Math.round(r.conduit.tick * 1000) + ' ms, interval ' + Math.round(r.conduit.interval * 1000) + ' ms)' : '') + (r.coc ? ', Cast on Crit from ' + r.coc.source + ' (' + f2(r.coc.rate) + '/s)' : ''),
       '- Supports: ' + (sup.join(', ') || 'none'),
       '- Uniques worn: ' + (uniq.join(', ') || 'none'),
-      '- Sheet settings: enemy boss, ' + (st.hps ? 'hits per second set by hand ' + st.hps + '/s' : st.cps ? 'fight cast rate ' + st.cps + '/s' : 'sheet cast rate'),
-      '', '| Guardian | Rupture | Life | Fight s (engage to kill) | Game engaged s | Casts | Real DPS | Sheet DPS | Per cast real/sheet |', '|---|---|---|---|---|---|---|---|---|',
-      ...c.fights.filter(f => !f.gear).map(f => '| ' + f.g.name + ' | ' + (f.g.rupture || '') + ' | ' + f.g.life + ' | ' + f.time.toFixed(1) + ' | ' + f.g.engaged + ' | ' + f.casts + ' | ' + Math.round(f.real) + ' | ' + Math.round(f.simDps) + ' | ' + (f.casts ? (f.perCastReal / f.perCastSim).toFixed(2) : '') + ' |'),
+      '- Sheet settings: enemy boss, ' + (st.hps ? 'hits per second set by hand ' + st.hps + '/s' : st.cps ? 'fight cast rate ' + st.cps + '/s' : 'sheet cast rate') + (st.charges && st.charges.bloodlust ? ', Bloodlust ' + st.charges.bloodlust : '') + (r.enemy && r.enemy.activeCurses && r.enemy.activeCurses.length ? ', curses ' + r.enemy.activeCurses.join('+') : ''),
+      '- Sheet hit: avg ' + Math.round(r.hitAvg || 0) + ' (with crits ' + Math.round(r.hitAvgCrit || 0) + '), crit ' + f2(r.crit && r.crit.chance, 1) + '% x' + (r.crit ? r.crit.multi : '') + ', ' + f2(r.speed && r.speed.usesPerSec) + ' uses/s' + (r.speed && r.speed.animRate && r.speed.animRate !== 1 ? ' (anim x' + r.speed.animRate + ')' : '') + ', ' + (r.hits ? r.hits.hitsPerUse + ' hits/use, ' + r.hits.projOnTarget + ' projectile(s) on target' : '') + ', panel ' + Math.round(r.panelDps || 0),
+      panel ? '- Game skill panel (log, at hero level ' + panel.hero + '): ' + panel.dps + ' DPS, x' + panel.mult + ' with ' + panel.extra + ' (sheet panel now ' + Math.round(r.panelDps || 0) + ')' : '',
+      st.log && st.log.poisonCheck ? '- Game poison self-check: ' + st.log.poisonCheck : '',
+      '', '| Guardian | RL | Elem | Life | Fight s | Engaged s | Away s | Lost at marks % | Casts | Real DPS | Sheet DPS | Per cast | Game raw DPS / median | Hero lvl |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+      ...fights.map(f => '| ' + f.g.name + ' | ' + (f.g.rupture || '') + ' | ' + (f.g.element || '') + (f.g.ward ? '+' + f.g.ward : '') + ' | ' + f.g.life + ' | ' + f.time.toFixed(1) + ' | ' + f.g.engaged + ' | ' + (f.g.away || 0) + ' | ' + f2(f.g.lostPct || 0, 0) + ' | ' + f.casts + ' | ' + Math.round(f.real) + ' | ' + Math.round(f.simDps) + ' | ' + (f.casts ? f2(f.perCastReal / f.perCastSim) : '') + ' | ' + (f.g.gameRaw || '') + (f.g.gameMedian ? ' / ' + f.g.gameMedian : '') + ' | ' + (f.g.hero ? f.g.hero.level : '') + ' |'),
       '', '- Median real / sheet: ' + (c.realMed / c.simMed).toFixed(2) + ', fight cast rate ' + (isFinite(c.rateMed) ? c.rateMed.toFixed(2) : 'n/a') + '/s' + (c.cast && c.cast.recentGap ? (c.cast.host ? ', spinning cast gap ' : ', back-to-back gap ') + c.cast.recentGap + ' ms' : ''),
       c.skyfall && c.skyfall.falls ? '- Skyfall repeats: ' + c.skyfall.falls + ' fell, ' + c.skyfall.hits + ' hits, ' + c.skyfall.blocked + ' skipped (target already struck)' : '',
     ];
-    return lines.filter(x => x !== '').join('\n').replace(/\n(\| Guardian)/, '\n\n$1');
+    // One detail line a fight, most recent first: everything else the log knew about it.
+    const details = fights.slice().reverse().slice(0, maxFights == null ? 99 : maxFights).map(f => {
+      const g = f.g, bits = [];
+      const v = g.volleys && g.volleys[st.skill];
+      if (v) bits.push('volleys ' + v.n + ' (' + f2(v.proj / v.n, 1) + ' proj each, all on one target ' + Math.round(v.full / v.n * 100) + '%, none shared ' + Math.round(v.none / v.n * 100) + '%)');
+      if (g.hits && g.hits.length) { const h = g.hits.map(x => x.v).sort((a, b) => a - b); bits.push('boss hits logged ' + h.length + ' (median ' + h[h.length >> 1] + ', max ' + h[h.length - 1] + ', crit ' + Math.round(g.hits.filter(x => x.crit).length / h.length * 100) + '%)'); }
+      if (g.ailments) { const a = g.ailments; bits.push('ailments: ignites ' + a.ignites + ', shocks ' + a.shocks + ', poisons ' + a.poisons + ', freezes ' + a.freezes + ', bleeds ' + a.bleeds + ' (dot ' + a.dot + ', bleed dot ' + a.bleedDot + ')'); }
+      if (g.marks && g.marks.length) bits.push('marks ' + g.marks.map(k => k.held + 's ' + k.landed + '/' + k.stored + '%').join(', ') + ' (held, landed/stored of life)');
+      if (g.leaves) bits.push('left the field ' + g.leaves + 'x');
+      if (g.phases) bits.push('phases ' + g.phases);
+      bits.push('interrupts ' + (g.interrupts || 0) + ', roll refunds ' + (g.refunds || 0) + ', on-kill triggers ' + (g.kills || 0));
+      if (g.hitMult != null) bits.push('hit x' + g.hitMult);
+      if (g.taken) bits.push('taken x' + g.taken[0] + '-x' + g.taken[1]);
+      if (g.target) bits.push('model target ' + g.target + ' s, held ' + g.heldRange.join('-'));
+      const other = Object.entries(g.casts || {}).filter(([k]) => k !== st.skill).map(([k, n]) => k + ' ' + n);
+      if (other.length) bits.push('other casts: ' + other.join(', '));
+      return '- ' + g.name + ' RL' + (g.rupture || '?') + ': ' + bits.join(' · ');
+    });
+    if (details.length) lines.push('', 'Fight details (most recent first):', ...details);
+    return lines.filter(x => x !== '').join('\n').replace(/\n(\| Guardian)/, '\n\n$1').replace(/\n(Fight details)/, '\n\n$1');
+  }
+  // The issue link carries the report in its URL: trim detail lines (oldest first) until it fits.
+  function reportLink(r, c) {
+    const title = encodeURIComponent('Check report: ' + c.skillName + ' (' + st.ch.classId + ' ' + st.ch.level + ')');
+    for (let n = c.fights.length; n >= 0; n--) {
+      const body = reportText(r, c, n), url = REPORT_URL + '?title=' + title + '&body=' + encodeURIComponent(n < c.fights.filter(f => !f.gear).length ? body + '\n\n(Trimmed to fit the link: use "Copy full report" for every fight.)' : body);
+      if (url.length <= 7800 || n === 0) return url;
+    }
   }
   const stat = (label, value, delta, cls, foot) => '<div class="stat ' + (cls || '') + '"><div class="label">' + label + '</div><div class="value">' + value + '</div>' + (delta || '') + (foot ? '<div class="foot-note">' + foot + '</div>' : '') + '</div>';
   // ---------- support search ----------

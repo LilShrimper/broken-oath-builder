@@ -302,6 +302,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
         <label class="field"><span>Insight</span><input type="number" min="0" max="10" value="0" data-charge="insight"></label>
         <label class="field"><span>Resolve</span><input type="number" min="0" max="10" value="0" data-charge="resolve"></label>
       </div>
+      <label class="field" title="0.6% more damage a stack, at most 50 + your maximum Bloodlust lines. Gained on kills (and boss crits with The Wolf's Due), each lasting 5 seconds."><span>Bloodlust stacks <span class="meta">0.6% more damage each, up to 50 + gear and tree</span></span><input type="number" min="0" max="200" value="0" data-charge="bloodlust"></label>
     </section>
 
     <section class="card">
@@ -1014,11 +1015,11 @@ window.CHARS = [];
     'MoveSpeed', 'GoldFind', 'ItemRarity', 'EsRecharge', 'EsRechargeDelay', 'DamageTaken', 'PhysTakenAsElemental', 'ManaCost',
     'Reservation', 'StunKnockback', 'Str', 'Dex', 'Int', 'Attributes', 'MinionLife', 'TotemLife', 'ChannelCostLess', 'Area',
     'Chains', 'Pierce', 'Fork', 'ChillEffect', 'FreezeDuration', 'SkillDuration', 'CurseLimit', 'MinionCap', 'MinionSpeed',
-    'Afterimages', 'BloodlustDuration', 'MinionGuard', 'MinionHunt', 'MinionDeathRecover', 'SkyfallDelay', 'TrapRearm',
+    'Phys70', 'BloodlustDuration', 'BloodlustMax', 'BloodlustOnKill', 'BloodlustOnBossCrit', 'MinionGuard', 'MinionHunt', 'MinionDeathRecover', 'SkyfallDelay', 'TrapRearm',
     'ConduitCostPct', 'ConduitInterval', 'EngineHoldInRupture', 'EngineHoldWhileSentenced', 'Woebringer', 'PassSentence',
     'BloodMagic', 'LifeLeech', 'Dragonling']);
   // Stats this model uses.
-  const HANDLED = new Set(['MaimOnHit', 'MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
+  const HANDLED = new Set(['StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
     'Cooldown', 'Repeats', 'Projectiles', 'Penetration', 'SkillLevel', 'PoisonChance', 'PoisonDamage', 'IgniteChance', 'IgniteDamage', 'BleedChance', 'BleedDamage',
     'DotMulti', 'AilmentDuration', 'CurseEffect', 'Str', 'Dex', 'Int', 'Attributes', 'GrantSupport', 'SkyfallRepeat', 'OrbitCount']);
   // Skyfall second fall: "falls again 0.4 seconds later for X% of their Damage". The game caps the sum at
@@ -1187,8 +1188,16 @@ window.CHARS = [];
       for (const m of b.Mods || []) add(m, ((m.Value || 0) + (m.PerLevel || 0) * (lvl - 1)) * brk, m.Value2, b.Name + (brk > 1 ? ' (Vowbreak x' + brk + ')' : ''), key);
     }
     // Charges: Fury / Insight / Resolve, counted by the user.
-    for (const [id, n] of Object.entries(o.charges || {})) {
-      const b = GD.blessings[id]; if (!b || !n) continue;
+    // Bloodlust (blessings.json Stack): 0.6% more damage a stack, at most 50 + BloodlustMax lines (tree, The Red
+    // Hunger, The Wolf's Due). Gained on kills (or boss crits with The Wolf's Due), so the user sets the stacks.
+    for (const [id, n0] of Object.entries(o.charges || {})) {
+      const b = GD.blessings[id]; if (!b || !n0) continue;
+      let n = n0;
+      if (id === 'bloodlust') {
+        const max = 50 + mods.filter(m => m.stat === 'BloodlustMax' && m.mode === 'Flat').reduce((s, m) => s + m.v, 0);
+        n = Math.min(n0, max);
+        if (n < n0) notes.push('Bloodlust: at most ' + max + ' stacks with your gear and tree (50 + "maximum Bloodlust" lines).');
+      }
       for (const m of b.Mods || []) add(m, (m.Value || 0) * (m.PerStack ? n : 1), m.Value2, b.Name + ' x' + n, 'charge:' + id);
     }
     for (const m of o.extra || []) add(m, m.Value, m.Value2, m.src || 'What-if', 'extra');
@@ -1291,6 +1300,9 @@ window.CHARS = [];
     o = o || {};
     const isCoc = x => lc(String(x).replace('@granted', '')) === 'cast_on_crit';
     const atk = id => { const s = GD.skills[lc(id)]; return !!s && (s.Tags || []).includes('Attack') && !(s.Tags || []).includes('Movement') && !s.Minion; };
+    // A linked source can be any skill with a hit: spells too (Discord guide 1 Nov: Ember Bolt with Cast on Crit
+    // shows "Casts Death Coil" in game; Shrimspins' Orbiting Hammers cast Judgement while the ring was up).
+    const hits = id => { const s = GD.skills[lc(id)]; return !!s && !s.Minion && s.Delivery !== 'Summon' && ((s.Tags || []).includes('Attack') || s.SpellMin > 0); };
     const linkS = ch.sockets.find(s => lc(s.skill) !== lc(skillId) && s.conduit && lc(s.conduit) === lc(skillId) && s.supports.some(isCoc));
     let src = null, mode = null;
     if (o.cocSource) { src = o.cocSource; mode = 'chosen'; }
@@ -1300,15 +1312,16 @@ window.CHARS = [];
       src = order.find(atk) || null; mode = 'self';
     }
     if (!mode) return null;
-    return { skill: src, name: src ? (GD.skills[lc(src)] || {}).Name || src : null, mode, counted: !!src && atk(src) };
+    return { skill: src, name: src ? (GD.skills[lc(src)] || {}).Name || src : null, mode, counted: !!src && (mode === 'self' ? atk(src) : hits(src)) };
   }
-  // Attacks on the bar that could trigger a spell with Cast on Crit (for the page's picker).
-  function cocAttacks(GD, ch) {
-    const seen = new Set(), out = [];
+  // Skills on the bar whose crits could cast a spell with Cast on Crit (for the page's picker): attacks and
+  // spells with a hit, other than the spell itself.
+  function cocAttacks(GD, ch, skillId) {
+    const seen = new Set(skillId ? [lc(skillId)] : []), out = [];
     for (const id of [...(ch.hotbar || []), ...ch.sockets.map(s => s.skill)]) {
       const s = id && GD.skills[lc(id)];
-      if (!s || seen.has(lc(id)) || !(s.Tags || []).includes('Attack') || (s.Tags || []).includes('Movement') || s.Minion) continue;
-      seen.add(lc(id)); out.push({ id, name: s.Name });
+      if (!s || seen.has(lc(id)) || s.Minion || s.Delivery === 'Summon' || (s.Tags || []).includes('Movement') || !((s.Tags || []).includes('Attack') || s.SpellMin > 0)) continue;
+      seen.add(lc(id)); out.push({ id, name: s.Name, spell: !(s.Tags || []).includes('Attack') });
     }
     return out;
   }
@@ -1417,6 +1430,18 @@ window.CHARS = [];
     }
     res.attr = attr;
     const per10 = (a, k) => attr[a] / 10 * (H[k] || 0); // not rounded down (Shrimpbow tooltips: 107 Dex = +10.7% attack speed, 52 Int = 4.21 s bleed)
+    // Mountainborn: "{v}% more Melee Physical Damage for every 10 Strength" (one more multiplier, unrounded like
+    // the other per-10 rules).
+    for (const m of mods.filter(m => m.stat === 'StrMeleeMore' && m.mode === 'Flat')) {
+      if (!isAttack || !ctx.tags.has('melee')) continue;
+      use(m, 'more per 10 Strength');
+      mods.push({ stat: 'Damage', mode: 'More', tags: ['Physical', 'Melee'], v: m.v * attr.Str / 10, v2: 0, local: false, src: m.src + ' (' + attr.Str + ' Str)', key: m.key });
+    }
+    // Ruthless: every third blow deals RuthlessBlow% more Physical damage: averaged over the three blows.
+    for (const m of mods.filter(m => m.stat === 'RuthlessBlow' && m.mode === 'Flat')) {
+      use(m, 'averaged over 3 blows');
+      mods.push({ stat: 'Damage', mode: 'More', tags: ['Physical'], v: m.v / 3, v2: 0, local: false, src: m.src + ' (every 3rd blow, averaged)', key: m.key });
+    }
 
     // Gem level. Weapon and basic skills follow the hero (CharLevelForGemLevel).
     let own = o.gemLevel || ch.gemLevels[skillId];
@@ -1700,8 +1725,8 @@ window.CHARS = [];
     // second falls are separate volleys. Triggered casts add to Conduit casts; your own casting is not counted.
     if (coc) {
       if (!coc.counted) {
-        res.notes.push(coc.skill ? 'Cast on Crit: ' + coc.name + ' is not an attack; the support says only attacks\' crits cast the spell, so no triggered casts are counted.'
-          : 'Cast on Crit: no attack on your bar to trigger it, so no triggered casts are counted.');
+        res.notes.push(coc.skill ? 'Cast on Crit: ' + coc.name + ' has no hit of its own to crit with, so no triggered casts are counted.'
+          : 'Cast on Crit in this spell\'s own sockets is cast by your attacks\' crits, and there is no attack on your bar. If it is linked to another skill in game (build codes do not carry links), pick that skill in the Cast on Crit box.');
       } else {
         const hr = calcSkill(GD, ch, coc.skill, { _col: col, off: o.off, coc: false, conduit: false, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyRes: o.enemyRes, curses: o.curses });
         if (hr.speed && hr.hits && hr.crit) {
@@ -1770,13 +1795,29 @@ window.CHARS = [];
       if (skyRep > 0) res.notes.push('Skyfall falls again 0.4 s later for ' + Math.round(skyRep * 100) + '% of the damage' + (skyRep >= SKYFALL_REPEAT_CAP / 100 ? ' (the game caps this at ' + SKYFALL_REPEAT_CAP + '%)' : '') + ': the target is struck a second time each cast.');
     }
     const falls = skyRep > 0 ? 2 : 1;
-    const perHitFactor = projWeight / projOnTarget * (1 + skyRep) / falls; // average share of a full hit per hit
+    let perHitFactor = projWeight / projOnTarget * (1 + skyRep) / falls; // average share of a full hit per hit
     const rainWaves = sk.Delivery === 'Rain' && sk.Rain && sk.Rain.Waves > 0 ? sk.Rain.Waves : 0;
     const strikes = rainWaves || (typeof sk.Strikes === 'object' && sk.Strikes ? (sk.Strikes.Count || 1) : (+sk.Strikes || 1));
     if (strikes > 1 && !rainWaves) res.notes.push(sk.Name + ' strikes ' + strikes + ' times per use; every strike is counted at the full hit (a stronger finisher is not modelled).');
-    const hitsPerUse = o.hitsPerSecOverride > 0 ? 1 : (1 + repeats) * projOnTarget * strikes * falls;
+    let hitsPerUse = o.hitsPerSecOverride > 0 ? 1 : (1 + repeats) * projOnTarget * strikes * falls;
+    // Afterimages (scaling.json Meta AfterimageCap / AfterimageDamagePct; Shade of the Blow, idols, Earthbreaker):
+    // a melee attack gets that many afterimages, at most the cap; each repeats the blow after the plain repeats
+    // for 40% of its damage. Channelling and Movement skills get none (Leap Slam is a Movement skill).
+    let afterimages = 0;
+    if (!(o.hitsPerSecOverride > 0) && isAttack && ctx.tags.has('melee')) {
+      let n = 0; const ai = pickMods(mods, 'Afterimages', 'Flat').filter(m => applies(ctx, m)); for (const m of ai) n += m.v;
+      const META = (GD.scaling && GD.scaling.Meta) || {};
+      if (n > 0 && (ctx.tags.has('channelling') || ctx.tags.has('movement'))) res.notes.push('Afterimages: ' + sk.Name + ' is a ' + (ctx.tags.has('movement') ? 'Movement' : 'Channelling') + ' skill, so it gets none (the game\'s rule).');
+      else if (n > 0) {
+        for (const m of ai) use(m);
+        afterimages = Math.min(META.AfterimageCap || 3, n); const pct = (META.AfterimageDamagePct || 40) / 100;
+        const blow = hitsPerUse / (1 + repeats), full = perHitFactor * hitsPerUse;
+        hitsPerUse += afterimages * blow; perHitFactor = (full + afterimages * pct * full / (1 + repeats)) / hitsPerUse;
+        res.notes.push('Afterimages: ' + afterimages + (n > afterimages ? ' (capped from ' + n + ')' : '') + ', each repeats the blow for ' + Math.round(pct * 100) + '% of its damage.');
+      }
+    }
     const hitsPerSec = usesPerSec * hitsPerUse;
-    res.hits = { repeats, projectiles, projOnTarget, projWeight, perHitFactor, orbit: orbitOn, strikes, skyfallRepeat: skyRep, hitsPerUse, hitsPerSec, fullHitsPerSec: hitsPerSec * perHitFactor };
+    res.hits = { repeats, projectiles, projOnTarget, projWeight, perHitFactor, orbit: orbitOn, strikes, skyfallRepeat: skyRep, afterimages, hitsPerUse, hitsPerSec, fullHitsPerSec: hitsPerSec * perHitFactor };
 
     // ----- the hit -----
     const hit = {}; let hitAvg = 0;
@@ -1833,7 +1874,9 @@ window.CHARS = [];
     // Limits per enemy, by kind (curses.json: Woe and Sentence are separate kinds): one Sentence and up
     // to two Woes (Woe skill text "Two Woes per enemy"; log "Woe Bearer laid ... (1 Woes now, limit 2)").
     // Guardians take them all (BossEffect already halves a Woe). The best ones for this hit are kept.
-    const LIMIT = { Sentence: 1, Woe: 2 };
+    // CurseLimit lines ("You can lay +1 more Woe on each enemy": amulet Woe-sworn, Twofold Woe, Twin Oath) add Woes.
+    let woeExtra = 0; for (const m of pickMods(mods, 'CurseLimit', 'Flat')) { woeExtra += m.v; use(m); }
+    const LIMIT = { Sentence: 1, Woe: 2 + woeExtra };
     const hitTotal = Object.values(hit).reduce((a, h) => a + h.avg, 0) || 1;
     const worth = r => Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTotal * (r.taken + (r.elem[d] || 0)), 0);
     const kindOf = r => (GD.curses[r.id] || {}).Kind || '';
@@ -2260,7 +2303,7 @@ window.BOStartApp = function () {
     }
     // Cast on Crit: offered for spells with a hit; pick which attack's crits cast it.
     const isSpellHit = r.skill && (r.skill.Tags || []).includes('Spell') && !(r.skill.Tags || []).includes('Attack') && !r.unsupported && !r.error;
-    const atks = isSpellHit ? S.cocAttacks(GD, ch) : [];
+    const atks = isSpellHit ? S.cocAttacks(GD, ch, st.skill) : [];
     $('#cocRow').hidden = !atks.length;
     if (atks.length) {
       const cur = st.coc === false ? 'none' : typeof st.coc === 'string' ? st.coc : 'auto';

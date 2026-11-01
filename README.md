@@ -2,7 +2,8 @@
 
 A fan-made damage calculator for the **Broken Oath** playtest. It reads your character's save and
 your own game install, then shows your skill's DPS, finds the best support gems, and compares
-setups. Everything runs in your browser; nothing is uploaded.
+setups. Everything runs in your browser; nothing is uploaded. The page counts anonymous visits with
+GoatCounter (no cookies, no personal data, never your files).
 
 **Open it:** the GitHub Pages link for this repository.
 

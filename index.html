@@ -211,6 +211,10 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 .tn.opt-rem { fill: var(--panel-2); stroke: var(--bad); stroke-width: 16; }
 .tl.opt-add { stroke: var(--good); stroke-width: 12; stroke-dasharray: 30 18; }
 .tl.opt-rem { stroke: var(--bad); stroke-width: 10; stroke-dasharray: 20 20; }
+/* Old game data reminder */
+.data-old { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin: 10px 16px 0; padding: 9px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--panel); font-size: 13px; }
+.data-old[hidden] { display: none; }
+.data-old span { flex: 1 1 260px; }
 
 </style>
 </head>
@@ -235,6 +239,11 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
     <button class="btn ghost" id="dataBtn" type="button" hidden title="Read the game's Data folder again after a patch">Update game data</button>
   </div>
 </header>
+<div class="data-old" id="dataOld" role="status" hidden>
+  <span id="dataOldText"></span>
+  <button class="btn small" type="button" id="dataOldUpdate">Update game data</button>
+  <button class="btn small ghost" type="button" id="dataOldOk">Still current</button>
+</div>
 
 <section class="setup card" id="setup" hidden>
   <h2>First, point the sim at your game</h2>
@@ -1875,7 +1884,7 @@ window.BOStartApp = function () {
   };
 
   // ---------- setup ----------
-  $('#builtInfo').textContent = 'Game data read ' + new Date(GD.builtAt).toLocaleString() + ' · ' + Object.keys(GD.skills).length + ' skills';
+  $('#builtInfo').textContent = 'Game data read ' + new Date(GD.builtAt).toLocaleString() + (GD.filesAt ? ' (game files from ' + new Date(GD.filesAt).toLocaleDateString() + ')' : '') + ' · ' + Object.keys(GD.skills).length + ' skills';
   const resGrid = $('#resGrid');
   resGrid.innerHTML = DT.map(d => '<label class="field"><span><span class="type" style="--c:' + typeColor(d) + '">' + (d === 'Lightning' ? 'Light.' : d) + '</span></span><input type="number" data-res="' + d + '" placeholder="auto"></label>').join('');
   const allSupports = Object.values(GD.supports).sort((a, b) => a.Name.localeCompare(b.Name));
@@ -2694,9 +2703,24 @@ window.BOStartApp = function () {
   let started = false;
   const start = () => {
     setup.hidden = true; document.body.classList.remove('needs-data');
-    if (window.GD && window.GD.source === 'picked') $('#dataBtn').hidden = false;
+    if (window.GD && window.GD.source === 'picked') { $('#dataBtn').hidden = false; checkOld(); }
     if (!started) { started = true; window.BOStartApp(); } else location.reload();
   };
+  // Data read from the player's folder stays in this browser; after a patch it is out of date until
+  // they pick the folder again. A browser cannot look at the folder by itself, so remind them once the
+  // copy is over OLD_HOURS old ("Still current" waits another OLD_HOURS).
+  const OLD_HOURS = 12;
+  function checkOld() {
+    const read = Date.parse(window.GD.builtAt) || 0, ok = Date.parse(store.get('dataOk') || '') || 0;
+    const hours = (Date.now() - Math.max(read, ok)) / 3600e3;
+    if (!(hours > OLD_HOURS)) { $('#dataOld').hidden = true; return; }
+    const age = (Date.now() - read) / 3600e3;
+    const ago = age < 48 ? Math.round(age) + ' hours ago' : Math.round(age / 24) + ' days ago';
+    $('#dataOldText').textContent = 'Your game data was read ' + ago + '. If Broken Oath has patched since, update it so the sim uses the new numbers (pick the Data folder again).';
+    $('#dataOld').hidden = false;
+  }
+  $('#dataOldUpdate').addEventListener('click', () => $('#dataBtn').click());
+  $('#dataOldOk').addEventListener('click', () => { store.set('dataOk', new Date().toISOString()); $('#dataOld').hidden = true; });
   const showSetup = msg => { setup.hidden = false; document.body.classList.add('needs-data'); if (msg) status.textContent = msg; };
 
   // Read the files the sim needs from a picked folder (Data, BrokenOath or the game folder all work).
@@ -2712,7 +2736,10 @@ window.BOStartApp = function () {
     for (const o of partList) texts['Gameplay/Parts/' + o.m[1] + '/' + o.m[2]] = await o.x.f.text();
     const J = rel => JSON.parse(texts[rel]);
     const parts = name => Object.keys(texts).filter(k => k.startsWith('Gameplay/Parts/') && k.endsWith('/' + name)).sort().map(J);
-    return BG.buildGameData(J, parts, { dataDir: 'your game folder', source: 'picked' });
+    // Newest of the files read: when the game last changed them (a patch).
+    const used = [...BG.NEEDED.map(rel => find(rel).f), ...partList.map(o => o.x.f)];
+    const filesAt = Math.max(...used.map(f => f.lastModified || 0));
+    return BG.buildGameData(J, parts, { dataDir: 'your game folder', source: 'picked', filesAt: filesAt > 0 ? new Date(filesAt).toISOString() : undefined });
   }
 
   $('#dataInput').addEventListener('change', async e => {

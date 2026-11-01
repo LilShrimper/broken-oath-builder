@@ -400,10 +400,11 @@ window.CHARS = [];
   'use strict';
   const NEEDED = ['Gameplay/skills.json', 'Gameplay/classes.json', 'Gameplay/supports.json', 'Gameplay/passive_tree.json',
     'Items/affixes.json', 'Items/uniques.json', 'Items/item_bases.json', 'Items/runes.json', 'Items/runewords.json',
-    'Gameplay/dragonling.json', 'Gameplay/curses.json', 'Gameplay/blessings.json', 'Gameplay/scaling.json', 'Items/stat_text.json', 'Rifts/bosses.json'];
-  const PART_FILES = ['skills.json', 'classes.json'];
+    'Gameplay/dragonling.json', 'Gameplay/curses.json', 'Gameplay/blessings.json', 'Gameplay/scaling.json', 'Items/stat_text.json', 'Rifts/bosses.json',
+    'Gameplay/animsets.json'];
+  const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 4; // 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward
+  const SCHEMA = 6; // 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -421,16 +422,38 @@ window.CHARS = [];
       if (s.Channel) o.Channel = pick(s.Channel, ['CostPerSec', 'Tick', 'MoveMult']);
       if (s.Minion) o.Minion = pick(s.Minion, ['MonsterId', 'Count', 'Cap', 'CountEvery', 'DamageMult', 'AttackEvery']);
       if (s.Ground) o.Ground = pick(s.Ground, ['Duration', 'Tick', 'TickScale', 'Radius']);
-      if (s.Totem) o.Totem = true;
+      if (s.Totem) o.Totem = typeof s.Totem === 'object' ? Object.assign({ on: true }, pick(s.Totem, ['Kind', 'Interval', 'Duration', 'Max', 'PerLevels', 'Effectiveness'])) : true;
+      if (s.Rain) o.Rain = pick(s.Rain, ['Delay', 'Waves', 'Interval', 'Arrows']);
       if (s.Brand) o.Brand = true;
       if (s.Orbit) o.Orbit = typeof s.Orbit === 'object' ? pick(s.Orbit, ['Count', 'CountPerLevels', 'Max', 'AngularSpeed', 'SweepPeriod', 'HitInterval', 'RingSplitAt', 'EmpowerSpeed']) : true;
       skills[s.Id.toLowerCase()] = Object.assign(skills[s.Id.toLowerCase()] || {}, o);
     }
 
-    const classes = {};
+    const classes = {}, classAnims = {};
     for (const c of [...J('Gameplay/classes.json').classes, ...parts('classes.json').flatMap(p => p.classes)]) {
       const o = pick(c, ['Id', 'Str', 'Dex', 'Int', 'StrPerLevel', 'DexPerLevel', 'IntPerLevel', 'EarlyDamagePct', 'EarlyDamageFullToLevel', 'EarlyDamageEndLevel']);
       classes[c.Id.toLowerCase()] = Object.assign(classes[c.Id.toLowerCase()] || {}, o);
+      const a = classAnims[c.Id.toLowerCase()] = classAnims[c.Id.toLowerCase()] || { skill: {}, deliv: {} };
+      Object.assign(a.skill, c.SkillAnimSets || {}); Object.assign(a.deliv, c.DeliveryAnimSets || {});
+    }
+
+    // Animation speed: each skill plays a clip set (animsets.json: the class's SkillAnimSets, then its
+    // DeliveryAnimSets, then the delivery defaults) whose Rate speeds the whole action (Rate 1.35 = 35% more
+    // uses per second; checked on Split Shot / Lightning Arrow / Piercing Shot against the log's attack timing).
+    const animFiles = [J('Gameplay/animsets.json'), ...parts('animsets.json')];
+    const setRate = {}, delivDefault = {};
+    for (const f of animFiles) for (const s of f.animsets || []) {
+      const r = (s.Anims || []).map(x => x.Rate || 1);
+      setRate[s.Id] = r.length ? r.reduce((a, b) => a + b, 0) / r.length : 1;
+    }
+    for (const f of [...animFiles].reverse()) for (const d of f.delivery_defaults || []) delivDefault[d.Delivery] = d.Set;
+    const animRate = {};
+    for (const [cls, a] of Object.entries(classAnims)) {
+      for (const [id, s] of Object.entries(skills)) {
+        const set = a.skill[id] || a.deliv[s.Delivery] || delivDefault[s.Delivery];
+        const r = set ? setRate[set] : 1;
+        if (r && Math.abs(r - 1) > 1e-6) (animRate[cls] = animRate[cls] || {})[id] = +r.toFixed(4);
+      }
     }
 
     const supports = {};
@@ -473,6 +496,7 @@ window.CHARS = [];
     const scaling = {
       Hero: noDocs(sc.Hero), Gem: noDocs(sc.Gem), Ailments: noDocs(sc.Ailments),
       Monster: { ResistPerLevel: sc.MonsterResistPerLevel, ResistMax: sc.MonsterResistMax, ArmourPerLevel: sc.MonsterArmourPerLevel, Life: sc.MonsterLife, Rarity: sc.Rarity },
+      Meta: noDocs(sc.Meta59 || {}),   // game-wide rule switches (Rain cooldown by speed, Ballista + Rain waves, ...)
     };
 
     // Guardians: each spawns as a colour variant with one element and extra resistance to it; from some
@@ -486,7 +510,7 @@ window.CHARS = [];
     for (const t of J('Items/stat_text.json').texts) statText[t.Key] = t.Text;
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
-      { skills, classes, supports, nodes, moved: tree.Moved || {}, affixes, uniques, bases, runes, runewords, dragon, curses, blessings, scaling, statText, guardians, ward });
+      { skills, classes, supports, nodes, moved: tree.Moved || {}, affixes, uniques, bases, runes, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, animRate });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, SCHEMA };
@@ -651,6 +675,7 @@ window.CHARS = [];
 //   Conduit: <channel> cast <spell> (...)
 //   Skyfall: second fall for P% (N hits) cast C, K already struck this cast
 //   Gem: <id> reached level N
+//   OrbitCast: release <skill> spheres=N arrows=N ...                (LogTemp; one per projectile volley)
 //   Guardian: <guardian> element signature <Name> (<Element>...   (its colour variant's element)
 //   Guardian: <guardian> gate mechanics - ..., ward N, ...       (extra resistance to that element)
 (function (root) {
@@ -662,12 +687,22 @@ window.CHARS = [];
     const out = { heroes: [], guardians: [], casts: {}, skyfall: { falls: 0, hits: 0, blocked: 0 }, gems: {}, start: null, end: null };
     let hero = null, cur = null;
     const rupture = {}, element = {}, ward = {};
+    const self = {}, conduitSkills = new Set();
     for (const l of String(text).split(/\r?\n/)) {
+      let m;
+      // Projectile releases (one line a volley, held attacks included; LogTemp, not LogBrokenOath): the
+      // cast count for skills you use yourself. Skills seen in Conduit lines keep the Conduit count.
+      if ((m = /LogTemp: OrbitCast: release (\w+) /.exec(l))) {
+        const t = time(l); if (t == null) continue;
+        (self[m[1]] = self[m[1]] || []).push(t);
+        if (cur) { cur.self = cur.self || {}; cur.self[m[1]] = (cur.self[m[1]] || 0) + 1; }
+        continue;
+      }
       if (!l.includes('LogBrokenOath')) continue;
       const t = time(l); if (t == null) continue;
       if (out.start == null) out.start = t; out.end = t;
-      let m;
       if ((m = /Conduit: (\w+) cast (\w+)/.exec(l))) {
+        conduitSkills.add(m[2]);
         const c = out.casts[m[2]] = out.casts[m[2]] || { host: m[1], times: [] }; c.times.push(t);
         if (cur) cur.casts[m[2]] = (cur.casts[m[2]] || 0) + 1;
       } else if ((m = /Skyfall: second fall for \d+% \((\d+) hits?\) cast \d+, (\d+) already/.exec(l))) {
@@ -692,6 +727,8 @@ window.CHARS = [];
         out.gems[m[1]] = +m[2];
       }
     }
+    for (const [sk, times] of Object.entries(self)) if (!conduitSkills.has(sk)) out.casts[sk] = { host: null, times };
+    for (const g of out.guardians) { for (const [sk, n] of Object.entries(g.self || {})) if (!conduitSkills.has(sk)) g.casts[sk] = n; delete g.self; }
     // Cast rate while channelling: the typical gap between back-to-back casts (gaps over 0.8 s are breaks).
     for (const c of Object.values(out.casts)) {
       const g = []; for (let i = 1; i < c.times.length; i++) { const d = c.times[i] - c.times[i - 1]; if (d > 0 && d < 800) g.push(d); }
@@ -976,10 +1013,10 @@ window.CHARS = [];
     'Chains', 'Pierce', 'Fork', 'ChillEffect', 'FreezeDuration', 'SkillDuration', 'CurseLimit', 'MinionCap', 'MinionSpeed',
     'Afterimages', 'BloodlustDuration', 'MinionGuard', 'MinionHunt', 'MinionDeathRecover', 'SkyfallDelay', 'TrapRearm',
     'ConduitCostPct', 'ConduitInterval', 'EngineHoldInRupture', 'EngineHoldWhileSentenced', 'Woebringer', 'PassSentence',
-    'BloodMagic', 'MaimOnHit', 'LifeLeech', 'Dragonling']);
+    'BloodMagic', 'LifeLeech', 'Dragonling']);
   // Stats this model uses.
-  const HANDLED = new Set(['MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
-    'Cooldown', 'Repeats', 'Projectiles', 'Penetration', 'SkillLevel', 'PoisonChance', 'PoisonDamage', 'IgniteChance', 'IgniteDamage',
+  const HANDLED = new Set(['MaimOnHit', 'MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
+    'Cooldown', 'Repeats', 'Projectiles', 'Penetration', 'SkillLevel', 'PoisonChance', 'PoisonDamage', 'IgniteChance', 'IgniteDamage', 'BleedChance', 'BleedDamage',
     'DotMulti', 'AilmentDuration', 'CurseEffect', 'Str', 'Dex', 'Int', 'Attributes', 'GrantSupport', 'SkyfallRepeat', 'OrbitCount']);
   // Skyfall second fall: "falls again 0.4 seconds later for X% of their Damage". The game caps the sum at
   // 100% (log 1 Nov: 190% of sources -> "second fall for 100%", "SkyfallSheet68 ... on the sheet (x2.00)")
@@ -1328,7 +1365,7 @@ window.CHARS = [];
       attr[a] = Math.floor(flat * (1 + inc / 100));
     }
     res.attr = attr;
-    const per10 = (a, k) => Math.floor(attr[a] / 10) * (H[k] || 0);
+    const per10 = (a, k) => attr[a] / 10 * (H[k] || 0); // not rounded down (Shrimpbow tooltips: 107 Dex = +10.7% attack speed, 52 Int = 4.21 s bleed)
 
     // Gem level. Weapon and basic skills follow the hero (CharLevelForGemLevel).
     let own = o.gemLevel || ch.gemLevels[skillId];
@@ -1368,11 +1405,6 @@ window.CHARS = [];
       attackMult = effAt(sk.Effectiveness != null ? sk.Effectiveness : 1) * levelFactor;
       for (const d of DT) addPart(d, weapon.dmg[d][0] * attackMult, weapon.dmg[d][1] * attackMult);
       res.base = { kind: 'attack', weapon, effectiveness: attackMult, levelFactor };
-      if (sk.DamageType && sk.DamageType !== 'Physical') {
-        // ASSUMPTION: an elemental attack turns its weapon's physical damage into its element (ConvertShare if given).
-        const share = sk.ConvertShare != null ? (sk.ConvertShare > 1 ? sk.ConvertShare / 100 : sk.ConvertShare) : 1;
-        const [a, b] = parts.Physical; parts.Physical = [a * (1 - share), b * (1 - share)]; addPart(sk.DamageType, a * share, b * share);
-      }
     } else {
       // Spells grow by the game-wide Gem.DamageGrowth (x1.19) per level, gear levels included.
       // (The per-skill SpellGrowth field does not match the game's numbers; calibrated 31 Oct.)
@@ -1403,6 +1435,18 @@ window.CHARS = [];
     // Tag rules (from item texts): [X] on an item = Physical converted to X; [X] on a support = other
     // damage to X (Zap/Flame/Ice: Poison at half); [X, cond...] = damage of skills with cond to X.
     let pieces = DT.filter(d => parts[d][1] > 0).map(d => ({ type: d, scales: new Set([d]), min: parts[d][0], max: parts[d][1] }));
+    // An elemental attack converts ConvertShare of ALL its physical damage (weapon + added) to its element,
+    // and the converted part keeps Physical modifiers too (Lightning Arrow tooltip 1 Nov: 44-97 Physical and
+    // 44-97 Lightning, "Converted damage keeps your Physical modifiers and gains the new element's too").
+    if (isAttack && sk.DamageType && sk.DamageType !== 'Physical' && DT.includes(sk.DamageType)) {
+      const share = sk.ConvertShare != null ? (sk.ConvertShare > 1 ? sk.ConvertShare / 100 : sk.ConvertShare) : 1;
+      const ph = pieces.find(p => p.type === 'Physical');
+      if (ph && share > 0) {
+        pieces.push({ type: sk.DamageType, scales: new Set(['Physical', sk.DamageType]), min: ph.min * share, max: ph.max * share });
+        ph.min *= 1 - share; ph.max *= 1 - share;
+        if (ph.max <= 0) pieces = pieces.filter(p => p !== ph);
+      }
+    }
     // All conversion lines apply at once to the original damage, each source type capped at 100%
     // (Unholy Void with Plaguewright's Grasp 50% + Venom 60% shows no Lightning or Cold left).
     // Poison converts at half into any other type (game rule "converts Poison at half").
@@ -1502,15 +1546,28 @@ window.CHARS = [];
     if (isAttack) speedInc += per10('Dex', 'DexAttackSpeedPer10');
     let rateMult = (1 + speedInc / 100) * speedMore * (sk.ActionSpeed || 1);
     rateMult = clamp(rateMult, H.ActionRateMin || 0, H.ActionRateMax || 99);
+    const speedRate = rateMult; // attack/cast speed alone, before the clip's own Rate
+    const META = (GD.scaling && GD.scaling.Meta) || {};
+    // The skill's own animation speed (animsets.json Rate): the whole action plays that much faster.
+    const animRate = ((GD.animRate || {})[lc(ch.classId)] || {})[skillId] || 1;
+    const animOn = animRate !== 1 && !(sk.Channel && sk.Channel.Tick);
+    if (animOn) rateMult *= animRate;
     let usesPerSec, useTime;
     if (sk.Channel && sk.Channel.Tick) { usesPerSec = rateMult / sk.Channel.Tick; useTime = sk.Channel.Tick / rateMult; }
     else if (isAttack) { const aps = weapon ? weapon.aps : 1.2; usesPerSec = aps * rateMult; useTime = 1 / usesPerSec; }
     else { const ct = sk.CastTime || 0.5; usesPerSec = rateMult / ct; useTime = ct / rateMult; }
+    const animUses = animOn ? usesPerSec : null;
     let cooldown = 0;
     if (sk.Cooldown > 0) {
       let cdInc = 0;
       for (const m of pickMods(mods, 'Cooldown', 'Inc')) if (applies(ctx, m)) { cdInc += m.v; use(m); }
       cooldown = Math.max(sk.MinCooldown || 0, sk.Cooldown * Math.max(0.1, 1 + cdInc / 100));
+      // scaling.json Meta59 bRainCooldownBySpeed: a Rain attack's cooldown recovers with attack speed, down to
+      // RainCooldownFloor (Rain of Arrows tooltip: 0.8 s at 1.65 APS on a 1.31 bow -> 0.64 s, 1.57 uses/s).
+      if (META.bRainCooldownBySpeed && isAttack && sk.Delivery === 'Rain') {
+        cooldown = Math.max(META.RainCooldownFloor || 0, cooldown / speedRate);
+        res.notes.push('Rain cooldown recovers with attack speed: ' + cooldown.toFixed(2) + ' s (at least ' + (META.RainCooldownFloor || 0) + ' s).');
+      }
       usesPerSec = Math.min(usesPerSec, 1 / cooldown);
     }
     // Shape supports: a skill takes one shape, the first of these socketed (Skyfall's text). The others
@@ -1558,6 +1615,20 @@ window.CHARS = [];
       usesPerSec = count * ob.AngularSpeed / 360; useTime = 1 / usesPerSec;
       res.orbitRing = { count, turnsPerSec: ob.AngularSpeed / 360 };
       res.notes.push(sk.Name + ': ' + count + ' in the ring, turning ' + (ob.AngularSpeed / 360).toFixed(2) + ' times a second, so a target is struck ' + usesPerSec.toFixed(2) + ' times a second (cast speed does not change it).');
+    } else if (sk.Totem && sk.Totem.Interval > 0 && shape !== 'totem_support' && shape !== 'trap_support') {
+      // A totem attack (Ballista): each totem fires every Totem.Interval s while it stands; attack speed only
+      // places it faster (Ballista tooltip: 1 totem every 0.7 s = 129 DPS). Totems: Max + one per PerLevels
+      // reached + TotemCount (Multiple Totems, tree). TotemSpeed counted as faster firing (not checked).
+      const tt = sk.Totem;
+      let count = (tt.Max || 1) + (tt.PerLevels || []).filter(l => own >= l).length;
+      for (const m of pickMods(mods, 'TotemCount', 'Flat')) if (applies(ctx, m)) { count += m.v; use(m); }
+      let tsInc = 0; for (const m of pickMods(mods, 'TotemSpeed', 'Inc')) if (applies(ctx, m)) { tsInc += m.v; use(m); }
+      const every = tt.Interval / Math.max(0.1, 1 + tsInc / 100);
+      usesPerSec = count / every; useTime = 1 / usesPerSec;
+      res.totem = { count, every };
+      res.notes.push(sk.Name + ': ' + count + ' totem' + (count > 1 ? 's' : '') + ', each firing every ' + every.toFixed(2) + ' s (attack speed only places them faster); assumes every totem shoots this enemy.');
+    } else if (sk.Delivery === 'Rain' && sk.Rain && sk.Rain.Waves > 0) {
+      res.notes.push(sk.Name + ': every use rains ' + sk.Rain.Waves + ' waves on the area; an enemy that stays in it is struck by each.');
     } else if (['Orb', 'Orbit', 'Ground', 'Skyfall', 'Rain', 'Totem'].includes(sk.Delivery)) {
       res.notes.push(sk.Delivery + ' skills hit on their own pattern; this sheet counts one hit per cast. Set "hits per second" by hand if you know the real rate.');
     }
@@ -1576,7 +1647,8 @@ window.CHARS = [];
     // hits (second falls, repeats, projectiles). "Hits per second" below replaces the whole hit rate.
     if (o.castsPerSecOverride > 0 && !(o.hitsPerSecOverride > 0)) { usesPerSec = o.castsPerSecOverride; useTime = 1 / usesPerSec; res.notes.push('Casts per second from your fights: ' + o.castsPerSecOverride + ' (each cast keeps all its hits).'); }
     if (o.hitsPerSecOverride > 0) { usesPerSec = o.hitsPerSecOverride; useTime = 1 / usesPerSec; res.notes.push('Hits per second set by hand: ' + o.hitsPerSecOverride + '.'); }
-    res.speed = { inc: speedInc, more: speedMore, rateMult, usesPerSec, useTime, cooldown, stat: speedStat, hitFactor };
+    if (animUses != null && usesPerSec === animUses) res.notes.push('Animation speed: this skill\'s clip plays ' + Math.round(Math.abs(animRate - 1) * 100) + '% ' + (animRate > 1 ? 'faster' : 'slower') + ' than the weapon\'s attack time or the cast time (the game\'s animation Rate ' + animRate + '; matches the attack timing in the game log).');
+    res.speed = { inc: speedInc, more: speedMore, animRate: animOn ? animRate : 1, rateMult, usesPerSec, useTime, cooldown, stat: speedStat, hitFactor };
 
     // ----- hits per use -----
     let repeats = 0;
@@ -1613,8 +1685,9 @@ window.CHARS = [];
     }
     const falls = skyRep > 0 ? 2 : 1;
     const perHitFactor = projWeight / projOnTarget * (1 + skyRep) / falls; // average share of a full hit per hit
-    const strikes = typeof sk.Strikes === 'object' && sk.Strikes ? (sk.Strikes.Count || 1) : (+sk.Strikes || 1);
-    if (strikes > 1) res.notes.push(sk.Name + ' strikes ' + strikes + ' times per use; every strike is counted at the full hit (a stronger finisher is not modelled).');
+    const rainWaves = sk.Delivery === 'Rain' && sk.Rain && sk.Rain.Waves > 0 ? sk.Rain.Waves : 0;
+    const strikes = rainWaves || (typeof sk.Strikes === 'object' && sk.Strikes ? (sk.Strikes.Count || 1) : (+sk.Strikes || 1));
+    if (strikes > 1 && !rainWaves) res.notes.push(sk.Name + ' strikes ' + strikes + ' times per use; every strike is counted at the full hit (a stronger finisher is not modelled).');
     const hitsPerUse = o.hitsPerSecOverride > 0 ? 1 : (1 + repeats) * projOnTarget * strikes * falls;
     const hitsPerSec = usesPerSec * hitsPerUse;
     res.hits = { repeats, projectiles, projOnTarget, projWeight, perHitFactor, orbit: orbitOn, strikes, skyfallRepeat: skyRep, hitsPerUse, hitsPerSec, fullHitsPerSec: hitsPerSec * perHitFactor };
@@ -1700,6 +1773,12 @@ window.CHARS = [];
     }
     res.marks = markPct ? { pct: markPct } : null;
     const extraTaken = (1 + (o.extraTakenPct || 0) / 100) * (1 + markPct / 100);
+    // Maim (support): the skill's hits make the enemy take X% more Physical damage from you. The game's skill
+    // panel counts it on the physical part of the hit, not on the bleed (Split Shot tooltip 1 Nov: 1,140 DPS =
+    // hits x1.10 + 216 bleeding). Counted on hits only here too.
+    let maimPct = 0;
+    for (const m of pickMods(mods, 'MaimOnHit', 'Flat')) if (applies(ctx, m)) { maimPct += m.v; use(m); }
+    if (maimPct) res.notes.push('Maim: the enemy takes ' + maimPct + '% more Physical damage from your hits (the game\'s skill panel counts it too).');
     const enemy = { level: lvl, rarity, resist, pen, armour, guardian, curses: curseRows, activeCurses: activeCurses.map(r => r.id), curseEffInc };
     res.enemy = enemy;
     const mitig = {};
@@ -1713,7 +1792,7 @@ window.CHARS = [];
         k = (1 - dr / 100) * (1 - effRes / 100);
         mitig.armourReduction = dr;
       }
-      mitig[d] = { effRes, k, taken: takenFor(activeCurses, d) * extraTaken };
+      mitig[d] = { effRes, k, taken: takenFor(activeCurses, d) * extraTaken * (d === 'Physical' ? 1 + maimPct / 100 : 1) };
     }
     res.mitig = mitig;
     let hitDpsVs = 0; const byType = {};
@@ -1738,7 +1817,7 @@ window.CHARS = [];
     const sumMod = (stat, mode) => { let s = mode === 'More' ? 1 : 0; for (const m of pickMods(mods, stat, mode)) if (applies(ctx, m)) { s = mode === 'More' ? s * (1 + m.v / 100) : s + m.v; use(m); } return s; };
     const ail = { dotMulti, durationInc: ailDur };
     res.ailments = ail;
-    let poisonDps = 0, igniteDps = 0;
+    let poisonDps = 0, igniteDps = 0, bleedDps = 0;
     if (A.bEnabled) {
       const poisonChanceStat = sumMod('PoisonChance', 'Flat');
       const hasPoison = !!hit.Poison;
@@ -1777,12 +1856,27 @@ window.CHARS = [];
         igniteDps = dps1 * uptime * dotTakenFor('Fire');
         ail.ignite = { chance: igChance, dps1, uptime, duration: dur, dps: igniteDps };
       }
-      if (sumMod('BleedChance', 'Flat') > 0) res.notes.push('Bleeding chance found but bleeding is not modelled (its duration is not in the data).');
+      // Bleeding (Rend): "50% of the hit's physical damage each second for 4 seconds (the strongest bleed
+      // holds; 50% more while the enemy moves)" = Ailments.BleedFracPerSec x the physical hit, one bleed at a
+      // time like ignite. The duration comes from the source's text (Rend: 4 s). Counted as a standing
+      // target: the 50% more while it moves is left out.
+      const bleedChance = clamp(sumMod('BleedChance', 'Flat'), 0, 100);
+      if (bleedChance > 0 && hit.Physical) {
+        const bInc = sumMod('BleedDamage', 'Inc'), bMore = sumMod('BleedDamage', 'More');
+        let baseDur = 4;
+        for (const s of res.supports) { const d = s.ok && GD.supports[lc(s.id)] && /Bleeding[^.]*?for (\d+(?:\.\d+)?) seconds/i.exec(GD.supports[lc(s.id)].Description || ''); if (d) { baseDur = +d[1]; break; } }
+        const dur = snap(baseDur * (1 + ailDur / 100));
+        const dps1 = hit.Physical.avg * critFactor * (A.BleedFracPerSec || 0.5) * Math.max(0, 1 + bInc / 100) * bMore * Math.max(0, 1 + dotMulti / 100);
+        const uptime = 1 - Math.exp(-hitsPerSec * perHitFactor * hitFactor * bleedChance / 100 * dur);
+        bleedDps = dps1 * uptime * dotTakenFor('Physical');
+        ail.bleed = { chance: bleedChance, dps1, uptime, duration: dur, dps: bleedDps, more: bMore, inc: bInc };
+        res.notes.push('Bleeding: ' + Math.round(bleedChance) + '% chance, ' + Math.round(dps1) + '/s for ' + dur + ' s (strongest one holds, up ' + Math.round(uptime * 100) + '% of the time). Counted on a standing enemy: bleeds deal 50% more while it moves. Not checked against the game yet.');
+      }
     }
-    res.poisonDps = poisonDps; res.igniteDps = igniteDps;
+    res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
     // What the in-game skill panel shows: hits + ailments to one enemy, before its resistances and curses.
-    res.panelDps = res.sheetHitDps + (ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * ail.ignite.uptime : 0);
-    res.totalDps = hitDpsVs + poisonDps + igniteDps;
+    res.panelDps = res.sheetHitDps * (1 + (hit.Physical ? hit.Physical.avg / (hitAvg || 1) : 0) * maimPct / 100) +(ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * ail.ignite.uptime : 0) + (ail.bleed ? ail.bleed.dps1 * ail.bleed.uptime : 0);
+    res.totalDps = hitDpsVs + poisonDps + igniteDps + bleedDps;
 
     // Lines that matched this skill but that the model does not use.
     res.notModelled = [];
@@ -2121,7 +2215,7 @@ window.BOStartApp = function () {
     if (st.ch.fromCode) html += '<div class="warn" style="margin-bottom:12px"><b>Loaded from a build code.</b> Gear numbers may run low: codes don\'t carry rolled item stats, and they don\'t record a Channel Conduit link (pick the linked spell in the skill list).' +
       (st.ch.codeWarnings.length ? '<ul>' + st.ch.codeWarnings.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '') + '</div>';
     html += '<div class="headline">' +
-      stat('Total DPS vs this enemy', num(r.totalDps), delta(r.totalDps, pin && pin.total), 'main', 'Hits + poison + ignite, after resistances and curses') +
+      stat('Total DPS vs this enemy', num(r.totalDps), delta(r.totalDps, pin && pin.total), 'main', 'Hits + poison + ignite + bleeding, after resistances and curses') +
       stat('Hit DPS', num(r.hitDps), delta(r.hitDps, pin && pin.hit), '', 'After enemy resist, armour and curses') +
       stat('Poison DPS', num(r.poisonDps), delta(r.poisonDps, pin && pin.poison), '', r.ailments.poison ? num(r.ailments.poison.stacks, 1) + ' stacks of ' + r.ailments.poison.cap + ' max' : 'No poison on this skill') +
       stat('Skill panel DPS', num(r.panelDps), delta(r.panelDps, pin && pin.sheet), '', 'Hits + poison before the enemy: the number the game\'s skill panel shows') +
@@ -2129,7 +2223,7 @@ window.BOStartApp = function () {
     st.last = r;
     html += optCard(r);
     html += logCard(r);
-    html += '<div class="pinbar"><button class="btn small" id="pinBtn">' + (pin ? 'Re-pin current' : 'Pin as baseline') + '</button>' + (pin ? '<button class="btn small ghost" id="unpinBtn">Clear pin</button><span>Change anything on the left to compare with the pinned setup.</span>' : '<span>Pin this setup, then change gear, supports or the enemy to see the difference.</span>') + (r.igniteDps > 0 ? '<span>· Ignite DPS ' + num(r.igniteDps) + '</span>' : '') + '</div>';
+    html += '<div class="pinbar"><button class="btn small" id="pinBtn">' + (pin ? 'Re-pin current' : 'Pin as baseline') + '</button>' + (pin ? '<button class="btn small ghost" id="unpinBtn">Clear pin</button><span>Change anything on the left to compare with the pinned setup.</span>' : '<span>Pin this setup, then change gear, supports or the enemy to see the difference.</span>') + (r.igniteDps > 0 ? '<span>· Ignite DPS ' + num(r.igniteDps) + '</span>' : '') + (r.bleedDps > 0 ? '<span>· Bleeding DPS ' + num(r.bleedDps) + '</span>' : '') + '</div>';
 
     // Hit table
     html += '<div class="card"><h2>The hit <small>' + esc(r.skill.Name) + ' · gem ' + r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus : '') + ' · ' + (r.base.kind === 'attack' ? 'attack with ' + esc(r.base.weapon.name) : 'spell') + '</small></h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Base</th><th>Increased</th><th>More</th><th>Hit range</th><th>Enemy res</th><th>Taken</th><th>DPS</th></tr></thead><tbody>' +
@@ -2139,10 +2233,11 @@ window.BOStartApp = function () {
       }).join('') + '</tbody></table></div></div>';
 
     // Speed / crit / ailments
-    const sp = r.speed, hs = r.hits, cr = r.crit, po = r.ailments.poison, ig = r.ailments.ignite;
+    const sp = r.speed, hs = r.hits, cr = r.crit, po = r.ailments.poison, ig = r.ailments.ignite, bl = r.ailments.bleed;
     html += '<div class="grid2"><div class="card"><h2>Hits &amp; speed</h2><dl class="kv">' +
       kv('Average hit (no crit)', num(r.hitAvg)) + kv('Average hit with crits', num(r.hitAvgCrit), true) +
       kv(sp.stat === 'CastSpeed' ? 'Cast speed' : 'Attack speed', '+' + num(sp.inc, 0) + '% inc × ' + num(sp.more, 2) + ' more') +
+      (sp.animRate && sp.animRate !== 1 ? kv('Animation speed', '×' + num(sp.animRate, 2) + " (this skill's own clip speed)") : '') +
       kv('Uses per second', num(sp.usesPerSec, 2) + (sp.cooldown ? ' (cooldown ' + num(sp.cooldown, 2) + ' s)' : '')) +
       (hs.repeats ? kv('Repeats per use', '+' + hs.repeats) : '') +
       (hs.projectiles ? kv('Projectiles', hs.projectiles + ' (' + hs.projOnTarget + ' on this target)') : '') +
@@ -2156,6 +2251,7 @@ window.BOStartApp = function () {
         kv('Increased poison / DoT multi', '+' + num(po.inc, 0) + '% / +' + num(r.ailments.dotMulti, 0) + '%') + kv('Each poison deals', num(po.perStack) + '/s (' + num(po.perHitTotal) + ' total)') +
         kv('Stacks on target', num(po.stacks, 1) + ' / ' + po.cap + (po.stacksRaw >= po.cap ? ' (capped)' : '')) + kv('Poison DPS vs enemy', num(po.dps), true) + '</dl>' : '<p class="hint">No poison: this skill has no Poison damage and no chance to poison.</p>') +
       (ig ? '<h3>Ignite</h3><dl class="kv">' + kv('Ignite chance', num(ig.chance, 0) + '%') + kv('Burning while ignited', num(ig.dps1) + '/s') + kv('Uptime', num(ig.uptime * 100, 0) + '%') + kv('Ignite DPS vs enemy', num(ig.dps), true) + '</dl>' : '') +
+      (bl ? '<h3>Bleeding</h3><dl class="kv">' + kv('Bleed chance', num(bl.chance, 0) + '%') + kv('Bleeding while it holds', num(bl.dps1) + '/s for ' + num(bl.duration, 1) + ' s') + kv('Uptime', num(bl.uptime * 100, 0) + '%') + kv('Bleeding DPS vs enemy', num(bl.dps), true) + '</dl>' : '') +
       '<h3>Your attributes</h3><dl class="kv">' + kv('Strength / Dexterity / Intelligence', r.attr.Str + ' / ' + r.attr.Dex + ' / ' + r.attr.Int) + '</dl>' +
       '</div></div>';
 
@@ -2252,7 +2348,7 @@ window.BOStartApp = function () {
     const verdict = !isFinite(ratio) ? '' : Math.abs(ratio - 1) <= 0.15 ? 'The sheet matches your kills (within 15%).' : ratio > 1 ? 'You kill Guardians ' + pct(ratio - 1) + ' faster than the sheet says: something adds damage it does not count (see below).' : 'You kill Guardians ' + pct(1 - ratio).replace('+', '') + ' slower than the sheet: likely time spent moving or dodging, or a rule the sheet gets wrong.';
     const rows = c.fights.map(f => '<tr' + (f.skip ? ' class="dim"' : '') + '><td>' + esc(f.g.name.replace(/_/g, ' ')) + (f.g.element ? ' <span class="type" style="--c:' + typeColor(f.g.element) + '">' + esc(f.g.element) + (f.g.ward ? ' +' + f.g.ward : '') + '</span>' : '') + (f.gear ?' <span class="hint">(other weapon)</span>' : '') + (f.levelDiff ? ' <span class="hint">(you were ' + f.levelDiff + ')</span>' : '') + '</td><td>' + (f.g.rupture || '–') + '</td><td>' + num(f.g.life) + '</td><td>' + num(f.time, 1) + ' s</td><td><b>' + num(f.real) + '</b></td><td>' + num(f.simDps) + '</td><td>' + (f.casts ? num(f.castRate, 2) : '–') + '</td><td>' + (f.casts ? num(f.perCastReal / f.perCastSim, 2) + '×' : '–') + '</td></tr>').join('');
     const notes = [];
-    if (isFinite(c.rateMed) && isFinite(c.simRate)) notes.push('In fights you cast ' + c.skillName + ' ' + num(c.rateMed, 2) + ' times a second, against the sheet\'s ' + num(c.simRate, 2) + ' (' + Math.round(c.rateMed / c.simRate * 100) + '%): moving, dodging and phase changes take the rest.' + (c.cast && c.cast.recentGap ? ' While spinning, your recent casts land every ' + c.cast.recentGap + ' ms (' + num(1000 / c.cast.recentGap, 2) + '/s).' : ''));
+    if (isFinite(c.rateMed) && isFinite(c.simRate)) notes.push('In fights you cast ' + c.skillName + ' ' + num(c.rateMed, 2) + ' times a second, against the sheet\'s ' + num(c.simRate, 2) + ' (' + Math.round(c.rateMed / c.simRate * 100) + '%): moving, dodging and phase changes take the rest.' + (c.cast && c.cast.recentGap ? (c.cast.host ? ' While spinning, your recent casts land every ' : ' Back to back, your recent shots leave every ') + c.cast.recentGap + ' ms (' + num(1000 / c.cast.recentGap, 2) + '/s).' : ''));
     if (isFinite(c.perCastRatio)) notes.push('Damage per cast, real ÷ sheet: ' + num(c.perCastRatio, 2) + '×. Real kills also include ' + (r.conduit ? r.conduit.hostName + '\'s own hits, ' : '') + 'Herald kill effects, shocks, freezes and anything else that hit the boss, so a little above 1× is expected.');
     if (c.skyfall && c.skyfall.falls) notes.push('Skyfall repeat strikes: ' + num(c.skyfall.falls) + ' fell, ' + num(c.skyfall.hits) + ' hit something; ' + num(c.skyfall.blocked) + ' were skipped because the target was already struck that cast. ' +
       (r.hits && r.hits.skyfallRepeat > 0 ? 'The sheet counts one second fall on the target per cast at ' + Math.round(r.hits.skyfallRepeat * 100) + '% (the game\'s own sheet does the same).' : 'This skill has no second fall on the sheet.'));
@@ -2281,7 +2377,7 @@ window.BOStartApp = function () {
       '- Sheet settings: enemy boss, ' + (st.hps ? 'hits per second set by hand ' + st.hps + '/s' : st.cps ? 'fight cast rate ' + st.cps + '/s' : 'sheet cast rate'),
       '', '| Guardian | Rupture | Life | Fight s (engage to kill) | Game engaged s | Casts | Real DPS | Sheet DPS | Per cast real/sheet |', '|---|---|---|---|---|---|---|---|---|',
       ...c.fights.filter(f => !f.gear).map(f => '| ' + f.g.name + ' | ' + (f.g.rupture || '') + ' | ' + f.g.life + ' | ' + f.time.toFixed(1) + ' | ' + f.g.engaged + ' | ' + f.casts + ' | ' + Math.round(f.real) + ' | ' + Math.round(f.simDps) + ' | ' + (f.casts ? (f.perCastReal / f.perCastSim).toFixed(2) : '') + ' |'),
-      '', '- Median real / sheet: ' + (c.realMed / c.simMed).toFixed(2) + ', fight cast rate ' + (isFinite(c.rateMed) ? c.rateMed.toFixed(2) : 'n/a') + '/s' + (c.cast && c.cast.recentGap ? ', spinning cast gap ' + c.cast.recentGap + ' ms' : ''),
+      '', '- Median real / sheet: ' + (c.realMed / c.simMed).toFixed(2) + ', fight cast rate ' + (isFinite(c.rateMed) ? c.rateMed.toFixed(2) : 'n/a') + '/s' + (c.cast && c.cast.recentGap ? (c.cast.host ? ', spinning cast gap ' : ', back-to-back gap ') + c.cast.recentGap + ' ms' : ''),
       c.skyfall && c.skyfall.falls ? '- Skyfall repeats: ' + c.skyfall.falls + ' fell, ' + c.skyfall.hits + ' hits, ' + c.skyfall.blocked + ' skipped (target already struck)' : '',
     ];
     return lines.filter(x => x !== '').join('\n').replace(/\n(\| Guardian)/, '\n\n$1');
@@ -2916,7 +3012,7 @@ window.BOStartApp = function () {
     try {
       const gd = JSON.parse(cached);
       if ((gd.schema || 1) >= window.BOGameData.SCHEMA) { window.GD = gd; return start(); }
-      return showSetup('The sim was updated and reads a little more from your game files now (Oathword power by item level). Pick the Data folder once more.');
+      return showSetup('The sim was updated and reads a little more from your game files now (the animation speed of each skill). Pick the Data folder once more.');
     } catch (e) { /* bad cache: ask again */ }
   }
   showSetup();

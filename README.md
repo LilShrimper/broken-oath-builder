@@ -40,7 +40,7 @@ GoatCounter (no cookies, no personal data, never your files).
 ## Accuracy
 
 Formulas follow the game's tooltips and data notes. They were checked against the game for Death
-Coil, Unholy Void and a Channel Conduit Judgement build; other skills use the same rules but were
+Coil, Unholy Void and a Channel Conduit Judgement build, and Split Shot, Rain of Arrows, Ballista and Lightning Arrow on a Ranger; other skills use the same rules but were
 not checked one by one. If the sheet's *Skill panel DPS* differs a lot from your in-game skill
 panel, the skill likely has a mechanic the sheet does not model yet.
 

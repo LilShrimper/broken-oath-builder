@@ -387,7 +387,7 @@ window.CHARS = [];
     'Gameplay/dragonling.json', 'Gameplay/curses.json', 'Gameplay/blessings.json', 'Gameplay/scaling.json', 'Items/stat_text.json'];
   const PART_FILES = ['skills.json', 'classes.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 2;
+  const SCHEMA = 3; // 3: runeword power bands (item level 56/70/84) and Level
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -436,7 +436,7 @@ window.CHARS = [];
     const runesFile = J('Items/runes.json');
     const runes = {};
     for (const r of [...runesFile.runes, ...runesFile.jewels]) runes[r.Id.toLowerCase()] = pick(r, ['Id', 'Name', 'Weapon', 'Armour']);
-    const runewords = J('Items/runewords.json').runewords.map(r => pick(r, ['Id', 'Name', 'Runes', 'Bases', 'Mods', 'PowerMods', 'Power2H']));
+    const runewords = J('Items/runewords.json').runewords.map(r => pick(r, ['Id', 'Name', 'Runes', 'Bases', 'Mods', 'PowerMods', 'Power2H', 'PowerBandILvl', 'PowerBandCount', 'PowerBandMods', 'Level', 'Sockets', 'Class']));
 
     const dragonFile = J('Gameplay/dragonling.json');
     const asc = dragonFile.Tree.Ascendancy || {};
@@ -1056,7 +1056,8 @@ window.CHARS = [];
         // Nightshade's "+1.5" on a staff).
         const twoHand = base.bTwoHanded || (base.Tags || []).includes('TwoHand');
         const pm = twoHand && rw.Power2H ? rw.Power2H : 1;
-        for (const mm of rw.PowerMods || []) add(mm.Mod, (mm.Mod.Value || 0) * pm, (mm.Mod.Value2 || 0) * pm, label + ' · runeword ' + rw.Name + ' (power' + (pm > 1 ? ' x' + pm + ' two-handed' : '') + ')', key);
+        const power = runewordPower(rw, it.level);
+        for (const mm of power.mods) add(mm.Mod, (mm.Mod.Value || 0) * pm, (mm.Mod.Value2 || 0) * pm, label + ' · runeword ' + rw.Name + ' (power' + (power.band ? ', item level ' + power.band + '+' : '') + (pm > 1 ? ' x' + pm + ' two-handed' : '') + ')', key);
       }
     }
 
@@ -1117,6 +1118,15 @@ window.CHARS = [];
     return Math.floor(b);
   }
 
+  // Power lines by item level: the highest band reached (PowerBandILvl) replaces the base PowerMods
+  // one for one (Maelstrom: 127% -> 152 / 180 / 212% at item level 56 / 70 / 84).
+  function runewordPower(rw, itemLevel) {
+    const lv = rw.PowerBandILvl || [], cnt = rw.PowerBandCount || [];
+    let band = -1; for (let i = 0; i < lv.length; i++) if ((itemLevel || 0) >= lv[i]) band = i;
+    if (band < 0 || !rw.PowerBandMods) return { mods: rw.PowerMods || [], band: 0 };
+    const from = cnt.slice(0, band).reduce((x, y) => x + y, 0);
+    return { mods: rw.PowerBandMods.slice(from, from + cnt[band]), band: lv[band] };
+  }
   function runewordFor(GD, it, base) {
     if (!it.runes || !it.runes.length || !base) return null;
     const ids = it.runes.map(lc).join(',');
@@ -2784,7 +2794,7 @@ window.BOStartApp = function () {
     try {
       const gd = JSON.parse(cached);
       if ((gd.schema || 1) >= window.BOGameData.SCHEMA) { window.GD = gd; return start(); }
-      return showSetup('The sim was updated and needs a little more from your game files (the passive tree layout). Pick the Data folder once more.');
+      return showSetup('The sim was updated and reads a little more from your game files now (Oathword power by item level). Pick the Data folder once more.');
     } catch (e) { /* bad cache: ask again */ }
   }
   showSetup();

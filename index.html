@@ -1670,10 +1670,17 @@ window.CHARS = [];
       curseRows.push(row);
     }
     const takenFor = (rows, d) => rows.reduce((p, r) => p * (1 + (r.taken + (r.elem[d] || 0)) / 100), 1);
-    let activeCurses = curseRows;
-    if (isBoss && curseRows.length > 1) {
-      const main = Object.keys(hit).sort((a, b) => hit[b].avg - hit[a].avg)[0];
-      activeCurses = [curseRows.slice().sort((a, b) => takenFor([b], main) - takenFor([a], main))[0]];
+    // Limits per enemy, by kind (curses.json: Woe and Sentence are separate kinds): one Sentence and up
+    // to two Woes (Woe skill text "Two Woes per enemy"; log "Woe Bearer laid ... (1 Woes now, limit 2)").
+    // Guardians take them all (BossEffect already halves a Woe). The best ones for this hit are kept.
+    const LIMIT = { Sentence: 1, Woe: 2 };
+    const hitTotal = Object.values(hit).reduce((a, h) => a + h.avg, 0) || 1;
+    const worth = r => Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTotal * (r.taken + (r.elem[d] || 0)), 0);
+    const kindOf = r => (GD.curses[r.id] || {}).Kind || '';
+    let activeCurses = [];
+    for (const kind of new Set(curseRows.map(kindOf))) {
+      const rows = curseRows.filter(r => kindOf(r) === kind).sort((a, b) => worth(b) - worth(a));
+      activeCurses.push(...(LIMIT[kind] ? rows.slice(0, LIMIT[kind]) : rows));
     }
     // Hunter's Marks (MarkOnHit): +X% damage taken per Mark up to a cap, doubled on a Guardian or Unique.
     // A separate group from Woes/Sentences, so a Guardian takes both its best curse and its Marks.
@@ -2087,7 +2094,7 @@ window.BOStartApp = function () {
       const row = (r.enemy && r.enemy.curses || []).find(x => x.id === c.Id);
       const onBar = ch.hotbar.includes(c.Skill);
       const effect = row ? 'now: +' + num(row.taken, 1) + '% taken' + Object.entries(row.elem).map(([d, v]) => ', +' + num(v, 1) + '% ' + d).join('') : (c.Text || '').replace('{0}', c.TakenPct || 0).replace('{1}', Object.values(c.ElementTakenPct || {})[0] || '').replace(/\{2\}%? ?/, '');
-      return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + (onBar ? '' : ' <span class="meta" style="display:inline">(not on bar)</span>') + '<span class="meta">' + esc(effect) + (isBoss && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · a Guardian only takes your strongest curse' : '') + '</span></span></label>' +
+      return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + (onBar ? '' : ' <span class="meta" style="display:inline">(not on bar)</span>') + '<span class="meta">' + esc(effect) + (cs.on && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · not counted: an enemy holds ' + (c.Kind === 'Woe' ? 'two Woes' : 'one ' + c.Kind) + ' at a time' : '') + '</span></span></label>' +
         (c.Dread && c.Dread.Cap ? '<input class="mini" type="number" min="0" max="' + c.Dread.Cap + '" value="' + (cs.dread || 0) + '" title="Dread on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + c.Dread.Cap + ', bosses ' + c.Dread.BossCap + ')" data-dread="' + esc(c.Id) + '">' : '') + '</li>';
     }).join('');
   }
@@ -2181,7 +2188,7 @@ window.BOStartApp = function () {
       '<li>Dragonling Ascendancy: on your chosen path some nodes are replaced by their Ascended version (Plague Wyrm becomes Virulence, Slow Death becomes Contagion of the Oath). Virulence makes poisons last 25% shorter in combat, which the game\'s tooltip leaves out, and lets Rares and Guardians hold 60 stacks.</li>' +
       '<li>Orbit: every projectile strikes; each one after the first on the same enemy deals 60% less (attacks 90% less), and its poison counts as part of a stack.</li>' +
       '<li>Poison: each stack deals 20% of the whole hit per second for 2 s × (1 + ailment duration + 1% per 10 Intelligence), as the skill tooltip shows; raised by increased poison damage and the damage over time multiplier; up to 40 stacks. Ticks are not reduced by resistance; curses\' general damage taken raises them. The skill panel uses that tooltip duration; DPS against an enemy uses the combat duration (shorter with Virulence).</li>' +
-      '<li>Curses: a curse\'s damage taken and its element taken add up (its element part counts on hits); increased curse effect raises both, Intelligence does not. Different curses multiply; a Guardian only takes the strongest. Woes build Dread to +30% by themselves on Rares and Guardians.</li>' +
+      '<li>Curses: a curse\'s damage taken and its element taken add up (its element part counts on hits); increased curse effect raises both, Intelligence does not. Different curses multiply; an enemy holds one Sentence and up to two Woes at a time, Guardians too. Woes build Dread to +30% by themselves on Rares and Guardians.</li>' +
       '<li>Enemy: resistance = monster level × 0.36 (max 25%) for elements and poison; armour = level × 1.5 against physical hits (armour / (armour + 5 × hit), max 80%). The DPS assumes you cast nonstop; on bosses the log shows about 90–95% of that.</li>' +
       '<li>Channel Conduit: a spell linked to a channel (read from the save) uses the channel\'s supports and is cast on its ticks, one cast every ceil(interval ÷ tick) ticks (checked against the game log).</li>' +
       '<li>Not modelled: minions, War Banner, shock and freeze, bleeding, Skyfall repeat strikes, other triggers (on kill / on crit), keystone flags, dual-wield alternation.</li>' +

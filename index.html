@@ -215,6 +215,12 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 .data-old { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin: 10px 16px 0; padding: 9px 12px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--panel); font-size: 13px; }
 .data-old[hidden] { display: none; }
 .data-old span { flex: 1 1 260px; }
+/* Plan my next points */
+.plan-group { display: inline-flex; gap: 6px; align-items: center; }
+.plan-group input { width: 58px; }
+.plan-list li { cursor: pointer; }
+.plan-list li > span:first-child { line-height: 1.5; }
+.plan-list b { color: var(--accent); font-weight: 600; }
 
 </style>
 </head>
@@ -358,6 +364,10 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
         <label class="check-row" title="Notables with no damage lines (life, armour, mana, Skyfall speed ...) stay where they are"><input type="checkbox" id="optKeepDef" checked><span>Keep defence notables</span></label>
         <label class="check-row" title="Glass Cannon and the like: the sim sees the damage, not the price"><input type="checkbox" id="optKeys"><span>Allow new keystones</span></label>
         <button class="btn small" type="button" id="treeOptimize">Optimize tree</button>
+        <span class="plan-group" title="Where your next points should go, in order, without refunding anything">
+          <label class="field inline"><span>Points</span><input type="number" id="planPoints" min="1" max="60" value="5"></label>
+          <button class="btn small ghost" type="button" id="treePlan">Plan next points</button>
+        </span>
       </div>
       <div class="tree-view" id="treeView">
         <svg id="treeSvg" xmlns="http://www.w3.org/2000/svg"></svg>
@@ -743,12 +753,18 @@ window.CHARS = [];
       if (v === undefined) {
         calcs++;
         const r = S.calcSkill(GD, Object.assign({}, ch, { passives: list }), skill, simOpt);
-        v = r && r.totalDps > 0 ? r.totalDps : 0; cache.set(key, v);
+        v = r && r.totalDps > 0 ? r.totalDps : 0;
+        // Channel Conduit: a channel tick within cfg.conduitMargin of the interval is treated as past it
+        // (casts every 2nd tick): the game's tick can run a little faster than the sheet's (Cyclone
+        // tooltip 5.30 uses/s vs sheet 5.27), and crossing it halves the linked spell's casts.
+        const c = r && r.conduit;
+        if (c && cfg.conduitMargin > 0 && c.ticks === 1 && c.tick < c.interval * (1 + cfg.conduitMargin)) v *= 0.5;
+        cache.set(key, v);
       }
       return v;
     };
     const have = new Set((ch.passives || []).map(realId).filter(id => walkable(id)));
-    const budget = have.size;
+    const budget = have.size + Math.max(0, cfg.extraPoints | 0); // cfg.extraPoints: unspent points to plan too
     const base = V(have);
     if (!(base > 0)) return { error: 'This skill has no DPS to optimize.' };
 
@@ -803,15 +819,17 @@ window.CHARS = [];
     // (no evasion, more damage taken ...) and what they do to how the skill plays are not in the DPS number.
     const changesPlay = n => n.Kind === 'Keystone' || (n.Mods || []).some(m => m.Mode === 'Trigger' || m.Mode === 'Flag');
     const useful = Object.keys(nodes).filter(id => walkable(id) && (nodes[id].Mods || []).some(dmgish) && (cfg.allowKeystones || !changesPlay(nodes[id]) || have.has(id)));
-    function* spend(start, points) {
+    // steps (optional): records each pick in order, for "plan my next points".
+    function* spend(start, points, steps) {
       const tree = new Set(start); let cur = V(tree);
       while (points > 0) {
         const b = bfs(tree, v => { const o = otherAtAltar(tree, v); return !!o; });
         let best = null;
         for (const id of useful) {
           if (tree.has(id)) continue;
-          let list, cost;
+          let list, cost, path = [id];
           const other = otherAtAltar(tree, id);
+          if (other && cfg.addOnly) continue; // an altar swap refunds the other option
           if (other) {
             // Swap at an altar: the new option usually links the same nodes.
             if (kept.has(other)) continue;
@@ -820,18 +838,19 @@ window.CHARS = [];
             list = c; cost = c.size - tree.size;
           } else {
             const d = b.dist.get(id); if (d === undefined || d > points) continue;
-            list = new Set(tree); for (const x of pathOf(b, tree, id)) list.add(x); cost = list.size - tree.size;
+            path = pathOf(b, tree, id); list = new Set(tree); for (const x of path) list.add(x); cost = list.size - tree.size;
           }
           if (cost > points) continue;
           const g = V(list) / cur - 1; if (g <= 1e-6) continue;
           const per = g / Math.max(cost, 0.5);
-          if (!best || per > best.per) best = { list, per, cost };
+          if (!best || per > best.per) best = { list, per, cost, g, path, swapped: other || null };
           if (++tries % 40 === 0) yield null;
         }
         if (!best) break;
         for (const x of [...tree]) if (!best.list.has(x)) tree.delete(x);
         for (const x of best.list) tree.add(x);
         points -= best.cost; cur = V(tree);
+        if (steps) steps.push({ nodes: best.path, cost: best.cost, gain: best.g, swapped: best.swapped });
       }
       return tree;
     }
@@ -868,9 +887,15 @@ window.CHARS = [];
 
     yield { phase: 'Re-routing', p: 0 };
     const starts = [];
-    const pruned = prune(have); if (pruned.size < have.size) starts.push(pruned);
-    const rebuilt = rebuild(); if (rebuilt && rebuilt.size <= budget) starts.push(rebuilt);
+    if (budget > have.size) starts.push(new Set(have)); // free points: spend them on the tree as it is
+    if (!cfg.addOnly) {
+      const pruned = prune(have); if (pruned.size < have.size) starts.push(pruned);
+      const rebuilt = rebuild(); if (rebuilt && rebuilt.size <= budget) starts.push(rebuilt);
+    }
     let best = new Set(have), bestV = base;
+    // Add-only (plan my next points): keep every taken node, spend the free points in order.
+    const steps = [];
+    if (cfg.addOnly) { best = yield* drain(spend(have, budget - have.size, steps)); bestV = V(best); starts.length = 0; }
     for (const st of starts) {
       const t = yield* drain(spend(st, budget - st.size));
       const v = V(t);
@@ -878,7 +903,7 @@ window.CHARS = [];
     }
 
     // ---- 4. swap weak branches for better ones ----
-    for (let iter = 0; iter < 14; iter++) {
+    for (let iter = 0; iter < (cfg.addOnly ? 0 : 14); iter++) {
       yield { phase: 'Trying swaps', p: iter / 14 };
       const cur = bestV, seen = new Set(), branches = [];
       for (const id of best) {
@@ -917,7 +942,7 @@ window.CHARS = [];
       list: order(finalSet),
       add: add.map(id => ({ id, d: worth(finalSet, id) })).sort((a, b) => b.d - a.d),
       remove: remove.map(id => ({ id, d: own[id] })).sort((a, b) => b.d - a.d),
-      kept: [...kept].map(id => ({ id, why: why[id] })),
+      kept: [...kept].map(id => ({ id, why: why[id] })), steps, addOnly: !!cfg.addOnly,
       attrs: { Str: a1.Str - a0.Str, Dex: a1.Dex - a0.Dex, Int: a1.Int - a0.Int },
       calcs, ms: Date.now() - t0,
     };
@@ -971,7 +996,7 @@ window.CHARS = [];
         slot: i.EquippedSlot, base: i.BaseID, rarity: i.Rarity, unique: i.UniqueID, name: i.Name, level: i.ItemLevel,
         affixes: (i.Affixes || []).map(a => ({ id: a.AffixId, tier: a.Tier, v: a.Value, v2: a.Value2 })), runes: i.Runes || [],
       })),
-      passives: R.PassiveNodeIds || [], gems: R.Gems || [], gemLevels: R.GemLevels || {},
+      passives: R.PassiveNodeIds || [], bonusPoints: R.BonusPassivePoints || 0, gems: R.Gems || [], gemLevels: R.GemLevels || {},
       sockets: (R.Sockets || []).map(s => ({ skill: s.SkillId, supports: (s.Supports || []).filter(Boolean), conduit: s.ConduitLink || '' })),
       hotbar: R.Hotbar || [], weaponId: R.WeaponId, dragonNodes: R.DragonlingNodes || [], dragonAspect: R.DragonlingAspect || '',
       mainSkill: R.MainSkillPin || '',
@@ -1923,7 +1948,14 @@ window.CHARS = [];
 
   // Is this stat part of the DPS math (or deliberately non-damage)? Used to flag lines the sheet cannot count.
   const counted = stat => HANDLED.has(stat) || NON_DAMAGE.has(stat);
-  const api = { wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, statWeights, modText, splitTags, DT, supportSearch, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  // Passive points the character has not spent: PassivePointsPerLevel for each level after the first plus
+  // the save's bonus points (Shrimspins L74: 73 + 13 = 86 points, 85 taken). Null when unknown (build codes).
+  function freePoints(GD, ch) {
+    if (ch.bonusPoints == null) return null;
+    const per = (GD.scaling.Hero || {}).PassivePointsPerLevel || 1;
+    return Math.max(0, Math.round((ch.level - 1) * per + ch.bonusPoints - (ch.passives || []).filter(id => !/^start_/.test(id)).length));
+  }
+  const api = { freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, statWeights, modText, splitTags, DT, supportSearch, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -2550,7 +2582,10 @@ window.BOStartApp = function () {
     }
     for (const t of $('#treeSvg').querySelectorAll('text.tlabel')) { const id = t.dataset.id; t.classList.toggle('alloc', have.has(id)); t.classList.toggle('top', top.has(id)); t.classList.toggle('opt', oa.has(id) || orm.has(id)); }
     const saved = (st.chOrig.passives || []).length;
-    $('#treePoints').textContent = have.size + ' points taken' + (have.size !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level;
+    const free = S.freePoints(GD, st.chOrig || st.ch);
+    $('#treePoints').textContent = have.size + ' points taken' + (have.size !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level + (free ? ' · ' + free + ' free' : '');
+    const pp = $('#planPoints'), who = (st.chOrig || st.ch).id + '|' + (st.chOrig || st.ch).level;
+    if (pp.dataset.for !== who) { pp.dataset.for = who; pp.value = free > 0 ? free : 5; }
     $('#treeUndo').disabled = !T.undo.length;
   }
 
@@ -2629,15 +2664,21 @@ window.BOStartApp = function () {
   function clearOpt() {
     T.optJob = (T.optJob || 0) + 1; T.opt = null; $('#treeOpt').hidden = true;
     const b = $('#treeOptimize'); b.disabled = false; b.textContent = 'Optimize tree';
+    const p = $('#treePlan'); p.disabled = false; p.textContent = 'Plan next points';
   }
-  function runOptimize() {
+  // plan = "plan my next points": keep every taken node and spend N more points in order.
+  function runOptimize(plan) {
     if (!st.ch || !st.skill) return;
     clearOpt();
+    const extra = plan ? Math.max(1, Math.min(60, Math.round(+$('#planPoints').value || 1))) : 0;
+    const label = plan ? 'Plan next points' : 'Optimize tree';
     const job = T.optJob, key = optKey();
     const skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
-    const btn = $('#treeOptimize'), card = $('#treeOpt');
-    btn.disabled = true; card.hidden = false; card.innerHTML = '<p class="hint">Optimizing the tree for ' + esc(skillName) + '…</p>';
-    const gen = BOTreeOpt.optimize(GD, S, st.ch, st.skill, opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked });
+    const btn = $(plan ? '#treePlan' : '#treeOptimize'), card = $('#treeOpt');
+    $('#treePlan').disabled = true; $('#treeOptimize').disabled = true;
+    card.hidden = false; card.innerHTML = '<p class="hint">' + (plan ? 'Planning your next ' + extra + ' point' + (extra > 1 ? 's' : '') : 'Optimizing the tree') + ' for ' + esc(skillName) + '…</p>';
+    // conduitMargin: keep a Conduit channel's tick 1% above the interval (the game's tick runs a hair faster).
+    const gen = BOTreeOpt.optimize(GD, S, st.ch, st.skill, opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra });
     let phase = 'Starting';
     const step = () => {
       if (job !== T.optJob) return;
@@ -2645,14 +2686,14 @@ window.BOStartApp = function () {
       try {
         do { r = gen.next(); if (r.value && r.value.phase) phase = r.value.phase + (r.value.p ? ' ' + Math.round(r.value.p * 100) + '%' : ''); }
         while (!r.done && performance.now() - t0 < 30);
-      } catch (err) { btn.disabled = false; btn.textContent = 'Optimize tree'; card.innerHTML = '<p class="hint">The optimizer failed: ' + esc(err.message) + '</p>'; return; }
+      } catch (err) { clearOpt(); card.hidden = false; card.innerHTML = '<p class="hint">The optimizer failed: ' + esc(err.message) + '</p>'; return; }
       if (!r.done) { btn.textContent = phase + '…'; setTimeout(step, 0); return; }
-      btn.disabled = false; btn.textContent = 'Optimize tree';
+      $('#treePlan').disabled = false; $('#treeOptimize').disabled = false; btn.textContent = label;
       const res = r.value;
       if (res.error) { card.innerHTML = '<p class="hint">' + esc(res.error) + '</p>'; return; }
-      if (key !== optKey()) { card.innerHTML = '<p class="hint">The tree or a setting changed while optimizing: press Optimize tree again.</p>'; return; }
+      if (key !== optKey()) { card.innerHTML = '<p class="hint">The tree or a setting changed while optimizing: press ' + label + ' again.</p>'; return; }
       const worth = res.gain > 0.001;
-      Object.assign(res, { key, skill: st.skill, skillName, addSet: new Set(worth ? res.add.map(x => x.id) : []), remSet: new Set(worth ? res.remove.map(x => x.id) : []) });
+      Object.assign(res, { key, skill: st.skill, skillName, base0: res.points - extra, addSet: new Set(worth ? res.add.map(x => x.id) : []), remSet: new Set(worth ? res.remove.map(x => x.id) : []) });
       T.opt = res; showOpt(); paintTree();
     };
     step();
@@ -2673,6 +2714,7 @@ window.BOStartApp = function () {
   function showOpt() {
     const o = T.opt, card = $('#treeOpt'); if (!o) { card.hidden = true; return; }
     card.hidden = false;
+    if (o.addOnly) return showPlan(o, card);
     const kept = o.kept.length ? '<p class="hint">Left where they are: ' + o.kept.map(k => esc(GD.nodes[k.id].Name) + ' (' + esc(k.why) + ')').join(', ') + '.</p>' : '';
     if (!(o.gain > 0.001)) {
       card.innerHTML = '<h2>Your tree already looks right for ' + esc(o.skillName) + '</h2><p class="hint">Moving the same ' + o.points + ' points around gains less than 0.1% DPS.</p>' + kept +
@@ -2690,13 +2732,32 @@ window.BOStartApp = function () {
     $('#optDismiss').onclick = () => { clearOpt(); paintTree(); };
     card.querySelectorAll('[data-focus]').forEach(li => li.onclick = () => focusNode(li.dataset.focus));
   }
+  // Plan my next points: the picks in the order to take them, each with its path.
+  function showPlan(o, card) {
+    const tip = id => GD.nodes[id].Kind === 'Notable' || GD.nodes[id].Kind === 'Choice' || GD.nodes[id].Kind === 'Socket' ? '<b>' + esc(GD.nodes[id].Name) + '</b>' : esc(GD.nodes[id].Name);
+    let n = 0;
+    const rows = (o.steps || []).map(s => { const from = n + 1; n += s.cost;
+      return '<li data-focus="' + esc(s.nodes[s.nodes.length - 1]) + '"><span><span class="c">' + (s.cost > 1 ? 'Points ' + from + '–' + n : 'Point ' + from) + '</span> ' + s.nodes.map(tip).join(' › ') + '</span><span class="v">' + pct(s.gain) + '</span></li>'; }).join('');
+    const at = Object.entries(o.attrs).filter(([, v]) => v).map(([k, v]) => k + ' ' + (v > 0 ? '+' : '−') + Math.abs(v));
+    const left = o.points - o.used;
+    card.innerHTML = '<h2>Next ' + (o.points - o.base0) + ' points for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' DPS</span> <span class="hint">' + num(o.base) + ' → ' + num(o.value) + '</span></h2>' +
+      (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">No node within reach adds DPS to this skill.</p>') +
+      (left > 0 && rows ? '<p class="hint">' + left + ' point' + (left > 1 ? 's' : '') + ' left over: nothing else within reach adds DPS.</p>' : '') +
+      (at.length ? '<p class="hint">Attributes from these picks: ' + esc(at.join(', ')) + '.</p>' : '') +
+      '<p class="hint">Take them top to bottom: each row is worth most per point at that moment, its path included (gains are on top of the rows above). Keystones and skill-changing nodes are left out; Channel Conduit builds keep their channel 1% slower than the cast interval. Green on the tree. Click a row to find it.</p>' +
+      '<div class="opt-actions">' + (rows ? '<button class="btn small" type="button" id="optApply">Add to my tree</button>' : '') + '<button class="btn small ghost" type="button" id="optDismiss">Dismiss</button></div>';
+    if (rows) $('#optApply').onclick = () => { const list = o.list; clearOpt(); setPassives(list); $('#treeStatus').textContent = 'Planned points added. Copy build code gives the game a code to follow; Undo goes back.'; };
+    $('#optDismiss').onclick = () => { clearOpt(); paintTree(); };
+    card.querySelectorAll('[data-focus]').forEach(li => li.onclick = () => focusNode(li.dataset.focus));
+  }
   function focusNode(id) {
     const n = GD.nodes[id]; if (!n || !T.vb) return;
     let [, , w, h] = T.vb; if (w > 4500) { h *= 4500 / w; w = 4500; }
     setVB([n.X - w / 2, n.Y - h / 2, w, h]);
     $('#treeView').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
-  $('#treeOptimize').onclick = runOptimize;
+  $('#treeOptimize').onclick = () => runOptimize(false);
+  $('#treePlan').onclick = () => runOptimize(true);
   $('#optSkill').addEventListener('change', e => { if (e.target.value && e.target.value !== st.skill) selectSkill(e.target.value); });
 
   function clickNode(id) {

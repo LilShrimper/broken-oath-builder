@@ -32,6 +32,9 @@ setups. Everything runs in your browser; nothing is uploaded.
    and swaps weak picks for strong ones nearby. It shows the changes on the tree (green take, red
    refund) for you to apply or dismiss. Keystones, jewel sockets, trigger nodes and (by default)
    notables with no damage lines stay where they are; new keystones only if you allow them.
+   **Plan next points** (box defaults to your unspent points) lists where your next points should go, in
+   order and with their paths, without refunding anything. Channel Conduit builds keep their channel
+   a little slower than the cast interval so a new point never halves your casts.
 
 ## Accuracy
 

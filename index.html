@@ -1753,10 +1753,10 @@ window.CHARS = [];
       projOnTarget = 1; projWeight = 1;
       res.notes.push('Skyfall: each enemy is struck once per use; extra projectiles only add targets.');
     } else if (projectiles && sk.Totem && sk.Totem.Kind === 'Ballista' && !orbitOn) {
-      // "Ballistas fire 1 more bolt": a Ballista turns on one enemy, so every bolt is aimed at it.
-      // ASSUMPTION (not checked in game): on one big target (Guardian, dummy) all of them strike.
-      projOnTarget = clamp(o.projOnTarget || projectiles, 1, projectiles); projWeight = projOnTarget;
-      if (projectiles > 1) res.notes.push('Ballista: ' + projectiles + ' bolts a shot, all counted on this enemy (not checked in game; set "Projectiles hitting it" to change).');
+      // Extra Ballista bolts spread like a fan: one strikes a given enemy. Ballista tooltip 1 Nov (Multiple
+      // Projectiles, "Projectiles 3"): 139 DPS = one 57-120 bolt x crit every 0.7 s, so only one bolt counts.
+      projOnTarget = clamp(o.projOnTarget || 1, 1, projectiles); projWeight = projOnTarget;
+      if (projectiles > 1) res.notes.push('Ballista: ' + projectiles + ' bolts a shot spread out; one strikes this enemy, as the game\'s tooltip counts it (the others hit other enemies).');
     } else if (projectiles) {
       projOnTarget = clamp(o.projOnTarget || (orbitOn ? projectiles : 1), 1, projectiles);
       projWeight = orbitOn ? 1 + (projOnTarget - 1) * (isAttack ? 0.1 : 0.4) : projOnTarget;

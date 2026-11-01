@@ -1679,8 +1679,19 @@ window.CHARS = [];
       usesPerSec = tps; useTime = 1 / tps;
       res.notes.push('Aura: ' + tps + ' ticks a second at ' + Math.round(hitFactor * 100) + '% of the shown damage; cast speed does not change it.');
     } else if (sk.Delivery === 'Brand') {
+      // Sparks: "Every X seconds it strikes its host ... Lasts N seconds; up to K sparks at once". Throwing at the
+      // cooldown keeps min(K, duration x throws a second) sparks on one boss, each striking every X s.
       const ev = /Every ([\d.]+) seconds? it strikes/i.exec(desc);
-      if (ev) { usesPerSec = 1 / +ev[1]; useTime = +ev[1]; res.notes.push('Brand: one spark on the target strikes every ' + ev[1] + ' s (from the skill text). More sparks on one boss = set "hits per second" by hand.'); }
+      if (ev) {
+        const lasts = /Lasts ([\d.]+) seconds/i.exec(desc), cap = /up to (\d+) sparks/i.exec(desc);
+        let durInc = 0; for (const m of pickMods(mods, 'SkillDuration', 'Inc')) if (applies(ctx, m)) { durInc += m.v; use(m); }
+        const dur = lasts ? +lasts[1] * Math.max(0, 1 + durInc / 100) : 0;
+        const throwsPerSec = usesPerSec; // cast rate, already capped by the cooldown
+        const sparks = cap && dur ? Math.max(1, Math.min(+cap[1], dur * throwsPerSec)) : 1;
+        usesPerSec = sparks / +ev[1]; useTime = 1 / usesPerSec;
+        res.brand = { sparks, every: +ev[1], duration: dur, cap: cap ? +cap[1] : 1 };
+        res.notes.push('Spark: ' + (sparks % 1 ? sparks.toFixed(1) : sparks) + ' on the target' + (cap ? ' (up to ' + cap[1] + ', each lasting ' + dur.toFixed(1) + ' s, thrown ' + throwsPerSec.toFixed(2) + ' times a second)' : '') + ', each striking every ' + ev[1] + ' s. Different Spark skills stack on the same enemy.');
+      }
     } else if (sk.Orbit && sk.Orbit.AngularSpeed && sk.Delivery === 'Orbit') {
       // A toggled ring (Orbiting Hammers): every hammer passes a target once per turn, so it is hit
       // count x turns a second. Hammers: Count + one per CountPerLevels reached by the gem's own level

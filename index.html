@@ -1499,6 +1499,9 @@ window.CHARS = [];
         res.notes.push('Cast by ' + host.name + '\'s Channel Conduit' + (host.linked ? '' : ' (no saved link: assumed)') + ' with ' + host.name + '\'s supports: one cast every ' + ticks + ' ' + host.name + ' tick' + (ticks > 1 ? 's' : '') + ' (tick ' + Math.round(tick * 1000) + ' ms, Conduit interval ' + Math.round(interval * 1000) + ' ms) = ' + usesPerSec.toFixed(2) + ' casts a second while you channel. Faster ' + host.name + ' (attack speed) means more casts until a tick is shorter than the interval.');
       }
     }
+    // Cast rate measured in fights (game log): replaces casts per second only; each cast keeps all its
+    // hits (second falls, repeats, projectiles). "Hits per second" below replaces the whole hit rate.
+    if (o.castsPerSecOverride > 0 && !(o.hitsPerSecOverride > 0)) { usesPerSec = o.castsPerSecOverride; useTime = 1 / usesPerSec; res.notes.push('Casts per second from your fights: ' + o.castsPerSecOverride + ' (each cast keeps all its hits).'); }
     if (o.hitsPerSecOverride > 0) { usesPerSec = o.hitsPerSecOverride; useTime = 1 / usesPerSec; res.notes.push('Hits per second set by hand: ' + o.hitsPerSecOverride + '.'); }
     res.speed = { inc: speedInc, more: speedMore, rateMult, usesPerSec, useTime, cooldown, stat: speedStat, hitFactor };
 
@@ -1891,7 +1894,7 @@ window.BOStartApp = function () {
 
   const st = {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), charges: { fury: 0, insight: 0, resolve: 0 },
-    enemyLevel: null, rarity: 'rare', res: {}, curses: {}, extraTaken: 0, projOnTarget: null, hps: null, ingame: null, pinned: null,
+    enemyLevel: null, rarity: 'rare', res: {}, curses: {}, extraTaken: 0, projOnTarget: null, hps: null, cps: null, ingame: null, pinned: null,
     penFloor: false, opt: null, optJob: null, last: null,
   };
 
@@ -1928,7 +1931,7 @@ window.BOStartApp = function () {
   }
 
   function selectSkill(id) {
-    st.skill = id; st.gemLevel = null; st.supports = null; st.pinned = null; st.hps = null; stopSearch(); st.opt = null;
+    st.skill = id; st.gemLevel = null; st.supports = null; st.pinned = null; st.hps = null; st.cps = null; stopSearch(); st.opt = null;
     $('#skillSelect').value = id; $('#optSkill').value = id; $('#gemLevel').value = ''; $('#hpsOverride').value = ''; $('#ingameDps').value = '';
     if (st.ch) store.set('skill:' + st.ch.id, id);
     const sk = GD.skills[String(id).toLowerCase()];
@@ -1952,7 +1955,7 @@ window.BOStartApp = function () {
     return Object.assign({
       off: st.off, vowbreak: st.vowbreak, charges: st.charges, supportsOverride: st.supports, gemLevel: st.gemLevel || undefined,
       enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0,
-      projOnTarget: +st.projOnTarget || undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, penFloor: st.penFloor,
+      projOnTarget: +st.projOnTarget || undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, castsPerSecOverride: st.cps > 0 ? +st.cps : undefined, penFloor: st.penFloor,
       conduit: st.conduit == null ? undefined : st.conduit,
     }, extra || {});
   }
@@ -2096,8 +2099,8 @@ window.BOStartApp = function () {
     const up = $('#unpinBtn'); if (up) up.onclick = () => { st.pinned = null; render(); };
     out.querySelectorAll('[data-use]').forEach(b => b.onclick = () => useSetup(+b.dataset.use));
     const oc = $('#optClose'); if (oc) oc.onclick = () => { st.opt = null; render(); };
-    const ur = $('#useFightRate'); if (ur) ur.onclick = () => { st.hps = +ur.dataset.rate; $('#hpsOverride').value = st.hps; render(); };
-    const cfr = $('#clearFightRate'); if (cfr) cfr.onclick = () => { st.hps = null; $('#hpsOverride').value = ''; render(); };
+    const ur = $('#useFightRate'); if (ur) ur.onclick = () => { st.cps = +ur.dataset.rate; render(); };
+    const cfr = $('#clearFightRate'); if (cfr) cfr.onclick = () => { st.cps = null; render(); };
     const lb = $('#logLoadInline'); if (lb) lb.onclick = () => $('#logInput').click();
   }
 
@@ -2154,7 +2157,7 @@ window.BOStartApp = function () {
     if (c.gearSkipped) notes.push(c.gearSkipped + ' fight' + (c.gearSkipped > 1 ? 's' : '') + ' with a different weapon than your save (greyed) left out of the medians.');
     if (c.oldSkipped) notes.push(c.oldSkipped + ' fight' + (c.oldSkipped > 1 ? 's' : '') + ' from more than 2 levels below your save (greyed) left out of the medians: the sheet uses today\'s gear and points.');
     if (!c.fights.some(f => f.casts) && r.conduit) notes.push('No ' + c.skillName + ' casts during these fights: was it linked then?');
-    const rateBtn = isFinite(c.rateMed) && c.rateMed > 0 ? (st.hps ? '<button class="btn small ghost" type="button" id="clearFightRate">Back to the sheet\'s cast rate</button>' : '<button class="btn small" type="button" id="useFightRate" data-rate="' + (Math.round(c.rateMed * 100) / 100) + '">Use my fight cast rate (' + num(c.rateMed, 2) + '/s)</button>') : '';
+    const rateBtn = isFinite(c.rateMed) && c.rateMed > 0 ? (st.cps ? '<button class="btn small ghost" type="button" id="clearFightRate">Back to the sheet\'s cast rate</button>' : '<button class="btn small" type="button" id="useFightRate" data-rate="' + (Math.round(c.rateMed * 100) / 100) + '">Use my fight cast rate (' + num(c.rateMed, 2) + '/s)</button>') : '';
     const report = reportText(r, c);
     return '<div class="card"><h2>Your fights vs the sim <span class="hint">' + c.fights.length + ' Guardian kill' + (c.fights.length > 1 ? 's' : '') + ' in the log</span></h2>' +
       '<div class="headline small">' + stat('Real boss DPS (median)', num(c.realMed), '', 'main', 'Boss life ÷ time from engaging it to the kill') + stat('Sheet vs a Guardian', num(c.simMed), '', '', 'Same Rupture levels, settings on the left') + stat('Real ÷ sheet', isFinite(ratio) ? num(ratio, 2) + '×' : '–', '', '', verdict) + '</div>' +
@@ -2173,7 +2176,7 @@ window.BOStartApp = function () {
       '- Skill: ' + st.skill + ' gem ' + (r.gem ? r.gem.own + '+' + r.gem.bonus : '?') + (r.conduit ? ', cast by ' + r.conduit.host + ' Channel Conduit (' + num(r.speed.usesPerSec, 2) + '/s, tick ' + Math.round(r.conduit.tick * 1000) + ' ms, interval ' + Math.round(r.conduit.interval * 1000) + ' ms)' : ''),
       '- Supports: ' + (sup.join(', ') || 'none'),
       '- Uniques worn: ' + (uniq.join(', ') || 'none'),
-      '- Sheet settings: enemy boss, ' + (st.hps ? 'cast rate set by hand ' + st.hps + '/s' : 'sheet cast rate'),
+      '- Sheet settings: enemy boss, ' + (st.hps ? 'hits per second set by hand ' + st.hps + '/s' : st.cps ? 'fight cast rate ' + st.cps + '/s' : 'sheet cast rate'),
       '', '| Guardian | Rupture | Life | Fight s (engage to kill) | Game engaged s | Casts | Real DPS | Sheet DPS | Per cast real/sheet |', '|---|---|---|---|---|---|---|---|---|',
       ...c.fights.filter(f => !f.gear).map(f => '| ' + f.g.name + ' | ' + (f.g.rupture || '') + ' | ' + f.g.life + ' | ' + f.time.toFixed(1) + ' | ' + f.g.engaged + ' | ' + f.casts + ' | ' + Math.round(f.real) + ' | ' + Math.round(f.simDps) + ' | ' + (f.casts ? (f.perCastReal / f.perCastSim).toFixed(2) : '') + ' |'),
       '', '- Median real / sheet: ' + (c.realMed / c.simMed).toFixed(2) + ', fight cast rate ' + (isFinite(c.rateMed) ? c.rateMed.toFixed(2) : 'n/a') + '/s' + (c.cast && c.cast.recentGap ? ', spinning cast gap ' + c.cast.recentGap + ' ms' : ''),
@@ -2186,7 +2189,7 @@ window.BOStartApp = function () {
   const supName = id => (GD.supports[String(id).toLowerCase()] || { Name: id }).Name;
   function optSig() {
     const o = opts();
-    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.enemyRes, o.curses, o.extraTakenPct, o.projOnTarget, o.hitsPerSecOverride, o.penFloor, o.gemLevel],
+    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.enemyRes, o.curses, o.extraTakenPct, o.projOnTarget, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
       off: [...st.off].filter(k => !k.startsWith('support:')).sort(), vb: [...st.vowbreak].sort(), ch: o.charges });
   }
   function runSearch() {

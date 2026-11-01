@@ -276,6 +276,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
         <div class="field"><span>From gear</span><output id="gemBonus" class="readout">+0</output></div>
       </div>
       <label class="check-row" id="conduitRow" hidden><input type="checkbox" id="conduitToggle"><span id="conduitLabel">Cast by Channel Conduit</span></label>
+      <label class="field" id="cocRow" hidden><span>Cast on Crit <span class="meta" id="cocInfo"></span></span><select id="cocSelect"></select></label>
       <p class="skill-desc" id="skillDesc"></p>
     </section>
 
@@ -676,6 +677,7 @@ window.CHARS = [];
 //   Skyfall: second fall for P% (N hits) cast C, K already struck this cast
 //   Gem: <id> reached level N
 //   OrbitCast: release <skill> spheres=N arrows=N ...                (LogTemp; one per projectile volley)
+//   Trigger: Crit -> CastLinked <spell> via <skill> (N hits, fired N)  (a Cast on Crit cast; counted like Conduit)
 //   Guardian: <guardian> element signature <Name> (<Element>...   (its colour variant's element)
 //   Guardian: <guardian> gate mechanics - ..., ward N, ...       (extra resistance to that element)
 (function (root) {
@@ -701,7 +703,8 @@ window.CHARS = [];
       if (!l.includes('LogBrokenOath')) continue;
       const t = time(l); if (t == null) continue;
       if (out.start == null) out.start = t; out.end = t;
-      if ((m = /Conduit: (\w+) cast (\w+)/.exec(l))) {
+      if ((m = /Conduit: (\w+) cast (\w+)/.exec(l)) || (m = /Trigger: Crit -> CastLinked (\w+) via (\w+)/.exec(l))) {
+        if (m[0].startsWith('Trigger')) m = [m[0], 'crit:' + m[2], m[1]]; // [_, host, spell] like the Conduit line
         conduitSkills.add(m[2]);
         const c = out.casts[m[2]] = out.casts[m[2]] || { host: m[1], times: [] }; c.times.push(t);
         if (cur) cur.casts[m[2]] = (cur.casts[m[2]] || 0) + 1;
@@ -1278,6 +1281,37 @@ window.CHARS = [];
     if (!s) return null;
     return { skill: s.skill, name: (GD.skills[lc(s.skill)] || {}).Name || s.skill, linked: !!linked, supports: s.supports.filter(x => lc(x) !== 'channel_conduit') };
   }
+  // Cast on Crit: which attack's crits cast this spell (support text: "When one of your attacks lands a critical
+  // hit, the spell this is socketed in casts itself ... In an attack instead, drop a spell on its link").
+  //   link:   a skill whose socket holds Cast on Crit and links this spell (the save's link field, like Conduit)
+  //   self:   Cast on Crit in the spell's own sockets; counted from the first attack on your bar
+  //   chosen: o.cocSource, an attack picked on the page
+  // Only attacks count: a spell holding it (Orbiting Hammers) fired a few times in a burst in the log, then never.
+  function cocSource(GD, ch, skillId, selfSupports, o) {
+    o = o || {};
+    const isCoc = x => lc(String(x).replace('@granted', '')) === 'cast_on_crit';
+    const atk = id => { const s = GD.skills[lc(id)]; return !!s && (s.Tags || []).includes('Attack') && !(s.Tags || []).includes('Movement') && !s.Minion; };
+    const linkS = ch.sockets.find(s => lc(s.skill) !== lc(skillId) && s.conduit && lc(s.conduit) === lc(skillId) && s.supports.some(isCoc));
+    let src = null, mode = null;
+    if (o.cocSource) { src = o.cocSource; mode = 'chosen'; }
+    else if (linkS) { src = linkS.skill; mode = 'link'; }
+    else if ((selfSupports || []).some(isCoc)) {
+      const order = [...(ch.hotbar || []), ...ch.sockets.map(s => s.skill)].filter(Boolean);
+      src = order.find(atk) || null; mode = 'self';
+    }
+    if (!mode) return null;
+    return { skill: src, name: src ? (GD.skills[lc(src)] || {}).Name || src : null, mode, counted: !!src && atk(src) };
+  }
+  // Attacks on the bar that could trigger a spell with Cast on Crit (for the page's picker).
+  function cocAttacks(GD, ch) {
+    const seen = new Set(), out = [];
+    for (const id of [...(ch.hotbar || []), ...ch.sockets.map(s => s.skill)]) {
+      const s = id && GD.skills[lc(id)];
+      if (!s || seen.has(lc(id)) || !(s.Tags || []).includes('Attack') || (s.Tags || []).includes('Movement') || s.Minion) continue;
+      seen.add(lc(id)); out.push({ id, name: s.Name });
+    }
+    return out;
+  }
   // Seconds between Conduit casts before ticks: the support's interval x every "ConduitInterval More" line.
   function conduitInterval(GD, mods) {
     const cc = GD.supports.channel_conduit || {};
@@ -1342,6 +1376,16 @@ window.CHARS = [];
     }
     res.mods = mods;
     const use = (m, why) => { res.used.set(m, why || true); };
+    // Cast on Crit: the spell is cast by an attack's crits (rate worked out below); it deals TrigDamage less.
+    const coc = isSpell && o.coc !== false ? cocSource(GD, ch, skillId, res.supports.filter(s => s.ok && !(o.off && o.off.has(s.key))).map(s => s.id), o) : null;
+    if (coc && coc.counted) {
+      ctx.tags.add('triggered');
+      const own = mods.filter(m => m.stat === 'TrigDamage' && m.mode === 'More');
+      const cs = GD.supports.cast_on_crit || {};
+      const lines = own.length ? own : (cs.Mods || []).filter(m => m.Stat === 'TrigDamage').map(m => ({ stat: 'TrigDamage', mode: 'More', tags: [], v: m.Value, v2: 0, local: false, src: 'Support · ' + (cs.Name || 'Cast on Crit') + ' (on ' + coc.name + ')', key: 'support:cast_on_crit' }));
+      for (const m of lines) { use(m, 'triggered damage'); mods.push(Object.assign({}, m, { stat: 'Damage', tags: [] })); }
+      for (const m of mods) if (m.stat === 'TrigCooldown') use(m, 'trigger cooldown');
+    }
     // The active shape support gives the skill its tag: Death Coil with Orbit "scales with ... Orbit"
     // damage (game tooltip), so "increased Orbit damage" lines apply.
     const SHAPE_TAG = { orbit: 'orbit', skyfall: 'skyfall', rain_support: 'rain', trap_support: 'trap', totem_support: 'totem' };
@@ -1643,6 +1687,36 @@ window.CHARS = [];
         res.notes.push('Cast by ' + host.name + '\'s Channel Conduit' + (host.linked ? '' : ' (no saved link: assumed)') + ' with ' + host.name + '\'s supports: one cast every ' + ticks + ' ' + host.name + ' tick' + (ticks > 1 ? 's' : '') + ' (tick ' + Math.round(tick * 1000) + ' ms, Conduit interval ' + Math.round(interval * 1000) + ' ms) = ' + usesPerSec.toFixed(2) + ' casts a second while you channel. Faster ' + host.name + ' (attack speed) means more casts until a tick is shorter than the interval.');
       }
     }
+    // Cast on Crit: one cast per attack volley that lands at least one crit, at most once per TrigCooldown
+    // (0.15 s; a totem's trigger once per second). A volley = the projectiles that strike together (Orbit's
+    // arrows all fly at once), so per volley P = 1 - (1 - crit)^arrows on the target. Repeats, Rain waves and
+    // second falls are separate volleys. Triggered casts add to Conduit casts; your own casting is not counted.
+    if (coc) {
+      if (!coc.counted) {
+        res.notes.push(coc.skill ? 'Cast on Crit: ' + coc.name + ' is not an attack; the support says only attacks\' crits cast the spell, so no triggered casts are counted.'
+          : 'Cast on Crit: no attack on your bar to trigger it, so no triggered casts are counted.');
+      } else {
+        const hr = calcSkill(GD, ch, coc.skill, { _col: col, off: o.off, coc: false, conduit: false, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyRes: o.enemyRes, curses: o.curses });
+        if (hr.speed && hr.hits && hr.crit) {
+          const cs = GD.supports.cast_on_crit || {};
+          const cdLine = mods.find(m => m.stat === 'TrigCooldown') || (cs.Mods || []).map(m => ({ v: m.Stat === 'TrigCooldown' ? m.Value : 0 })).find(m => m.v > 0);
+          const srcSk = GD.skills[lc(coc.skill)] || {};
+          const totemSrc = !!(srcSk.Totem || hr.shape === 'totem_support');
+          const tau = totemSrc ? Math.max(1, cdLine ? cdLine.v : 0.15) : (cdLine ? cdLine.v : 0.15);
+          const per = Math.max(1, hr.hits.projOnTarget || 1);
+          const volleys = (hr.hits.hitsPerSec || 0) / per;
+          const c = clamp(hr.crit.chance / 100, 0, 1);
+          const p = 1 - Math.pow(1 - c, per);
+          const lam = volleys * p, T = volleys > 0 ? 1 / volleys : Infinity;
+          let rate = lam / (1 + lam * Math.max(0, tau - T));
+          rate = Math.min(rate, 1 / tau);
+          if (cooldown > 0) rate = Math.min(rate, 1 / cooldown);
+          usesPerSec = (res.conduit ? usesPerSec : 0) + rate; useTime = usesPerSec > 0 ? 1 / usesPerSec : Infinity;
+          res.coc = { source: coc.skill, sourceName: coc.name, mode: coc.mode, crit: hr.crit.chance, perVolley: per, volleysPerSec: volleys, pVolley: p, rate, tau, cooldown };
+          res.notes.push('Cast on Crit from ' + coc.name + (coc.mode === 'self' ? ' (the first attack on your bar)' : coc.mode === 'chosen' ? ' (picked on the page)' : ' (its link)') + ': ' + volleys.toFixed(2) + ' volleys a second of ' + per + ' hit' + (per > 1 ? 's' : '') + ' at ' + hr.crit.chance.toFixed(1) + '% crit = ' + Math.round(p * 100) + '% of volleys crit; at most one cast per ' + tau + ' s' + (cooldown > 0 ? ' and per ' + cooldown.toFixed(2) + ' s cooldown' : '') + ' = ' + rate.toFixed(2) + ' casts a second' + (res.conduit ? ' on top of the Conduit casts' : '') + '. Each triggered cast deals 25% less. Not checked against the game yet.');
+        }
+      }
+    }
     // Cast rate measured in fights (game log): replaces casts per second only; each cast keeps all its
     // hits (second falls, repeats, projectiles). "Hits per second" below replaces the whole hit rate.
     if (o.castsPerSecOverride > 0 && !(o.hitsPerSecOverride > 0)) { usesPerSec = o.castsPerSecOverride; useTime = 1 / usesPerSec; res.notes.push('Casts per second from your fights: ' + o.castsPerSecOverride + ' (each cast keeps all its hits).'); }
@@ -1923,13 +1997,15 @@ window.CHARS = [];
   function clone(p) { const o = {}; for (const k in p) o[k] = p[k].slice(); return o; }
 
   // Skills worth offering for a character: hotbar first, then socketed, then every owned gem.
-  function listSkills(GD, ch) {
+  // all: also every other skill with a hit (planning with gems you don't own; gem level = what your level allows).
+  function listSkills(GD, ch, all) {
     const seen = new Set(); const out = [];
     const push = (id, where) => { if (!id || id === 'move' || seen.has(id) || !GD.skills[lc(id)]) return; seen.add(id); out.push({ id, where, name: GD.skills[lc(id)].Name }); };
     ch.hotbar.forEach(id => push(id, 'Hotbar'));
     ch.sockets.forEach(s => push(s.skill, 'Socketed'));
     const w = ch.items.find(i => i.slot === 'MainHand'); const wb = w && GD.bases[lc(w.base)];
     ch.gems.forEach(id => push(id, 'Owned gem'));
+    if (all) for (const s of Object.values(GD.skills)) if (s.Kind !== 'Basic' && (s.SpellMin || (s.Tags || []).includes('Attack')) && !s.Minion && s.Delivery !== 'Summon') push(lc(s.Id), 'Other skills (not owned: gem level from your character level)');
     return out;
   }
 
@@ -2057,7 +2133,7 @@ window.CHARS = [];
     const per = (GD.scaling.Hero || {}).PassivePointsPerLevel || 1;
     return Math.max(0, Math.round((ch.level - 1) * per + ch.bonusPoints - (ch.passives || []).filter(id => !/^start_/.test(id)).length));
   }
-  const api = { freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, statWeights, modText, splitTags, DT, supportSearch, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  const api = { cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, statWeights, modText, splitTags, DT, supportSearch, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -2115,7 +2191,7 @@ window.BOStartApp = function () {
     st.enemyLevel = null; $('#enemyLevel').value = ''; $('#enemyLevel').placeholder = ch.level;
     const skills = S.listSkills(GD, ch);
     const groups = {};
-    for (const s of skills) (groups[s.where] = groups[s.where] || []).push(s);
+    for (const s of S.listSkills(GD, ch, true)) (groups[s.where] = groups[s.where] || []).push(s);
     $('#skillSelect').innerHTML = Object.entries(groups).map(([g, list]) => '<optgroup label="' + g + '">' + list.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('') + '</optgroup>').join('');
     const remembered = store.get('skill:' + ch.id, null);
     const pickable = skills.filter(s => { const r = S.calcSkill(GD, ch, s.id, {}); return !r.unsupported && !r.error; });
@@ -2131,6 +2207,7 @@ window.BOStartApp = function () {
     const sk = GD.skills[String(id).toLowerCase()];
     $('#skillDesc').textContent = sk ? sk.Description.replace(/\{[^}]+\}\|plural\([^)]*\)/g, '').replace(/\{(\w+)\}/g, '$1') : '';
     st.conduit = null; // auto: follow the save's Conduit link
+    st.coc = undefined; // auto: Cast on Crit as socketed in the save
     resetSupports();
     render();
   }
@@ -2151,6 +2228,7 @@ window.BOStartApp = function () {
       enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0,
       projOnTarget: +st.projOnTarget || undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, castsPerSecOverride: st.cps > 0 ? +st.cps : undefined, penFloor: st.penFloor,
       conduit: st.conduit == null ? undefined : st.conduit,
+      coc: st.coc === false ? false : undefined, cocSource: typeof st.coc === 'string' ? st.coc : undefined,
     }, extra || {});
   }
 
@@ -2167,6 +2245,17 @@ window.BOStartApp = function () {
       $('#conduitLabel').textContent = r.conduit
         ? 'Cast by ' + r.conduit.hostName + '\'s Channel Conduit: ' + num(r.speed.usesPerSec, 2) + ' casts/s (every ' + r.conduit.ticks + ' tick' + (r.conduit.ticks > 1 ? 's' : '') + ' of ' + Math.round(r.conduit.tick * 1000) + ' ms), with ' + r.conduit.hostName + '\'s supports'
         : 'Cast by ' + possible.name + '\'s Channel Conduit (off: cast by hand with this spell\'s own supports)';
+    }
+    // Cast on Crit: offered for spells with a hit; pick which attack's crits cast it.
+    const isSpellHit = r.skill && (r.skill.Tags || []).includes('Spell') && !(r.skill.Tags || []).includes('Attack') && !r.unsupported && !r.error;
+    const atks = isSpellHit ? S.cocAttacks(GD, ch) : [];
+    $('#cocRow').hidden = !atks.length;
+    if (atks.length) {
+      const cur = st.coc === false ? 'none' : typeof st.coc === 'string' ? st.coc : 'auto';
+      $('#cocSelect').innerHTML = '<option value="auto">As in your save' + (r.coc && st.coc === undefined ? ' (' + esc(r.coc.sourceName) + ')' : ' (not triggered)') + '</option><option value="none">Not triggered (cast by hand)</option>' +
+        atks.map(a => '<option value="' + esc(a.id) + '">Triggered by ' + esc(a.name) + "'s crits</option>").join('');
+      $('#cocSelect').value = cur;
+      $('#cocInfo').textContent = r.coc ? num(r.coc.rate, 2) + ' casts/s: ' + Math.round(r.coc.pVolley * 100) + '% of ' + r.coc.sourceName + "'s volleys crit" : '';
     }
     // Supports
     const sup = r.supports || [];
@@ -2348,7 +2437,7 @@ window.BOStartApp = function () {
     const verdict = !isFinite(ratio) ? '' : Math.abs(ratio - 1) <= 0.15 ? 'The sheet matches your kills (within 15%).' : ratio > 1 ? 'You kill Guardians ' + pct(ratio - 1) + ' faster than the sheet says: something adds damage it does not count (see below).' : 'You kill Guardians ' + pct(1 - ratio).replace('+', '') + ' slower than the sheet: likely time spent moving or dodging, or a rule the sheet gets wrong.';
     const rows = c.fights.map(f => '<tr' + (f.skip ? ' class="dim"' : '') + '><td>' + esc(f.g.name.replace(/_/g, ' ')) + (f.g.element ? ' <span class="type" style="--c:' + typeColor(f.g.element) + '">' + esc(f.g.element) + (f.g.ward ? ' +' + f.g.ward : '') + '</span>' : '') + (f.gear ?' <span class="hint">(other weapon)</span>' : '') + (f.levelDiff ? ' <span class="hint">(you were ' + f.levelDiff + ')</span>' : '') + '</td><td>' + (f.g.rupture || '–') + '</td><td>' + num(f.g.life) + '</td><td>' + num(f.time, 1) + ' s</td><td><b>' + num(f.real) + '</b></td><td>' + num(f.simDps) + '</td><td>' + (f.casts ? num(f.castRate, 2) : '–') + '</td><td>' + (f.casts ? num(f.perCastReal / f.perCastSim, 2) + '×' : '–') + '</td></tr>').join('');
     const notes = [];
-    if (isFinite(c.rateMed) && isFinite(c.simRate)) notes.push('In fights you cast ' + c.skillName + ' ' + num(c.rateMed, 2) + ' times a second, against the sheet\'s ' + num(c.simRate, 2) + ' (' + Math.round(c.rateMed / c.simRate * 100) + '%): moving, dodging and phase changes take the rest.' + (c.cast && c.cast.recentGap ? (c.cast.host ? ' While spinning, your recent casts land every ' : ' Back to back, your recent shots leave every ') + c.cast.recentGap + ' ms (' + num(1000 / c.cast.recentGap, 2) + '/s).' : ''));
+    if (isFinite(c.rateMed) && isFinite(c.simRate)) notes.push('In fights you cast ' + c.skillName + ' ' + num(c.rateMed, 2) + ' times a second, against the sheet\'s ' + num(c.simRate, 2) + ' (' + Math.round(c.rateMed / c.simRate * 100) + '%): moving, dodging and phase changes take the rest.' + (c.cast && c.cast.recentGap ? (c.cast.host && String(c.cast.host).startsWith('crit:') ? ' Your recent Cast on Crit casts come every ' : c.cast.host ? ' While spinning, your recent casts land every ' : ' Back to back, your recent shots leave every ') + c.cast.recentGap + ' ms (' + num(1000 / c.cast.recentGap, 2) + '/s).' : ''));
     if (isFinite(c.perCastRatio)) notes.push('Damage per cast, real ÷ sheet: ' + num(c.perCastRatio, 2) + '×. Real kills also include ' + (r.conduit ? r.conduit.hostName + '\'s own hits, ' : '') + 'Herald kill effects, shocks, freezes and anything else that hit the boss, so a little above 1× is expected.');
     if (c.skyfall && c.skyfall.falls) notes.push('Skyfall repeat strikes: ' + num(c.skyfall.falls) + ' fell, ' + num(c.skyfall.hits) + ' hit something; ' + num(c.skyfall.blocked) + ' were skipped because the target was already struck that cast. ' +
       (r.hits && r.hits.skyfallRepeat > 0 ? 'The sheet counts one second fall on the target per cast at ' + Math.round(r.hits.skyfallRepeat * 100) + '% (the game\'s own sheet does the same).' : 'This skill has no second fall on the sheet.'));
@@ -2451,6 +2540,7 @@ window.BOStartApp = function () {
   $('#extraTaken').addEventListener('input', e => { st.extraTaken = e.target.value; render(); });
   $('#projOnTarget').addEventListener('input', e => { st.projOnTarget = e.target.value; render(); });
   $('#hpsOverride').addEventListener('input', e => { st.hps = +e.target.value || null; render(); });
+  $('#cocSelect').addEventListener('change', e => { const v = e.target.value; st.coc = v === 'auto' ? undefined : v === 'none' ? false : v; st.pinned = null; stopSearch(); st.opt = null; render(); });
   $('#conduitToggle').addEventListener('change', e => { st.conduit = e.target.checked; st.pinned = null; stopSearch(); st.opt = null; resetSupports(); render(); });
   $('#optBtn').addEventListener('click', runSearch);
   $('#penNeg').addEventListener('change', e => { st.penFloor = !e.target.checked; render(); });

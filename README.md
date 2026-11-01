@@ -19,7 +19,10 @@ GoatCounter (no cookies, no personal data, never your files).
 3. **Or paste a build code** from the passive tree's copy button (starts with `BO1.`). Codes carry
    the tree, skills, supports, Dragonling and gear bases but not rolled item stats, so numbers for
    rare-heavy gear read low. A save is exact.
-4. Pick a skill, then use **Find best supports**, **Pin as baseline** and **What helps most**.
+4. Pick a skill, then use **Find best supports**, **Pin as baseline** and **What helps most**. The skill list also has
+   skills you don't own yet (at the gem level your character could use). A spell with Cast on Crit shows a picker
+   for the attack whose crits cast it; the sheet then counts one cast per attack volley that crits (at most one
+   per 0.15 s, 25% less damage). Cast on Crit has not been checked against the game yet.
 5. **Check it against your fights:** click *Load game log* and pick
    `%LOCALAPPDATA%\BrokenOath\Saved\Logs\BrokenOath.log`. The page compares the sheet with your real
    Guardian kills (boss life ÷ fight time), your cast rate and damage per cast, and can use your

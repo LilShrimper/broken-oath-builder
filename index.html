@@ -1,0 +1,1793 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Broken Oath Damage Sim</title>
+<style>
+:root {
+  --bg: #141116; --panel: #1d1920; --panel-2: #241f28; --line: #352e3a; --text: #ebe4d8; --muted: #a59bab; --faint: #776d7c;
+  --accent: #d9a85b; --accent-ink: #1a1408; --good: #7fc46a; --bad: #e0675a;
+  --t-physical: #cbb9a2; --t-fire: #ec7b4c; --t-cold: #73b9ea; --t-lightning: #e9d45c; --t-poison: #82c76c;
+  --radius: 10px; --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 6px 20px rgba(0,0,0,.25);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f0ea; --panel: #fffdf9; --panel-2: #f7f2ea; --line: #e2d9cc; --text: #2a2420; --muted: #6d6259; --faint: #9a8f84;
+    --accent: #a8742a; --accent-ink: #fff; --good: #3f8a2e; --bad: #b8433a;
+    --t-physical: #8a7356; --t-fire: #c4521f; --t-cold: #2c7fb8; --t-lightning: #a68a0a; --t-poison: #3f8a2e;
+    --shadow: 0 1px 2px rgba(0,0,0,.06);
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+code { font-family: ui-monospace, Consolas, monospace; font-size: .92em; background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+h1 { font-size: 18px; margin: 0; letter-spacing: .02em; }
+h2 { font-size: 13px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; }
+h2 small { color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 400; }
+h3 { font-size: 12px; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+.top { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+  padding: 12px 20px; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.brand { display: flex; flex-direction: column; }
+.sub { color: var(--faint); font-size: 12px; }
+.top-controls { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+.code-form { display: flex; gap: 6px; align-items: center; margin: 0; }
+.code-form input { width: 220px; }
+@media (max-width: 600px) { .code-form { width: 100%; } .code-form input { width: auto; flex: 1; } }
+.warn ul { margin: 6px 0 0; padding-left: 18px; }
+
+.layout { display: grid; grid-template-columns: minmax(300px, 360px) 1fr; gap: 18px; padding: 18px 20px; max-width: 1500px; margin: 0 auto; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; padding: 14px 16px; } .top { padding: 10px 16px; position: static; } }
+.controls { display: flex; flex-direction: column; gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); min-width: 0; }
+
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; min-width: 0; }
+.field > span { font-size: 12px; color: var(--muted); }
+.field.inline { margin: 0; }
+select, input[type=number], input[type=text] { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; font: inherit; min-width: 0; }
+select:focus, input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 0; border-color: var(--accent); }
+.top select { min-width: 220px; }
+.readout { display: block; padding: 7px 9px; border: 1px dashed var(--line); border-radius: 7px; color: var(--muted); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); font-weight: 600; cursor: pointer; border: 0; font: inherit; font-weight: 600; white-space: nowrap; }
+.btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.btn.small { padding: 4px 9px; font-size: 12px; }
+.btn.wide { width: 100%; justify-content: center; }
+.btn:disabled { opacity: .6; cursor: progress; }
+.opt { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 10px; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; margin: 2px 0 8px; cursor: pointer; }
+.check input { margin-top: 3px; accent-color: var(--accent); }
+.check .meta { display: block; color: var(--faint); font-size: 11.5px; }
+.optrow { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.optrow:last-child { border-bottom: 0; }
+.optrow .rank { color: var(--faint); font-variant-numeric: tabular-nums; text-align: right; }
+.optrow .names { overflow-wrap: anywhere; font-size: 13px; }
+.optrow .nums { display: block; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.optrow.current { background: var(--panel-2); border-radius: 6px; padding-left: 4px; }
+.optrow .new { color: var(--accent); }
+.optrow .gone { color: var(--faint); text-decoration: line-through; }
+.hint { color: var(--faint); font-size: 12px; margin: 4px 0 8px; }
+.skill-desc { color: var(--muted); font-size: 12.5px; margin: 4px 0 0; }
+
+.checklist { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.checklist li { display: flex; align-items: flex-start; gap: 8px; padding: 5px 6px; border-radius: 6px; }
+.checklist li:hover { background: var(--panel-2); }
+.checklist label { display: flex; gap: 8px; align-items: flex-start; flex: 1; cursor: pointer; min-width: 0; }
+.checklist .name { overflow-wrap: anywhere; }
+.checklist .meta { display: block; color: var(--faint); font-size: 11.5px; }
+#supportList .meta:not(.bad) { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#supportList li:hover .meta { -webkit-line-clamp: unset; }
+.checklist .bad { color: var(--bad); }
+.checklist input[type=checkbox] { margin-top: 3px; accent-color: var(--accent); }
+.checklist .x { background: none; border: 0; color: var(--faint); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; }
+.checklist .x:hover { color: var(--bad); }
+.checklist .mini { width: 58px; padding: 3px 6px; font-size: 12px; }
+.res-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.res-grid .field > span { font-size: 11px; }
+
+.results { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.empty { color: var(--muted); padding: 40px; text-align: center; border: 1px dashed var(--line); border-radius: var(--radius); }
+.headline { display: grid; grid-template-columns: 1.4fr repeat(3, 1fr); gap: 12px; }
+@media (max-width: 1100px) { .headline { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .headline { grid-template-columns: 1fr; } .res-grid { grid-template-columns: repeat(3, 1fr); } }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); min-width: 0; }
+.stat .label { color: var(--muted); font-size: 12px; }
+.stat .value { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.01em; margin-top: 2px; }
+.stat.main { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.stat.main .value { font-size: 36px; color: var(--accent); }
+.stat .delta { font-size: 12.5px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.delta.up { color: var(--good); } .delta.down { color: var(--bad); }
+.stat .foot-note { color: var(--faint); font-size: 11.5px; margin-top: 4px; }
+.pinbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 12.5px; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 6px 7px; border-bottom: 1px solid var(--line); white-space: nowrap; font-size: 13px; }
+td[title] { cursor: help; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+tr:last-child td { border-bottom: 0; }
+.table-wrap { overflow-x: auto; }
+.type { display: inline-flex; align-items: center; gap: 6px; }
+.type::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--c, var(--muted)); }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-variant-numeric: tabular-nums; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; text-align: right; }
+.kv dd.strong { font-weight: 650; }
+
+.weights { display: flex; flex-direction: column; gap: 6px; }
+.weight { display: grid; grid-template-columns: minmax(0, 1fr) 70px; gap: 10px; align-items: center; }
+.weight .bar { position: relative; height: 24px; background: var(--panel-2); border-radius: 5px; overflow: hidden; }
+.weight .fill { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 40%, transparent); border-right: 2px solid var(--accent); }
+.weight .lbl { position: relative; padding: 3px 8px; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.weight .pct { text-align: right; font-variant-numeric: tabular-nums; }
+
+details { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+details:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+summary { cursor: pointer; color: var(--text); font-weight: 600; padding: 4px 0; }
+summary .count { color: var(--faint); font-weight: 400; }
+.modgroup { margin: 6px 0 10px; }
+.modgroup h4 { margin: 8px 0 4px; font-size: 12.5px; color: var(--accent); font-weight: 600; display: flex; justify-content: space-between; }
+.modgroup h4 span { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+.modline { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); gap: 10px; padding: 3px 0; font-size: 12.5px; border-bottom: 1px dashed color-mix(in srgb, var(--line) 70%, transparent); }
+.modline .src { color: var(--faint); text-align: right; overflow-wrap: anywhere; }
+.notes { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+.notes li { margin: 3px 0; }
+.warn { border-left: 3px solid var(--accent); padding: 10px 12px; background: var(--panel-2); border-radius: 6px; color: var(--muted); font-size: 13px; }
+.foot { color: var(--faint); font-size: 12px; text-align: center; padding: 10px 20px 30px; }
+.drop-hint { position: fixed; inset: 0; background: color-mix(in srgb, var(--bg) 80%, transparent); display: none; align-items: center; justify-content: center; font-size: 20px; color: var(--accent); z-index: 20; border: 3px dashed var(--accent); }
+body.dragging .drop-hint { display: flex; }
+.setup { max-width: 720px; margin: 24px auto; }
+.setup h2 { margin-top: 0; }
+.setup ol { padding-left: 20px; }
+.setup li { margin: 6px 0; }
+.setup code { word-break: break-all; }
+body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .drop-hint { display: none !important; }
+[hidden] { display: none !important; }
+
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>Broken Oath Damage Sim</h1>
+    <span class="sub" id="builtInfo"></span>
+  </div>
+  <div class="top-controls">
+    <label class="field inline"><span>Character</span><select id="charSelect"></select></label>
+    <label class="btn" title="Load a BO_Char_*.sav file from %LOCALAPPDATA%\BrokenOath\Saved\SaveGames">
+      <input type="file" id="saveInput" accept=".sav" hidden>Load save file
+    </label>
+    <form class="code-form" id="codeForm" title="Paste a build code from the passive tree's COPY CODE (it starts with BO1.)">
+      <input type="text" id="codeInput" placeholder="Paste a BO1. build code" autocomplete="off" spellcheck="false">
+      <button class="btn ghost" type="submit">Load code</button>
+    </form>
+    <button class="btn ghost" id="dataBtn" type="button" hidden title="Read the game's Data folder again after a patch">Update game data</button>
+  </div>
+</header>
+
+<section class="setup card" id="setup" hidden>
+  <h2>First, point the sim at your game</h2>
+  <p>The sim reads skills, items and the passive tree straight from your own copy of Broken Oath, so it always matches your patch. Nothing is uploaded: every file is read in this browser tab.</p>
+  <ol>
+    <li>Click <b>Pick the Data folder</b>.</li>
+    <li>Go to your game folder, usually <code>C:\Program Files (x86)\Steam\steamapps\common\Broken Oath Playtest</code> (in Steam: right-click the game › Manage › Browse local files).</li>
+    <li>Open <code>BrokenOath</code>, select the <code>Data</code> folder and confirm. Your browser may ask whether to "upload" the files: that only means this page may read them.</li>
+  </ol>
+  <label class="btn"><input type="file" id="dataInput" webkitdirectory directory multiple hidden>Pick the Data folder</label>
+  <button class="btn ghost" id="setupCancel" type="button" hidden>Keep current data</button>
+  <p class="hint" id="setupStatus"></p>
+  <p class="hint">The page remembers the data in this browser. After a game patch, use <b>Update game data</b> at the top.</p>
+</section>
+
+<main class="layout">
+  <aside class="controls" id="controls">
+    <section class="card">
+      <h2>Skill</h2>
+      <label class="field"><span>Skill</span><select id="skillSelect"></select></label>
+      <div class="row2">
+        <label class="field"><span>Gem level</span><input type="number" id="gemLevel" min="1" max="40"></label>
+        <div class="field"><span>From gear</span><output id="gemBonus" class="readout">+0</output></div>
+      </div>
+      <p class="skill-desc" id="skillDesc"></p>
+    </section>
+
+    <section class="card">
+      <h2>Supports <small id="supportCount"></small></h2>
+      <ul class="checklist" id="supportList"></ul>
+      <label class="field"><span>Try another support</span><select id="supportAdd"><option value="">Add a support…</option></select></label>
+      <div class="opt">
+        <div class="row2">
+          <label class="field"><span>Search</span><select id="optPool"><option value="owned">Gems you own</option><option value="all">Every support</option></select></label>
+          <label class="field"><span>Aim for</span><select id="optTarget"><option value="enemy">The enemy below</option><option value="panel">Skill panel DPS</option></select></label>
+        </div>
+        <button class="btn wide" id="optBtn" type="button">Find best supports</button>
+        <p class="hint">Tries every combination against the enemy set below. Pack-only supports (Chain, Pierce, Fork, area, leech, on-kill) are left out.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Vows, Heralds &amp; charges</h2>
+      <ul class="checklist" id="vowList"></ul>
+      <div class="row3">
+        <label class="field"><span>Fury</span><input type="number" min="0" max="10" value="0" data-charge="fury"></label>
+        <label class="field"><span>Insight</span><input type="number" min="0" max="10" value="0" data-charge="insight"></label>
+        <label class="field"><span>Resolve</span><input type="number" min="0" max="10" value="0" data-charge="resolve"></label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Gear &amp; character</h2>
+      <p class="hint">Untick a piece to see what it is worth.</p>
+      <ul class="checklist" id="sourceList"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Enemy</h2>
+      <div class="row2">
+        <label class="field"><span>Monster level</span><input type="number" id="enemyLevel" min="1" max="300"></label>
+        <label class="field"><span>Rarity</span>
+          <select id="enemyRarity">
+            <option value="normal">Normal</option><option value="magic">Magic</option>
+            <option value="rare" selected>Rare</option><option value="boss">Guardian / Boss</option>
+          </select></label>
+      </div>
+      <div class="res-grid" id="resGrid"></div>
+      <p class="hint">Blank = the game's own curve (level × 0.36, at most 25%).</p>
+      <label class="check"><input type="checkbox" id="penNeg" checked><span>Penetration can push resistance below 0% <span class="meta">Not confirmed in game. Untick for the cautious rule.</span></span></label>
+      <h3>Curses on the enemy</h3>
+      <ul class="checklist" id="curseList"></ul>
+      <div class="row2">
+        <label class="field"><span>Other "% more damage taken"</span><input type="number" id="extraTaken" value="0" step="5"></label>
+        <label class="field"><span>Projectiles hitting it</span><input type="number" id="projOnTarget" min="1" max="20" placeholder="auto"></label>
+      </div>
+      <label class="field"><span>Hits per second (override)</span><input type="number" id="hpsOverride" min="0" step="0.1" placeholder="auto"></label>
+    </section>
+
+    <section class="card">
+      <h2>Check against the game</h2>
+      <label class="field"><span>DPS shown in game for this skill</span><input type="number" id="ingameDps" placeholder="optional"></label>
+      <p class="hint" id="calibOut">Type the number from the in-game skill panel to see how close this sheet is.</p>
+    </section>
+  </aside>
+
+  <section class="results" id="results">
+    <div class="empty" id="emptyState">Pick a character to start. Characters found in your save folder at build time are listed above; use <b>Load save file</b> for a fresher save.</div>
+  </section>
+</main>
+
+<footer class="foot">
+  Fan-made tool, not affiliated with the developers of Broken Oath. Reads the game's own data files and your save in your browser; nothing is uploaded. Formulas follow the game's tooltips and design notes; checked against the game for Death Coil, Unholy Void and Judgement, other skills use the same rules unchecked.
+</footer>
+
+<script>
+window.GD = null;
+window.CHARS = [];
+</script>
+<script>
+// Turns the game's Data folder into the compact game data (GD) the sim uses. Shared by build.js (Node)
+// and the public page (files picked in the browser).
+//   J(rel)        -> parsed JSON of a file under Data, e.g. J('Gameplay/skills.json')
+//   parts(name)   -> parsed JSON of every Gameplay/Parts/<class>/<name>, in folder-name order
+(function (root) {
+  'use strict';
+  const NEEDED = ['Gameplay/skills.json', 'Gameplay/classes.json', 'Gameplay/supports.json', 'Gameplay/passive_tree.json',
+    'Items/affixes.json', 'Items/uniques.json', 'Items/item_bases.json', 'Items/runes.json', 'Items/runewords.json',
+    'Gameplay/dragonling.json', 'Gameplay/curses.json', 'Gameplay/blessings.json', 'Gameplay/scaling.json', 'Items/stat_text.json'];
+  const PART_FILES = ['skills.json', 'classes.json'];
+
+  function buildGameData(J, parts, meta) {
+    const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
+
+    // Skills: base file + per-class parts (parts override base on the same id).
+    const skillsArr = [...J('Gameplay/skills.json').skills];
+    for (const p of parts('skills.json')) skillsArr.push(...p.skills);
+    const SKILL_KEYS = ['Id', 'Name', 'Kind', 'Attribute', 'Description', 'Tags', 'Delivery', 'DamageType', 'Family', 'Effectiveness',
+      'EffectivenessLate', 'EffectivenessLateFrom', 'EffectivenessLateAt', 'EffectivenessEarly', 'EffectivenessEarlyHold', 'EffectivenessEarlyFull',
+      'SpellMin', 'SpellMax', 'SpellGrowth', 'CastTime', 'ActionSpeed', 'ManaCost', 'Cooldown', 'CooldownLate', 'CooldownLateAt', 'MinCooldown',
+      'WeaponKinds', 'Projectiles', 'ProjectilesAtLevels', 'Chains', 'Pierce', 'Strikes', 'WaveCount', 'ConvertShare', 'LifeAsBase', 'bBothHands'];
+    const skills = {};
+    for (const s of skillsArr) {
+      const o = pick(s, SKILL_KEYS);
+      if (s.Channel) o.Channel = pick(s.Channel, ['CostPerSec', 'Tick', 'MoveMult']);
+      if (s.Minion) o.Minion = pick(s.Minion, ['MonsterId', 'Count', 'Cap', 'CountEvery', 'DamageMult', 'AttackEvery']);
+      if (s.Ground) o.Ground = pick(s.Ground, ['Duration', 'Tick', 'TickScale', 'Radius']);
+      if (s.Totem) o.Totem = true;
+      if (s.Brand) o.Brand = true;
+      if (s.Orbit) o.Orbit = true;
+      skills[s.Id.toLowerCase()] = Object.assign(skills[s.Id.toLowerCase()] || {}, o);
+    }
+
+    const classes = {};
+    for (const c of [...J('Gameplay/classes.json').classes, ...parts('classes.json').flatMap(p => p.classes)]) {
+      const o = pick(c, ['Id', 'Str', 'Dex', 'Int', 'StrPerLevel', 'DexPerLevel', 'IntPerLevel', 'EarlyDamagePct', 'EarlyDamageFullToLevel', 'EarlyDamageEndLevel']);
+      classes[c.Id.toLowerCase()] = Object.assign(classes[c.Id.toLowerCase()] || {}, o);
+    }
+
+    const supports = {};
+    for (const s of J('Gameplay/supports.json').supports) supports[s.Id.toLowerCase()] = pick(s, ['Id', 'Name', 'Description', 'RequiresAnyTag', 'ExcludeTags', 'Mods', 'ManaMultiplier']);
+
+    const tree = J('Gameplay/passive_tree.json');
+    const nodes = {};
+    for (const n of tree.nodes) nodes[n.Id] = pick(n, ['Id', 'Name', 'Kind', 'Mods', 'Text', 'Region']);
+
+    const affixes = {};
+    for (const a of J('Items/affixes.json').affixes) affixes[a.Id.toLowerCase()] = pick(a, ['Id', 'Type', 'Group', 'Mod']);
+
+    const uniques = {};
+    for (const u of J('Items/uniques.json').uniques) uniques[u.Id.toLowerCase()] = { Id: u.Id, Name: u.Name, BaseId: u.BaseId, Mods: u.Mods.map(m => pick(m, ['Mod', 'Text', 'Min', 'Max', 'Min2', 'Max2'])) };
+
+    const bases = {};
+    for (const b of J('Items/item_bases.json').bases) bases[b.Id.toLowerCase()] = pick(b, ['Id', 'Name', 'Slot', 'Class', 'TypeName', 'Tags', 'Implicits', 'DamageMin', 'DamageMax', 'AttacksPerSecond', 'Crit', 'bTwoHanded', 'Weapon']);
+
+    const runesFile = J('Items/runes.json');
+    const runes = {};
+    for (const r of [...runesFile.runes, ...runesFile.jewels]) runes[r.Id.toLowerCase()] = pick(r, ['Id', 'Name', 'Weapon', 'Armour']);
+    const runewords = J('Items/runewords.json').runewords.map(r => pick(r, ['Id', 'Name', 'Runes', 'Bases', 'Mods', 'PowerMods', 'Power2H']));
+
+    const dragonFile = J('Gameplay/dragonling.json');
+    const asc = dragonFile.Tree.Ascendancy || {};
+    const dragon = { aspects: {}, classes: {}, ascend: { enabled: !!asc.bEnabled, classes: (asc.Classes || []).map(c => c.toLowerCase()) }, rules: dragonFile.Tree.Rules71 || {} };
+    for (const a of dragonFile.Aspects) dragon.aspects[a.Id] = { Name: a.Name, Mods: a.Mods || [], Text: a.Text };
+    for (const [cls, list] of Object.entries(dragonFile.Tree.Classes)) {
+      dragon.classes[cls.toLowerCase()] = {};
+      for (const n of list) dragon.classes[cls.toLowerCase()][n.Id] = pick(n, ['Id', 'Name', 'Kind', 'Path', 'Mods', 'AspectMods', 'Text', 'Ascend']);
+    }
+
+    const curses = {};
+    for (const c of J('Gameplay/curses.json').curses) curses[c.Id] = pick(c, ['Id', 'Name', 'Kind', 'Skill', 'TakenPct', 'ElementTakenPct', 'BossEffect', 'Dread', 'Tough', 'Text']);
+    const blessings = {};
+    for (const b of J('Gameplay/blessings.json').blessings) blessings[b.Id] = pick(b, ['Id', 'Name', 'Kind', 'Skill', 'Mods', 'Text', 'Vowbreak']);
+
+    const sc = J('Gameplay/scaling.json');
+    const noDocs = o => Object.fromEntries(Object.entries(o).filter(([k]) => !k.startsWith('_')));
+    const scaling = {
+      Hero: noDocs(sc.Hero), Gem: noDocs(sc.Gem), Ailments: noDocs(sc.Ailments),
+      Monster: { ResistPerLevel: sc.MonsterResistPerLevel, ResistMax: sc.MonsterResistMax, ArmourPerLevel: sc.MonsterArmourPerLevel, Life: sc.MonsterLife, Rarity: sc.Rarity },
+    };
+
+    const statText = {};
+    for (const t of J('Items/stat_text.json').texts) statText[t.Key] = t.Text;
+
+    return Object.assign({ builtAt: new Date().toISOString(), dataDir: '' }, meta || {},
+      { skills, classes, supports, nodes, moved: tree.Moved || {}, affixes, uniques, bases, runes, runewords, dragon, curses, blessings, scaling, statText });
+  }
+
+  const api = { buildGameData, NEEDED, PART_FILES };
+  root.BOGameData = api;
+  if (typeof module !== 'undefined') module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+// Reader for Unreal Engine 5.4+ GVAS save files (property tags with complete type names).
+// Works on a Uint8Array; no Node-only APIs so it also runs in a browser.
+(function (root) {
+  const NATIVE = {
+    Guid: r => r.guid(),
+    DateTime: r => r.i64().toString(),
+    Timespan: r => r.i64().toString(),
+    Vector: r => ({ X: r.f64(), Y: r.f64(), Z: r.f64() }),
+    Rotator: r => ({ P: r.f64(), Y: r.f64(), R: r.f64() }),
+    Vector2D: r => ({ X: r.f64(), Y: r.f64() }),
+    IntPoint: r => ({ X: r.i32(), Y: r.i32() }),
+    LinearColor: r => ({ R: r.f32(), G: r.f32(), B: r.f32(), A: r.f32() }),
+    Color: r => ({ B: r.u8(), G: r.u8(), R: r.u8(), A: r.u8() }),
+    Quat: r => ({ X: r.f64(), Y: r.f64(), Z: r.f64(), W: r.f64() }),
+  };
+
+  class Reader {
+    constructor(u8) { this.b = u8; this.v = new DataView(u8.buffer, u8.byteOffset, u8.byteLength); this.o = 0; }
+    u8() { return this.b[this.o++]; }
+    i32() { const x = this.v.getInt32(this.o, true); this.o += 4; return x; }
+    u32() { const x = this.v.getUint32(this.o, true); this.o += 4; return x; }
+    u16() { const x = this.v.getUint16(this.o, true); this.o += 2; return x; }
+    i64() { const x = this.v.getBigInt64(this.o, true); this.o += 8; return x; }
+    f32() { const x = this.v.getFloat32(this.o, true); this.o += 4; return x; }
+    f64() { const x = this.v.getFloat64(this.o, true); this.o += 8; return x; }
+    bytes(n) { const x = this.b.subarray(this.o, this.o + n); this.o += n; return x; }
+    guid() { let s = ''; for (let i = 0; i < 16; i++) s += this.b[this.o + i].toString(16).padStart(2, '0'); this.o += 16; return s; }
+    str() {
+      const n = this.i32();
+      if (n === 0) return '';
+      if (n > 0) { if (n > 1e6) throw new Error('bad string length ' + n + ' @' + this.o); let s = ''; for (let i = 0; i < n - 1; i++) s += String.fromCharCode(this.b[this.o + i]); this.o += n; return s; }
+      const m = -n; if (m > 1e6) throw new Error('bad string length'); let s = '';
+      for (let i = 0; i < m - 1; i++) s += String.fromCharCode(this.v.getUint16(this.o + i * 2, true));
+      this.o += m * 2; return s;
+    }
+  }
+
+  function readTypeName(r) {
+    const name = r.str(); const n = r.i32(); const params = [];
+    for (let i = 0; i < n; i++) params.push(readTypeName(r));
+    return { name, params };
+  }
+
+  function readTagged(r) {
+    const out = {};
+    for (;;) {
+      const name = r.str();
+      if (name === 'None' || name === '') break;
+      const type = readTypeName(r);
+      const size = r.i32();
+      const flags = r.u8();
+      let idx = 0;
+      if (flags & 0x01) idx = r.i32();
+      if (flags & 0x02) r.guid();
+      if (flags & 0x04) { const ext = r.u8(); if (ext & 0x02) { r.u8(); r.u8(); } }
+      const start = r.o;
+      if (root.GVAS_TRACE) root.GVAS_TRACE(start, name, type, size, flags);
+      let val;
+      if (type.name === 'BoolProperty') val = !!(flags & 0x10);
+      else {
+        try { val = readValue(r, type, size, true); }
+        catch (e) { val = { _error: e.message, _type: type.name }; }
+        if (r.o !== start + size) r.o = start + size; // stay in sync whatever happened
+      }
+      if (idx) out[name + '[' + idx + ']'] = val; else out[name] = val;
+    }
+    return out;
+  }
+
+  function readValue(r, type, size, top) {
+    switch (type.name) {
+      case 'IntProperty': return r.i32();
+      case 'UInt32Property': return r.u32();
+      case 'Int64Property': case 'UInt64Property': return Number(r.i64());
+      case 'Int16Property': return r.v.getInt16((r.o += 2) - 2, true);
+      case 'UInt16Property': return r.u16();
+      case 'Int8Property': return (r.u8() << 24) >> 24;
+      case 'FloatProperty': return r.f32();
+      case 'DoubleProperty': return r.f64();
+      case 'BoolProperty': return !!r.u8();
+      case 'StrProperty': case 'NameProperty': return r.str();
+      case 'EnumProperty': return r.str();
+      case 'ByteProperty': return type.params.length && type.params[0].name !== 'None' ? r.str() : r.u8();
+      case 'ObjectProperty': case 'ClassProperty': case 'SoftObjectProperty': case 'SoftClassProperty':
+        if (top) { const s = r.str(); return s; }
+        return r.str();
+      case 'StructProperty': {
+        const sname = type.params[0] ? type.params[0].name : '';
+        if (NATIVE[sname]) return NATIVE[sname](r);
+        return readTagged(r);
+      }
+      case 'ArrayProperty': {
+        const n = r.i32(); const inner = type.params[0]; const arr = [];
+        if (inner.name === 'ByteProperty' && !(inner.params.length && inner.params[0].name !== 'None')) return { _bytes: n, _skipped: r.bytes(n).length };
+        for (let i = 0; i < n; i++) arr.push(readValue(r, inner, -1, false));
+        return arr;
+      }
+      case 'SetProperty': {
+        const rem = r.i32(); for (let i = 0; i < rem; i++) readValue(r, type.params[0], -1, false);
+        const n = r.i32(); const arr = []; for (let i = 0; i < n; i++) arr.push(readValue(r, type.params[0], -1, false));
+        return arr;
+      }
+      case 'MapProperty': {
+        const rem = r.i32(); for (let i = 0; i < rem; i++) readValue(r, type.params[0], -1, false);
+        const n = r.i32(); const obj = {};
+        for (let i = 0; i < n; i++) {
+          const k = readValue(r, type.params[0], -1, false);
+          const v = readValue(r, type.params[1], -1, false);
+          obj[typeof k === 'object' ? JSON.stringify(k) : k] = v;
+        }
+        return obj;
+      }
+      case 'TextProperty': { const end = size > 0 ? r.o + size : r.o; const raw = r.bytes(Math.max(0, size)); return { _text: Array.from(raw).filter(c => c >= 32 && c < 127).map(c => String.fromCharCode(c)).join('') }; }
+      default:
+        if (size >= 0) { r.bytes(size); return { _unknown: type.name, _size: size }; }
+        throw new Error('cannot read ' + type.name + ' inside a container');
+    }
+  }
+
+  function parseGvas(u8) {
+    const r = new Reader(u8);
+    const magic = String.fromCharCode(...u8.subarray(0, 4));
+    if (magic !== 'GVAS') throw new Error('Not a GVAS save file');
+    r.o = 4;
+    const saveVer = r.i32(); const ue4 = r.i32(); const ue5 = saveVer >= 3 ? r.i32() : 0;
+    const eng = { major: r.u16(), minor: r.u16(), patch: r.u16(), cl: r.u32(), branch: r.str() };
+    const cvFormat = r.i32(); const cvCount = r.i32();
+    for (let i = 0; i < cvCount; i++) { r.guid(); r.i32(); }
+    const cls = r.str();
+    // Newer engines write one header-flags byte after the class name.
+    const peek = r.v.getInt32(r.o, true);
+    if (peek <= 0 || peek > 256) r.o += 1;
+    if (ue5 < 1012) throw new Error('Save uses the pre-5.4 property layout (UE5 version ' + ue5 + '), not supported');
+    const props = readTagged(r);
+    return { header: { saveVer, ue4, ue5, engine: eng, saveClass: cls }, props };
+  }
+
+  root.parseGvas = parseGvas;
+  if (typeof module !== 'undefined') module.exports = { parseGvas };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+// Broken Oath damage model. Runs in Node and in the browser.
+// Rebuilds the game's stat sheet from data files: every modifier is Stat + Mode (Flat / Inc / More) + Tags.
+// What is read from data is exact; how a few rules combine (marked ASSUMPTION) is inferred from the
+// game's own tooltips and design notes, because the formulas themselves live in compiled code.
+(function (root) {
+  'use strict';
+  const DT = ['Physical', 'Fire', 'Cold', 'Lightning', 'Poison'];
+  const CONVERT_ORDER = ['Physical', 'Lightning', 'Cold', 'Fire', 'Poison'];
+  const lc = s => String(s == null ? '' : s).toLowerCase();
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const sum = a => a.reduce((s, x) => s + x, 0);
+
+  // Stats that only matter for defence, economy or utility: never shown as "not modelled".
+  const NON_DAMAGE = new Set(['Life', 'Mana', 'EnergyShield', 'Armour', 'Evasion', 'Defences', 'Block', 'Resist', 'MaxResist',
+    'LifeRegen', 'LifeRegenPct', 'ManaRegen', 'LifeLeech', 'ManaLeech', 'LifeOnKill', 'ManaOnKill', 'ManaOnHit', 'LifeOnBlock',
+    'MoveSpeed', 'GoldFind', 'ItemRarity', 'EsRecharge', 'EsRechargeDelay', 'DamageTaken', 'PhysTakenAsElemental', 'ManaCost',
+    'Reservation', 'StunKnockback', 'Str', 'Dex', 'Int', 'Attributes', 'MinionLife', 'TotemLife', 'ChannelCostLess', 'Area',
+    'Chains', 'Pierce', 'Fork', 'ChillEffect', 'FreezeDuration', 'SkillDuration', 'CurseLimit', 'MinionCap', 'MinionSpeed',
+    'Afterimages', 'BloodlustDuration', 'MinionGuard', 'MinionHunt', 'MinionDeathRecover', 'SkyfallDelay', 'TrapRearm',
+    'ConduitCostPct', 'ConduitInterval', 'EngineHoldInRupture', 'EngineHoldWhileSentenced', 'Woebringer', 'PassSentence',
+    'BloodMagic', 'MaimOnHit', 'LifeLeech', 'Dragonling']);
+  // Stats this model uses.
+  const HANDLED = new Set(['MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
+    'Cooldown', 'Repeats', 'Projectiles', 'Penetration', 'SkillLevel', 'PoisonChance', 'PoisonDamage', 'IgniteChance', 'IgniteDamage',
+    'DotMulti', 'AilmentDuration', 'CurseEffect', 'Str', 'Dex', 'Int', 'Attributes', 'GrantSupport']);
+
+  // ---------- character extraction (from a parsed GVAS save) ----------
+  function extractCharacter(save) {
+    const R = (save.props || {}).Record;
+    if (!R || !R.Summary) throw new Error('This is not a Broken Oath character save (BO_Char_*.sav).');
+    const S = R.Summary;
+    return {
+      id: S.ID, name: S.Name, classId: S.ClassId, level: S.Level, league: S.League, lastZone: S.LastZone,
+      items: (R.Items || []).filter(i => i.EquippedSlot && i.EquippedSlot !== 'None').map(i => ({
+        slot: i.EquippedSlot, base: i.BaseID, rarity: i.Rarity, unique: i.UniqueID, name: i.Name, level: i.ItemLevel,
+        affixes: (i.Affixes || []).map(a => ({ id: a.AffixId, tier: a.Tier, v: a.Value, v2: a.Value2 })), runes: i.Runes || [],
+      })),
+      passives: R.PassiveNodeIds || [], gems: R.Gems || [], gemLevels: R.GemLevels || {},
+      sockets: (R.Sockets || []).map(s => ({ skill: s.SkillId, supports: (s.Supports || []).filter(Boolean) })),
+      hotbar: R.Hotbar || [], weaponId: R.WeaponId, dragonNodes: R.DragonlingNodes || [], dragonAspect: R.DragonlingAspect || '',
+      mainSkill: R.MainSkillPin || '',
+      supportGems: R.SupportGems || [], // spare support gems in the inventory
+    };
+  }
+
+  // ---------- character from an in-game build code ----------
+  // A build code is "BO1." + base64url(uint32 length + zlib(JSON)). This takes the decoded JSON:
+  // {v, t?, c, l, p, h, s:[{k, l, u}], g:[{s, b, r, u?, n?}], da, dn}. Codes carry no rolled stats: rare and
+  // magic items come in as bare bases, uniques at the middle of each roll (uniqueRoll 0..1 moves that).
+  function characterFromCode(GD, j, opt) {
+    opt = opt || {};
+    if (!j || !j.c || !Array.isArray(j.p)) throw new Error('This build code has no class or passive tree.');
+    const roll = opt.uniqueRoll == null ? 0.5 : opt.uniqueRoll;
+    const at = (lo, hi) => lo == null ? 0 : Math.round((lo + (hi - lo) * roll) * 100) / 100;
+    const warnings = [];
+    const bare = [], unknown = [];
+    const items = (j.g || []).map(g => {
+      const it = { slot: g.s, base: g.b, rarity: g.r || 'Normal', unique: g.u || 'None', name: g.n || '', level: j.l || 1, affixes: [], runes: [] };
+      if (g.u) {
+        const u = GD.uniques[lc(g.u)];
+        if (!u) unknown.push(g.u);
+        else u.Mods.forEach((m, i) => { if (m.Mod) it.affixes.push({ id: 'unique:' + i, tier: 0, v: at(m.Min, m.Max), v2: at(m.Min2, m.Max2) }); });
+        if (u && !it.name) it.name = u.Name;
+      } else if (g.r && g.r !== 'Normal') bare.push(g.s + (g.n ? ' (' + g.n + ')' : ''));
+      return it;
+    });
+    if (bare.length) warnings.push(bare.length + ' rare/magic item' + (bare.length > 1 ? 's' : '') + ' count as bare bases (the code has no rolled stats): ' + bare.join(', ') + '.');
+    if (items.some(i => i.unique !== 'None')) warnings.push('Unique items use the middle of each roll.');
+    if (unknown.length) warnings.push('Unknown unique' + (unknown.length > 1 ? 's' : '') + ': ' + unknown.join(', ') + '.');
+    const skills = j.s || [];
+    const gemLevels = {}; for (const s of skills) if (s.k) gemLevels[s.k] = s.l || 1;
+    const hotbar = (j.h || []).filter(x => x != null);
+    const main = skills.slice().sort((a, b) => (b.u || []).length - (a.u || []).length)[0];
+    const sig = JSON.stringify([j.c, j.l, j.p.length, j.p.slice(-3), j.t || '']);
+    let hash = 0; for (let i = 0; i < sig.length; i++) hash = (hash * 31 + sig.charCodeAt(i)) | 0;
+    return {
+      id: 'code:' + (hash >>> 0).toString(16), name: (j.t || j.c + ' build') + ' (code)', classId: j.c, level: j.l || 1, league: '', lastZone: '',
+      items, passives: j.p.filter(id => !/^start_/.test(id)), gems: [...new Set([...Object.keys(gemLevels), ...hotbar.filter(h => h && h !== 'move')])], gemLevels,
+      sockets: skills.filter(s => (s.u || []).length).map(s => ({ skill: s.k, supports: s.u.filter(x => x && !String(x).includes('@')) })),
+      hotbar, weaponId: '', dragonNodes: j.dn || [], dragonAspect: j.da || '', mainSkill: main ? main.k : '', supportGems: [],
+      fromCode: true, codeWarnings: warnings,
+    };
+  }
+
+  // ---------- tags ----------
+  function splitTags(tags) {
+    const types = []; const conds = []; let gemScaled = false;
+    for (const t of tags || []) {
+      if (t === 'Elemental') types.push('Fire', 'Cold', 'Lightning');
+      else if (DT.includes(t)) types.push(t);
+      else if (t === 'GemScaled') gemScaled = true;
+      else if (t.includes('=')) { /* trigger parameters */ }
+      else conds.push(t);
+    }
+    return { types, conds, gemScaled };
+  }
+  const has = (set, t) => set.has(lc(t));
+
+  // ---------- modifier collection ----------
+  function itemLabel(GD, it) {
+    const base = GD.bases[lc(it.base)];
+    const u = GD.uniques[lc(it.unique)];
+    return (it.name || (u && u.Name) || (base && base.Name) || it.base) + ' (' + it.slot + ')';
+  }
+
+  // Every modifier the character has, before choosing a skill. Returns {mods, notes, sources}.
+  function collectMods(GD, ch, o) {
+    const off = o.off || new Set();
+    const mods = []; const notes = []; const sources = [];
+    const add = (m, v, v2, src, key, extra) => {
+      if (!m || !m.Stat) return;
+      mods.push(Object.assign({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: v != null ? v : (m.Value || 0), v2: v2 != null ? v2 : (m.Value2 || 0), local: !!m.bLocal, src, key }, extra || {}));
+    };
+
+    for (const it of ch.items) {
+      const key = 'item:' + it.slot; const label = itemLabel(GD, it); const base = GD.bases[lc(it.base)];
+      const rw = runewordFor(GD, it, base);
+      sources.push({ key, label, group: 'Gear', detail: rw ? 'Runeword: ' + rw.Name : (it.rarity || '') });
+      if (off.has(key)) continue;
+      if (base) for (const m of base.Implicits || []) add(m, m.Value, m.Value2, label + ' · implicit', key);
+      else notes.push('Unknown item base ' + it.base + ' on ' + it.slot);
+      for (const a of it.affixes) {
+        if (a.id.startsWith('unique:')) {
+          const u = GD.uniques[lc(it.unique)]; const um = u && u.Mods[+a.id.slice(7)];
+          if (um) add(um.Mod, a.v, a.v2, label, key, { text: um.Text }); else notes.push('Unknown unique line ' + a.id + ' on ' + label);
+        } else {
+          const af = GD.affixes[lc(a.id)];
+          if (af) add(af.Mod, a.v, a.v2, label, key); else notes.push('Unknown affix ' + a.id + ' on ' + label);
+        }
+      }
+      const weaponSlot = it.slot === 'MainHand' || it.slot === 'OffHand';
+      for (const r of it.runes) {
+        const rd = GD.runes[lc(r)]; if (!rd) { notes.push('Unknown rune ' + r); continue; }
+        for (const m of (weaponSlot ? rd.Weapon : rd.Armour) || []) add(m, m.Value, m.Value2, label + ' · rune ' + rd.Name, key);
+      }
+      if (rw) {
+        for (const mm of rw.Mods) add(mm.Mod, mm.Mod.Value, mm.Mod.Value2, label + ' · runeword ' + rw.Name, key);
+        // Power lines count Power2H times on a two-handed base (the game logs Poison gems at +3 from
+        // Nightshade's "+1.5" on a staff).
+        const twoHand = base.bTwoHanded || (base.Tags || []).includes('TwoHand');
+        const pm = twoHand && rw.Power2H ? rw.Power2H : 1;
+        for (const mm of rw.PowerMods || []) add(mm.Mod, (mm.Mod.Value || 0) * pm, (mm.Mod.Value2 || 0) * pm, label + ' · runeword ' + rw.Name + ' (power' + (pm > 1 ? ' x' + pm + ' two-handed' : '') + ')', key);
+      }
+    }
+
+    sources.push({ key: 'passives', label: 'Passive tree (' + ch.passives.length + ' nodes)', group: 'Character' });
+    if (!off.has('passives')) {
+      for (const id of ch.passives) {
+        const n = GD.nodes[id] || GD.nodes[GD.moved[id]];
+        if (!n) { notes.push('Passive node not in current tree: ' + id); continue; }
+        for (const m of n.Mods || []) add(m, m.Value, m.Value2, 'Passive · ' + n.Name + (n.Kind === 'Keystone' || n.Kind === 'Notable' ? ' (' + n.Kind + ')' : ''), 'passives');
+      }
+    }
+
+    const dcls = GD.dragon.classes[lc(ch.classId)] || {};
+    if (ch.dragonNodes.length || ch.dragonAspect) {
+      sources.push({ key: 'dragon', label: 'Dragonling (' + (ch.dragonAspect || 'no aspect') + ', ' + ch.dragonNodes.length + ' nodes)', group: 'Character' });
+      if (!off.has('dragon')) {
+        const asp = GD.dragon.aspects[ch.dragonAspect];
+        if (asp) for (const m of asp.Mods) add(m, m.Value, m.Value2, 'Dragonling · ' + asp.Name + ' Aspect', 'dragon');
+        // Ascendancy: for listed classes, a node's Ascend block replaces its name and lines (only the
+        // chosen path's nodes can be taken, so every taken node with one is ascended).
+        const ascOn = GD.dragon.ascend && GD.dragon.ascend.enabled && GD.dragon.ascend.classes.includes(lc(ch.classId));
+        for (const id of ch.dragonNodes) {
+          const n = dcls[id]; if (!n) { notes.push('Dragonling node not found: ' + id); continue; }
+          const a = ascOn && n.Ascend;
+          let list = (a ? a.Mods : n.Mods) || [];
+          if (!a && n.AspectMods && n.AspectMods[ch.dragonAspect]) list = list.concat(n.AspectMods[ch.dragonAspect]);
+          const label = 'Dragonling · ' + (a ? a.Name + ' (ascended ' + n.Name + ')' : n.Name);
+          for (const m of list) add(m, m.Value, m.Value2, label, 'dragon', a ? { text: a.Text } : null);
+        }
+      }
+    }
+
+    // Vows and Heralds on the hotbar (sworn). Their value grows per gem level.
+    for (const b of Object.values(GD.blessings)) {
+      if (b.Kind !== 'Vow' || !b.Skill || !ch.hotbar.includes(b.Skill)) continue;
+      const key = 'vow:' + b.Id;
+      const vsk = GD.skills[lc(b.Skill)];
+      const lvl = (ch.gemLevels[b.Skill] || 1) + (vsk ? levelBonus(vsk, ch.gems.includes(b.Skill) || vsk.Kind === 'Gem', mods) : 0);
+      const brk = o.vowbreak && o.vowbreak.has(b.Id) && b.Vowbreak ? b.Vowbreak.Mult : 1;
+      sources.push({ key, label: b.Name + ' (gem ' + lvl + ')', group: 'Vows & Heralds', vowbreak: !!b.Vowbreak, vowId: b.Id, defaultOff: !/herald/i.test(b.Id) });
+      if (off.has(key)) continue;
+      for (const m of b.Mods || []) add(m, ((m.Value || 0) + (m.PerLevel || 0) * (lvl - 1)) * brk, m.Value2, b.Name + (brk > 1 ? ' (Vowbreak x' + brk + ')' : ''), key);
+    }
+    // Charges: Fury / Insight / Resolve, counted by the user.
+    for (const [id, n] of Object.entries(o.charges || {})) {
+      const b = GD.blessings[id]; if (!b || !n) continue;
+      for (const m of b.Mods || []) add(m, (m.Value || 0) * (m.PerStack ? n : 1), m.Value2, b.Name + ' x' + n, 'charge:' + id);
+    }
+    for (const m of o.extra || []) add(m, m.Value, m.Value2, m.src || 'What-if', 'extra');
+    return { mods, notes, sources };
+  }
+
+  // +levels from gear for a skill: SkillLevel lines whose tags the skill carries ("Gem" = any gem).
+  function levelBonus(sk, isGem, mods) {
+    const tags = new Set([...(sk.Tags || []), sk.Delivery].map(lc)); if (isGem) tags.add('gem');
+    let b = 0;
+    for (const m of mods) if (m.stat === 'SkillLevel' && m.mode === 'Flat' && (m.tags || []).every(t => tags.has(lc(t)))) b += m.v;
+    return Math.floor(b);
+  }
+
+  function runewordFor(GD, it, base) {
+    if (!it.runes || !it.runes.length || !base) return null;
+    const ids = it.runes.map(lc).join(',');
+    const btags = new Set([...(base.Tags || []), base.Class, base.Slot].map(lc));
+    return GD.runewords.find(w => w.Runes.map(lc).join(',') === ids && w.Bases.some(b => btags.has(lc(b)))) || null;
+  }
+
+  // ---------- helpers on the mod list ----------
+  function makeCtx(GD, ch, sk, skillId, mainBase, offBase) {
+    const tags = new Set();
+    for (const t of sk.Tags || []) tags.add(lc(t));
+    if (sk.Delivery) tags.add(lc(sk.Delivery));
+    const isAttack = has(tags, 'Attack');
+    const isGem = sk.Kind === 'Gem' || ch.gems.includes(skillId);
+    if (isGem) tags.add('gem');
+    const gear = new Set();
+    for (const b of [mainBase, offBase]) if (b) for (const t of [...(b.Tags || []), b.Class]) gear.add(lc(t));
+    if (mainBase && offBase && offBase.DamageMin) gear.add('dualwielding');
+    if (offBase && lc(offBase.Class) === 'shield') gear.add('holdingshield');
+    if (!mainBase) gear.add('martial');
+    if (mainBase && ['fist', 'claw'].includes(lc(mainBase.Class))) gear.add('martial');
+    return { tags, gear, isAttack, isSpell: has(tags, 'Spell'), dealt: new Set() };
+  }
+
+  function condsOk(ctx, conds) {
+    for (const c of conds) {
+      const t = lc(c);
+      if (ctx.tags.has(t)) continue;
+      if (t === 'dualwielding' || t === 'holdingshield') { if (ctx.gear.has(t)) continue; return false; }
+      if (ctx.isAttack && ctx.gear.has(t)) continue; // weapon-kind lines (Bow, Staff, TwoHand ...) on attacks
+      return false;
+    }
+    return true;
+  }
+
+  // Does this mod apply to the skill, and (for damage stats) to damage type d?
+  function applies(ctx, m, d) {
+    const { types, conds } = splitTags(m.tags);
+    if (!condsOk(ctx, conds)) return false;
+    if (d === undefined) {
+      // Non-damage stat with element tags (e.g. "Lightning crit chance"): the skill must carry or deal that element.
+      return !types.length || types.some(t => ctx.tags.has(lc(t)) || ctx.dealt.has(t));
+    }
+    return !types.length || types.includes(d);
+  }
+
+  function pickMods(mods, stat, mode) { return mods.filter(m => m.stat === stat && (!mode || m.mode === mode) && !m.local); }
+
+  // ---------- the calculation ----------
+  function calcSkill(GD, ch, skillId, o) {
+    o = o || {};
+    const H = GD.scaling.Hero, G = GD.scaling.Gem, A = GD.scaling.Ailments, M = GD.scaling.Monster;
+    const sk = GD.skills[lc(skillId)];
+    const res = { skillId, notes: [], used: new Map() };
+    if (!sk) return Object.assign(res, { error: 'Unknown skill ' + skillId });
+    res.skill = sk;
+    if (sk.Minion || sk.Delivery === 'Summon') return Object.assign(res, { unsupported: 'Minion skills are not modelled yet: minions have their own damage, speed and AI.' });
+    const isAttack = (sk.Tags || []).includes('Attack');
+    if (!sk.SpellMin && !isAttack) return Object.assign(res, { unsupported: 'This skill has no hit of its own (a buff, curse, Vow or movement skill). Its effects show up on your damage skills.' });
+
+    const mainItem = ch.items.find(i => i.slot === 'MainHand');
+    const offItem = ch.items.find(i => i.slot === 'OffHand');
+    const mainBase = mainItem && GD.bases[lc(mainItem.base)];
+    const offBase = offItem && GD.bases[lc(offItem.base)];
+    const ctx = makeCtx(GD, ch, sk, skillId, mainBase, offBase);
+    const isSpell = ctx.isSpell && !isAttack;
+
+    // Gather mods: character-wide + this skill's supports (+ supports granted by passives/uniques).
+    const col = o._col || collectMods(GD, ch, o); // _col: reuse when only supports change (search)
+    res.notes.push(...col.notes);
+    res.sources = col.sources;
+    let mods = col.mods.slice();
+    const socket = ch.sockets.find(s => s.skill === skillId);
+    const supportList = (o.supportsOverride || (socket ? socket.supports : [])).slice();
+    for (const m of mods) if (m.stat === 'GrantSupport') {
+      const sid = (m.tags || []).find(t => GD.supports[lc(t)]);
+      if (sid && !supportList.some(s => lc(s) === lc(sid))) supportList.push(sid + '@granted');
+    }
+    res.supports = [];
+    for (const raw of supportList) {
+      const granted = raw.endsWith('@granted'); const id = raw.replace('@granted', '');
+      const sd = GD.supports[lc(id)];
+      const key = 'support:' + lc(id);
+      if (!sd) { res.supports.push({ id, key, name: id, ok: false, why: 'unknown support' }); continue; }
+      const req = sd.RequiresAnyTag || []; const ex = sd.ExcludeTags || [];
+      const ok = (!req.length || req.some(t => ctx.tags.has(lc(t)))) && !ex.some(t => ctx.tags.has(lc(t)));
+      res.supports.push({ id, key, name: sd.Name + (granted ? ' (granted)' : ''), ok, why: ok ? '' : 'does not support this skill (needs ' + req.join(' or ') + ')', desc: sd.Description });
+      if (!ok || (o.off && o.off.has(key))) continue;
+      for (const m of sd.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: m.Value || 0, v2: m.Value2 || 0, local: false, src: 'Support · ' + sd.Name, key });
+    }
+    res.mods = mods;
+    const use = (m, why) => { res.used.set(m, why || true); };
+    // The active shape support gives the skill its tag: Death Coil with Orbit "scales with ... Orbit"
+    // damage (game tooltip), so "increased Orbit damage" lines apply.
+    const SHAPE_TAG = { orbit: 'orbit', skyfall: 'skyfall', rain_support: 'rain', trap_support: 'trap', totem_support: 'totem' };
+    const shapeId = res.supports.filter(s => s.ok && !(o.off && o.off.has(s.key))).map(s => lc(s.id)).find(id => SHAPE_TAG[id]) || null;
+    if (shapeId) ctx.tags.add(SHAPE_TAG[shapeId]);
+    // Dragonling Ascendancy rules that change combat but not the stat sheet.
+    const ascFlag = f => mods.some(m => m.stat === 'Dragonling' && (m.tags || []).includes(f));
+    const virulence = ascFlag('Asc71_Virulence') ? (GD.dragon.rules || {}).Virulence || { Cap: 60, DurMult: 0.75 } : null;
+
+    // Attributes.
+    const cls = GD.classes[lc(ch.classId)] || {};
+    const attr = {};
+    for (const a of ['Str', 'Dex', 'Int']) {
+      let flat = (cls[a] || 0) + (cls[a + 'PerLevel'] || 0) * Math.max(0, ch.level - 1);
+      let inc = 0;
+      for (const m of mods) {
+        if (m.stat === a || m.stat === 'Attributes') {
+          if (m.mode === 'Flat') { flat += m.v; use(m); } else if (m.mode === 'Inc') { inc += m.v; use(m); }
+        }
+      }
+      attr[a] = Math.floor(flat * (1 + inc / 100));
+    }
+    res.attr = attr;
+    const per10 = (a, k) => Math.floor(attr[a] / 10) * (H[k] || 0);
+
+    // Gem level. Weapon and basic skills follow the hero (CharLevelForGemLevel).
+    let own = o.gemLevel || ch.gemLevels[skillId];
+    if (!own) { const t = G.CharLevelForGemLevel || []; own = 1; for (let i = 0; i < t.length; i++) if (ch.level >= t[i]) own = i + 1; }
+    let bonus = 0;
+    for (const m of mods) if (m.stat === 'SkillLevel' && m.mode === 'Flat') {
+      const { types, conds } = splitTags(m.tags);
+      if (condsOk(ctx, conds) && types.every(t => ctx.tags.has(lc(t)))) { bonus += m.v; use(m); }
+    }
+    bonus = Math.floor(bonus);
+    const L = own + bonus;
+    res.gem = { own, bonus, total: L };
+
+    // Effectiveness ramps: Early (low gem levels) and Late (from -> at), linear, read at the gem's OWN
+    // level (gear levels do not move them). Calibrated 31 Oct against the game's log: Death Coil 20+7
+    // hits 25.6k-36.9k and the skill panel's 967k DPS both fit this within 0.1%.
+    const effAt = (baseEff) => {
+      let e = baseEff;
+      if (sk.EffectivenessLate != null && sk.EffectivenessLateAt) {
+        const f = sk.EffectivenessLateFrom || 1, a = sk.EffectivenessLateAt;
+        e = baseEff + (sk.EffectivenessLate - baseEff) * clamp(((o._lateOwn ? own : L) - f) / Math.max(1, a - f), 0, 1);
+      }
+      if (sk.EffectivenessEarly != null) {
+        const h = sk.EffectivenessEarlyHold || 1, fu = sk.EffectivenessEarlyFull || h + 1;
+        e *= sk.EffectivenessEarly + (1 - sk.EffectivenessEarly) * clamp(((o._lateOwn ? own : L) - h) / Math.max(1, fu - h), 0, 1);
+      }
+      return e;
+    };
+
+    // ----- base damage -----
+    const parts = {}; DT.forEach(d => parts[d] = [0, 0]);
+    const addPart = (d, a, b) => { parts[d][0] += a; parts[d][1] += b; };
+    let weapon = null, spellGrowth = 1, attackMult = 1;
+    if (isAttack) {
+      weapon = weaponStats(GD, mainItem, mainBase, mods, use);
+      const levelFactor = (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, bonus) : 1 + (G.AttackEffectivenessPerLevel || 0) * bonus);
+      attackMult = effAt(sk.Effectiveness != null ? sk.Effectiveness : 1) * levelFactor;
+      for (const d of DT) addPart(d, weapon.dmg[d][0] * attackMult, weapon.dmg[d][1] * attackMult);
+      res.base = { kind: 'attack', weapon, effectiveness: attackMult, levelFactor };
+      if (sk.DamageType && sk.DamageType !== 'Physical') {
+        // ASSUMPTION: an elemental attack turns its weapon's physical damage into its element (ConvertShare if given).
+        const share = sk.ConvertShare != null ? (sk.ConvertShare > 1 ? sk.ConvertShare / 100 : sk.ConvertShare) : 1;
+        const [a, b] = parts.Physical; parts.Physical = [a * (1 - share), b * (1 - share)]; addPart(sk.DamageType, a * share, b * share);
+      }
+    } else {
+      // Spells grow by the game-wide Gem.DamageGrowth (x1.19) per level, gear levels included.
+      // (The per-skill SpellGrowth field does not match the game's numbers; calibrated 31 Oct.)
+      spellGrowth = Math.pow(G.DamageGrowth || (1 + (sk.SpellGrowth || 0)), L - 1);
+      const eff = effAt(1);
+      const d = DT.includes(sk.DamageType) ? sk.DamageType : 'Physical';
+      addPart(d, sk.SpellMin * spellGrowth * eff, sk.SpellMax * spellGrowth * eff);
+      res.base = { kind: 'spell', min: sk.SpellMin, max: sk.SpellMax, growth: spellGrowth, effectiveness: eff };
+      if (mainBase && lc(mainBase.Class) === 'staff') weapon = { crit: mainBase.Crit || 0, isStaff: true };
+    }
+    // Added damage. Attacks: x effectiveness. Spells: x1, or grown like the gem when GemScaled.
+    for (const m of pickMods(mods, 'AddedDamage', 'Flat')) {
+      const { types, conds, gemScaled } = splitTags(m.tags);
+      if (!condsOk(ctx, conds) || !types.length) continue;
+      // Spells: support gems' added damage ("scaled up by the skill's gem level") grows x1.19 a level but
+      // does NOT get the skill's effectiveness (Unholy Void 700%: the game adds only ~17k a hit for
+      // Added Lightning + Added Cold); other added damage gets "effectiveness of added damage".
+      const k = isAttack ? attackMult : (gemScaled ? spellGrowth : effAt(1));
+      addPart(types[0], m.v * k, m.v2 * k); use(m, 'adds ' + types[0]);
+    }
+    res.baseParts = clone(parts);
+
+    // ----- conversion -----
+    // Each piece of damage remembers which types' modifiers it scales with: converted damage keeps
+    // the old type's modifiers and gains the new one's (the game's tooltip says so).
+    // Tag rules (from item texts): [X] on an item = Physical converted to X; [X] on a support = other
+    // damage to X (Zap/Flame/Ice: Poison at half); [X, cond...] = damage of skills with cond to X.
+    let pieces = DT.filter(d => parts[d][1] > 0).map(d => ({ type: d, scales: new Set([d]), min: parts[d][0], max: parts[d][1] }));
+    // All conversion lines apply at once to the original damage, each source type capped at 100%
+    // (Unholy Void with Plaguewright's Grasp 50% + Venom 60% shows no Lightning or Cold left).
+    // Poison converts at half into any other type (game rule "converts Poison at half").
+    const convRules = [];
+    for (const m of pickMods(mods, 'Convert', 'Flat')) {
+      const tags = m.tags || [];
+      const to = tags.find(t => DT.includes(t)); if (!to) continue;
+      const rest = tags.filter(t => t !== to);
+      if (!condsOk(ctx, rest)) continue;
+      const fromSupport = /^Support/.test(m.src);
+      let from;
+      // [X, Y] with Y a damage type: Y damage converted to X (Plaguewright's Grasp: Poison -> Physical;
+      // its Physical share did not grow when Added Lightning/Cold were socketed). Other extra tags are
+      // skill conditions: that skill's damage of every other type.
+      const restTypes = rest.filter(t => DT.includes(t));
+      if (restTypes.length) from = t => (restTypes.includes(t) ? 1 : 0);
+      else if (rest.length) from = t => 1;
+      else if (fromSupport) from = t => 1;
+      else from = t => (t === 'Physical' ? 1 : 0);
+      convRules.push({ to, pct: m.v, from }); use(m, 'conversion');
+    }
+    if (convRules.length) {
+      const out = [];
+      for (const p of pieces) {
+        const shares = convRules.map(r => {
+          if (r.to === p.type) return 0;
+          let f = r.from(p.type); if (f && p.type === 'Poison') f = Math.min(f, 0.5);
+          return r.pct * f / 100;
+        });
+        const tot = shares.reduce((a, b) => a + b, 0);
+        const scale = tot > 1 ? 1 / tot : 1;
+        const kept = 1 - Math.min(1, tot);
+        if (kept > 0) out.push({ type: p.type, scales: p.scales, min: p.min * kept, max: p.max * kept });
+        const byTo = {};
+        convRules.forEach((r, i) => { if (shares[i] > 0) byTo[r.to] = (byTo[r.to] || 0) + shares[i] * scale; });
+        for (const [to, s] of Object.entries(byTo)) out.push({ type: to, scales: new Set([...p.scales, to]), min: p.min * s, max: p.max * s });
+      }
+      pieces = out;
+    }
+    // Extra damage (Heralds, "gain X% of Y as extra Z"): from the converted, unscaled hit; it scales with
+    // the source piece's modifiers and the new type's.
+    const extras = [];
+    for (const m of pickMods(mods, 'DamageAsExtra', 'Flat')) {
+      const { types, conds } = splitTags(m.tags);
+      if (!condsOk(ctx, conds) || !types.length) continue;
+      const to = types[types.length - 1]; const from = types.length >= 2 ? types[0] : null;
+      for (const p of pieces) if (!from || p.type === from) extras.push({ type: to, scales: new Set([...p.scales, to]), min: p.min * m.v / 100, max: p.max * m.v / 100 });
+      use(m, 'extra ' + to);
+    }
+    pieces = pieces.concat(extras);
+    DT.forEach(d => parts[d] = [0, 0]);
+    for (const p of pieces) addPart(p.type, p.min, p.max);
+    res.convertedParts = clone(parts);
+    DT.forEach(d => { if (parts[d][1] > 0) ctx.dealt.add(d); });
+
+    // ----- scaling: each piece by the modifiers of every type it remembers -----
+    const scaled = {}; const scaleInfo = {};
+    const early = earlyDamage(cls, ch.level);
+    const intSpell = ctx.isSpell ? per10('Int', 'IntSpellDamagePer10') : 0;
+    for (const p of pieces) {
+      let inc = intSpell, more = early;
+      const hits = m => { const { types, conds } = splitTags(m.tags); return condsOk(ctx, conds) && (!types.length || types.some(t => p.scales.has(t))); };
+      for (const m of pickMods(mods, 'Damage', 'Inc')) if (hits(m)) { inc += m.v; use(m); }
+      for (const m of pickMods(mods, 'Damage', 'More')) if (hits(m)) { more *= 1 + m.v / 100; use(m); }
+      if (p.scales.has('Physical') && ctx.tags.has('melee')) inc += per10('Str', 'StrMeleePhysPer10');
+      const k = Math.max(0, 1 + inc / 100) * more;
+      const s = scaled[p.type] || (scaled[p.type] = [0, 0]);
+      s[0] += p.min * k; s[1] += p.max * k;
+      const si = scaleInfo[p.type] || (scaleInfo[p.type] = { base: 0, scaledAvg: 0 });
+      si.base += (p.min + p.max) / 2; si.scaledAvg += (p.min + p.max) / 2 * k;
+      if (!si.inc || (p.min + p.max) > (si._w || 0)) { si.inc = inc; si.more = more; si._w = p.min + p.max; }
+    }
+    for (const d of Object.keys(scaleInfo)) scaleInfo[d].k = scaleInfo[d].scaledAvg / scaleInfo[d].base;
+    res.scaleInfo = scaleInfo;
+
+    // ----- crit -----
+    // Spells cast with a staff use the staff's own crit chance instead of the spell base (tooltip: 9% staff x 1.4 = 12.6%).
+    let baseCrit = isAttack ? (weapon ? weapon.crit : H.CritBase) : (weapon && weapon.isStaff ? weapon.crit : H.SpellCritBase);
+    let critFlat = 0, critInc = 0, critMore = 1, multi = H.CritMultiBase;
+    for (const m of pickMods(mods, 'CritChance')) if (applies(ctx, m)) {
+      if (m.mode === 'Flat') critFlat += m.v; else if (m.mode === 'Inc') critInc += m.v; else if (m.mode === 'More') critMore *= 1 + m.v / 100; use(m);
+    }
+    for (const m of pickMods(mods, 'CritMulti', 'Flat')) if (applies(ctx, m)) { multi += m.v; use(m); }
+    const critChance = clamp((baseCrit + critFlat) * (1 + critInc / 100) * critMore, 0, 95);
+    multi = Math.max(100, multi);
+    const critFactor = 1 + critChance / 100 * (multi / 100 - 1);
+    res.crit = { base: baseCrit, chance: critChance, multi, factor: critFactor, inc: critInc };
+
+    // ----- speed -----
+    let speedInc = 0, speedMore = 1;
+    const speedStat = isAttack ? 'AttackSpeed' : 'CastSpeed';
+    for (const m of pickMods(mods, speedStat)) if (applies(ctx, m)) {
+      if (m.mode === 'Inc') speedInc += m.v; else if (m.mode === 'More') speedMore *= 1 + m.v / 100; use(m);
+    }
+    if (isAttack) speedInc += per10('Dex', 'DexAttackSpeedPer10');
+    let rateMult = (1 + speedInc / 100) * speedMore * (sk.ActionSpeed || 1);
+    rateMult = clamp(rateMult, H.ActionRateMin || 0, H.ActionRateMax || 99);
+    let usesPerSec, useTime;
+    if (sk.Channel && sk.Channel.Tick) { usesPerSec = rateMult / sk.Channel.Tick; useTime = sk.Channel.Tick / rateMult; }
+    else if (isAttack) { const aps = weapon ? weapon.aps : 1.2; usesPerSec = aps * rateMult; useTime = 1 / usesPerSec; }
+    else { const ct = sk.CastTime || 0.5; usesPerSec = rateMult / ct; useTime = ct / rateMult; }
+    let cooldown = 0;
+    if (sk.Cooldown > 0) {
+      let cdInc = 0;
+      for (const m of pickMods(mods, 'Cooldown', 'Inc')) if (applies(ctx, m)) { cdInc += m.v; use(m); }
+      cooldown = Math.max(sk.MinCooldown || 0, sk.Cooldown * Math.max(0.1, 1 + cdInc / 100));
+      usesPerSec = Math.min(usesPerSec, 1 / cooldown);
+    }
+    // Shape supports: a skill takes one shape, the first of these socketed (Skyfall's text). The others
+    // only add their damage lines.
+    const SHAPES = ['orbit', 'skyfall', 'rain_support', 'trap_support', 'totem_support'];
+    const activeSup = res.supports.filter(s => s.ok && !(o.off && o.off.has(s.key))).map(s => lc(s.id));
+    const shape = activeSup.find(id => SHAPES.includes(id)) || null;
+    res.shape = shape;
+    if (shape === 'totem_support') {
+      const t = /every ([\d.]+) seconds/i.exec(GD.supports.totem_support.Description); const every = t ? +t[1] : 0.8;
+      usesPerSec = 1 / every; useTime = every;
+      res.notes.push('Totem: one totem casts it every ' + every + ' s; your cast speed only places totems faster.');
+    } else if (shape === 'trap_support') {
+      const d = GD.supports.trap_support.Description; const n = /up to (\d+)/i.exec(d), re = /re-arms ([\d.]+) seconds/i.exec(d);
+      const traps = n ? +n[1] : 3, rearm = re ? +re[1] : 2.5;
+      usesPerSec = traps / rearm; useTime = 1 / usesPerSec;
+      res.notes.push('Trap: ' + traps + ' traps each striking every ' + rearm + ' s once laid; assumes the boss stands on them.');
+    }
+    // Deliveries that hit on their own clock (read from the skill text; cast speed only places them).
+    let hitFactor = 1; const desc = sk.Description || '';
+    if (sk.Delivery === 'Aura' || (sk.Ground && sk.Ground.Tick && !sk.Ground.Duration)) {
+      // Toggled ground (Unholy Void): ticks every Ground.Tick s at Ground.TickScale of the shown hit.
+      // Checked against the in-game tooltip: "Casts per second 2.00", 70% a tick.
+      let tps, scale;
+      if (sk.Ground && sk.Ground.Tick) { tps = 1 / sk.Ground.Tick; scale = sk.Ground.TickScale || 1; }
+      else {
+        const tw = /(once|twice|three times|four times|(\d+(?:\.\d+)?) times) a second/i.exec(desc);
+        const words = { once: 1, twice: 2, 'three times': 3, 'four times': 4 };
+        tps = tw ? (words[tw[1].toLowerCase()] || parseFloat(tw[2])) : 2;
+        const pct = /(\d+)% of the damage shown/i.exec(desc); scale = pct ? +pct[1] / 100 : 1;
+      }
+      hitFactor = scale;
+      usesPerSec = tps; useTime = 1 / tps;
+      res.notes.push('Aura: ' + tps + ' ticks a second at ' + Math.round(hitFactor * 100) + '% of the shown damage; cast speed does not change it.');
+    } else if (sk.Delivery === 'Brand') {
+      const ev = /Every ([\d.]+) seconds? it strikes/i.exec(desc);
+      if (ev) { usesPerSec = 1 / +ev[1]; useTime = +ev[1]; res.notes.push('Brand: one spark on the target strikes every ' + ev[1] + ' s (from the skill text). More sparks on one boss = set "hits per second" by hand.'); }
+    } else if (['Orb', 'Orbit', 'Ground', 'Skyfall', 'Rain', 'Totem'].includes(sk.Delivery)) {
+      res.notes.push(sk.Delivery + ' skills hit on their own pattern; this sheet counts one hit per cast. Set "hits per second" by hand if you know the real rate.');
+    }
+    if (o.hitsPerSecOverride > 0) { usesPerSec = o.hitsPerSecOverride; useTime = 1 / usesPerSec; res.notes.push('Hits per second set by hand: ' + o.hitsPerSecOverride + '.'); }
+    res.speed = { inc: speedInc, more: speedMore, rateMult, usesPerSec, useTime, cooldown, stat: speedStat, hitFactor };
+
+    // ----- hits per use -----
+    let repeats = 0;
+    // Auras, Vows, toggles and dashes are never echoed (game tooltip: "Spell Echo: no, Unholy Void is an aura").
+    const noEcho = ['Aura', 'Vow', 'Woe', 'Toll', 'Sentence', 'Blink', 'Dash'].includes(sk.Delivery) || ctx.tags.has('aura');
+    if (!noEcho) for (const m of pickMods(mods, 'Repeats', 'Flat')) if (applies(ctx, m)) { repeats += m.v; use(m); }
+    let projectiles = 0;
+    if (ctx.tags.has('projectile')) {
+      projectiles = (sk.Projectiles || 1) + (sk.ProjectilesAtLevels || []).filter(l => L >= l).length;
+      for (const m of pickMods(mods, 'Projectiles', 'Flat')) if (applies(ctx, m)) { projectiles += m.v; use(m); }
+    }
+    // Orbit: every projectile strikes; ones sent at an enemy already struck this cast deal 60% less
+    // (attacks 90% less). The game's log matches this: 4 projectiles x 2 echoes x 60% = 10.9 poisons/s.
+    const orbitOn = shape === 'orbit';
+    let projOnTarget = 1, projWeight = 1;
+    if (projectiles && shape === 'rain_support') {
+      // Rain: every enemy inside is struck twice, three times with 4 or more projectiles.
+      projOnTarget = o.projOnTarget || (projectiles >= 4 ? 3 : 2); projWeight = projOnTarget;
+      res.notes.push('Rain: the target is struck ' + projOnTarget + ' times per use.');
+    } else if (projectiles && shape === 'skyfall') {
+      projOnTarget = 1; projWeight = 1;
+      res.notes.push('Skyfall: each enemy is struck once per use; extra projectiles only add targets.');
+    } else if (projectiles) {
+      projOnTarget = clamp(o.projOnTarget || (orbitOn ? projectiles : 1), 1, projectiles);
+      projWeight = orbitOn ? 1 + (projOnTarget - 1) * (isAttack ? 0.1 : 0.4) : projOnTarget;
+      if (orbitOn && projOnTarget > 1) res.notes.push('Orbit: all ' + projOnTarget + ' projectiles strike this enemy; each after the first deals ' + (isAttack ? '90' : '60') + '% less (worth ' + projWeight.toFixed(2) + ' full hits per cast).');
+    }
+    const perHitFactor = projWeight / projOnTarget; // average share of a full hit per projectile hit
+    const strikes = typeof sk.Strikes === 'object' && sk.Strikes ? (sk.Strikes.Count || 1) : (+sk.Strikes || 1);
+    if (strikes > 1) res.notes.push(sk.Name + ' strikes ' + strikes + ' times per use; every strike is counted at the full hit (a stronger finisher is not modelled).');
+    const hitsPerUse = o.hitsPerSecOverride > 0 ? 1 : (1 + repeats) * projOnTarget * strikes;
+    const hitsPerSec = usesPerSec * hitsPerUse;
+    res.hits = { repeats, projectiles, projOnTarget, projWeight, perHitFactor, orbit: orbitOn, strikes, hitsPerUse, hitsPerSec, fullHitsPerSec: hitsPerSec * perHitFactor };
+
+    // ----- the hit -----
+    const hit = {}; let hitAvg = 0;
+    for (const d of Object.keys(scaled)) { const a = scaled[d][0] * hitFactor, b = scaled[d][1] * hitFactor; hit[d] = { min: a, max: b, avg: (a + b) / 2 }; hitAvg += hit[d].avg; }
+    res.hit = hit;
+    res.hitAvg = hitAvg; res.hitAvgCrit = hitAvg * critFactor;
+    res.sheetHitDps = hitAvg * critFactor * hitsPerSec * perHitFactor;
+
+    // ----- enemy -----
+    const lvl = o.enemyLevel || ch.level;
+    const rarity = o.enemyRarity || 'rare';
+    const isBoss = rarity === 'boss';
+    const resist = {};
+    for (const d of DT) resist[d] = o.enemyRes && o.enemyRes[d] != null ? o.enemyRes[d] : (d === 'Physical' ? 0 : Math.min(M.ResistMax, lvl * M.ResistPerLevel));
+    const pen = {}; DT.forEach(d => pen[d] = 0);
+    for (const m of pickMods(mods, 'Penetration', 'Flat')) {
+      const { types, conds } = splitTags(m.tags);
+      if (!condsOk(ctx, conds)) continue;
+      let hit1 = false; for (const d of (types.length ? types : DT)) { pen[d] += m.v; if (ctx.dealt.has(d)) hit1 = true; }
+      if (hit1) use(m);
+    }
+    const armour = o.enemyArmour != null ? o.enemyArmour : lvl * M.ArmourPerLevel;
+    // Curses: more damage taken (all types) and per-element taken. A Guardian/boss only takes the strongest.
+    // Int does not scale a curse's damage taken (game note: "Int never scales it"); the in-game tip
+    // shows Woe of Withering on a poison skill as +30% = its 10% taken + 20% Poison taken, added.
+    let curseEffInc = 0;
+    for (const m of pickMods(mods, 'CurseEffect', 'Inc')) { curseEffInc += m.v; use(m); }
+    const curseRows = [];
+    for (const [id, cfg] of Object.entries(o.curses || {})) {
+      const c = GD.curses[id]; if (!c || !cfg || !cfg.on) continue;
+      // On a Rare / Unique / Guardian a Woe holds and grows Dread by itself up to Tough.Cap.
+      const tough = (rarity === 'rare' || isBoss) && c.Tough && c.Tough.Holds ? (c.Tough.Cap || 0) : 0;
+      const dread = Math.max(+cfg.dread || 0, tough);
+      const dreadPct = c.Dread && dread ? Math.min(dread, isBoss ? (c.Dread.BossCap || c.Dread.Cap) : c.Dread.Cap) * c.Dread.EffectPct : 0;
+      const eff = (1 + curseEffInc / 100) * (1 + dreadPct / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
+      const row = { id, name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0 };
+      for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
+      curseRows.push(row);
+    }
+    const takenFor = (rows, d) => rows.reduce((p, r) => p * (1 + (r.taken + (r.elem[d] || 0)) / 100), 1);
+    let activeCurses = curseRows;
+    if (isBoss && curseRows.length > 1) {
+      const main = Object.keys(hit).sort((a, b) => hit[b].avg - hit[a].avg)[0];
+      activeCurses = [curseRows.slice().sort((a, b) => takenFor([b], main) - takenFor([a], main))[0]];
+    }
+    // Hunter's Marks (MarkOnHit): +X% damage taken per Mark up to a cap, doubled on a Guardian or Unique.
+    // A separate group from Woes/Sentences, so a Guardian takes both its best curse and its Marks.
+    let marks = 0, markPct = 0;
+    for (const m of pickMods(mods, 'MarkOnHit', 'Flat')) if (applies(ctx, m)) { marks += m.v; use(m); }
+    if (marks > 0) {
+      const t = /([\d.]+)% more damage for each Mark, up to (\d+)/i.exec((GD.supports.hunters_mark_support || {}).Description || '');
+      const per = t ? +t[1] : 1.4; let cap = t ? +t[2] : 10;
+      for (const m of pickMods(mods, 'MarkMax', 'Flat')) { cap += m.v; use(m); }
+      if (isBoss) cap *= 2;
+      let eff = 0; for (const m of pickMods(mods, 'MarkEffect', 'Inc')) { eff += m.v; use(m); }
+      // Marks fall off 3 s after the LAST hit, so any skill hitting more often than that keeps
+      // stacking them to the cap.
+      const held = hitsPerSec * marks >= 1 / 3 ? cap : 0;
+      markPct = held * per * (1 + eff / 100);
+    }
+    res.marks = markPct ? { pct: markPct } : null;
+    const extraTaken = (1 + (o.extraTakenPct || 0) / 100) * (1 + markPct / 100);
+    const enemy = { level: lvl, rarity, resist, pen, armour, curses: curseRows, activeCurses: activeCurses.map(r => r.id), curseEffInc };
+    res.enemy = enemy;
+    const mitig = {};
+    for (const d of DT) {
+      // Unknown whether penetration can take resistance below 0; o.penFloor = it cannot.
+      const effRes = o.penFloor ? Math.min(resist[d], Math.max(0, resist[d] - pen[d])) : resist[d] - pen[d];
+      let k = 1 - Math.min(H.ResistHardCap || 90, effRes) / 100;
+      if (d === 'Physical') {
+        const ph = hit.Physical ? hit.Physical.avg * critFactor : 0;
+        const dr = ph > 0 ? Math.min(H.ArmourMaxReduction, 100 * armour / (armour + H.ArmourFactor * ph)) : 0;
+        k = (1 - dr / 100) * (1 - effRes / 100);
+        mitig.armourReduction = dr;
+      }
+      mitig[d] = { effRes, k, taken: takenFor(activeCurses, d) * extraTaken };
+    }
+    res.mitig = mitig;
+    let hitDpsVs = 0; const byType = {};
+    for (const d of Object.keys(hit)) {
+      const v = hit[d].avg * critFactor * hitsPerSec * perHitFactor * mitig[d].k * mitig[d].taken;
+      byType[d] = v; hitDpsVs += v;
+    }
+    res.hitDpsByType = byType;
+    res.hitDps = hitDpsVs;
+
+    // ----- ailments -----
+    // Duration: 2 s x (1 + passives + 1% per 10 Int), as the game's skill tooltip shows (3.34 s at L74).
+    // NOTE: the game's combat log says "for 2.5s" for the same poisons, so real fights may get less.
+    let ailDur = per10('Int', 'IntAilmentDurPer10');
+    for (const m of pickMods(mods, 'AilmentDuration', 'Inc')) { ailDur += m.v; use(m); }
+    const snap = s => (o.combatDuration ? Math.max(0.5, Math.floor(s / 0.5) * 0.5) : s);
+    // Ticks are not reduced by resistance (the log: "tick 23520 = 47039.7/s x 0.5, poison taken x1.00");
+    // they are raised by damage taken.
+    const dotTakenFor = d => (o.dotElementTaken ? mitig[d].taken : takenFor(activeCurses.map(r => ({ taken: r.taken, elem: {} })), undefined) * extraTaken);
+    let dotMulti = 0;
+    for (const m of pickMods(mods, 'DotMulti', 'Flat')) { dotMulti += m.v; use(m); }
+    const sumMod = (stat, mode) => { let s = mode === 'More' ? 1 : 0; for (const m of pickMods(mods, stat, mode)) if (applies(ctx, m)) { s = mode === 'More' ? s * (1 + m.v / 100) : s + m.v; use(m); } return s; };
+    const ail = { dotMulti, durationInc: ailDur };
+    res.ailments = ail;
+    let poisonDps = 0, igniteDps = 0;
+    if (A.bEnabled) {
+      const poisonChanceStat = sumMod('PoisonChance', 'Flat');
+      const hasPoison = !!hit.Poison;
+      let pChance = clamp((hasPoison ? A.PoisonChance : 0) + poisonChanceStat, 0, 100);
+      // A PoisonChance stat also poisons with Physical (scaling.json Ailments doc).
+      // The poisoning hit is the whole hit (the tooltip's 24,573/s a stack = 20% x the full average hit
+      // x poison modifiers). Orbit's weaker spheres count as part-stacks, as the game's panel does.
+      // Like Orbit's spheres, an aura's 70% ticks poison from the full shown hit and count as 0.7 of a
+      // stack each (Unholy Void tooltip: 83,928/s a stack, "about 2.3 stacks" at 2 ticks x 50%).
+      const eligible = ((hit.Poison ? hit.Poison.avg : 0) + (poisonChanceStat > 0 && hit.Physical ? hit.Physical.avg : 0)) * critFactor / hitFactor;
+      if (!hasPoison && !(poisonChanceStat > 0 && hit.Physical)) pChance = 0;
+      if (pChance > 0 && eligible > 0) {
+        const pInc = sumMod('PoisonDamage', 'Inc'), pMore = sumMod('PoisonDamage', 'More');
+        // Tooltip duration (what the skill panel uses) and combat duration: Virulence (Dragonling
+        // Ascendancy) makes poisons last 25% shorter in combat (the log's 2.5 s = 3.34 s x 0.75), which
+        // the tooltip leaves out, and lets Rares, Uniques and Guardians hold 60 stacks instead of 40.
+        const tipDur = snap(A.PoisonSeconds * (1 + ailDur / 100));
+        const dur = virulence ? tipDur * virulence.DurMult : tipDur;
+        const cap = virulence && (rarity === 'rare' || rarity === 'boss') ? virulence.Cap : A.PoisonMaxStacks;
+        const perStack = eligible * A.PoisonFracPerSec * Math.max(0, 1 + pInc / 100) * pMore * Math.max(0, 1 + dotMulti / 100);
+        const rate = hitsPerSec * perHitFactor * hitFactor * pChance / 100;
+        const stacksRaw = rate * dur;
+        const stacks = Math.min(stacksRaw, cap);
+        const m = A.bPoisonTakesDamageTaken ? dotTakenFor('Poison') : 1;
+        poisonDps = stacks * perStack * m;
+        const panelStacks = Math.min(rate * tipDur, A.PoisonMaxStacks);
+        ail.poison = { chance: pChance, eligible, duration: dur, tipDuration: tipDur, virulence: !!virulence, perStack, stacks, stacksRaw, cap, panelStacks, inc: pInc, more: pMore, dps: poisonDps, perHitTotal: perStack * dur };
+        if (virulence) res.notes.push('Virulence (Dragonling): poisons last ' + dur.toFixed(2) + ' s in combat instead of the tooltip\'s ' + tipDur.toFixed(2) + ' s; Rares and Guardians hold up to ' + virulence.Cap + ' stacks. The skill panel DPS uses the tooltip duration, like the game.');
+      }
+      const igChance = clamp((hit.Fire ? A.IgniteChance : 0) + sumMod('IgniteChance', 'Flat'), 0, 100);
+      if (hit.Fire && igChance > 0) {
+        const iInc = sumMod('IgniteDamage', 'Inc'), iMore = sumMod('IgniteDamage', 'More');
+        const dur = snap(A.IgniteSeconds * (1 + ailDur / 100));
+        const dps1 = hit.Fire.avg * critFactor * A.IgniteFrac / A.IgniteSeconds * Math.max(0, 1 + iInc / 100) * iMore * Math.max(0, 1 + dotMulti / 100);
+        const uptime = 1 - Math.exp(-hitsPerSec * igChance / 100 * dur);
+        igniteDps = dps1 * uptime * dotTakenFor('Fire');
+        ail.ignite = { chance: igChance, dps1, uptime, duration: dur, dps: igniteDps };
+      }
+      if (sumMod('BleedChance', 'Flat') > 0) res.notes.push('Bleeding chance found but bleeding is not modelled (its duration is not in the data).');
+    }
+    res.poisonDps = poisonDps; res.igniteDps = igniteDps;
+    // What the in-game skill panel shows: hits + ailments to one enemy, before its resistances and curses.
+    res.panelDps = res.sheetHitDps + (ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * ail.ignite.uptime : 0);
+    res.totalDps = hitDpsVs + poisonDps + igniteDps;
+
+    // Lines that matched this skill but that the model does not use.
+    res.notModelled = [];
+    for (const m of mods) {
+      if (res.used.has(m) || m.local) continue;
+      if (NON_DAMAGE.has(m.stat) || HANDLED.has(m.stat)) continue;
+      if (/^Minion/.test(m.stat) && !ctx.tags.has('minion')) continue;
+      const { conds } = splitTags(m.tags);
+      if (!condsOk(ctx, conds)) continue;
+      res.notModelled.push(m);
+    }
+    if (offBase && offBase.DamageMin && isAttack) res.notes.push('Off-hand weapon found: dual wielding alternates weapons in game; this sheet uses the main hand only.');
+    return res;
+  }
+
+  function earlyDamage(cls, level) {
+    if (!cls.EarlyDamagePct) return 1;
+    const full = cls.EarlyDamageFullToLevel || 0, end = cls.EarlyDamageEndLevel || 0;
+    if (level <= full) return 1 + cls.EarlyDamagePct / 100;
+    if (level >= end) return 1;
+    return 1 + cls.EarlyDamagePct / 100 * (end - level) / Math.max(1, end - full);
+  }
+
+  // Weapon damage with its local lines (local % physical, local added damage, local speed and crit).
+  function weaponStats(GD, item, base, mods, use) {
+    const dmg = {}; DT.forEach(d => dmg[d] = [0, 0]);
+    if (!base || !base.DamageMin) { dmg.Physical = [2, 5]; return { name: 'Unarmed', dmg, aps: 1.2, crit: GD.scaling.Hero.CritBase }; }
+    const key = 'item:' + item.slot;
+    let physInc = 0, asInc = 0, critInc = 0;
+    const added = {}; DT.forEach(d => added[d] = [0, 0]);
+    for (const m of mods) {
+      if (!m.local || m.key !== key) continue;
+      const { types } = splitTags(m.tags);
+      if (m.stat === 'Damage' && m.mode === 'Inc' && (!types.length || types.includes('Physical'))) { physInc += m.v; use(m, 'local'); }
+      else if (m.stat === 'AddedDamage' && types.length) { added[types[0]][0] += m.v; added[types[0]][1] += m.v2; use(m, 'local'); }
+      else if (m.stat === 'AttackSpeed' && m.mode === 'Inc') { asInc += m.v; use(m, 'local'); }
+      else if (m.stat === 'CritChance' && m.mode === 'Inc') { critInc += m.v; use(m, 'local'); }
+    }
+    dmg.Physical = [(base.DamageMin + added.Physical[0]) * (1 + physInc / 100), (base.DamageMax + added.Physical[1]) * (1 + physInc / 100)];
+    for (const d of DT) if (d !== 'Physical') dmg[d] = added[d];
+    return { name: base.Name, dmg, aps: (base.AttacksPerSecond || 1) * (1 + asInc / 100), crit: (base.Crit || GD.scaling.Hero.CritBase) * (1 + critInc / 100), physInc, isStaff: lc(base.Class) === 'staff' };
+  }
+
+  function clone(p) { const o = {}; for (const k in p) o[k] = p[k].slice(); return o; }
+
+  // Skills worth offering for a character: hotbar first, then socketed, then every owned gem.
+  function listSkills(GD, ch) {
+    const seen = new Set(); const out = [];
+    const push = (id, where) => { if (!id || id === 'move' || seen.has(id) || !GD.skills[lc(id)]) return; seen.add(id); out.push({ id, where, name: GD.skills[lc(id)].Name }); };
+    ch.hotbar.forEach(id => push(id, 'Hotbar'));
+    ch.sockets.forEach(s => push(s.skill, 'Socketed'));
+    const w = ch.items.find(i => i.slot === 'MainHand'); const wb = w && GD.bases[lc(w.base)];
+    ch.gems.forEach(id => push(id, 'Owned gem'));
+    return out;
+  }
+
+  // What would help most: DPS change from one small upgrade at a time.
+  function statWeights(GD, ch, skillId, o, baseRes) {
+    const base = baseRes.totalDps; if (!(base > 0)) return [];
+    const main = Object.keys(baseRes.hit).sort((a, b) => baseRes.hit[b].avg - baseRes.hit[a].avg)[0];
+    const sp = baseRes.speed.stat;
+    const tests = [
+      ['+1 to level of this gem', { Stat: 'SkillLevel', Mode: 'Flat', Tags: [], Value: 1 }],
+      ['+20% increased Damage', { Stat: 'Damage', Mode: 'Inc', Tags: [], Value: 20 }],
+      ['+20% increased ' + main + ' Damage', { Stat: 'Damage', Mode: 'Inc', Tags: [main], Value: 20 }],
+      ['10% more Damage', { Stat: 'Damage', Mode: 'More', Tags: [], Value: 10 }],
+      ['+10% increased ' + (sp === 'CastSpeed' ? 'Cast' : 'Attack') + ' Speed', { Stat: sp, Mode: 'Inc', Tags: [], Value: 10 }],
+      ['+30% increased Critical Strike Chance', { Stat: 'CritChance', Mode: 'Inc', Tags: [], Value: 30 }],
+      ['+30% to Critical Strike Multiplier', { Stat: 'CritMulti', Mode: 'Flat', Tags: [], Value: 30 }],
+      ['10% ' + main + ' Penetration', { Stat: 'Penetration', Mode: 'Flat', Tags: [main], Value: 10 }],
+    ];
+    if (baseRes.ailments.poison || baseRes.hit.Poison) {
+      tests.push(['+20% increased Poison Damage (ailment)', { Stat: 'PoisonDamage', Mode: 'Inc', Tags: [], Value: 20 }]);
+      tests.push(['+10% Damage over Time Multiplier', { Stat: 'DotMulti', Mode: 'Flat', Tags: [], Value: 10 }]);
+      tests.push(['+10% chance to Poison', { Stat: 'PoisonChance', Mode: 'Flat', Tags: [], Value: 10 }]);
+    }
+    tests.push(['+50 Intelligence', { Stat: 'Int', Mode: 'Flat', Tags: [], Value: 50 }]);
+    return tests.map(([label, mod]) => {
+      const r = calcSkill(GD, ch, skillId, Object.assign({}, o, { extra: (o.extra || []).concat([Object.assign({ src: 'What-if' }, mod)]) }));
+      return { label, dps: r.totalDps, gain: r.totalDps / base - 1 };
+    }).sort((a, b) => b.gain - a.gain);
+  }
+
+  // Readable text for a mod, using the game's own stat_text templates where possible.
+  function modText(GD, m) {
+    const { types, conds, gemScaled } = splitTags(m.tags);
+    const keys = [m.stat + '.' + m.mode + (m.tags.length ? '+' + m.tags.join('+') : ''), m.stat + '.' + m.mode + (conds[0] ? '+' + conds[0] : ''), m.stat + '.' + m.mode + (gemScaled ? '+GemScaled' : ''), m.stat + '.' + m.mode + '+', m.stat + '.' + m.mode];
+    let t = null; for (const k of keys) if (GD.statText[k]) { t = GD.statText[k]; break; }
+    const fmt = x => (Math.round(x * 100) / 100).toString();
+    if (!t) return m.stat + ' ' + m.mode + ' ' + fmt(m.v) + (m.v2 ? '-' + fmt(m.v2) : '') + (m.tags.length ? ' [' + m.tags.join(', ') + ']' : '');
+    const tagWords = [...types.filter((x, i, a) => a.indexOf(x) === i), ...conds].join(' ');
+    return t.replace('{v}', fmt(m.v)).replace('{v2}', fmt(m.v2)).replace('{abs}', fmt(Math.abs(m.v))).replace('{tags}', tagWords || '').replace('{skills}', (conds.join(' ') || 'Skills'))
+      .replace('{tag0}', m.tags[0] || '').replace('{tag1}', m.tags[1] || '').replace(/\{n\}\|plural\(one=([^,]+),other=([^)]+)\)/, (_, a, b) => Math.abs(m.v) === 1 ? a : b).replace(/\s+/g, ' ').trim()
+      + (conds.length && !/\{tags\}|\{skills\}/.test(t) && !t.includes(conds[0]) ? ' (' + conds.join(', ') + ')' : '');
+  }
+
+  // ---------- support search ----------
+  // Supports that add nothing against one enemy (packs, sustain, on-kill, triggers).
+  const NO_SINGLE_TARGET = new Set(['chain', 'pierce', 'fork', 'tether', 'increased_area', 'life_leech', 'siphon', 'tithe', 'gather_fury',
+    'bloodlust_support', 'bloodbound', 'war_banner_support', 'cast_on_crit', 'cast_when_hit', 'shatter', 'contagion_flame', 'living_storm',
+    'stormfrost_support', 'rend', 'woebringer', 'pass_sentence', 'swift_step', 'bone_guard', 'ravening_host', 'minion_damage', 'minion_life',
+    'minion_speed', 'channel_conduit', 'channel_mastery', 'woe_bearer', 'cast_on_minion_death', 'executioner', 'maim', 'ruthless']);
+  const SHAPES = ['orbit', 'skyfall', 'rain_support', 'trap_support', 'totem_support'];
+
+  // Support gems the character has: spares + every support socketed in any skill.
+  function ownedSupports(ch) {
+    const s = new Set((ch.supportGems || []).map(lc));
+    for (const so of ch.sockets) for (const id of so.supports) s.add(lc(id));
+    return s;
+  }
+  function socketsFor(GD, ch, skillId, gemLevel) {
+    const lv = gemLevel || ch.gemLevels[skillId] || 1;
+    return (GD.scaling.Gem.SocketsAtLevel || [1, 2, 5, 12, 15, 20]).filter(l => lv >= l).length;
+  }
+  // Put the shape first (only the first shape socketed counts; Skyfall may follow as damage only).
+  function arrangeShapes(set) {
+    const shapes = set.filter(id => SHAPES.includes(id));
+    const real = shapes.filter(id => id !== 'skyfall');
+    if (real.length > 1) return null;
+    const first = real[0] || (shapes.includes('skyfall') ? 'skyfall' : null);
+    return first ? [first, ...set.filter(id => id !== first)] : set;
+  }
+
+  // Tries every combination. Returns a job: call job.step(n) until job.done; job.results is sorted best first.
+  // opt: { pool: 'owned' | 'all', target: 'enemy' | 'panel', sockets, keep: 15 }
+  function supportSearch(GD, ch, skillId, o, opt) {
+    opt = opt || {};
+    const sk = GD.skills[lc(skillId)];
+    const tags = new Set([...(sk.Tags || []), sk.Delivery].map(lc));
+    const owned = ownedSupports(ch);
+    const fits = Object.values(GD.supports).filter(s => (!(s.RequiresAnyTag || []).length || s.RequiresAnyTag.some(t => tags.has(lc(t)))) && !(s.ExcludeTags || []).some(t => tags.has(lc(t))));
+    const pool = fits.map(s => lc(s.Id)).filter(id => !NO_SINGLE_TARGET.has(id) && (opt.pool === 'all' || owned.has(id)));
+    const k = Math.min(opt.sockets || socketsFor(GD, ch, skillId, o.gemLevel), pool.length);
+    const base = Object.assign({}, o); delete base.supportsOverride;
+    base.off = new Set([...(o.off || [])].filter(x => !String(x).startsWith('support:')));
+    base._col = collectMods(GD, ch, base);
+    const score = sup => { const r = calcSkill(GD, ch, skillId, Object.assign({}, base, { supportsOverride: sup })); return { r, v: opt.target === 'panel' ? r.panelDps : r.totalDps }; };
+    // Iterative combination generator (indices).
+    const idx = Array.from({ length: k }, (_, i) => i);
+    let more = k > 0, tried = 0;
+    const total = (() => { let t = 1; for (let i = 0; i < k; i++) t = t * (pool.length - i) / (i + 1); return Math.round(t); })();
+    const keep = opt.keep || 15; const results = [];
+    const job = {
+      pool, sockets: k, total, owned, results, done: !more,
+      get tried() { return tried; },
+      step(n) {
+        while (n-- > 0 && more) {
+          const sup = arrangeShapes(idx.map(i => pool[i]));
+          tried++;
+          if (sup) {
+            const { r, v } = score(sup);
+            if (results.length < keep || v > results[results.length - 1].v) {
+              results.push({ sup, v, total: r.totalDps, panel: r.panelDps, mana: sup.reduce((p, id) => p * ((GD.supports[id] || {}).ManaMultiplier || 1), 1), notOwned: sup.filter(id => !owned.has(id)) });
+              results.sort((a, b) => b.v - a.v); if (results.length > keep) results.pop();
+            }
+          }
+          // next combination
+          let i = k - 1; while (i >= 0 && idx[i] === pool.length - k + i) i--;
+          if (i < 0) more = false; else { idx[i]++; for (let j = i + 1; j < k; j++) idx[j] = idx[j - 1] + 1; }
+        }
+        job.done = !more; return job;
+      },
+    };
+    return job;
+  }
+
+  const api = { extractCharacter, characterFromCode, collectMods, calcSkill, listSkills, statWeights, modText, splitTags, DT, supportSearch, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  root.BOSim = api;
+  if (typeof module !== 'undefined') module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+// Page logic for DamageSim.html. Data comes in as window.GD (game data) and window.CHARS (characters).
+// The app starts once GD exists: built into the page (local copy) or read from the player's own game
+// folder (public page, see boot() at the end).
+window.BOStartApp = function () {
+  'use strict';
+  const GD = window.GD, S = window.BOSim;
+  let CHARS = (window.CHARS || []).slice();
+  const DT = S.DT;
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const num = (x, d) => {
+    if (!isFinite(x)) return '–';
+    if (d == null) d = Math.abs(x) >= 100 ? 0 : Math.abs(x) >= 10 ? 1 : 2;
+    return x.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: d });
+  };
+  const pct = x => (x >= 0 ? '+' : '') + num(x * 100, 1) + '%';
+  const typeColor = d => 'var(--t-' + d.toLowerCase() + ')';
+  const store = {
+    get(k, def) { try { const v = localStorage.getItem('bods:' + k); return v == null ? def : JSON.parse(v); } catch (e) { return def; } },
+    set(k, v) { try { localStorage.setItem('bods:' + k, JSON.stringify(v)); } catch (e) { /* storage off */ } },
+  };
+
+  const st = {
+    ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), charges: { fury: 0, insight: 0, resolve: 0 },
+    enemyLevel: null, rarity: 'rare', res: {}, curses: {}, extraTaken: 0, projOnTarget: null, hps: null, ingame: null, pinned: null,
+    penFloor: false, opt: null, optJob: null, last: null,
+  };
+
+  // ---------- setup ----------
+  $('#builtInfo').textContent = 'Game data read ' + new Date(GD.builtAt).toLocaleString() + ' · ' + Object.keys(GD.skills).length + ' skills';
+  const resGrid = $('#resGrid');
+  resGrid.innerHTML = DT.map(d => '<label class="field"><span><span class="type" style="--c:' + typeColor(d) + '">' + (d === 'Lightning' ? 'Light.' : d) + '</span></span><input type="number" data-res="' + d + '" placeholder="auto"></label>').join('');
+  const allSupports = Object.values(GD.supports).sort((a, b) => a.Name.localeCompare(b.Name));
+  $('#supportAdd').innerHTML += allSupports.map(s => '<option value="' + esc(s.Id) + '">' + esc(s.Name) + '</option>').join('');
+  const drop = document.createElement('div'); drop.className = 'drop-hint'; drop.textContent = 'Drop a BO_Char_*.sav file'; document.body.appendChild(drop);
+
+  function fillChars(selectId) {
+    $('#charSelect').innerHTML = CHARS.map(c => '<option value="' + esc(c.id) + '">' + esc(c.name) + ' · ' + esc(c.classId) + ' ' + c.level + (c.file ? '' : ' (loaded)') + '</option>').join('') || '<option value="">No characters found</option>';
+    if (selectId) $('#charSelect').value = selectId;
+  }
+
+  function selectChar(id) {
+    const ch = CHARS.find(c => c.id === id) || CHARS[0];
+    st.ch = ch; st.pinned = null; stopSearch(); st.opt = null;
+    if (!ch) return;
+    store.set('char', ch.id);
+    st.curses = {};
+    for (const c of Object.values(GD.curses)) st.curses[c.Id] = { on: ch.hotbar.includes(c.Skill), dread: 0 };
+    st.enemyLevel = null; $('#enemyLevel').value = ''; $('#enemyLevel').placeholder = ch.level;
+    const skills = S.listSkills(GD, ch);
+    const groups = {};
+    for (const s of skills) (groups[s.where] = groups[s.where] || []).push(s);
+    $('#skillSelect').innerHTML = Object.entries(groups).map(([g, list]) => '<optgroup label="' + g + '">' + list.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('') + '</optgroup>').join('');
+    const remembered = store.get('skill:' + ch.id, null);
+    const pickable = skills.filter(s => { const r = S.calcSkill(GD, ch, s.id, {}); return !r.unsupported && !r.error; });
+    const first = [remembered, ch.mainSkill].find(id => id && skills.some(s => s.id === id)) || (pickable[0] || skills[0] || {}).id;
+    selectSkill(first);
+  }
+
+  function selectSkill(id) {
+    st.skill = id; st.gemLevel = null; st.supports = null; st.pinned = null; st.hps = null; stopSearch(); st.opt = null;
+    $('#skillSelect').value = id; $('#gemLevel').value = ''; $('#hpsOverride').value = ''; $('#ingameDps').value = '';
+    if (st.ch) store.set('skill:' + st.ch.id, id);
+    const sk = GD.skills[String(id).toLowerCase()];
+    $('#skillDesc').textContent = sk ? sk.Description.replace(/\{[^}]+\}\|plural\([^)]*\)/g, '').replace(/\{(\w+)\}/g, '$1') : '';
+    const sock = st.ch.sockets.find(s => s.skill === id);
+    st.supports = sock ? sock.supports.slice() : [];
+    render();
+  }
+
+  function opts(extra) {
+    const res = {};
+    for (const d of DT) if (st.res[d] !== '' && st.res[d] != null && isFinite(+st.res[d])) res[d] = +st.res[d];
+    return Object.assign({
+      off: st.off, vowbreak: st.vowbreak, charges: st.charges, supportsOverride: st.supports, gemLevel: st.gemLevel || undefined,
+      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0,
+      projOnTarget: +st.projOnTarget || undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, penFloor: st.penFloor,
+    }, extra || {});
+  }
+
+  // ---------- left panel ----------
+  function renderControls(r) {
+    const ch = st.ch;
+    $('#gemLevel').placeholder = r.gem ? r.gem.own : '';
+    $('#gemBonus').textContent = r.gem ? '+' + r.gem.bonus + ' → ' + r.gem.total : '–';
+    // Supports
+    const sup = r.supports || [];
+    $('#supportCount').textContent = sup.length ? sup.filter(s => s.ok && !st.off.has(s.key)).length + ' active' : '';
+    $('#supportList').innerHTML = sup.length ? sup.map(s => '<li><label><input type="checkbox" data-src="' + esc(s.key) + '"' + (st.off.has(s.key) ? '' : ' checked') + (s.ok ? '' : ' disabled') + '><span class="name">' + esc(s.name) +
+      (s.ok ? '<span class="meta">' + esc(s.desc || '') + '</span>' : '<span class="meta bad">' + esc(s.why) + '</span>') + '</span></label>' +
+      (s.name.includes('(granted)') ? '' : '<button class="x" title="Remove" data-remove-support="' + esc(s.id) + '">×</button>') + '</li>').join('') : '<li class="hint">No supports in this skill\'s sockets.</li>';
+    // Vows & sources
+    const src = r.sources || S.collectMods(GD, ch, opts()).sources;
+    const vows = src.filter(s => s.group === 'Vows & Heralds');
+    $('#vowList').innerHTML = vows.length ? vows.map(s => '<li><label><input type="checkbox" data-src="' + esc(s.key) + '"' + (st.off.has(s.key) ? '' : ' checked') + '><span class="name">' + esc(s.label) + '</span></label>' +
+      (s.vowbreak ? '<label title="Vowbreak: the Herald\'s extra damage x2.5 for 4 s"><input type="checkbox" data-vowbreak="' + esc(s.vowId) + '"' + (st.vowbreak.has(s.vowId) ? ' checked' : '') + '><span class="meta">Vowbreak</span></label>' : '') + '</li>').join('')
+      : '<li class="hint">No Vows or Heralds on your hotbar.</li>';
+    $('#sourceList').innerHTML = src.filter(s => s.group !== 'Vows & Heralds').map(s => '<li><label><input type="checkbox" data-src="' + esc(s.key) + '"' + (st.off.has(s.key) ? '' : ' checked') + '><span class="name">' + esc(s.label) + (s.detail ? '<span class="meta">' + esc(s.detail) + '</span>' : '') + '</span></label></li>').join('');
+    // Curses
+    const isBoss = st.rarity === 'boss';
+    $('#curseList').innerHTML = Object.values(GD.curses).filter(c => c.TakenPct || c.ElementTakenPct).map(c => {
+      const cs = st.curses[c.Id] || { on: false, dread: 0 };
+      const row = (r.enemy && r.enemy.curses || []).find(x => x.id === c.Id);
+      const onBar = ch.hotbar.includes(c.Skill);
+      const effect = row ? 'now: +' + num(row.taken, 1) + '% taken' + Object.entries(row.elem).map(([d, v]) => ', +' + num(v, 1) + '% ' + d).join('') : (c.Text || '').replace('{0}', c.TakenPct || 0).replace('{1}', Object.values(c.ElementTakenPct || {})[0] || '').replace(/\{2\}%? ?/, '');
+      return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + (onBar ? '' : ' <span class="meta" style="display:inline">(not on bar)</span>') + '<span class="meta">' + esc(effect) + (isBoss && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · a Guardian only takes your strongest curse' : '') + '</span></span></label>' +
+        (c.Dread && c.Dread.Cap ? '<input class="mini" type="number" min="0" max="' + c.Dread.Cap + '" value="' + (cs.dread || 0) + '" title="Dread on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + c.Dread.Cap + ', bosses ' + c.Dread.BossCap + ')" data-dread="' + esc(c.Id) + '">' : '') + '</li>';
+    }).join('');
+  }
+
+  // ---------- right panel ----------
+  function render() {
+    if (!st.ch || !st.skill) { $('#results').innerHTML = '<div class="empty">No character loaded. Use <b>Load save file</b> (or drop a BO_Char_*.sav here) or paste a build code above.<br><small>Saves are in %LOCALAPPDATA%\\BrokenOath\\Saved\\SaveGames\\&lt;number&gt;\\ — paste that into the file picker\'s address bar. Files ending in _bak are older backups.</small></div>'; return; }
+    const r = S.calcSkill(GD, st.ch, st.skill, opts());
+    renderControls(r);
+    const out = $('#results');
+    if (r.error || r.unsupported) {
+      out.innerHTML = '<div class="card"><h2>' + esc(r.skill ? r.skill.Name : st.skill) + '</h2><p class="warn">' + esc(r.error || r.unsupported) + '</p></div>';
+      return;
+    }
+    const pin = st.pinned;
+    const delta = (v, base) => base == null ? '' : '<div class="delta ' + (v >= base ? 'up' : 'down') + '">' + pct(base ? v / base - 1 : 0) + ' vs pinned (' + num(base) + ')</div>';
+    const hitTypes = Object.keys(r.hit);
+    const calib = st.ingame > 0 ? 'This sheet\'s skill panel DPS is ' + num(r.panelDps) + ' (' + pct(r.panelDps / st.ingame - 1) + ' vs the game). Death Coil, Unholy Void and Judgement matched the game within a few percent; a big gap on another skill means a rule the sheet does not model yet.' : 'Type the number from the in-game skill panel to see how close this sheet is.';
+    $('#calibOut').textContent = calib;
+
+    let html = '';
+    if (st.ch.fromCode) html += '<div class="warn" style="margin-bottom:12px"><b>Loaded from a build code.</b> Gear numbers may run low: codes don\'t carry rolled item stats, and they don\'t record a Channel Conduit link (pick the linked spell in the skill list).' +
+      (st.ch.codeWarnings.length ? '<ul>' + st.ch.codeWarnings.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '') + '</div>';
+    html += '<div class="headline">' +
+      stat('Total DPS vs this enemy', num(r.totalDps), delta(r.totalDps, pin && pin.total), 'main', 'Hits + poison + ignite, after resistances and curses') +
+      stat('Hit DPS', num(r.hitDps), delta(r.hitDps, pin && pin.hit), '', 'After enemy resist, armour and curses') +
+      stat('Poison DPS', num(r.poisonDps), delta(r.poisonDps, pin && pin.poison), '', r.ailments.poison ? num(r.ailments.poison.stacks, 1) + ' stacks of ' + r.ailments.poison.cap + ' max' : 'No poison on this skill') +
+      stat('Skill panel DPS', num(r.panelDps), delta(r.panelDps, pin && pin.sheet), '', 'Hits + poison before the enemy: the number the game\'s skill panel shows') +
+      '</div>';
+    st.last = r;
+    html += optCard(r);
+    html += '<div class="pinbar"><button class="btn small" id="pinBtn">' + (pin ? 'Re-pin current' : 'Pin as baseline') + '</button>' + (pin ? '<button class="btn small ghost" id="unpinBtn">Clear pin</button><span>Change anything on the left to compare with the pinned setup.</span>' : '<span>Pin this setup, then change gear, supports or the enemy to see the difference.</span>') + (r.igniteDps > 0 ? '<span>· Ignite DPS ' + num(r.igniteDps) + '</span>' : '') + '</div>';
+
+    // Hit table
+    html += '<div class="card"><h2>The hit <small>' + esc(r.skill.Name) + ' · gem ' + r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus : '') + ' · ' + (r.base.kind === 'attack' ? 'attack with ' + esc(r.base.weapon.name) : 'spell') + '</small></h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Base</th><th>Increased</th><th>More</th><th>Hit range</th><th>Enemy res</th><th>Taken</th><th>DPS</th></tr></thead><tbody>' +
+      hitTypes.map(d => {
+        const b = r.convertedParts[d], si = r.scaleInfo[d], h = r.hit[d], m = r.mitig[d];
+        return '<tr><td><span class="type" style="--c:' + typeColor(d) + '">' + d + '</span></td><td>' + num(b[0]) + '–' + num(b[1]) + '</td><td>+' + num(si.inc, 0) + '%</td><td>×' + num(si.more, 2) + '</td><td>' + num(h.min) + '–' + num(h.max) + '</td><td title="' + esc('Resistance ' + num(r.enemy.resist[d], 1) + '% minus ' + num(r.enemy.pen[d], 0) + '% penetration' + (d === 'Physical' && r.mitig.armourReduction ? '; armour stops ' + num(r.mitig.armourReduction, 1) + '%' : '')) + '">' + num(m.effRes, 1) + '%' + (d === 'Physical' && r.mitig.armourReduction ? ' <small>(arm. −' + num(r.mitig.armourReduction, 1) + '%)</small>' : '') + '</td><td>×' + num(m.taken, 2) + '</td><td><b>' + num(r.hitDpsByType[d]) + '</b></td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+
+    // Speed / crit / ailments
+    const sp = r.speed, hs = r.hits, cr = r.crit, po = r.ailments.poison, ig = r.ailments.ignite;
+    html += '<div class="grid2"><div class="card"><h2>Hits &amp; speed</h2><dl class="kv">' +
+      kv('Average hit (no crit)', num(r.hitAvg)) + kv('Average hit with crits', num(r.hitAvgCrit), true) +
+      kv(sp.stat === 'CastSpeed' ? 'Cast speed' : 'Attack speed', '+' + num(sp.inc, 0) + '% inc × ' + num(sp.more, 2) + ' more') +
+      kv('Uses per second', num(sp.usesPerSec, 2) + (sp.cooldown ? ' (cooldown ' + num(sp.cooldown, 2) + ' s)' : '')) +
+      (hs.repeats ? kv('Repeats per use', '+' + hs.repeats) : '') +
+      (hs.projectiles ? kv('Projectiles', hs.projectiles + ' (' + hs.projOnTarget + ' on this target)') : '') +
+      (hs.strikes > 1 ? kv('Strikes per use', hs.strikes) : '') +
+      kv('Hits per second on target', num(hs.hitsPerSec, 2), true) +
+      '</dl><h3>Critical strikes</h3><dl class="kv">' +
+      kv('Base chance', num(cr.base, 1) + '%') + kv('Increased', '+' + num(cr.inc, 0) + '%') + kv('Crit chance', num(cr.chance, 1) + '%', true) +
+      kv('Crit multiplier', num(cr.multi, 0) + '%') + kv('Damage from crits', '×' + num(cr.factor, 3)) +
+      '</dl></div><div class="card"><h2>Ailments</h2>' +
+      (po ? '<dl class="kv">' + kv('Poison chance', num(po.chance, 0) + '%') + kv('Poison duration', num(po.duration, 2) + ' s' + (po.virulence ? ' in combat' : '')) + (po.virulence ? kv('Tooltip duration', num(po.tipDuration, 2) + ' s (leaves out Virulence)') : '') + kv('Poisoning part of a hit', num(po.eligible)) +
+        kv('Increased poison / DoT multi', '+' + num(po.inc, 0) + '% / +' + num(r.ailments.dotMulti, 0) + '%') + kv('Each poison deals', num(po.perStack) + '/s (' + num(po.perHitTotal) + ' total)') +
+        kv('Stacks on target', num(po.stacks, 1) + ' / ' + po.cap + (po.stacksRaw >= po.cap ? ' (capped)' : '')) + kv('Poison DPS vs enemy', num(po.dps), true) + '</dl>' : '<p class="hint">No poison: this skill has no Poison damage and no chance to poison.</p>') +
+      (ig ? '<h3>Ignite</h3><dl class="kv">' + kv('Ignite chance', num(ig.chance, 0) + '%') + kv('Burning while ignited', num(ig.dps1) + '/s') + kv('Uptime', num(ig.uptime * 100, 0) + '%') + kv('Ignite DPS vs enemy', num(ig.dps), true) + '</dl>' : '') +
+      '<h3>Your attributes</h3><dl class="kv">' + kv('Strength / Dexterity / Intelligence', r.attr.Str + ' / ' + r.attr.Dex + ' / ' + r.attr.Int) + '</dl>' +
+      '</div></div>';
+
+    // Upgrade value
+    const w = S.statWeights(GD, st.ch, st.skill, opts(), r);
+    const maxGain = Math.max(0.0001, ...w.map(x => x.gain));
+    html += '<div class="card"><h2>What helps most <small>DPS gain from one change at a time</small></h2><div class="weights">' +
+      w.map(x => '<div class="weight"><div class="bar"><div class="fill" style="width:' + Math.max(0, x.gain / maxGain * 100).toFixed(1) + '%"></div><div class="lbl">' + esc(x.label) + '</div></div><div class="pct">' + pct(x.gain) + '</div></div>').join('') + '</div></div>';
+
+    // Modifiers
+    const used = r.mods.filter(m => r.used.has(m));
+    const groups = {};
+    for (const m of used) { const k = m.stat + ' ' + m.mode; (groups[k] = groups[k] || []).push(m); }
+    const order = ['Damage Inc', 'Damage More', 'AddedDamage Flat', 'Convert Flat', 'DamageAsExtra Flat', 'Penetration Flat', 'CritChance Inc', 'CritChance Flat', 'CritMulti Flat', 'CastSpeed Inc', 'CastSpeed More', 'AttackSpeed Inc', 'AttackSpeed More', 'PoisonChance Flat', 'PoisonDamage Inc', 'DotMulti Flat', 'SkillLevel Flat'];
+    const keys = Object.keys(groups).sort((a, b) => ((order.indexOf(a) + 1) || 99) - ((order.indexOf(b) + 1) || 99));
+    html += '<div class="card"><h2>Where the numbers come from</h2>';
+    html += '<details open><summary>Modifiers used <span class="count">(' + used.length + ')</span></summary>' + keys.map(k => {
+      const list = groups[k]; const mode = list[0].mode;
+      const total = mode === 'More' ? '×' + num(list.reduce((p, m) => p * (1 + m.v / 100), 1), 3) : (list.every(m => !m.v2) ? '+' + num(list.reduce((s, m) => s + m.v, 0), 1) : '');
+      return '<div class="modgroup"><h4>' + esc(k.replace(' Inc', ' · increased').replace(' More', ' · more').replace(' Flat', '')) + '<span>' + total + '</span></h4>' + list.map(m => '<div class="modline"><span>' + esc(m.text || S.modText(GD, m)) + '</span><span class="src">' + esc(m.src) + '</span></div>').join('') + '</div>';
+    }).join('') + '</details>';
+    html += '<details><summary>Lines that apply but are not in this model <span class="count">(' + r.notModelled.length + ')</span></summary>' +
+      (r.notModelled.length ? r.notModelled.map(m => '<div class="modline"><span>' + esc(m.text || S.modText(GD, m)) + '</span><span class="src">' + esc(m.src) + '</span></div>').join('') : '<p class="hint">None for this skill.</p>') + '</details>';
+    html += '<details' + (r.notes.length ? ' open' : '') + '><summary>Notes for this skill <span class="count">(' + r.notes.length + ')</span></summary><ul class="notes">' + r.notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul></details>';
+    html += '<details><summary>How it is calculated</summary><ul class="notes">' +
+      '<li><b>Checked against the game</b> (31 Oct): a Necromancer\'s Death Coil tooltip (crit, cast time, poison per stack, duration, stacks) matches within 1–2% and its skill panel DPS within 2.4%; Unholy Void within 3%; a Paladin\'s Channel Conduit Judgement cast rate matches the game log. Other skills use the same rules but were not checked one by one.</li>' +
+      '<li><b>Spells</b>: SpellMin–SpellMax × 1.19<sup>level − 1</sup> (gear levels included) × effectiveness. <b>Attacks</b>: weapon damage (with its local lines) × Effectiveness × (1 + 0.08 per gem level) × 1.06 per gear level.</li>' +
+      '<li>Effectiveness ("of added damage" in the tooltip) moves linearly from its base (1 for spells) to <code>EffectivenessLate</code> between <code>EffectivenessLateFrom</code> and <code>EffectivenessLateAt</code>, at the level the gem plays at.</li>' +
+      '<li>Runeword power lines count twice on a two-handed weapon. All increased lines of a kind add up; each more line multiplies. Converted damage keeps its old type\'s modifiers and gains the new type\'s. An item line "X% … converted to Physical" with a skill tag converts that kind of skill\'s damage. Extra damage (Heralds) comes from the unscaled hit.</li>' +
+      '<li>Crit: attacks use the weapon\'s chance; spells 6%, or a staff\'s own chance when you hold one; capped at 95%; base multiplier 150%.</li>' +
+      '<li>Dragonling Ascendancy: on your chosen path some nodes are replaced by their Ascended version (Plague Wyrm becomes Virulence, Slow Death becomes Contagion of the Oath). Virulence makes poisons last 25% shorter in combat, which the game\'s tooltip leaves out, and lets Rares and Guardians hold 60 stacks.</li>' +
+      '<li>Orbit: every projectile strikes; each one after the first on the same enemy deals 60% less (attacks 90% less), and its poison counts as part of a stack.</li>' +
+      '<li>Poison: each stack deals 20% of the whole hit per second for 2 s × (1 + ailment duration + 1% per 10 Intelligence), as the skill tooltip shows; raised by increased poison damage and the damage over time multiplier; up to 40 stacks. Ticks are not reduced by resistance; curses\' general damage taken raises them. The skill panel uses that tooltip duration; DPS against an enemy uses the combat duration (shorter with Virulence).</li>' +
+      '<li>Curses: a curse\'s damage taken and its element taken add up (its element part counts on hits); increased curse effect raises both, Intelligence does not. Different curses multiply; a Guardian only takes the strongest. Woes build Dread to +30% by themselves on Rares and Guardians.</li>' +
+      '<li>Enemy: resistance = monster level × 0.36 (max 25%) for elements and poison; armour = level × 1.5 against physical hits (armour / (armour + 5 × hit), max 80%). The DPS assumes you cast nonstop; on bosses the log shows about 90–95% of that.</li>' +
+      '<li>Not modelled: minions, Hunter\'s Marks, War Banner, shock and freeze, bleeding, triggers (on kill / on crit), keystone flags, dual-wield alternation.</li>' +
+      '</ul></details></div>';
+    out.innerHTML = html;
+
+    $('#pinBtn').onclick = () => { st.pinned = { total: r.totalDps, hit: r.hitDps, poison: r.poisonDps, sheet: r.panelDps }; render(); };
+    const up = $('#unpinBtn'); if (up) up.onclick = () => { st.pinned = null; render(); };
+    out.querySelectorAll('[data-use]').forEach(b => b.onclick = () => useSetup(+b.dataset.use));
+    const oc = $('#optClose'); if (oc) oc.onclick = () => { st.opt = null; render(); };
+  }
+  const stat = (label, value, delta, cls, foot) => '<div class="stat ' + (cls || '') + '"><div class="label">' + label + '</div><div class="value">' + value + '</div>' + (delta || '') + (foot ? '<div class="foot-note">' + foot + '</div>' : '') + '</div>';
+  // ---------- support search ----------
+  const supName = id => (GD.supports[String(id).toLowerCase()] || { Name: id }).Name;
+  function optSig() {
+    const o = opts();
+    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.enemyRes, o.curses, o.extraTakenPct, o.projOnTarget, o.hitsPerSecOverride, o.penFloor, o.gemLevel],
+      off: [...st.off].filter(k => !k.startsWith('support:')).sort(), vb: [...st.vowbreak].sort(), ch: o.charges });
+  }
+  function runSearch() {
+    stopSearch();
+    const o = opts(), pool = $('#optPool').value, target = $('#optTarget').value;
+    const cur = S.calcSkill(GD, st.ch, st.skill, o);
+    if (cur.unsupported || cur.error) return;
+    const job = S.supportSearch(GD, st.ch, st.skill, o, { pool, target, keep: 12 });
+    st.optJob = job;
+    st.opt = { skill: st.skill, pool, target, sig: optSig(), running: true, tried: 0, total: job.total, sockets: job.sockets, poolSize: job.pool.length, results: job.results, currentValue: target === 'panel' ? cur.panelDps : cur.totalDps, baseSup: (st.supports || []).map(s => s.toLowerCase()) };
+    const btn = $('#optBtn'); btn.disabled = true;
+    const tick = () => {
+      if (st.optJob !== job) return;
+      const t = performance.now();
+      while (!job.done && performance.now() - t < 40) job.step(150);
+      st.opt.tried = job.tried;
+      if (job.done) { st.opt.running = false; st.optJob = null; btn.disabled = false; btn.textContent = 'Find best supports'; render(); }
+      else { btn.textContent = 'Searching… ' + Math.round(job.tried / job.total * 100) + '%'; setTimeout(tick, 0); }
+    };
+    render(); setTimeout(tick, 0);
+  }
+  function stopSearch() { st.optJob = null; const b = $('#optBtn'); if (b) { b.disabled = false; b.textContent = 'Find best supports'; } }
+  function useSetup(i) {
+    const x = !st.opt ? null : i === -1 ? { sup: st.opt.baseSup } : st.opt.results[i]; if (!x) return;
+    if (!st.pinned && st.last) st.pinned = { total: st.last.totalDps, hit: st.last.hitDps, poison: st.last.poisonDps, sheet: st.last.panelDps };
+    st.supports = x.sup.slice();
+    for (const k of [...st.off]) if (k.startsWith('support:')) st.off.delete(k);
+    render();
+  }
+  function optCard() {
+    const O = st.opt; if (!O || O.skill !== st.skill) return '';
+    const cur = O.baseSup; // compare with the setup you had when you searched
+    const inUse = (st.supports || []).map(s => s.toLowerCase());
+    const same = sup => sup.length === inUse.length && sup.every(id => inUse.includes(id));
+    let h = '<div class="card"><h2>Best support setups <small>' + (O.target === 'panel' ? 'skill panel DPS' : 'vs the enemy on the left') + ' · ' + (O.pool === 'all' ? 'every support' : 'gems you own') + ' · ' + O.sockets + ' sockets · ' + O.tried.toLocaleString('en-US') + ' setups <button class="x" id="optClose" title="Close" style="background:none;border:0;color:var(--faint);cursor:pointer;font-size:16px">×</button></small></h2>';
+    if (O.running) h += '<p class="hint">Searching… ' + Math.round(O.tried / Math.max(1, O.total) * 100) + '% (' + O.poolSize + ' supports, ' + O.total.toLocaleString('en-US') + ' combinations)</p>';
+    else if (O.sig !== optSig()) h += '<p class="warn">Settings changed after this search. Run it again for picks that match them.</p>';
+    h += '<div class="optrow current"><span class="rank">was</span><span class="names">' + esc(cur.map(supName).join(', ') || 'no supports') + '<span class="nums">' + num(O.currentValue) + ' · your setup when you searched</span></span>' +
+      (same(cur) ? '<span class="hint">in use</span>' : '<button class="btn small ghost" data-use="-1">Back</button>') + '</div>';
+    O.results.slice(0, 8).forEach((x, i) => {
+      const added = x.sup.filter(id => !cur.includes(id)), removed = cur.filter(id => !x.sup.includes(id));
+      const names = x.sup.map(id => added.includes(id) ? '<span class="new">' + esc(supName(id)) + '</span>' : esc(supName(id))).join(', ');
+      h += '<div class="optrow"><span class="rank">' + (i + 1) + '</span><span class="names">' + names +
+        (removed.length ? ' <span class="gone">' + esc(removed.map(supName).join(', ')) + '</span>' : '') +
+        '<span class="nums">' + num(x.v) + ' (' + pct(x.v / O.currentValue - 1) + ') · mana ×' + x.mana.toFixed(1) + (x.notOwned.length ? ' · not owned: ' + esc(x.notOwned.map(supName).join(', ')) : '') + '</span></span>' +
+        (same(x.sup) ? '<span class="hint">in use</span>' : '<button class="btn small" data-use="' + i + '"' + (O.running ? ' disabled' : '') + '>Use</button>') + '</div>';
+    });
+    h += '<p class="hint">New gems are highlighted; struck-through ones come out. <b>Use</b> loads a setup into this page and pins your current one as the baseline; change the gems in game to match. Socket the shape gem (Orbit, Skyfall, Rain, Trap or Totem) first.</p></div>';
+    return h;
+  }
+
+  const kv = (k, v, strong) => '<dt>' + k + '</dt><dd' + (strong ? ' class="strong"' : '') + '>' + v + '</dd>';
+
+  // ---------- events ----------
+  $('#charSelect').addEventListener('change', e => selectChar(e.target.value));
+  $('#skillSelect').addEventListener('change', e => selectSkill(e.target.value));
+  $('#gemLevel').addEventListener('input', e => { st.gemLevel = +e.target.value || null; render(); });
+  $('#enemyLevel').addEventListener('input', e => { st.enemyLevel = +e.target.value || null; render(); });
+  $('#enemyRarity').addEventListener('change', e => { st.rarity = e.target.value; render(); });
+  $('#extraTaken').addEventListener('input', e => { st.extraTaken = e.target.value; render(); });
+  $('#projOnTarget').addEventListener('input', e => { st.projOnTarget = e.target.value; render(); });
+  $('#hpsOverride').addEventListener('input', e => { st.hps = +e.target.value || null; render(); });
+  $('#optBtn').addEventListener('click', runSearch);
+  $('#penNeg').addEventListener('change', e => { st.penFloor = !e.target.checked; render(); });
+  $('#ingameDps').addEventListener('input', e => { st.ingame = +e.target.value || null; render(); });
+  resGrid.addEventListener('input', e => { const d = e.target.dataset.res; if (d) { st.res[d] = e.target.value; render(); } });
+  document.querySelectorAll('[data-charge]').forEach(el => el.addEventListener('input', e => { st.charges[e.target.dataset.charge] = Math.max(0, +e.target.value || 0); render(); }));
+  $('#supportAdd').addEventListener('change', e => { const id = e.target.value; e.target.value = ''; if (id && !st.supports.some(s => s.toLowerCase() === id.toLowerCase())) { st.supports.push(id); render(); } });
+  $('#controls').addEventListener('change', e => {
+    const t = e.target;
+    if (t.dataset.src) { if (t.checked) st.off.delete(t.dataset.src); else st.off.add(t.dataset.src); render(); }
+    else if (t.dataset.vowbreak) { if (t.checked) st.vowbreak.add(t.dataset.vowbreak); else st.vowbreak.delete(t.dataset.vowbreak); render(); }
+    else if (t.dataset.curse) { st.curses[t.dataset.curse] = Object.assign(st.curses[t.dataset.curse] || { dread: 0 }, { on: t.checked }); render(); }
+    else if (t.dataset.dread) { st.curses[t.dataset.dread] = Object.assign(st.curses[t.dataset.dread] || { on: true }, { dread: Math.max(0, +t.value || 0) }); render(); }
+  });
+  $('#controls').addEventListener('click', e => {
+    const id = e.target.dataset && e.target.dataset.removeSupport;
+    if (id) { st.supports = st.supports.filter(s => s !== id); st.off.delete('support:' + id.toLowerCase()); render(); }
+  });
+
+  // Loading a save file (picker or drag and drop).
+  function loadFile(file) {
+    const fr = new FileReader();
+    fr.onload = () => {
+      try {
+        const ch = S.extractCharacter(window.parseGvas(new Uint8Array(fr.result)));
+        ch.savedAt = new Date(file.lastModified).toISOString();
+        CHARS = CHARS.filter(c => c.id !== ch.id); CHARS.unshift(ch);
+        fillChars(ch.id); selectChar(ch.id);
+      } catch (err) { alert('Could not read ' + file.name + ':\n' + err.message); }
+    };
+    fr.readAsArrayBuffer(file);
+  }
+  $('#saveInput').addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; });
+
+  // Loading an in-game build code: "BO1." + base64url(uint32 length + zlib(JSON)).
+  async function decodeBuildCode(text) {
+    const code = String(text || '').trim().replace(/\s+/g, '');
+    if (!/^BO1\./.test(code)) throw new Error('A build code starts with BO1. (copy it from the passive tree).');
+    let b64 = code.slice(4).replace(/-/g, '+').replace(/_/g, '/'); while (b64.length % 4) b64 += '=';
+    let bin; try { bin = atob(b64); } catch (e) { throw new Error('The code is damaged or cut short.'); }
+    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    if (bytes.length < 8) throw new Error('The code is cut short.');
+    if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot unpack build codes; try a current Chrome, Edge or Firefox.');
+    const stream = new Blob([bytes.slice(4)]).stream().pipeThrough(new DecompressionStream('deflate'));
+    let json; try { json = await new Response(stream).text(); } catch (e) { throw new Error('The code is damaged or cut short.'); }
+    return JSON.parse(json);
+  }
+  $('#codeForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    try {
+      const ch = S.characterFromCode(GD, await decodeBuildCode($('#codeInput').value));
+      CHARS = CHARS.filter(c => c.id !== ch.id); CHARS.unshift(ch);
+      fillChars(ch.id); selectChar(ch.id); $('#codeInput').value = '';
+    } catch (err) { alert('Could not load that build code:\n' + err.message); }
+  });
+  window.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragging'); });
+  window.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
+  window.addEventListener('drop', e => { e.preventDefault(); document.body.classList.remove('dragging'); const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+
+  // Start.
+  const startId = store.get('char', null);
+  fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
+  if (CHARS.length) selectChar($('#charSelect').value); else render();
+};
+
+// ---------- boot: find game data, then start ----------
+(function boot() {
+  'use strict';
+  const $ = s => document.querySelector(s);
+  const setup = $('#setup'), status = $('#setupStatus');
+  const store = {
+    get(k) { try { return localStorage.getItem('bods:' + k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem('bods:' + k, v); return true; } catch (e) { return false; } },
+  };
+  let started = false;
+  const start = () => {
+    setup.hidden = true; document.body.classList.remove('needs-data');
+    if (window.GD && window.GD.source === 'picked') $('#dataBtn').hidden = false;
+    if (!started) { started = true; window.BOStartApp(); } else location.reload();
+  };
+  const showSetup = msg => { setup.hidden = false; document.body.classList.add('needs-data'); if (msg) status.textContent = msg; };
+
+  // Read the files the sim needs from a picked folder (Data, BrokenOath or the game folder all work).
+  async function fromFiles(fileList) {
+    const files = Array.from(fileList).map(f => ({ f, p: (f.webkitRelativePath || f.name).replace(/\\/g, '/') }));
+    const find = rel => files.find(x => x.p === rel || x.p.endsWith('/' + rel));
+    const BG = window.BOGameData, texts = {};
+    const missing = BG.NEEDED.filter(rel => !find(rel));
+    if (missing.length) throw new Error('That folder is missing ' + missing.slice(0, 3).join(', ') + (missing.length > 3 ? ' and more' : '') + '. Pick the BrokenOath\\Data folder inside the game folder.');
+    for (const rel of BG.NEEDED) texts[rel] = await find(rel).f.text();
+    const partRe = /(?:^|\/)Gameplay\/Parts\/([^/]+)\/([^/]+\.json)$/;
+    const partList = files.map(x => ({ x, m: x.p.match(partRe) })).filter(o => o.m && BG.PART_FILES.includes(o.m[2]));
+    for (const o of partList) texts['Gameplay/Parts/' + o.m[1] + '/' + o.m[2]] = await o.x.f.text();
+    const J = rel => JSON.parse(texts[rel]);
+    const parts = name => Object.keys(texts).filter(k => k.startsWith('Gameplay/Parts/') && k.endsWith('/' + name)).sort().map(J);
+    return BG.buildGameData(J, parts, { dataDir: 'your game folder', source: 'picked' });
+  }
+
+  $('#dataInput').addEventListener('change', async e => {
+    if (!e.target.files.length) return;
+    status.textContent = 'Reading ' + e.target.files.length + ' files…';
+    try {
+      const gd = await fromFiles(e.target.files);
+      window.GD = gd;
+      status.textContent = store.set('gd', JSON.stringify(gd)) ? '' : 'Loaded (your browser would not keep a copy, so you will pick the folder again next visit).';
+      start();
+    } catch (err) { status.textContent = 'Could not read the game data: ' + err.message; }
+    e.target.value = '';
+  });
+  $('#dataBtn').addEventListener('click', () => { $('#setupCancel').hidden = false; showSetup('Pick the folder again after a game patch to load the new numbers.'); });
+  $('#setupCancel').addEventListener('click', () => { setup.hidden = true; document.body.classList.remove('needs-data'); status.textContent = ''; });
+
+  if (window.GD) return start();
+  const cached = store.get('gd');
+  if (cached) { try { window.GD = JSON.parse(cached); return start(); } catch (e) { /* bad cache: ask again */ } }
+  showSetup();
+})();
+
+</script>
+</body>
+</html>

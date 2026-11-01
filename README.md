@@ -27,7 +27,11 @@ setups. Everything runs in your browser; nothing is uploaded.
    before posting.
 6. Open the **Skill tree** tab to see your passive tree with every node's DPS value for that skill
    (heat map, hover, and a best-next-picks list). Click nodes to try changes; *Copy build code*
-   gives a code you can follow in game.
+   gives a code you can follow in game. **Optimize tree** takes your main damage skill and moves
+   the same number of points to where that skill gains the most: it fixes long or dead-end paths
+   and swaps weak picks for strong ones nearby. It shows the changes on the tree (green take, red
+   refund) for you to apply or dismiss. Keystones, jewel sockets, trigger nodes and (by default)
+   notables with no damage lines stay where they are; new keystones only if you allow them.
 
 ## Accuracy
 

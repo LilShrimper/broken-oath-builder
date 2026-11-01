@@ -171,7 +171,7 @@ details.report pre { white-space: pre-wrap; word-break: break-word; font-size: 1
 .tn:hover { stroke: var(--text); stroke-width: 14; }
 .tlabel { fill: var(--text); font-size: 58px; font-weight: 600; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 14px; display: none; }
 .tree-view.zoomed .tlabel { display: block; }
-.tlabel.alloc, .tlabel.top { display: block; }
+.tlabel.alloc, .tlabel.top, .tlabel.opt { display: block; }
 .tree-tip { position: absolute; z-index: 3; max-width: 300px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-size: 12.5px; pointer-events: none; box-shadow: var(--shadow); }
 .tree-tip b { color: var(--accent); }
 .tree-tip .tk { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
@@ -193,6 +193,24 @@ details.report pre { white-space: pre-wrap; word-break: break-word; font-size: 1
 .setup code { word-break: break-all; }
 body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .drop-hint { display: none !important; }
 [hidden] { display: none !important; }
+/* Tree optimizer */
+.opt-bar { padding: 6px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.opt-bar .field.inline { flex-direction: row; align-items: center; gap: 6px; }
+.opt-bar select { max-width: 200px; }
+.opt-card h2 .g { color: var(--good); }
+.opt-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 8px 0; }
+.opt-cols h3 { margin: 0 0 5px; font-size: 13px; }
+.opt-cols h3.add { color: var(--good); } .opt-cols h3.rem { color: var(--bad); }
+.opt-cols ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+.opt-cols li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 8px; border-radius: 6px; background: var(--panel-2); font-size: 13px; cursor: pointer; }
+.opt-cols li:hover { outline: 1px solid var(--accent); }
+.opt-cols li .c { color: var(--faint); font-size: 12px; }
+.opt-cols li .v { white-space: nowrap; color: var(--muted); }
+.opt-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.tn.opt-add { fill: var(--good); stroke: var(--good); stroke-width: 16; }
+.tn.opt-rem { fill: var(--panel-2); stroke: var(--bad); stroke-width: 16; }
+.tl.opt-add { stroke: var(--good); stroke-width: 12; stroke-dasharray: 30 18; }
+.tl.opt-rem { stroke: var(--bad); stroke-width: 10; stroke-dasharray: 20 20; }
 
 </style>
 </head>
@@ -321,12 +339,19 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
         <button class="btn small ghost" type="button" id="treeReset">Reset to save</button>
         <button class="btn small" type="button" id="treeCopy">Copy build code</button>
       </div>
+      <div class="tree-bar opt-bar">
+        <label class="field inline"><span>Main damage skill</span><select id="optSkill"></select></label>
+        <label class="check-row" title="Notables with no damage lines (life, armour, mana, Skyfall speed ...) stay where they are"><input type="checkbox" id="optKeepDef" checked><span>Keep defence notables</span></label>
+        <label class="check-row" title="Glass Cannon and the like: the sim sees the damage, not the price"><input type="checkbox" id="optKeys"><span>Allow new keystones</span></label>
+        <button class="btn small" type="button" id="treeOptimize">Optimize tree</button>
+      </div>
       <div class="tree-view" id="treeView">
         <svg id="treeSvg" xmlns="http://www.w3.org/2000/svg"></svg>
         <div class="tree-tip" id="treeTip" hidden></div>
         <div class="tree-zoom"><button type="button" id="treeZoomIn" title="Zoom in">+</button><button type="button" id="treeZoomOut" title="Zoom out">−</button><button type="button" id="treeFit" title="Show the whole tree">Fit</button></div>
       </div>
       <p class="hint" id="treeStatus"></p>
+      <div class="card opt-card" id="treeOpt" hidden></div>
       <p class="hint">Click a node to take it (the shortest path is added) or to refund it (nodes that lose their connection go too). Hover for its stats and what it does to the selected skill's DPS against the enemy set on the left. Heat map: brighter green = more DPS per point spent. Changes here apply to the Damage tab until you reset or switch character.</p>
       <div class="card" id="treeBest"></div>
     </section>
@@ -644,6 +669,234 @@ window.CHARS = [];
 
   const api = { parseLog };
   root.BOLog = api;
+  if (typeof module !== 'undefined') module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+// Passive tree optimizer: keeps the same number of points and moves them where the chosen skill
+// gains the most DPS. Works in the browser (run in small slices) and in Node (tests).
+//   steps = BOTreeOpt.optimize(GD, S, ch, skillId, simOpts, cfg)  -> generator
+//   each next() does a little work; the last one returns the result (see the end of optimize).
+// Steps:
+//   1. What each taken node is worth on its own. Nodes worth little are path nodes.
+//   2. Re-route: rebuild the shortest tree that reaches every node worth keeping.
+//   3. Spend the points this frees on the best DPS per point (path included).
+//   4. Swap: refund the weakest branches and spend them again while that gains DPS.
+// Kept no matter what: keystones, jewel sockets, nodes with lines the sim does not count (triggers,
+// minion, bleed, shock ...), and with cfg.keepDefence the notables that add no damage (life etc.).
+(function (root) {
+  'use strict';
+
+  const ATTR = ['Str', 'Dex', 'Int', 'Attributes'];
+  const MIN_GAIN = 0.001;    // a swap must gain at least 0.1% DPS
+  const OWN_KEEP = 0.002;    // a taken node worth 0.2% or more is a target, not a path node
+
+  function* optimize(GD, S, ch, skill, simOpt, cfg) {
+    cfg = cfg || {};
+    const t0 = Date.now();
+    const nodes = GD.nodes;
+    const realId = id => nodes[id] ? id : ((GD.moved || {})[id] || id);
+    const s0 = 'start_' + String(ch.classId).toLowerCase();
+    const adj = {};
+    for (const n of Object.values(nodes)) for (const l of n.Links || []) {
+      if (!nodes[l]) continue;
+      (adj[n.Id] = adj[n.Id] || []).push(l); (adj[l] = adj[l] || []).push(n.Id);
+    }
+    const walkable = id => { const n = nodes[id]; return !!n && n.Kind !== 'Start'; };
+    const altarOf = id => (nodes[id] || {}).Choice || null;
+    const otherAtAltar = (set, id) => { const a = altarOf(id); if (!a) return null; for (const x of set) if (x !== id && altarOf(x) === a) return x; return null; };
+
+    // ---- values ----
+    const cache = new Map(); let calcs = 0, tries = 0;
+    const V = set => {
+      const list = [...set].sort(); const key = list.join(',');
+      let v = cache.get(key);
+      if (v === undefined) {
+        calcs++;
+        const r = S.calcSkill(GD, Object.assign({}, ch, { passives: list }), skill, simOpt);
+        v = r && r.totalDps > 0 ? r.totalDps : 0; cache.set(key, v);
+      }
+      return v;
+    };
+    const have = new Set((ch.passives || []).map(realId).filter(id => walkable(id)));
+    const budget = have.size;
+    const base = V(have);
+    if (!(base > 0)) return { error: 'This skill has no DPS to optimize.' };
+
+    // ---- what must stay ----
+    const isUncounted = m => m.Mode === 'Trigger' || m.Mode === 'Flag' || !S.counted(m.Stat);
+    const dmgish = m => !isUncounted(m) && (S.damageStat(m.Stat) || ATTR.includes(m.Stat));
+    const big = n => n.Kind === 'Notable' || n.Kind === 'Choice';
+    const why = {};
+    for (const id of have) {
+      const n = nodes[id], mods = n.Mods || [];
+      if (n.Kind === 'Keystone') why[id] = 'keystone';
+      else if (n.Kind === 'Socket') why[id] = 'jewel socket';
+      // Small nodes are path nodes even with an uncounted line (most are "1% minion damage").
+      else if (mods.some(m => m.Mode === 'Trigger' || m.Mode === 'Flag') || (big(n) && mods.some(isUncounted))) why[id] = 'has lines the sim does not count';
+      else if (cfg.keepDefence && big(n) && mods.length && !mods.some(dmgish)) why[id] = 'no damage lines';
+    }
+    const kept = new Set(Object.keys(why));
+
+    // ---- graph helpers ----
+    // Connected part of a set (from the class start).
+    const connected = set => {
+      const keep = new Set(), q = [s0];
+      for (let i = 0; i < q.length; i++) for (const v of adj[q[i]] || []) if (set.has(v) && !keep.has(v)) { keep.add(v); q.push(v); }
+      return keep;
+    };
+    // BFS from the set (and the start) through free nodes; `avoid` = nodes that may not be used.
+    const bfs = (set, avoid) => {
+      const dist = new Map(), prev = new Map(), q = [s0, ...set];
+      for (const x of q) dist.set(x, 0);
+      for (let i = 0; i < q.length; i++) {
+        const u = q[i], d = dist.get(u);
+        for (const v of adj[u] || []) if (!dist.has(v) && walkable(v) && !(avoid && avoid(v))) { dist.set(v, d + 1); prev.set(v, u); q.push(v); }
+      }
+      return { dist, prev };
+    };
+    const pathOf = (b, set, target) => { const p = []; let x = target; while (x && !set.has(x) && x !== s0) { p.push(x); x = b.prev.get(x); } return p.reverse(); };
+    const dependents = (set, id) => { const s = new Set(set); s.delete(id); const keep = connected(s); return [...set].filter(x => !keep.has(x)); };
+
+    // ---- 1. what each taken node is worth on its own ----
+    const own = {};
+    let k = 0;
+    for (const id of have) {
+      const s = new Set(have); s.delete(id);
+      own[id] = 1 - V(s) / base;
+      if (++k % 8 === 0) yield { phase: 'Valuing your nodes', p: k / have.size };
+    }
+    const targets = [...have].filter(id => kept.has(id) || own[id] >= OWN_KEEP);
+
+    // ---- 3. spend points (used by 2 and 4) ----
+    // Damage nodes worth trying, found once.
+    // New keystones and skill-changing nodes (granted supports, triggers) only when asked: their price
+    // (no evasion, more damage taken ...) and what they do to how the skill plays are not in the DPS number.
+    const changesPlay = n => n.Kind === 'Keystone' || (n.Mods || []).some(m => m.Mode === 'Trigger' || m.Mode === 'Flag');
+    const useful = Object.keys(nodes).filter(id => walkable(id) && (nodes[id].Mods || []).some(dmgish) && (cfg.allowKeystones || !changesPlay(nodes[id]) || have.has(id)));
+    function* spend(start, points) {
+      const tree = new Set(start); let cur = V(tree);
+      while (points > 0) {
+        const b = bfs(tree, v => { const o = otherAtAltar(tree, v); return !!o; });
+        let best = null;
+        for (const id of useful) {
+          if (tree.has(id)) continue;
+          let list, cost;
+          const other = otherAtAltar(tree, id);
+          if (other) {
+            // Swap at an altar: the new option usually links the same nodes.
+            if (kept.has(other)) continue;
+            const s = new Set(tree); s.delete(other); s.add(id); const c = connected(s);
+            if (!c.has(id) || [...kept].some(x => tree.has(x) && !c.has(x))) continue;
+            list = c; cost = c.size - tree.size;
+          } else {
+            const d = b.dist.get(id); if (d === undefined || d > points) continue;
+            list = new Set(tree); for (const x of pathOf(b, tree, id)) list.add(x); cost = list.size - tree.size;
+          }
+          if (cost > points) continue;
+          const g = V(list) / cur - 1; if (g <= 1e-6) continue;
+          const per = g / Math.max(cost, 0.5);
+          if (!best || per > best.per) best = { list, per, cost };
+          if (++tries % 40 === 0) yield null;
+        }
+        if (!best) break;
+        for (const x of [...tree]) if (!best.list.has(x)) tree.delete(x);
+        for (const x of best.list) tree.add(x);
+        points -= best.cost; cur = V(tree);
+      }
+      return tree;
+    }
+    const drain = function* (g) { let r; while (!(r = g.next()).done) yield r.value; return r.value; };
+
+    // ---- 2. re-route to the nodes worth keeping ----
+    const rebuild = () => {
+      const tree = new Set(), left = new Set(targets);
+      const ownAltar = new Map(); for (const t of targets) if (altarOf(t)) ownAltar.set(altarOf(t), t);
+      const avoid = v => { const a = altarOf(v); return !!a && ownAltar.has(a) && ownAltar.get(a) !== v; };
+      while (left.size) {
+        const b = bfs(tree, avoid);
+        let pick = null, pd = Infinity;
+        for (const t of left) { const d = b.dist.get(t); if (d !== undefined && (d < pd || (d === pd && own[t] > own[pick]))) { pick = t; pd = d; } }
+        if (!pick) return null;
+        for (const x of pathOf(b, tree, pick)) tree.add(x);
+        tree.add(pick); left.delete(pick);
+        for (const t of left) if (tree.has(t)) left.delete(t);
+      }
+      return tree;
+    };
+    // Dead ends: taken leaves that are not worth keeping.
+    const prune = set => {
+      const s = new Set(set); let changed = true;
+      while (changed) {
+        changed = false;
+        for (const id of [...s]) {
+          if (kept.has(id) || own[id] >= OWN_KEEP) continue;
+          if (dependents(s, id).length === 1) { s.delete(id); changed = true; }
+        }
+      }
+      return s;
+    };
+
+    yield { phase: 'Re-routing', p: 0 };
+    const starts = [];
+    const pruned = prune(have); if (pruned.size < have.size) starts.push(pruned);
+    const rebuilt = rebuild(); if (rebuilt && rebuilt.size <= budget) starts.push(rebuilt);
+    let best = new Set(have), bestV = base;
+    for (const st of starts) {
+      const t = yield* drain(spend(st, budget - st.size));
+      const v = V(t);
+      if (v > bestV) { best = t; bestV = v; }
+    }
+
+    // ---- 4. swap weak branches for better ones ----
+    for (let iter = 0; iter < 14; iter++) {
+      yield { phase: 'Trying swaps', p: iter / 14 };
+      const cur = bestV, seen = new Set(), branches = [];
+      for (const id of best) {
+        if (kept.has(id)) continue;
+        const rem = dependents(best, id);
+        if (rem.some(x => kept.has(x))) continue;
+        const key = rem.slice().sort().join(','); if (seen.has(key)) continue; seen.add(key);
+        const s = new Set(best); for (const x of rem) s.delete(x);
+        branches.push({ rem, loss: (1 - V(s) / cur) / rem.length });
+      }
+      branches.sort((a, b) => a.loss - b.loss);
+      const trials = branches.slice(0, 5).map(b => b.rem);
+      for (let i = 0; i < Math.min(4, branches.length); i++) for (let j = i + 1; j < Math.min(4, branches.length); j++) trials.push([...new Set([...branches[i].rem, ...branches[j].rem])]);
+      let found = null, fv = cur * (1 + MIN_GAIN);
+      for (const rem of trials) {
+        const s = new Set(best); for (const x of rem) s.delete(x);
+        const c = connected(s); if (c.size !== s.size) continue;
+        const t = yield* drain(spend(s, budget - s.size));
+        const v = V(t);
+        if (v > fv) { found = t; fv = v; }
+      }
+      if (!found) break;
+      best = found; bestV = fv;
+    }
+
+    // ---- result ----
+    const finalSet = connected(best);
+    const value = V(finalSet);
+    const add = [...finalSet].filter(id => !have.has(id)), remove = [...have].filter(id => !finalSet.has(id));
+    const worth = (set, id) => { const s = new Set(set); s.delete(id); return 1 - V(s) / V(set); };
+    const attrs = set => { const a = { Str: 0, Dex: 0, Int: 0 }; for (const id of set) for (const m of nodes[id].Mods || []) if (m.Mode === 'Flat') { if (m.Stat === 'Attributes') { a.Str += m.Value || 0; a.Dex += m.Value || 0; a.Int += m.Value || 0; } else if (m.Stat in a) a[m.Stat] += m.Value || 0; } return a; };
+    const a0 = attrs(have), a1 = attrs(finalSet);
+    const order = set => { const out = [], seen = new Set([s0]), q = [s0]; for (let i = 0; i < q.length; i++) for (const v of adj[q[i]] || []) if (set.has(v) && !seen.has(v)) { seen.add(v); out.push(v); q.push(v); } return out; };
+    return {
+      base, value, gain: value / base - 1, points: budget, used: finalSet.size,
+      list: order(finalSet),
+      add: add.map(id => ({ id, d: worth(finalSet, id) })).sort((a, b) => b.d - a.d),
+      remove: remove.map(id => ({ id, d: own[id] })).sort((a, b) => b.d - a.d),
+      kept: [...kept].map(id => ({ id, why: why[id] })),
+      attrs: { Str: a1.Str - a0.Str, Dex: a1.Dex - a0.Dex, Int: a1.Int - a0.Int },
+      calcs, ms: Date.now() - t0,
+    };
+  }
+
+  const api = { optimize };
+  root.BOTreeOpt = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -1586,7 +1839,7 @@ window.CHARS = [];
 
   // Is this stat part of the DPS math (or deliberately non-damage)? Used to flag lines the sheet cannot count.
   const counted = stat => HANDLED.has(stat) || NON_DAMAGE.has(stat);
-  const api = { counted, extractCharacter, characterFromCode, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, statWeights, modText, splitTags, DT, supportSearch, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  const api = { counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, statWeights, modText, splitTags, DT, supportSearch, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -1648,13 +1901,14 @@ window.BOStartApp = function () {
     $('#skillSelect').innerHTML = Object.entries(groups).map(([g, list]) => '<optgroup label="' + g + '">' + list.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('') + '</optgroup>').join('');
     const remembered = store.get('skill:' + ch.id, null);
     const pickable = skills.filter(s => { const r = S.calcSkill(GD, ch, s.id, {}); return !r.unsupported && !r.error; });
+    $('#optSkill').innerHTML = pickable.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('');
     const first = [remembered, ch.mainSkill].find(id => id && skills.some(s => s.id === id)) || (pickable[0] || skills[0] || {}).id;
     selectSkill(first);
   }
 
   function selectSkill(id) {
     st.skill = id; st.gemLevel = null; st.supports = null; st.pinned = null; st.hps = null; stopSearch(); st.opt = null;
-    $('#skillSelect').value = id; $('#gemLevel').value = ''; $('#hpsOverride').value = ''; $('#ingameDps').value = '';
+    $('#skillSelect').value = id; $('#optSkill').value = id; $('#gemLevel').value = ''; $('#hpsOverride').value = ''; $('#ingameDps').value = '';
     if (st.ch) store.set('skill:' + st.ch.id, id);
     const sk = GD.skills[String(id).toLowerCase()];
     $('#skillDesc').textContent = sk ? sk.Description.replace(/\{[^}]+\}\|plural\([^)]*\)/g, '').replace(/\{(\w+)\}/g, '$1') : '';
@@ -2178,23 +2432,29 @@ window.BOStartApp = function () {
     const heat = $('#treeHeat').checked;
     let best = 0; for (const [id, s] of T.scores) if (!have.has(id) && perPt(s) > best) best = perPt(s);
     const top = new Set(bestRows(have, 8).map(([id]) => id));
+    // Optimizer proposal: green = take, red = refund.
+    const oa = T.opt && T.opt.addSet || new Set(), orm = T.opt && T.opt.remSet || new Set();
     for (const c of $('#treeSvg').querySelectorAll('circle.tn')) {
       const id = c.dataset.id, n = GD.nodes[id], on = have.has(id) || id === s0;
       c.classList.toggle('alloc', on); c.classList.toggle('next', !on && next.has(id));
+      c.classList.toggle('opt-add', oa.has(id)); c.classList.toggle('opt-rem', orm.has(id));
       let found = false;
       if (q) { const txt = (n.Name + ' ' + (n.Text || '') + ' ' + (n.Mods || []).map(modLine).join(' ')).toLowerCase(); found = txt.includes(q); }
       c.classList.toggle('found', found);
       const s = T.scores.get(id);
-      if (heat && !on && s && s.d > 0.0005 && best > 0) {
+      if (heat && !on && !oa.has(id) && s && s.d > 0.0005 && best > 0) {
         const t = Math.min(1, perPt(s) / best);
         c.style.fill = 'hsl(' + Math.round(110 - 70 * (1 - t)) + ', ' + Math.round(40 + 45 * t) + '%, ' + Math.round(26 + 30 * t) + '%)';
       } else c.style.fill = '';
     }
     for (const ln of $('#treeSvg').querySelectorAll('line.tl')) {
       const a = ln.dataset.a, b = ln.dataset.b;
-      ln.classList.toggle('alloc', (have.has(a) || a === s0) && (have.has(b) || b === s0));
+      const inOld = x => have.has(x) || x === s0, inNew = x => (inOld(x) || oa.has(x)) && !orm.has(x);
+      ln.classList.toggle('alloc', inOld(a) && inOld(b));
+      ln.classList.toggle('opt-add', inNew(a) && inNew(b) && (oa.has(a) || oa.has(b)));
+      ln.classList.toggle('opt-rem', inOld(a) && inOld(b) && (orm.has(a) || orm.has(b)));
     }
-    for (const t of $('#treeSvg').querySelectorAll('text.tlabel')) { t.classList.toggle('alloc', have.has(t.dataset.id)); t.classList.toggle('top', top.has(t.dataset.id)); }
+    for (const t of $('#treeSvg').querySelectorAll('text.tlabel')) { const id = t.dataset.id; t.classList.toggle('alloc', have.has(id)); t.classList.toggle('top', top.has(id)); t.classList.toggle('opt', oa.has(id) || orm.has(id)); }
     const saved = (st.chOrig.passives || []).length;
     $('#treePoints').textContent = have.size + ' points taken' + (have.size !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level;
     $('#treeUndo').disabled = !T.undo.length;
@@ -2268,6 +2528,83 @@ window.BOStartApp = function () {
     $('#treeBest').querySelectorAll('[data-take]').forEach(li => li.onclick = () => clickNode(li.dataset.take));
   }
 
+  // ---------- Optimize tree ----------
+  // Same points, moved to where the chosen skill gains the most (src/treeopt.js). Shown as a proposal
+  // (green = take, red = refund) until applied or dismissed; changing the tree or a setting clears it.
+  const optKey = () => st.skill + '|' + [...allocSet()].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
+  function clearOpt() {
+    T.optJob = (T.optJob || 0) + 1; T.opt = null; $('#treeOpt').hidden = true;
+    const b = $('#treeOptimize'); b.disabled = false; b.textContent = 'Optimize tree';
+  }
+  function runOptimize() {
+    if (!st.ch || !st.skill) return;
+    clearOpt();
+    const job = T.optJob, key = optKey();
+    const skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
+    const btn = $('#treeOptimize'), card = $('#treeOpt');
+    btn.disabled = true; card.hidden = false; card.innerHTML = '<p class="hint">Optimizing the tree for ' + esc(skillName) + '…</p>';
+    const gen = BOTreeOpt.optimize(GD, S, st.ch, st.skill, opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked });
+    let phase = 'Starting';
+    const step = () => {
+      if (job !== T.optJob) return;
+      const t0 = performance.now(); let r;
+      try {
+        do { r = gen.next(); if (r.value && r.value.phase) phase = r.value.phase + (r.value.p ? ' ' + Math.round(r.value.p * 100) + '%' : ''); }
+        while (!r.done && performance.now() - t0 < 30);
+      } catch (err) { btn.disabled = false; btn.textContent = 'Optimize tree'; card.innerHTML = '<p class="hint">The optimizer failed: ' + esc(err.message) + '</p>'; return; }
+      if (!r.done) { btn.textContent = phase + '…'; setTimeout(step, 0); return; }
+      btn.disabled = false; btn.textContent = 'Optimize tree';
+      const res = r.value;
+      if (res.error) { card.innerHTML = '<p class="hint">' + esc(res.error) + '</p>'; return; }
+      if (key !== optKey()) { card.innerHTML = '<p class="hint">The tree or a setting changed while optimizing: press Optimize tree again.</p>'; return; }
+      const worth = res.gain > 0.001;
+      Object.assign(res, { key, skill: st.skill, skillName, addSet: new Set(worth ? res.add.map(x => x.id) : []), remSet: new Set(worth ? res.remove.map(x => x.id) : []) });
+      T.opt = res; showOpt(); paintTree();
+    };
+    step();
+  }
+  // Notables by name; small and attribute nodes counted together.
+  function optRows(list, sign) {
+    const big = [], small = [];
+    for (const x of list) (['Notable', 'Keystone', 'Choice', 'Socket'].includes(GD.nodes[x.id].Kind) ? big : small).push(x);
+    const rows = big.map(x => '<li data-focus="' + esc(x.id) + '"><span>' + esc(GD.nodes[x.id].Name) + ' <span class="c">' + esc(GD.nodes[x.id].Kind) +
+      (GD.nodes[x.id].Price ? ' · ' + esc(GD.nodes[x.id].Price) : '') + '</span></span><span class="v">' + pct(sign * x.d || 0) + '</span></li>');
+    if (small.length) {
+      const names = [...new Set(small.map(x => GD.nodes[x.id].Name))];
+      rows.push('<li data-focus="' + esc(small[0].id) + '"><span>' + small.length + ' small node' + (small.length > 1 ? 's' : '') + ' <span class="c">' + esc(names.slice(0, 4).join(', ') + (names.length > 4 ? ' …' : '')) +
+        '</span></span><span class="v">' + pct(sign * small.reduce((a, x) => a + x.d, 0) || 0) + '</span></li>');
+    }
+    return rows.join('') || '<li><span class="c">nothing</span></li>';
+  }
+  function showOpt() {
+    const o = T.opt, card = $('#treeOpt'); if (!o) { card.hidden = true; return; }
+    card.hidden = false;
+    const kept = o.kept.length ? '<p class="hint">Left where they are: ' + o.kept.map(k => esc(GD.nodes[k.id].Name) + ' (' + esc(k.why) + ')').join(', ') + '.</p>' : '';
+    if (!(o.gain > 0.001)) {
+      card.innerHTML = '<h2>Your tree already looks right for ' + esc(o.skillName) + '</h2><p class="hint">Moving the same ' + o.points + ' points around gains less than 0.1% DPS.</p>' + kept +
+        '<div class="opt-actions"><button class="btn small ghost" type="button" id="optDismiss">Close</button></div>';
+    } else {
+      const at = Object.entries(o.attrs).filter(([, v]) => v).map(([k, v]) => k + ' ' + (v > 0 ? '+' : '−') + Math.abs(v));
+      card.innerHTML = '<h2>Optimized for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' DPS</span> <span class="hint">same ' + o.points + ' points · ' + num(o.base) + ' → ' + num(o.value) + '</span></h2>' +
+        '<div class="opt-cols"><div><h3 class="rem">Refund (red on the tree)</h3><ul>' + optRows(o.remove, -1) + '</ul></div>' +
+        '<div><h3 class="add">Take (green on the tree)</h3><ul>' + optRows(o.add, 1) + '</ul></div></div>' +
+        (at.length ? '<p class="hint">Attributes from the tree: ' + esc(at.join(', ')) + '. Check your gear and gem requirements still fit.</p>' : '') + kept +
+        '<p class="hint">Each value is that node\'s share of the DPS. The sim cannot weigh lines it does not count (see a node\'s tooltip), so check the picks fit how you play. Click a row to find it on the tree.</p>' +
+        '<div class="opt-actions"><button class="btn small" type="button" id="optApply">Apply to my tree</button><button class="btn small ghost" type="button" id="optDismiss">Dismiss</button></div>';
+      $('#optApply').onclick = () => { const list = o.list; clearOpt(); setPassives(list); $('#treeStatus').textContent = 'Optimized tree applied. Undo goes back; Copy build code gives it to the game.'; };
+    }
+    $('#optDismiss').onclick = () => { clearOpt(); paintTree(); };
+    card.querySelectorAll('[data-focus]').forEach(li => li.onclick = () => focusNode(li.dataset.focus));
+  }
+  function focusNode(id) {
+    const n = GD.nodes[id]; if (!n || !T.vb) return;
+    let [, , w, h] = T.vb; if (w > 4500) { h *= 4500 / w; w = 4500; }
+    setVB([n.X - w / 2, n.Y - h / 2, w, h]);
+    $('#treeView').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  $('#treeOptimize').onclick = runOptimize;
+  $('#optSkill').addEventListener('change', e => { if (e.target.value && e.target.value !== st.skill) selectSkill(e.target.value); });
+
   function clickNode(id) {
     const n = GD.nodes[id]; if (!n || n.Kind === 'Start' || blocked(id)) return;
     const have = allocSet();
@@ -2276,6 +2613,7 @@ window.BOStartApp = function () {
   }
 
   function treeAfterRender() {
+    if (T.opt && T.opt.key !== optKey()) clearOpt();
     if (!T.visible || !st.ch) return;
     if (!T.built) buildTree();
     paintTree(); scoreSoon();

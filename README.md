@@ -19,6 +19,9 @@ setups. Everything runs in your browser; nothing is uploaded.
    the tree, skills, supports, Dragonling and gear bases but not rolled item stats, so numbers for
    rare-heavy gear read low. A save is exact.
 4. Pick a skill, then use **Find best supports**, **Pin as baseline** and **What helps most**.
+5. Open the **Skill tree** tab to see your passive tree with every node's DPS value for that skill
+   (heat map, hover, and a best-next-picks list). Click nodes to try changes; *Copy build code*
+   gives a code you can follow in game.
 
 ## Accuracy
 

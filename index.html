@@ -140,6 +140,44 @@ summary .count { color: var(--faint); font-weight: 400; }
 .foot { color: var(--faint); font-size: 12px; text-align: center; padding: 10px 20px 30px; }
 .drop-hint { position: fixed; inset: 0; background: color-mix(in srgb, var(--bg) 80%, transparent); display: none; align-items: center; justify-content: center; font-size: 20px; color: var(--accent); z-index: 20; border: 3px dashed var(--accent); }
 body.dragging .drop-hint { display: flex; }
+.results-wrap { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-weight: 600; padding: 8px 14px; cursor: pointer; margin-bottom: -1px; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tree-pane { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tree-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tree-bar .check-row { margin: 0; }
+.tree-points { font-weight: 600; margin-right: auto; }
+.tree-search input { width: 190px; }
+.tree-view { position: relative; height: 68vh; min-height: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; touch-action: none; cursor: grab; }
+.tree-view.dragging { cursor: grabbing; }
+.tree-view svg { width: 100%; height: 100%; display: block; }
+.tl { stroke: var(--line); stroke-width: 9; }
+.tl.alloc { stroke: var(--accent); stroke-width: 18; }
+.tl.way { stroke-dasharray: 30 30; opacity: .5; }
+.tn { fill: var(--panel-2); stroke: var(--faint); stroke-width: 5; cursor: pointer; }
+.tn.k-Notable { stroke: var(--muted); stroke-width: 8; }
+.tn.k-Keystone { stroke: #d9b45b; stroke-width: 10; }
+.tn.k-Start { fill: var(--line); stroke: var(--text); }
+.tn.next { stroke: var(--accent); stroke-width: 9; }
+.tn.alloc { fill: var(--accent); stroke: var(--text); }
+.tn.found { stroke: #fff; stroke-width: 16; }
+.tn:hover { stroke: var(--text); stroke-width: 14; }
+.tlabel { fill: var(--text); font-size: 58px; font-weight: 600; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 14px; display: none; }
+.tree-view.zoomed .tlabel { display: block; }
+.tlabel.alloc, .tlabel.top { display: block; }
+.tree-tip { position: absolute; z-index: 3; max-width: 300px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-size: 12.5px; pointer-events: none; box-shadow: var(--shadow); }
+.tree-tip b { color: var(--accent); }
+.tree-tip .tk { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.tree-tip ul { margin: 5px 0; padding-left: 16px; }
+.tree-tip .gain { font-weight: 600; } .tree-tip .gain.up { color: var(--good); } .tree-tip .gain.down { color: var(--bad); }
+.tree-zoom { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 4px; }
+.tree-zoom button { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; min-width: 34px; height: 30px; font: inherit; cursor: pointer; }
+.best-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.best-list li { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; padding: 5px 8px; border-radius: 6px; background: var(--panel-2); cursor: pointer; font-size: 13px; }
+.best-list li:hover { outline: 1px solid var(--accent); }
+.best-list .g { color: var(--good); font-weight: 600; white-space: nowrap; }
+.best-list .c { color: var(--faint); font-size: 12px; }
 .check-row { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin: 2px 0 8px; cursor: pointer; }
 .check-row input { margin-top: 3px; }
 .setup { max-width: 720px; margin: 24px auto; }
@@ -257,9 +295,33 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
     </section>
   </aside>
 
-  <section class="results" id="results">
-    <div class="empty" id="emptyState">Pick a character to start. Characters found in your save folder at build time are listed above; use <b>Load save file</b> for a fresher save.</div>
-  </section>
+  <div class="results-wrap">
+    <nav class="tabs" role="tablist">
+      <button class="tab active" type="button" role="tab" data-tab="damage" aria-selected="true">Damage</button>
+      <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false">Skill tree</button>
+    </nav>
+    <section class="results" id="results">
+      <div class="empty" id="emptyState">Pick a character to start. Characters found in your save folder at build time are listed above; use <b>Load save file</b> for a fresher save.</div>
+    </section>
+    <section class="tree-pane" id="treePane" hidden>
+      <div class="tree-bar">
+        <span class="tree-points" id="treePoints"></span>
+        <label class="field inline tree-search"><input type="text" id="treeSearch" placeholder="Find a node or stat" autocomplete="off"></label>
+        <label class="check-row"><input type="checkbox" id="treeHeat" checked><span>Heat map</span></label>
+        <button class="btn small ghost" type="button" id="treeUndo">Undo</button>
+        <button class="btn small ghost" type="button" id="treeReset">Reset to save</button>
+        <button class="btn small" type="button" id="treeCopy">Copy build code</button>
+      </div>
+      <div class="tree-view" id="treeView">
+        <svg id="treeSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div class="tree-tip" id="treeTip" hidden></div>
+        <div class="tree-zoom"><button type="button" id="treeZoomIn" title="Zoom in">+</button><button type="button" id="treeZoomOut" title="Zoom out">−</button><button type="button" id="treeFit" title="Show the whole tree">Fit</button></div>
+      </div>
+      <p class="hint" id="treeStatus"></p>
+      <p class="hint">Click a node to take it (the shortest path is added) or to refund it (nodes that lose their connection go too). Hover for its stats and what it does to the selected skill's DPS against the enemy set on the left. Heat map: brighter green = more DPS per point spent. Changes here apply to the Damage tab until you reset or switch character.</p>
+      <div class="card" id="treeBest"></div>
+    </section>
+  </div>
 </main>
 
 <footer class="foot">
@@ -281,6 +343,8 @@ window.CHARS = [];
     'Items/affixes.json', 'Items/uniques.json', 'Items/item_bases.json', 'Items/runes.json', 'Items/runewords.json',
     'Gameplay/dragonling.json', 'Gameplay/curses.json', 'Gameplay/blessings.json', 'Gameplay/scaling.json', 'Items/stat_text.json'];
   const PART_FILES = ['skills.json', 'classes.json'];
+  // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
+  const SCHEMA = 2;
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -315,7 +379,7 @@ window.CHARS = [];
 
     const tree = J('Gameplay/passive_tree.json');
     const nodes = {};
-    for (const n of tree.nodes) nodes[n.Id] = pick(n, ['Id', 'Name', 'Kind', 'Mods', 'Text', 'Region']);
+    for (const n of tree.nodes) nodes[n.Id] = pick(n, ['Id', 'Name', 'Kind', 'Mods', 'Text', 'Region', 'X', 'Y', 'Links', 'ClassStart', 'Price', 'Choice']);
 
     const affixes = {};
     for (const a of J('Items/affixes.json').affixes) affixes[a.Id.toLowerCase()] = pick(a, ['Id', 'Type', 'Group', 'Mod']);
@@ -355,11 +419,11 @@ window.CHARS = [];
     const statText = {};
     for (const t of J('Items/stat_text.json').texts) statText[t.Key] = t.Text;
 
-    return Object.assign({ builtAt: new Date().toISOString(), dataDir: '' }, meta || {},
+    return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
       { skills, classes, supports, nodes, moved: tree.Moved || {}, affixes, uniques, bases, runes, runewords, dragon, curses, blessings, scaling, statText });
   }
 
-  const api = { buildGameData, NEEDED, PART_FILES };
+  const api = { buildGameData, NEEDED, PART_FILES, SCHEMA };
   root.BOGameData = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -827,6 +891,9 @@ window.CHARS = [];
       const ok = (!req.length || req.some(t => ctx.tags.has(lc(t)))) && !ex.some(t => ctx.tags.has(lc(t)));
       // In a Conduit, a support that only fits the channel (Faster Attacks on Cyclone) still works there:
       // it changes the channel's ticks, which sets the cast rate below.
+      // A support granted by a passive or item that does not fit this skill just doesn't apply: don't list it.
+      const fitsSelf = (!req.length || req.some(t => ctx.tags.has(lc(t)))) && !ex.some(t => ctx.tags.has(lc(t)));
+      if (granted && !fitsSelf) continue;
       const fitsHost = hostTags && (!req.length || req.some(t => hostTags.has(lc(t)))) && !ex.some(t => hostTags.has(lc(t)));
       if (hostTags && !granted && !fitsHost) { res.supports.push({ id, key, name: sd.Name, ok: false, why: 'cannot be socketed in ' + host.name + ' (needs ' + req.join(' or ') + ')', desc: sd.Description }); continue; }
       const onHost = !ok && fitsHost && !granted;
@@ -1441,7 +1508,9 @@ window.CHARS = [];
     return job;
   }
 
-  const api = { extractCharacter, characterFromCode, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, statWeights, modText, splitTags, DT, supportSearch, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  // Is this stat part of the DPS math (or deliberately non-damage)? Used to flag lines the sheet cannot count.
+  const counted = stat => HANDLED.has(stat) || NON_DAMAGE.has(stat);
+  const api = { counted, extractCharacter, characterFromCode, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, statWeights, modText, splitTags, DT, supportSearch, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -1491,7 +1560,7 @@ window.BOStartApp = function () {
 
   function selectChar(id) {
     const ch = CHARS.find(c => c.id === id) || CHARS[0];
-    st.ch = ch; st.pinned = null; stopSearch(); st.opt = null;
+    st.ch = ch; st.chOrig = ch; st.pinned = null; stopSearch(); st.opt = null; treeReset();
     if (!ch) return;
     store.set('char', ch.id);
     st.curses = {};
@@ -1577,7 +1646,8 @@ window.BOStartApp = function () {
   }
 
   // ---------- right panel ----------
-  function render() {
+  function render() { renderMain(); treeAfterRender(); }
+  function renderMain() {
     if (!st.ch || !st.skill) { $('#results').innerHTML = '<div class="empty">No character loaded. Use <b>Load save file</b> (or drop a BO_Char_*.sav here) or paste a build code above.<br><small>Saves are in %LOCALAPPDATA%\\BrokenOath\\Saved\\SaveGames\\&lt;number&gt;\\ — paste that into the file picker\'s address bar. Files ending in _bak are older backups.</small></div>'; return; }
     const r = S.calcSkill(GD, st.ch, st.skill, opts());
     renderControls(r);
@@ -1665,7 +1735,8 @@ window.BOStartApp = function () {
       '<li>Poison: each stack deals 20% of the whole hit per second for 2 s × (1 + ailment duration + 1% per 10 Intelligence), as the skill tooltip shows; raised by increased poison damage and the damage over time multiplier; up to 40 stacks. Ticks are not reduced by resistance; curses\' general damage taken raises them. The skill panel uses that tooltip duration; DPS against an enemy uses the combat duration (shorter with Virulence).</li>' +
       '<li>Curses: a curse\'s damage taken and its element taken add up (its element part counts on hits); increased curse effect raises both, Intelligence does not. Different curses multiply; a Guardian only takes the strongest. Woes build Dread to +30% by themselves on Rares and Guardians.</li>' +
       '<li>Enemy: resistance = monster level × 0.36 (max 25%) for elements and poison; armour = level × 1.5 against physical hits (armour / (armour + 5 × hit), max 80%). The DPS assumes you cast nonstop; on bosses the log shows about 90–95% of that.</li>' +
-      '<li>Not modelled: minions, Hunter\'s Marks, War Banner, shock and freeze, bleeding, triggers (on kill / on crit), keystone flags, dual-wield alternation.</li>' +
+      '<li>Channel Conduit: a spell linked to a channel (read from the save) uses the channel\'s supports and is cast on its ticks, one cast every ceil(interval ÷ tick) ticks (checked against the game log).</li>' +
+      '<li>Not modelled: minions, War Banner, shock and freeze, bleeding, Skyfall repeat strikes, other triggers (on kill / on crit), keystone flags, dual-wield alternation.</li>' +
       '</ul></details></div>';
     out.innerHTML = html;
 
@@ -1801,10 +1872,311 @@ window.BOStartApp = function () {
   window.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
   window.addEventListener('drop', e => { e.preventDefault(); document.body.classList.remove('dragging'); const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
 
+  // ---------- Skill tree tab ----------
+  // Shows the character's passive tree, lets you take/refund nodes (edits apply to st.ch until reset)
+  // and scores every node: the selected skill's DPS change if you take it (with its path) or refund it.
+  const T = { visible: false, adj: null, built: false, vb: null, full: null, scores: new Map(), job: 0, timer: 0, undo: [], drag: null };
+  const NS = 'http://www.w3.org/2000/svg';
+  const nodeOf = id => GD.nodes[id] || GD.nodes[GD.moved[id]];
+  const realId = id => GD.nodes[id] ? id : (GD.moved[id] || id);
+  function treeAdj() {
+    if (T.adj) return T.adj;
+    const adj = {};
+    for (const n of Object.values(GD.nodes)) for (const l of n.Links || []) {
+      if (!GD.nodes[l]) continue;
+      (adj[n.Id] = adj[n.Id] || new Set()).add(l); (adj[l] = adj[l] || new Set()).add(n.Id);
+    }
+    return (T.adj = adj);
+  }
+  const startNode = () => 'start_' + String(st.ch.classId).toLowerCase();
+  const blocked = id => { const n = GD.nodes[id]; return !n || (n.Kind === 'Start' && id !== startNode()); };
+  const allocSet = () => new Set(st.ch.passives.map(realId).filter(id => GD.nodes[id]));
+  // Choice nodes sit at an altar (node.Choice): you keep one of its options.
+  const altarOf = id => (GD.nodes[id] || {}).Choice || null;
+  function altarTaken(have, id) { const a = altarOf(id); if (!a) return null; for (const x of have) if (x !== id && altarOf(x) === a) return x; return null; }
+  // Shortest path of new nodes from the taken set (and the class start) to target.
+  function pathTo(have, target) {
+    const adj = treeAdj(), s0 = startNode();
+    if (have.has(target)) return [];
+    const prev = {}, seen = new Set([s0, ...have]), q = [s0, ...have];
+    for (let i = 0; i < q.length; i++) {
+      const u = q[i]; if (u === target) break;
+      for (const v of adj[u] || []) if (!seen.has(v) && !blocked(v) && !(v !== target && altarTaken(have, v))) { seen.add(v); prev[v] = u; q.push(v); }
+    }
+    if (!seen.has(target)) return null;
+    const path = []; let x = target; while (!have.has(x) && x !== s0) { path.unshift(x); x = prev[x]; }
+    return path;
+  }
+  // Nodes still connected to the class start.
+  function connected(set) {
+    const adj = treeAdj(), s0 = startNode(), keep = new Set(), q = [s0];
+    for (let i = 0; i < q.length; i++) for (const v of adj[q[i]] || []) if (set.has(v) && !keep.has(v)) { keep.add(v); q.push(v); }
+    return keep;
+  }
+  const refundList = (have, id) => { const s = new Set(have); s.delete(id); const keep = connected(s); return [...have].filter(x => !keep.has(x)); };
+  // What taking a node means: its path, swapping out the altar's other option if needed.
+  function planTake(have, id) {
+    let base = have, swapped = null;
+    const other = altarTaken(have, id);
+    if (other) {
+      swapped = other;
+      // The new option usually links the same nodes as the old one: keep everything still connected.
+      const s = new Set(have); s.delete(other); s.add(id); const keep = connected(s);
+      if (keep.has(id)) { const list = [...keep]; return { list, cost: list.length - have.size, swapped }; }
+      const r = new Set(refundList(have, other)); base = new Set([...have].filter(x => !r.has(x)));
+    }
+    const p = pathTo(base, id); if (!p) return null;
+    const list = [...base, ...p];
+    return { list, cost: list.length - have.size, swapped };
+  }
+  // In-order list (each node next to an earlier one) for build codes.
+  function ordered(set) {
+    const adj = treeAdj(), out = [], seen = new Set([startNode()]), q = [startNode()];
+    for (let i = 0; i < q.length; i++) for (const v of adj[q[i]] || []) if (set.has(v) && !seen.has(v)) { seen.add(v); out.push(v); q.push(v); }
+    return out;
+  }
+
+  function treeReset() { T.undo = []; T.scores = new Map(); T.job++; T.built = false; }
+  function setPassives(list, undo) {
+    if (undo !== false) T.undo.push(st.ch.passives.slice());
+    st.ch = Object.assign({}, st.chOrig, { passives: list });
+    st.pinned = null; stopSearch(); st.opt = null;
+    T.scores = new Map();
+    render();
+  }
+
+  function modLine(m) { return S.modText(GD, { stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: m.Value || 0, v2: m.Value2 || 0 }); }
+
+  function buildTree() {
+    const svg = $('#treeSvg'); svg.innerHTML = '';
+    const nodes = Object.values(GD.nodes).filter(n => isFinite(n.X) && isFinite(n.Y));
+    const xs = nodes.map(n => n.X), ys = nodes.map(n => n.Y);
+    const pad = 300;
+    T.full = [Math.min(...xs) - pad, Math.min(...ys) - pad, Math.max(...xs) - Math.min(...xs) + 2 * pad, Math.max(...ys) - Math.min(...ys) + 2 * pad];
+    const gL = document.createElementNS(NS, 'g'), gN = document.createElementNS(NS, 'g'), gT = document.createElementNS(NS, 'g');
+    const done = new Set();
+    for (const n of nodes) for (const l of n.Links || []) {
+      const m = GD.nodes[l]; if (!m || !isFinite(m.X)) continue;
+      const k = [n.Id, l].sort().join('|'); if (done.has(k)) continue; done.add(k);
+      const ln = document.createElementNS(NS, 'line');
+      ln.setAttribute('x1', n.X); ln.setAttribute('y1', n.Y); ln.setAttribute('x2', m.X); ln.setAttribute('y2', m.Y);
+      ln.setAttribute('class', 'tl' + (/^waygate/.test(n.Id) && /^waygate/.test(l) ? ' way' : '')); ln.dataset.a = n.Id; ln.dataset.b = l;
+      gL.appendChild(ln);
+    }
+    const R = { Start: 70, Keystone: 62, Notable: 44, Choice: 36, Socket: 34, Small: 26, Attribute: 18 };
+    for (const n of nodes) {
+      const c = document.createElementNS(NS, 'circle');
+      c.setAttribute('cx', n.X); c.setAttribute('cy', n.Y); c.setAttribute('r', R[n.Kind] || 22);
+      c.setAttribute('class', 'tn k-' + n.Kind); c.dataset.id = n.Id;
+      gN.appendChild(c);
+      if (n.Kind === 'Notable' || n.Kind === 'Keystone' || n.Kind === 'Start') {
+        const t = document.createElementNS(NS, 'text');
+        t.setAttribute('x', n.X); t.setAttribute('y', n.Y - (R[n.Kind] || 22) - 18); t.setAttribute('class', 'tlabel'); t.dataset.id = n.Id;
+        t.textContent = n.Kind === 'Start' ? (n.ClassStart || n.Name) : n.Name;
+        gT.appendChild(t);
+      }
+    }
+    svg.append(gL, gN, gT);
+    T.built = true;
+    fitTree();
+  }
+  function setVB(vb) {
+    T.vb = vb; $('#treeSvg').setAttribute('viewBox', vb.join(' '));
+    $('#treeView').classList.toggle('zoomed', vb[2] < 5200);
+  }
+  function fitTree() {
+    // Frame the taken nodes (plus margin), or the whole tree for a fresh character.
+    const have = [...allocSet(), startNode()].map(id => GD.nodes[id]).filter(n => n && isFinite(n.X));
+    const box = $('#treeView').getBoundingClientRect(); const aspect = box.width / Math.max(1, box.height);
+    let x0, y0, x1, y1;
+    if (have.length > 3) { x0 = Math.min(...have.map(n => n.X)) - 900; x1 = Math.max(...have.map(n => n.X)) + 900; y0 = Math.min(...have.map(n => n.Y)) - 900; y1 = Math.max(...have.map(n => n.Y)) + 900; }
+    else { [x0, y0] = T.full; x1 = x0 + T.full[2]; y1 = y0 + T.full[3]; }
+    let w = x1 - x0, h = y1 - y0;
+    if (w / h < aspect) { const nw = h * aspect; x0 -= (nw - w) / 2; w = nw; } else { const nh = w / aspect; y0 -= (nh - h) / 2; h = nh; }
+    setVB([x0, y0, w, h]);
+  }
+  function zoomAt(f, cx, cy) {
+    const [x, y, w, h] = T.vb; const nw = Math.min(T.full[2] * 1.4, Math.max(900, w * f)), k = nw / w;
+    setVB([cx - (cx - x) * k, cy - (cy - y) * k, nw, h * k]);
+  }
+  function svgPoint(ev) {
+    const r = $('#treeView').getBoundingClientRect(), [x, y, w, h] = T.vb;
+    return [x + (ev.clientX - r.left) / r.width * w, y + (ev.clientY - r.top) / r.height * h];
+  }
+
+  // Colours and classes from the current allocation, scores and search.
+  function paintTree() {
+    if (!T.built) return;
+    const have = allocSet(), s0 = startNode(), adj = treeAdj();
+    const next = new Set(); for (const id of [s0, ...have]) for (const v of adj[id] || []) if (!have.has(v) && !blocked(v)) next.add(v);
+    const q = ($('#treeSearch').value || '').trim().toLowerCase();
+    const heat = $('#treeHeat').checked;
+    let best = 0; for (const [id, s] of T.scores) if (!have.has(id) && perPt(s) > best) best = perPt(s);
+    const top = new Set(bestRows(have, 8).map(([id]) => id));
+    for (const c of $('#treeSvg').querySelectorAll('circle.tn')) {
+      const id = c.dataset.id, n = GD.nodes[id], on = have.has(id) || id === s0;
+      c.classList.toggle('alloc', on); c.classList.toggle('next', !on && next.has(id));
+      let found = false;
+      if (q) { const txt = (n.Name + ' ' + (n.Text || '') + ' ' + (n.Mods || []).map(modLine).join(' ')).toLowerCase(); found = txt.includes(q); }
+      c.classList.toggle('found', found);
+      const s = T.scores.get(id);
+      if (heat && !on && s && s.d > 0.0005 && best > 0) {
+        const t = Math.min(1, perPt(s) / best);
+        c.style.fill = 'hsl(' + Math.round(110 - 70 * (1 - t)) + ', ' + Math.round(40 + 45 * t) + '%, ' + Math.round(26 + 30 * t) + '%)';
+      } else c.style.fill = '';
+    }
+    for (const ln of $('#treeSvg').querySelectorAll('line.tl')) {
+      const a = ln.dataset.a, b = ln.dataset.b;
+      ln.classList.toggle('alloc', (have.has(a) || a === s0) && (have.has(b) || b === s0));
+    }
+    for (const t of $('#treeSvg').querySelectorAll('text.tlabel')) { t.classList.toggle('alloc', have.has(t.dataset.id)); t.classList.toggle('top', top.has(t.dataset.id)); }
+    const saved = (st.chOrig.passives || []).length;
+    $('#treePoints').textContent = have.size + ' points taken' + (have.size !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level;
+    $('#treeUndo').disabled = !T.undo.length;
+  }
+
+  // DPS gain per point spent (a swap at an altar counts as one point).
+  const perPt = s => s.d / Math.max(1, s.cost);
+  const bestRows = (have, n) => [...T.scores].filter(([id, s]) => !have.has(id) && s.d > 0.0005).sort((a, b) => perPt(b[1]) - perPt(a[1])).slice(0, n);
+  // Lines on a node the DPS math does not count (triggers, keystone rules, Skyfall repeats ...).
+  function uncounted(n) {
+    return (n.Mods || []).filter(m => m.Mode === 'Trigger' || m.Mode === 'Flag' || !S.counted(m.Stat))
+      .map(m => m.Mode === 'Trigger' || m.Mode === 'Flag' ? (n.Text || n.Name) : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
+  }
+  function tipHtml(id) {
+    const n = GD.nodes[id]; if (!n) return '';
+    const have = allocSet(), on = have.has(id);
+    let h = '<div class="tk">' + esc(n.Kind) + (n.Region ? ' · ' + esc(n.Region) : '') + '</div><b>' + esc(n.Name) + '</b>';
+    const lines = (n.Mods || []).filter(m => !['Keystone', 'Trigger', 'Dragonling'].includes(m.Mode)).map(modLine).filter(Boolean);
+    if (lines.length) h += '<ul>' + lines.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>';
+    if (n.Text && (n.Kind === 'Keystone' || n.Kind === 'Notable' || n.Kind === 'Socket') && n.Text !== lines.join(' ')) h += '<div>' + esc(n.Text) + '</div>';
+    if (n.Price) h += '<div class="gain down">' + esc(n.Price) + '</div>';
+    if (n.Kind === 'Start') return h;
+    const s = T.scores.get(id);
+    const skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
+    if (s) {
+      const cls = s.d > 0.0005 ? 'up' : s.d < -0.0005 ? 'down' : '';
+      if (on) h += '<div class="gain ' + cls + '">Refund: ' + pct(s.d) + ' ' + esc(skillName) + ' DPS' + (s.cost < -1 ? ' (' + (-s.cost) + ' nodes go with it)' : '') + '</div>';
+      else if (s.swapped) h += '<div class="gain ' + cls + '">Swap for ' + esc(GD.nodes[s.swapped].Name) + ' (one choice per altar): ' + pct(s.d) + ' ' + esc(skillName) + ' DPS' + (s.cost > 0 ? ' · ' + s.cost + ' more point' + (s.cost > 1 ? 's' : '') : '') + '</div>';
+      else h += '<div class="gain ' + cls + '">Take: ' + pct(s.d) + ' ' + esc(skillName) + ' DPS · ' + s.cost + ' point' + (s.cost > 1 ? 's' : '') + (s.cost > 1 ? ' (' + pct(s.d / s.cost) + ' a point)' : '') + '</div>';
+    } else h += '<div class="tk">' + (on ? 'Click to refund' : 'Click to take') + ' · scoring…</div>';
+    const unc = [n, s && s.swapped ? GD.nodes[s.swapped] : null].filter(Boolean).flatMap(uncounted);
+    if (unc.length) h += '<div class="tk" style="margin-top:5px">Not in the DPS number: ' + esc(unc.join(' · ')) + '</div>';
+    return h;
+  }
+
+  function scoreSoon() { clearTimeout(T.timer); T.timer = setTimeout(scoreTree, 250); }
+  function scoreTree() {
+    const job = ++T.job; T.scores = new Map();
+    if (!st.ch || !st.skill) return;
+    const o = opts();
+    const base = S.calcSkill(GD, st.ch, st.skill, o);
+    const skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
+    if (base.error || base.unsupported || !(base.totalDps > 0)) { $('#treeStatus').textContent = 'Node DPS values need a damage skill: pick one in the Skill box.'; paintTree(); bestList(); return; }
+    const b = base.totalDps, have = allocSet();
+    const ids = Object.keys(GD.nodes).filter(id => !blocked(id) && GD.nodes[id].Kind !== 'Start');
+    let i = 0;
+    const step = () => {
+      if (job !== T.job) return;
+      const t0 = performance.now();
+      while (i < ids.length && performance.now() - t0 < 25) {
+        const id = ids[i++]; let list, cost;
+        let swapped = null;
+        if (have.has(id)) { const rem = refundList(have, id); const r = new Set(rem); list = [...have].filter(x => !r.has(x)); cost = -rem.length; }
+        else { const pl = planTake(have, id); if (!pl) continue; list = pl.list; cost = pl.cost; swapped = pl.swapped; }
+        const v = S.calcSkill(GD, Object.assign({}, st.ch, { passives: list }), st.skill, o).totalDps;
+        T.scores.set(id, { d: v / b - 1, cost, swapped });
+      }
+      if (i < ids.length) { $('#treeStatus').textContent = 'Scoring nodes for ' + skillName + '… ' + Math.round(i / ids.length * 100) + '%'; if (i % 200 < 30) paintTree(); setTimeout(step, 0); }
+      else { $('#treeStatus').textContent = 'Node values: ' + skillName + ' vs a ' + (st.rarity || 'rare') + ' (level ' + (st.enemyLevel || st.ch.level) + '), with the supports and settings on the left. Base ' + num(b) + ' DPS.'; paintTree(); bestList(); }
+    };
+    step();
+  }
+  function bestList() {
+    const have = allocSet();
+    const rows = bestRows(have, 12);
+    $('#treeBest').innerHTML = '<h2>Best next picks <span class="hint">DPS per point, path included</span></h2>' + (rows.length
+      ? '<ul class="best-list">' + rows.map(([id, s]) => '<li data-take="' + esc(id) + '"><span>' + esc(GD.nodes[id].Name) + ' <span class="c">' + esc(GD.nodes[id].Kind) + ' · ' +
+        (s.swapped ? 'swap for ' + esc(GD.nodes[s.swapped].Name) : s.cost + ' pt' + (s.cost > 1 ? 's' : '')) + (uncounted(GD.nodes[id]).length || (s.swapped && uncounted(GD.nodes[s.swapped]).length) ? ' · has uncounted lines' : '') +
+        '</span></span><span class="g">' + (s.swapped && s.cost <= 0 ? pct(s.d) : pct(perPt(s)) + '/pt · ' + pct(s.d)) + '</span></li>').join('') + '</ul>'
+      : '<p class="hint">' + (T.scores.size ? 'No node adds DPS to this skill.' : 'Scoring…') + '</p>');
+    $('#treeBest').querySelectorAll('[data-take]').forEach(li => li.onclick = () => clickNode(li.dataset.take));
+  }
+
+  function clickNode(id) {
+    const n = GD.nodes[id]; if (!n || n.Kind === 'Start' || blocked(id)) return;
+    const have = allocSet();
+    if (have.has(id)) { const r = new Set(refundList(have, id)); setPassives([...have].filter(x => !r.has(x))); }
+    else { const pl = planTake(have, id); if (!pl) return; setPassives(pl.list); }
+  }
+
+  function treeAfterRender() {
+    if (!T.visible || !st.ch) return;
+    if (!T.built) buildTree();
+    paintTree(); scoreSoon();
+  }
+  function showTab(tab) {
+    T.visible = tab === 'tree';
+    document.querySelectorAll('.tab').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    $('#results').hidden = T.visible; $('#treePane').hidden = !T.visible;
+    store.set('tab', tab);
+    if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); }
+  }
+  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+  // Pan, zoom, hover, click.
+  const view = $('#treeView'), tip = $('#treeTip');
+  view.addEventListener('wheel', e => { if (!T.vb) return; e.preventDefault(); const [cx, cy] = svgPoint(e); zoomAt(e.deltaY > 0 ? 1.18 : 1 / 1.18, cx, cy); }, { passive: false });
+  view.addEventListener('pointerdown', e => {
+    if (e.target.closest('.tree-zoom') || !T.vb) return;
+    T.drag = { x: e.clientX, y: e.clientY, vb: T.vb.slice(), moved: false, id: e.target.dataset && e.target.dataset.id };
+    view.setPointerCapture(e.pointerId);
+  });
+  view.addEventListener('pointermove', e => {
+    if (T.drag) {
+      const dx = e.clientX - T.drag.x, dy = e.clientY - T.drag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 5) { T.drag.moved = true; view.classList.add('dragging'); }
+      if (T.drag.moved) { const r = view.getBoundingClientRect(), [x, y, w, h] = T.drag.vb; setVB([x - dx / r.width * w, y - dy / r.height * h, w, h]); tip.hidden = true; return; }
+    }
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const id = el && el.classList && el.classList.contains('tn') ? el.dataset.id : null;
+    if (!id) { tip.hidden = true; return; }
+    tip.innerHTML = tipHtml(id); tip.hidden = false;
+    const r = view.getBoundingClientRect(); let x = e.clientX - r.left + 14, y = e.clientY - r.top + 14;
+    if (x + tip.offsetWidth > r.width - 6) x = e.clientX - r.left - tip.offsetWidth - 14;
+    if (y + tip.offsetHeight > r.height - 6) y = Math.max(6, r.height - tip.offsetHeight - 6);
+    tip.style.left = Math.max(6, x) + 'px'; tip.style.top = y + 'px';
+  });
+  view.addEventListener('pointerup', e => {
+    const d = T.drag; T.drag = null; view.classList.remove('dragging');
+    if (d && !d.moved && d.id) { clickNode(d.id); tip.hidden = true; }
+  });
+  view.addEventListener('pointerleave', () => { if (!T.drag) tip.hidden = true; });
+  $('#treeZoomIn').onclick = () => { const [x, y, w, h] = T.vb; zoomAt(1 / 1.4, x + w / 2, y + h / 2); };
+  $('#treeZoomOut').onclick = () => { const [x, y, w, h] = T.vb; zoomAt(1.4, x + w / 2, y + h / 2); };
+  $('#treeFit').onclick = () => { if (T.full) setVB(T.full.slice()); };
+  $('#treeSearch').addEventListener('input', paintTree);
+  $('#treeHeat').addEventListener('change', paintTree);
+  $('#treeUndo').onclick = () => { if (T.undo.length) setPassives(T.undo.pop(), false); };
+  $('#treeReset').onclick = () => { if (st.chOrig) { T.undo.push(st.ch.passives.slice()); st.ch = st.chOrig; st.pinned = null; T.scores = new Map(); render(); } };
+  $('#treeCopy').onclick = async () => {
+    try {
+      const p = [startNode(), ...ordered(allocSet())];
+      const json = new TextEncoder().encode(JSON.stringify({ v: 1, t: st.ch.name.replace(/ \(code\)$/, '') + (st.ch !== st.chOrig ? ' (edited)' : ''), c: st.ch.classId, l: st.ch.level, p }));
+      const z = new Uint8Array(await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+      const all = new Uint8Array(4 + z.length); new DataView(all.buffer).setUint32(0, json.length, true); all.set(z, 4);
+      let bin = ''; for (const b of all) bin += String.fromCharCode(b);
+      const code = 'BO1.' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      try { await navigator.clipboard.writeText(code); $('#treeStatus').textContent = 'Build code copied: paste it into the game\'s passive tree (FOLLOW CODE).'; }
+      catch (e) { window.prompt('Copy this build code:', code); }
+    } catch (err) { alert('Could not make a build code: ' + err.message); }
+  };
+
   // Start.
   const startId = store.get('char', null);
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();
+  if (store.get('tab', 'damage') === 'tree') showTab('tree');
 };
 
 // ---------- boot: find game data, then start ----------
@@ -1856,7 +2228,13 @@ window.BOStartApp = function () {
 
   if (window.GD) return start();
   const cached = store.get('gd');
-  if (cached) { try { window.GD = JSON.parse(cached); return start(); } catch (e) { /* bad cache: ask again */ } }
+  if (cached) {
+    try {
+      const gd = JSON.parse(cached);
+      if ((gd.schema || 1) >= window.BOGameData.SCHEMA) { window.GD = gd; return start(); }
+      return showSetup('The sim was updated and needs a little more from your game files (the passive tree layout). Pick the Data folder once more.');
+    } catch (e) { /* bad cache: ask again */ }
+  }
   showSetup();
 })();
 

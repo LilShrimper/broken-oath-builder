@@ -140,6 +140,12 @@ summary .count { color: var(--faint); font-weight: 400; }
 .foot { color: var(--faint); font-size: 12px; text-align: center; padding: 10px 20px 30px; }
 .drop-hint { position: fixed; inset: 0; background: color-mix(in srgb, var(--bg) 80%, transparent); display: none; align-items: center; justify-content: center; font-size: 20px; color: var(--accent); z-index: 20; border: 3px dashed var(--accent); }
 body.dragging .drop-hint { display: flex; }
+.headline.small { grid-template-columns: 1.4fr 1fr 1.4fr; margin-bottom: 10px; }
+@media (max-width: 700px) { .headline.small { grid-template-columns: 1fr; } }
+tr.dim td { opacity: .5; }
+details.report { margin-top: 10px; }
+details.report pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px; color: var(--muted); max-height: 280px; overflow: auto; }
+.log-cta p { margin: 0; }
 .results-wrap { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
 .tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-weight: 600; padding: 8px 14px; cursor: pointer; margin-bottom: -1px; }
@@ -200,6 +206,9 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
     <label class="field inline"><span>Character</span><select id="charSelect"></select></label>
     <label class="btn" title="Load a BO_Char_*.sav file from %LOCALAPPDATA%\BrokenOath\Saved\SaveGames">
       <input type="file" id="saveInput" accept=".sav" hidden>Load save file
+    </label>
+    <label class="btn ghost" title="Load BrokenOath.log from %LOCALAPPDATA%\BrokenOath\Saved\Logs to check the sim against your real fights. It is read in this tab only, never uploaded.">
+      <input type="file" id="logInput" accept=".log,.txt" hidden>Load game log
     </label>
     <form class="code-form" id="codeForm" title="Paste a build code from the passive tree's COPY CODE (it starts with BO1.)">
       <input type="text" id="codeInput" placeholder="Paste a BO1. build code" autocomplete="off" spellcheck="false">
@@ -569,6 +578,73 @@ window.CHARS = [];
 
   root.parseGvas = parseGvas;
   if (typeof module !== 'undefined') module.exports = { parseGvas };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+// Reads Broken Oath's game log (BrokenOath.log) for the lines that let us check the sim against real
+// fights. Runs in the browser (file picked by the player, never uploaded) and in Node (tests).
+//   parseLog(text) -> { heroes, guardians, casts, skyfall, gems, start, end }
+// Lines used (game version of Nov 2026):
+//   Hero <name> (<Class>, level N, weapon '<id>', N gems) assembled
+//   Harder59: <guardian> at Rupture N - ...
+//   Guardian: <guardian> engaged
+//   BossPain60: <guardian> <fx> (hit H of LIFE, crit 0|1)
+//   Guardian: <guardian> model - S s (...), engaged E s, hero raw boss DPS D vs median ...
+//   Conduit: <channel> cast <spell> (...)
+//   Skyfall: second fall for P% (N hits) cast C, K already struck this cast
+//   Gem: <id> reached level N
+(function (root) {
+  'use strict';
+  const TS = /^\[(\d{4})\.(\d\d)\.(\d\d)-(\d\d)\.(\d\d)\.(\d\d):(\d{3})\]/;
+  const time = l => { const m = TS.exec(l); return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6], +m[7]).getTime() : null; };
+
+  function parseLog(text) {
+    const out = { heroes: [], guardians: [], casts: {}, skyfall: { falls: 0, hits: 0, blocked: 0 }, gems: {}, start: null, end: null };
+    let hero = null, cur = null;
+    const rupture = {};
+    for (const l of String(text).split(/\r?\n/)) {
+      if (!l.includes('LogBrokenOath')) continue;
+      const t = time(l); if (t == null) continue;
+      if (out.start == null) out.start = t; out.end = t;
+      let m;
+      if ((m = /Conduit: (\w+) cast (\w+)/.exec(l))) {
+        const c = out.casts[m[2]] = out.casts[m[2]] || { host: m[1], times: [] }; c.times.push(t);
+        if (cur) cur.casts[m[2]] = (cur.casts[m[2]] || 0) + 1;
+      } else if ((m = /Skyfall: second fall for \d+% \((\d+) hits?\) cast \d+, (\d+) already/.exec(l))) {
+        out.skyfall.falls++; out.skyfall.hits += +m[1]; if (+m[1] === 0 && +m[2] > 0) out.skyfall.blocked++;
+      } else if ((m = /Hero (.+?) \((\w+), level (\d+), weapon '([^']*)'/.exec(l))) {
+        hero = { name: m[1], cls: m[2], level: +m[3], weapon: m[4], t }; out.heroes.push(hero);
+      } else if ((m = /(?:Harder59|BossMech): (\w+) at Rupture (\d+)/.exec(l))) {
+        rupture[m[1]] = +m[2]; if (cur && cur.name === m[1]) cur.rupture = +m[2];
+      } else if ((m = /Guardian: (\w+) engaged\s*$/.exec(l))) {
+        if (!cur || cur.name !== m[1]) cur = { name: m[1], rupture: rupture[m[1]] || null, t0: t, hero, life: null, hits: [], casts: {} };
+      } else if ((m = /BossPain60: (\w+) \S+ \(hit (\d+) of (\d+), crit (\d)\)/.exec(l))) {
+        if (cur && cur.name === m[1]) { cur.life = +m[3]; cur.hits.push({ v: +m[2], crit: m[4] === '1' }); }
+      } else if ((m = /Guardian: (\w+) model - ([\d.]+) s.*engaged ([\d.]+) s, hero raw boss DPS (\d+)/.exec(l))) {
+        if (cur && cur.name === m[1]) { cur.engaged = +m[3]; cur.gameRaw = +m[4]; cur.t1 = t; cur.wall = (t - cur.t0) / 1000; out.guardians.push(cur); }
+        cur = null;
+      } else if ((m = /Gem: (\w+) reached level (\d+)/.exec(l))) {
+        out.gems[m[1]] = +m[2];
+      }
+    }
+    // Cast rate while channelling: the typical gap between back-to-back casts (gaps over 0.8 s are breaks).
+    for (const c of Object.values(out.casts)) {
+      const g = []; for (let i = 1; i < c.times.length; i++) { const d = c.times[i] - c.times[i - 1]; if (d > 0 && d < 800) g.push(d); }
+      g.sort((a, b) => a - b);
+      c.count = c.times.length; c.medianGap = g.length ? g[g.length >> 1] : null;
+      // Recent rate: the last 200 casts (gear changes during a session move it).
+      const r = g.length > 200 ? c.times.slice(-201) : c.times; const rg = [];
+      for (let i = 1; i < r.length; i++) { const d = r[i] - r[i - 1]; if (d > 0 && d < 800) rg.push(d); }
+      rg.sort((a, b) => a - b); c.recentGap = rg.length ? rg[rg.length >> 1] : c.medianGap;
+      c.lastAt = c.times[c.times.length - 1]; delete c.times;
+    }
+    return out;
+  }
+
+  const api = { parseLog };
+  root.BOLog = api;
+  if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -1673,6 +1749,7 @@ window.BOStartApp = function () {
       '</div>';
     st.last = r;
     html += optCard(r);
+    html += logCard(r);
     html += '<div class="pinbar"><button class="btn small" id="pinBtn">' + (pin ? 'Re-pin current' : 'Pin as baseline') + '</button>' + (pin ? '<button class="btn small ghost" id="unpinBtn">Clear pin</button><span>Change anything on the left to compare with the pinned setup.</span>' : '<span>Pin this setup, then change gear, supports or the enemy to see the difference.</span>') + (r.igniteDps > 0 ? '<span>· Ignite DPS ' + num(r.igniteDps) + '</span>' : '') + '</div>';
 
     // Hit table
@@ -1744,6 +1821,80 @@ window.BOStartApp = function () {
     const up = $('#unpinBtn'); if (up) up.onclick = () => { st.pinned = null; render(); };
     out.querySelectorAll('[data-use]').forEach(b => b.onclick = () => useSetup(+b.dataset.use));
     const oc = $('#optClose'); if (oc) oc.onclick = () => { st.opt = null; render(); };
+    const ur = $('#useFightRate'); if (ur) ur.onclick = () => { st.hps = +ur.dataset.rate; $('#hpsOverride').value = st.hps; render(); };
+    const cfr = $('#clearFightRate'); if (cfr) cfr.onclick = () => { st.hps = null; $('#hpsOverride').value = ''; render(); };
+    const lb = $('#logLoadInline'); if (lb) lb.onclick = () => $('#logInput').click();
+  }
+
+  // ---------- checking the sim against the game log ----------
+  const median = a => { const s = a.filter(isFinite).slice().sort((x, y) => x - y); return s.length ? (s.length % 2 ? s[s.length >> 1] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : NaN; };
+  const REPORT_URL = 'https://github.com/LilShrimper/broken-oath-damage-sim/issues/new';
+  function logCheck() {
+    if (!st.log || !st.ch) return null;
+    const name = (st.chOrig || st.ch).name;
+    const all = st.log.guardians.filter(g => g.life > 0 && g.engaged > 0);
+    const mine = all.filter(g => st.ch.fromCode || !g.hero || g.hero.name === name);
+    const skill = st.skill, sim = {};
+    const fights = mine.map(g => {
+      const key = g.rupture || 0;
+      if (!sim[key]) sim[key] = S.calcSkill(GD, st.ch, skill, opts({ enemyLevel: g.rupture || undefined, enemyRarity: 'boss' }));
+      const s = sim[key], casts = g.casts[skill] || 0;
+      const save = st.chOrig || st.ch;
+      const gear = g.hero && save.weaponId && g.hero.weapon && g.hero.weapon !== save.weaponId;
+      return { g, s, real: g.life / g.engaged, simDps: s.totalDps, casts, castRate: g.wall > 0 ? casts / g.wall : NaN,
+        perCastReal: casts ? g.life / casts : NaN, perCastSim: s.speed && s.speed.usesPerSec ? s.totalDps / s.speed.usesPerSec : NaN,
+        levelDiff: g.hero && g.hero.level !== save.level ? g.hero.level : null, gear };
+    });
+    const clean = fights.filter(f => !f.gear);
+    const use = clean.length ? clean : fights;
+    return {
+      name, fights, others: all.length - mine.length, skillName: (GD.skills[String(skill).toLowerCase()] || {}).Name || skill,
+      realMed: median(use.map(f => f.real)), simMed: median(use.map(f => f.simDps)),
+      rateMed: median(use.filter(f => f.casts).map(f => f.castRate)), simRate: use[0] && use[0].s.speed ? use[0].s.speed.usesPerSec : NaN,
+      perCastRatio: median(use.filter(f => f.casts).map(f => f.perCastReal / f.perCastSim)), used: use.length, gearSkipped: fights.length - use.length,
+      cast: st.log.casts[skill] || null, skyfall: st.log.skyfall,
+    };
+  }
+  function logCard(r) {
+    if (r.error || r.unsupported) return '';
+    if (!st.log) return '<div class="card log-cta"><h2>Check against your fights</h2><p class="hint">Load your game log (<code>%LOCALAPPDATA%\\BrokenOath\\Saved\\Logs\\BrokenOath.log</code>) to compare this sheet with your real Guardian kills: boss life ÷ fight time, your cast rate and damage per cast. The log is read in this tab only and never uploaded. <button class="btn small ghost" id="logLoadInline" type="button">Load game log</button></p></div>';
+    const c = logCheck(); if (!c) return '';
+    if (!c.fights.length) return '<div class="card"><h2>Your fights vs the sim</h2><p class="hint">This log has no Guardian kills by ' + esc(c.name) + (c.others ? ' (' + c.others + ' by other characters)' : '') + '. Kill a Guardian, then load the log again (the game writes it as you play).</p></div>';
+    const ratio = c.realMed / c.simMed;
+    const verdict = !isFinite(ratio) ? '' : Math.abs(ratio - 1) <= 0.15 ? 'The sheet matches your kills (within 15%).' : ratio > 1 ? 'You kill Guardians ' + pct(ratio - 1) + ' faster than the sheet says: something adds damage it does not count (see below).' : 'You kill Guardians ' + pct(1 - ratio).replace('+', '') + ' slower than the sheet: likely time spent moving or dodging, or a rule the sheet gets wrong.';
+    const rows = c.fights.map(f => '<tr' + (f.gear ? ' class="dim"' : '') + '><td>' + esc(f.g.name.replace(/_/g, ' ')) + (f.gear ? ' <span class="hint">(other weapon)</span>' : '') + (f.levelDiff ? ' <span class="hint">(you were ' + f.levelDiff + ')</span>' : '') + '</td><td>' + (f.g.rupture || '–') + '</td><td>' + num(f.g.life) + '</td><td>' + num(f.g.engaged, 1) + ' s</td><td><b>' + num(f.real) + '</b></td><td>' + num(f.simDps) + '</td><td>' + (f.casts ? num(f.castRate, 2) : '–') + '</td><td>' + (f.casts ? num(f.perCastReal / f.perCastSim, 2) + '×' : '–') + '</td></tr>').join('');
+    const notes = [];
+    if (isFinite(c.rateMed) && isFinite(c.simRate)) notes.push('In fights you cast ' + c.skillName + ' ' + num(c.rateMed, 2) + ' times a second, against the sheet\'s ' + num(c.simRate, 2) + ' (' + Math.round(c.rateMed / c.simRate * 100) + '%): moving, dodging and phase changes take the rest.' + (c.cast && c.cast.recentGap ? ' While spinning, your recent casts land every ' + c.cast.recentGap + ' ms (' + num(1000 / c.cast.recentGap, 2) + '/s).' : ''));
+    if (isFinite(c.perCastRatio)) notes.push('Damage per cast, real ÷ sheet: ' + num(c.perCastRatio, 2) + '×. Real kills also include ' + (r.conduit ? r.conduit.hostName + '\'s own hits, ' : '') + 'Herald kill effects, shocks, freezes and anything else that hit the boss, so a little above 1× is expected.');
+    if (c.skyfall && c.skyfall.falls) notes.push('Skyfall repeat strikes: ' + num(c.skyfall.falls) + ' fell, ' + num(c.skyfall.hits) + ' hit something; ' + num(c.skyfall.blocked) + ' were skipped because the target was already struck that cast. The sheet does not count repeats.');
+    if (c.gearSkipped) notes.push(c.gearSkipped + ' fight' + (c.gearSkipped > 1 ? 's' : '') + ' with a different weapon than your save (greyed) left out of the medians.');
+    if (!c.fights.some(f => f.casts) && r.conduit) notes.push('No ' + c.skillName + ' casts during these fights: was it linked then?');
+    const rateBtn = isFinite(c.rateMed) && c.rateMed > 0 ? (st.hps ? '<button class="btn small ghost" type="button" id="clearFightRate">Back to the sheet\'s cast rate</button>' : '<button class="btn small" type="button" id="useFightRate" data-rate="' + (Math.round(c.rateMed * 100) / 100) + '">Use my fight cast rate (' + num(c.rateMed, 2) + '/s)</button>') : '';
+    const report = reportText(r, c);
+    return '<div class="card"><h2>Your fights vs the sim <span class="hint">' + c.fights.length + ' Guardian kill' + (c.fights.length > 1 ? 's' : '') + ' in the log</span></h2>' +
+      '<div class="headline small">' + stat('Real boss DPS (median)', num(c.realMed), '', 'main', 'Boss life ÷ time engaged') + stat('Sheet vs a Guardian', num(c.simMed), '', '', 'Same Rupture levels, settings on the left') + stat('Real ÷ sheet', isFinite(ratio) ? num(ratio, 2) + '×' : '–', '', '', verdict) + '</div>' +
+      '<div class="table-wrap"><table class="tbl"><thead><tr><th>Guardian</th><th>Rupture</th><th>Life</th><th>Fight</th><th>Real DPS</th><th>Sheet</th><th>Casts/s</th><th>Per cast</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<ul class="notes">' + notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul>' +
+      '<div class="pinbar">' + rateBtn + '<a class="btn small ghost" target="_blank" rel="noopener" href="' + REPORT_URL + '?title=' + encodeURIComponent('Check report: ' + c.skillName + ' (' + st.ch.classId + ' ' + st.ch.level + ')') + '&body=' + encodeURIComponent(report) + '">Send a check report</a><span>Opens a GitHub issue with only the numbers below, for improving the sim. You can edit it before posting.</span></div>' +
+      '<details class="report"><summary>What the report contains</summary><pre>' + esc(report) + '</pre></details></div>';
+  }
+  // Anonymous numbers only: no character name, no Steam ID, no file paths.
+  function reportText(r, c) {
+    const sup = (r.supports || []).filter(s => s.ok && !st.off.has(s.key)).map(s => s.id);
+    const uniq = (st.ch.items || []).filter(i => i.unique && i.unique !== 'None').map(i => i.unique);
+    const lines = [
+      'Anonymous check report from the Broken Oath Damage Sim (game data ' + String(GD.builtAt).slice(0, 10) + ').', '',
+      '- Class / level: ' + st.ch.classId + ' ' + st.ch.level,
+      '- Skill: ' + st.skill + ' gem ' + (r.gem ? r.gem.own + '+' + r.gem.bonus : '?') + (r.conduit ? ', cast by ' + r.conduit.host + ' Channel Conduit (' + num(r.speed.usesPerSec, 2) + '/s, tick ' + Math.round(r.conduit.tick * 1000) + ' ms, interval ' + Math.round(r.conduit.interval * 1000) + ' ms)' : ''),
+      '- Supports: ' + (sup.join(', ') || 'none'),
+      '- Uniques worn: ' + (uniq.join(', ') || 'none'),
+      '- Sheet settings: enemy boss, ' + (st.hps ? 'cast rate set by hand ' + st.hps + '/s' : 'sheet cast rate'),
+      '', '| Guardian | Rupture | Life | Engaged s | Casts | Real DPS | Sheet DPS | Per cast real/sheet |', '|---|---|---|---|---|---|---|---|',
+      ...c.fights.filter(f => !f.gear).map(f => '| ' + f.g.name + ' | ' + (f.g.rupture || '') + ' | ' + f.g.life + ' | ' + f.g.engaged + ' | ' + f.casts + ' | ' + Math.round(f.real) + ' | ' + Math.round(f.simDps) + ' | ' + (f.casts ? (f.perCastReal / f.perCastSim).toFixed(2) : '') + ' |'),
+      '', '- Median real / sheet: ' + (c.realMed / c.simMed).toFixed(2) + ', fight cast rate ' + (isFinite(c.rateMed) ? c.rateMed.toFixed(2) : 'n/a') + '/s' + (c.cast && c.cast.recentGap ? ', spinning cast gap ' + c.cast.recentGap + ' ms' : ''),
+      c.skyfall && c.skyfall.falls ? '- Skyfall repeats: ' + c.skyfall.falls + ' fell, ' + c.skyfall.hits + ' hits, ' + c.skyfall.blocked + ' skipped (target already struck)' : '',
+    ];
+    return lines.filter(x => x !== '').join('\n').replace(/\n(\| Guardian)/, '\n\n$1');
   }
   const stat = (label, value, delta, cls, foot) => '<div class="stat ' + (cls || '') + '"><div class="label">' + label + '</div><div class="value">' + value + '</div>' + (delta || '') + (foot ? '<div class="foot-note">' + foot + '</div>' : '') + '</div>';
   // ---------- support search ----------
@@ -1846,6 +1997,17 @@ window.BOStartApp = function () {
     fr.readAsArrayBuffer(file);
   }
   $('#saveInput').addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; });
+  // The game log: read here, kept in memory for this tab only.
+  async function loadLog(file) {
+    try {
+      const text = await file.text();
+      const log = window.BOLog.parseLog(text);
+      if (!log.start) throw new Error('This does not look like a Broken Oath game log (BrokenOath.log).');
+      st.log = log; render();
+      if (!log.guardians.length) alert('Loaded the log, but it has no Guardian kills yet. Kill a Guardian, then load it again.');
+    } catch (err) { alert('Could not read ' + file.name + ':\n' + err.message); }
+  }
+  $('#logInput').addEventListener('change', e => { if (e.target.files[0]) loadLog(e.target.files[0]); e.target.value = ''; });
 
   // Loading an in-game build code: "BO1." + base64url(uint32 length + zlib(JSON)).
   async function decodeBuildCode(text) {
@@ -1870,7 +2032,7 @@ window.BOStartApp = function () {
   });
   window.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragging'); });
   window.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
-  window.addEventListener('drop', e => { e.preventDefault(); document.body.classList.remove('dragging'); const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+  window.addEventListener('drop', e => { e.preventDefault(); document.body.classList.remove('dragging'); const f = e.dataTransfer.files[0]; if (f) (/\.(log|txt)$/i.test(f.name) ? loadLog(f) : loadFile(f)); });
 
   // ---------- Skill tree tab ----------
   // Shows the character's passive tree, lets you take/refund nodes (edits apply to st.ch until reset)

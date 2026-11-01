@@ -1394,6 +1394,13 @@ window.CHARS = [];
     // Dragonling Ascendancy rules that change combat but not the stat sheet.
     const ascFlag = f => mods.some(m => m.stat === 'Dragonling' && (m.tags || []).includes(f));
     const virulence = ascFlag('Asc71_Virulence') ? (GD.dragon.rules || {}).Virulence || { Cap: 60, DurMult: 0.75 } : null;
+    // Mark of the Siege (ascended Watch Wyrm): "Your Ballistas deal 30% more damage to the enemy you last hit
+    // yourself". Counted as if you keep hitting the target; its "own hits 10% less" is left out (the 76 rules drop it).
+    if (ascFlag('Asc71_MarkOfSiege') && sk.Totem && sk.Totem.Kind === 'Ballista' && o.markOfSiege !== false) {
+      const ms = (GD.dragon.rules || {}).MarkOfSiege || { More: 30 };
+      mods.push({ stat: 'Damage', mode: 'More', tags: [], v: ms.More || 30, v2: 0, local: false, src: 'Dragonling · Mark of the Siege', key: 'dragon:mark_of_siege' });
+      res.notes.push('Mark of the Siege: Ballistas deal ' + (ms.More || 30) + '% more to the enemy you last hit yourself (counted as if you keep hitting it).');
+    }
 
     // Attributes.
     const cls = GD.classes[lc(ch.classId)] || {};
@@ -1745,6 +1752,11 @@ window.CHARS = [];
     } else if (projectiles && shape === 'skyfall') {
       projOnTarget = 1; projWeight = 1;
       res.notes.push('Skyfall: each enemy is struck once per use; extra projectiles only add targets.');
+    } else if (projectiles && sk.Totem && sk.Totem.Kind === 'Ballista' && !orbitOn) {
+      // "Ballistas fire 1 more bolt": a Ballista turns on one enemy, so every bolt is aimed at it.
+      // ASSUMPTION (not checked in game): on one big target (Guardian, dummy) all of them strike.
+      projOnTarget = clamp(o.projOnTarget || projectiles, 1, projectiles); projWeight = projOnTarget;
+      if (projectiles > 1) res.notes.push('Ballista: ' + projectiles + ' bolts a shot, all counted on this enemy (not checked in game; set "Projectiles hitting it" to change).');
     } else if (projectiles) {
       projOnTarget = clamp(o.projOnTarget || (orbitOn ? projectiles : 1), 1, projectiles);
       projWeight = orbitOn ? 1 + (projOnTarget - 1) * (isAttack ? 0.1 : 0.4) : projOnTarget;

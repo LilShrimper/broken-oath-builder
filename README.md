@@ -72,4 +72,7 @@ panel, the skill likely has a mechanic the sheet does not model yet.
 `gamedata.json` holds the numbers the sim needs (skills, supports, items, the passive tree), extracted
 from the playtest and published with the developer's permission. It is not the raw game files.
 
+The passive and Dragonling tree icons (`icons/tree.webp`) are the game's own tree art, shown with the
+developer's permission.
+
 Not affiliated with the developers of Broken Oath.

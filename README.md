@@ -25,6 +25,9 @@ GoatCounter (no cookies, no personal data, never your files).
    skills you don't own yet (at the gem level your character could use). A spell with Cast on Crit shows a picker
    for the attack whose crits cast it; the sheet then counts one cast per attack volley that crits (at most one
    per 0.15 s, 25% less damage). Cast on Crit has not been checked against the game yet.
+   Shock (from the game's own formula and the enemy's life), Executioner (counted over a whole fight) and
+   mana are counted too: the Hits & speed card shows mana spent against mana gained a second, and
+   *Only setups my mana can sustain* limits the support search to setups you can keep casting.
 5. **Check it against your fights:** click *Load game log* and pick
    `%LOCALAPPDATA%\BrokenOath\Saved\Logs\BrokenOath.log`. The page compares the sheet with your real
    Guardian kills (boss life ÷ fight time), your cast rate and damage per cast, and can use your

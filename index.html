@@ -292,9 +292,6 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
     <label class="btn" id="saveDirBtn" title="Pick your SaveGames folder (%LOCALAPPDATA%\BrokenOath\Saved\SaveGames): every character in it is loaded, newest first. Read in this tab only, never uploaded.">
       <input type="file" id="saveDirInput" webkitdirectory directory multiple hidden><span id="saveDirLabel">Load saves folder</span>
     </label>
-    <label class="btn ghost" title="Load one BO_Char_*.sav file from %LOCALAPPDATA%\BrokenOath\Saved\SaveGames\&lt;number&gt;">
-      <input type="file" id="saveInput" accept=".sav" hidden>One save file
-    </label>
     <button class="btn ghost" id="copySavePath" type="button" title="Copies %LOCALAPPDATA%\BrokenOath\Saved\SaveGames. Paste it into the file picker's address bar and press Enter.">Copy save path</button>
     <label class="btn ghost" title="Load BrokenOath.log from %LOCALAPPDATA%\BrokenOath\Saved\Logs to check the sim against your real fights. It is read in this tab only, never uploaded.">
       <input type="file" id="logInput" accept=".log,.txt" hidden>Load game log
@@ -3450,7 +3447,6 @@ window.BOStartApp = function () {
     saveTip('Loaded ' + got.length + ' character' + (got.length > 1 ? 's' : '') + ' (' + got.map(c => c.name).join(', ') + ').' + (bad.length ? ' Skipped ' + bad.length + ' save' + (bad.length > 1 ? 's' : '') + ' it could not read.' : '') +
       (kept ? ' They stay in this browser after a refresh. After you play, use Reload saves and pick the same folder.' : KEEP_FAIL), kept);
   }
-  $('#saveInput').addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; });
   $('#saveDirInput').addEventListener('change', e => { if (e.target.files.length) loadFolder(e.target.files); e.target.value = ''; });
   $('#copySavePath').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(SAVE_PATH); } catch (e) { window.prompt('Copy this path:', SAVE_PATH); return; }

@@ -295,6 +295,28 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 .dl-n text { fill: var(--text); font-size: 13px; text-anchor: middle; pointer-events: none; }
 .dl-list { margin: 4px 0 0; padding-left: 18px; columns: 2 260px; font-size: 13px; }
 .dl-list li { margin: 0 0 4px; break-inside: avoid; }
+/* Dragonling button and panel on the Skill tree tab */
+.dragon-btn { position: absolute; top: 10px; right: 10px; z-index: 4; width: 56px; height: 56px; padding: 4px; border-radius: 8px; cursor: pointer;
+  background: #1b1915; border: 2px solid #8a7440; box-shadow: inset 0 0 0 2px #2b261b, var(--shadow); }
+.dragon-btn:hover, .dragon-btn[aria-expanded="true"] { border-color: var(--accent); }
+.dragon-btn svg { width: 100%; height: 100%; display: block; }
+.dragon-btn .db-ring { fill: #2f4a35; stroke: #4e7a55; stroke-width: 2; }
+.dragon-btn .db-head { fill: #9be08c; stroke: #3d6b3a; stroke-width: 1.2; stroke-linejoin: round; }
+.dragon-btn .db-eye { fill: #1b1915; }
+.dragon-badge { position: absolute; right: -6px; bottom: -6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; font-size: 12px; font-weight: 700; line-height: 20px; text-align: center;
+  background: #1b1915; color: var(--accent); border: 1px solid #8a7440; }
+.dragon-badge.over { color: var(--bad); border-color: var(--bad); }
+.dragon-panel { position: absolute; top: 76px; right: 10px; z-index: 5; width: min(560px, calc(100% - 20px)); max-height: calc(100% - 130px); overflow: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+.dragon-panel .card { margin: 0; border: 0; box-shadow: none; background: transparent; }
+.dragon-panel .dl-tree { max-width: 100%; }
+.dragon-close { position: absolute; top: 8px; right: 10px; z-index: 1; background: none; border: 0; color: var(--faint); font-size: 20px; cursor: pointer; }
+.dragon-close:hover { color: var(--text); }
+.dragon-status:empty { display: none; }
+.dragon-status { margin: 0 16px 12px; }
+.dragon-panel svg.dl-tree { height: auto; width: 100%; }
+.dragon-panel { cursor: default; }
+.dragon-panel h2 { padding-right: 30px; }
 
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
@@ -461,6 +483,16 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
       <div class="tree-view" id="treeView">
         <svg id="treeSvg" xmlns="http://www.w3.org/2000/svg"></svg>
         <div class="tree-tip" id="treeTip" hidden></div>
+        <button type="button" class="dragon-btn" id="dragonBtn" title="Dragonling tree" aria-label="Dragonling tree" aria-expanded="false">
+          <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27" class="db-ring"/>
+            <path class="db-head" d="M15 44c3-9 9-15 17-17l-4-7 7 5 3-9 3 10 7-3-4 8c4 2 6 6 6 10l-7-2c-2 4-6 7-11 7l3-6-6 2-2 5c-3-1-5-3-6-6l-6 3z"/>
+            <circle cx="40" cy="31" r="2.2" class="db-eye"/></svg>
+          <span class="dragon-badge" id="dragonBadge" hidden></span>
+        </button>
+        <div class="dragon-panel" id="dragonPanel" hidden>
+          <button type="button" class="dragon-close" id="dragonClose" title="Close">×</button>
+          <div id="dragonBody"></div>
+        </div>
         <div class="tree-zoom"><button type="button" id="treeZoomIn" title="Zoom in">+</button><button type="button" id="treeZoomOut" title="Zoom out">−</button><button type="button" id="treeFit" title="Show the whole tree">Fit</button></div>
       </div>
       <p class="hint" id="treeStatus"></p>
@@ -1293,7 +1325,10 @@ window.BOPlanner = function (ctx) {
   const dCore = T => Object.values(T).find(n => n.Kind === 'Core');
   const isCrown = n => (dRules().crownKinds || []).includes(n.Kind);
   const ascOn = ch => !!(GD.dragon.ascend && GD.dragon.ascend.enabled && (GD.dragon.ascend.classes || []).includes(lc(ch.classId)));
-  function dPoints(ch) { const R = dRules(); return (R.milestones || []).filter(l => ch.level >= l).length + (R.hatch || 0) + (ch.dragonExtra || 0); }
+  // Gate kills unknown (a save): assume just enough to hold the nodes it has.
+  const dBase = ch => { const R = dRules(); return (R.milestones || []).filter(l => ch.level >= l).length + (R.hatch || 0); };
+  const dExtra = ch => ch.dragonExtra != null ? ch.dragonExtra : Math.max(0, (ch.dragonNodes || []).length - dBase(ch));
+  function dPoints(ch) { return dBase(ch) + dExtra(ch); }
   function dAdj(T) {
     const adj = {}; for (const id in T) adj[id] = adj[id] || new Set();
     for (const n of Object.values(T)) for (const l of n.Links || []) if (T[l]) { adj[n.Id].add(l); (adj[l] = adj[l] || new Set()).add(n.Id); }
@@ -1349,7 +1384,7 @@ window.BOPlanner = function (ctx) {
     const over = used > pts;
     let h = '<div class="card"><h2>Dragonling <small>' + used + ' / ' + pts + ' points' + (path ? ' · ' + esc(path) + ' path' : '') + '</small></h2>';
     h += '<div class="pl-row">' + (aspects.length ? '<label class="field inline"><span>Aspect</span><select data-f="aspect"' + dis + '>' + opt('', 'None', !ch.dragonAspect) + aspects.map(a => opt(a, GD.dragon.aspects[a].Name || a, a === ch.dragonAspect)).join('') + '</select></label>' : '') +
-      '<label class="field inline" title="One point for each end-game Gate killed and one for the Pinnacle"><span>Gate kills + Pinnacle</span><input type="number" min="0" max="40" data-f="dextra" value="' + (ch.dragonExtra || 0) + '"' + dis + '></label>' +
+      '<label class="field inline" title="One point for each end-game Gate killed and one for the Pinnacle"><span>Gate kills + Pinnacle</span><input type="number" min="0" max="40" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
       (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') + '</div>';
     h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.' :
       'Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, + Gate kills and the Pinnacle. ' + (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + 'One path (the first path node picks your Ascendancy) and one Keystone or Capstone. Hover a node for its lines.') + '</p>';
@@ -1552,11 +1587,9 @@ window.BOPlanner = function (ctx) {
     }
     if (!ch || !ch.plan) return;
     if (act === 'dnode') {
-      const id = b.dataset.id, st = dState(ch, id);
-      if (st.s === 'open') { ch.dragonNodes = [...(ch.dragonNodes || []), id]; status = ''; }
-      else if (st.s === 'taken' && !st.why) ch.dragonNodes = ch.dragonNodes.filter(x => x !== id);
-      else { status = dLabel(ch, dTree(ch)[id]).name + ': ' + (st.why || 'not reachable yet') + '.'; return render(); }
-      return done();
+      const r = dToggle(ch, b.dataset.id);
+      if (!r.nodes) { status = r.msg; return render(); }
+      ch.dragonNodes = r.nodes; status = ''; return done();
     }
     if (act === 'dreset') { ch.dragonNodes = []; status = 'Dragonling points refunded.'; return done(); }
     const row = b.closest('[data-skill]'), skill = row && row.dataset.skill;
@@ -1594,7 +1627,18 @@ window.BOPlanner = function (ctx) {
   el.addEventListener('click', onClick);
   el.addEventListener('toggle', onToggle, true);
 
-  return { render, fromCode, isPlanCode, clearStatus: () => { status = ''; } };
+  // Take or refund one Dragonling node: { nodes } (the new list) or { msg } (why not).
+  function dToggle(ch, id) {
+    const n = dTree(ch)[id]; if (!n) return { msg: 'Unknown node.' };
+    const st = dState(ch, id);
+    if (st.s === 'open') return { nodes: [...(ch.dragonNodes || []), id] };
+    if (st.s === 'taken' && !st.why) return { nodes: ch.dragonNodes.filter(x => x !== id) };
+    return { msg: dLabel(ch, n).name + ': ' + (st.why || 'not reachable yet') + '.' };
+  }
+  // The Dragonling tree for the Skill tree tab (app.js draws it in a panel and handles its clicks).
+  const dragon = { html: ch => dragonCard(ch, true, ''), toggle: dToggle, points: ch => ({ total: dPoints(ch), used: dTaken(ch).size }), extra: dExtra };
+
+  return { render, fromCode, isPlanCode, dragon, clearStatus: () => { status = ''; } };
 };
 
 </script>
@@ -3908,11 +3952,46 @@ window.BOStartApp = function () {
   function setPassives(list, undo) {
     if (undo !== false) T.undo.push(st.ch.passives.slice());
     if (st.chOrig && st.chOrig.plan) { st.chOrig.passives = list; st.ch = st.chOrig; keepChars(); }
-    else st.ch = Object.assign({}, st.chOrig, { passives: list });
+    else st.ch = Object.assign({}, st.ch, { passives: list }); // keeps Dragonling edits made on this tab
     st.pinned = null; stopSearch(); st.opt = null;
     T.scores = new Map();
     render();
   }
+  // Dragonling edits from the Skill tree tab: a plan keeps them; a saved character gets a working copy (like
+  // passive changes here) until Reset.
+  function setDragon(fields) {
+    if (st.chOrig && st.chOrig.plan) { Object.assign(st.chOrig, fields); st.chOrig.savedAt = new Date().toISOString(); st.ch = st.chOrig; keepChars(); }
+    else st.ch = Object.assign({}, st.ch, fields);
+    st.pinned = null; stopSearch(); st.opt = null;
+    T.scores = new Map();
+    render();
+  }
+  function renderDragon() {
+    const btn = $('#dragonBtn'), panel = $('#dragonPanel'), badge = $('#dragonBadge');
+    const has = !!(st.ch && Object.keys((GD.dragon.classes || {})[String(st.ch.classId).toLowerCase()] || {}).length);
+    btn.hidden = !has; if (!has) { panel.hidden = true; return; }
+    const p = planner.dragon.points(st.ch), free = p.total - p.used;
+    badge.hidden = free === 0; badge.textContent = free > 0 ? free : free;
+    badge.classList.toggle('over', free < 0);
+    btn.title = 'Dragonling tree: ' + p.used + ' of ' + p.total + ' points' + (free > 0 ? ', ' + free + ' to spend' : free < 0 ? ' (' + -free + ' over)' : '');
+    if (!panel.hidden) $('#dragonBody').innerHTML = planner.dragon.html(st.ch) + '<p class="hint dragon-status" id="dragonStatus"></p>';
+  }
+  $('#dragonBtn').onclick = () => { const p = $('#dragonPanel'); p.hidden = !p.hidden; $('#dragonBtn').setAttribute('aria-expanded', String(!p.hidden)); renderDragon(); };
+  $('#dragonClose').onclick = () => { $('#dragonPanel').hidden = true; $('#dragonBtn').setAttribute('aria-expanded', 'false'); };
+  $('#dragonBody').addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if (!b || !st.ch) return;
+    if (b.dataset.act === 'dreset') return setDragon({ dragonNodes: [] });
+    if (b.dataset.act !== 'dnode') return;
+    const r = planner.dragon.toggle(st.ch, b.dataset.id);
+    if (!r.nodes) { const s = $('#dragonStatus'); if (s) s.textContent = r.msg; return; }
+    // Saved characters: pin today's Gate-kill guess so taking a node shows it as spending a point.
+    setDragon(Object.assign({ dragonNodes: r.nodes }, st.ch.dragonExtra == null ? { dragonExtra: planner.dragon.extra(st.ch) } : {}));
+  });
+  $('#dragonBody').addEventListener('change', e => {
+    const t = e.target, f = t.dataset.f; if (!st.ch || !f) return;
+    if (f === 'aspect') setDragon({ dragonAspect: t.value });
+    else if (f === 'dextra') setDragon({ dragonExtra: Math.max(0, Math.min(40, +t.value || 0)) });
+  });
 
   function modLine(m) { return S.modText(GD, { stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: m.Value || 0, v2: m.Value2 || 0 }); }
 
@@ -4194,6 +4273,7 @@ window.BOStartApp = function () {
   function treeAfterRender() {
     if (T.opt && T.opt.key !== optKey()) clearOpt();
     if (!T.visible || !st.ch) return;
+    renderDragon();
     if (!T.built) buildTree();
     paintTree(); scoreSoon();
   }
@@ -4203,15 +4283,16 @@ window.BOStartApp = function () {
     $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build';
     if (tab === 'build') planner.render();
     store.set('tab', tab);
-    if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); }
+    if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
   }
   document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
 
   // Pan, zoom, hover, click.
   const view = $('#treeView'), tip = $('#treeTip');
-  view.addEventListener('wheel', e => { if (!T.vb) return; e.preventDefault(); const [cx, cy] = svgPoint(e); zoomAt(e.deltaY > 0 ? 1.18 : 1 / 1.18, cx, cy); }, { passive: false });
+  const inDragon = e => e.target.closest && e.target.closest('.dragon-btn, .dragon-panel');
+  view.addEventListener('wheel', e => { if (!T.vb || inDragon(e)) return; e.preventDefault(); const [cx, cy] = svgPoint(e); zoomAt(e.deltaY > 0 ? 1.18 : 1 / 1.18, cx, cy); }, { passive: false });
   view.addEventListener('pointerdown', e => {
-    if (e.target.closest('.tree-zoom') || !T.vb) return;
+    if (e.target.closest('.tree-zoom') || inDragon(e) || !T.vb) return;
     T.drag = { x: e.clientX, y: e.clientY, vb: T.vb.slice(), moved: false, id: e.target.dataset && e.target.dataset.id };
     view.setPointerCapture(e.pointerId);
   });

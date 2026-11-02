@@ -13,9 +13,11 @@ GoatCounter (no cookies, no personal data, never your files).
    `BrokenOath\Data` inside your game folder (Steam: right-click the game › Manage › Browse local
    files). The page reads the skills, items and passive tree from your own copy, so it always
    matches your patch. After a game patch, click *Update game data*.
-2. **Load your character.** Click *Load save file* (or drag the file onto the page) and pick your
-   `BO_Char_*.sav` from `%LOCALAPPDATA%\BrokenOath\Saved\SaveGames\<number>\`. Files ending in
-   `_bak` are older backups. The game autosaves while you play, so the newest file is current.
+2. **Load your characters.** Click *Copy save path*, then *Load saves folder*. In the picker, click the
+   address bar, paste (Ctrl+V), press Enter and choose *Select Folder*. Every character in
+   `%LOCALAPPDATA%\BrokenOath\Saved\SaveGames` is loaded (backups skipped) and stays in your browser
+   after a refresh. After you play, click *Reload saves* and pick the same folder. You can also drag
+   the folder or a single `BO_Char_*.sav` onto the page.
 3. **Or paste a build code** from the passive tree's copy button (starts with `BO1.`). Codes carry
    the tree, skills, supports, Dragonling and gear bases but not rolled item stats, so numbers for
    rare-heavy gear read low. A save is exact.

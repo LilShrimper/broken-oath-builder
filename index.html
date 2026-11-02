@@ -233,9 +233,13 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
   </div>
   <div class="top-controls">
     <label class="field inline"><span>Character</span><select id="charSelect"></select></label>
-    <label class="btn" title="Load a BO_Char_*.sav file from %LOCALAPPDATA%\BrokenOath\Saved\SaveGames">
-      <input type="file" id="saveInput" accept=".sav" hidden>Load save file
+    <label class="btn" id="saveDirBtn" title="Pick your SaveGames folder (%LOCALAPPDATA%\BrokenOath\Saved\SaveGames): every character in it is loaded, newest first. Read in this tab only, never uploaded.">
+      <input type="file" id="saveDirInput" webkitdirectory directory multiple hidden><span id="saveDirLabel">Load saves folder</span>
     </label>
+    <label class="btn ghost" title="Load one BO_Char_*.sav file from %LOCALAPPDATA%\BrokenOath\Saved\SaveGames\&lt;number&gt;">
+      <input type="file" id="saveInput" accept=".sav" hidden>One save file
+    </label>
+    <button class="btn ghost" id="copySavePath" type="button" title="Copies %LOCALAPPDATA%\BrokenOath\Saved\SaveGames. Paste it into the file picker's address bar and press Enter.">Copy save path</button>
     <label class="btn ghost" title="Load BrokenOath.log from %LOCALAPPDATA%\BrokenOath\Saved\Logs to check the sim against your real fights. It is read in this tab only, never uploaded.">
       <input type="file" id="logInput" accept=".log,.txt" hidden>Load game log
     </label>
@@ -250,6 +254,12 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
   <span id="dataOldText"></span>
   <button class="btn small" type="button" id="dataOldUpdate">Update game data</button>
   <button class="btn small ghost" type="button" id="dataOldOk">Still current</button>
+</div>
+
+<div class="data-old" id="saveTip" role="status" hidden>
+  <span id="saveTipText"></span>
+  <button class="btn small ghost" type="button" id="saveForget" hidden>Forget loaded characters</button>
+  <button class="btn small ghost" type="button" id="saveTipOk">OK</button>
 </div>
 
 <section class="setup card" id="setup" hidden>
@@ -351,7 +361,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
       <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false">Skill tree</button>
     </nav>
     <section class="results" id="results">
-      <div class="empty" id="emptyState">Pick a character to start. Characters found in your save folder at build time are listed above; use <b>Load save file</b> for a fresher save.</div>
+      <div class="empty" id="emptyState">Pick a character to start. Use <b>Load saves folder</b> and pick your SaveGames folder to load every character at once.</div>
     </section>
     <section class="tree-pane" id="treePane" hidden>
       <div class="tree-bar">
@@ -2294,7 +2304,7 @@ window.BOStartApp = function () {
   resGrid.innerHTML = DT.map(d => '<label class="field"><span><span class="type" style="--c:' + typeColor(d) + '">' + (d === 'Lightning' ? 'Light.' : d) + '</span></span><input type="number" data-res="' + d + '" placeholder="auto"></label>').join('');
   const allSupports = Object.values(GD.supports).sort((a, b) => a.Name.localeCompare(b.Name));
   $('#supportAdd').innerHTML += allSupports.map(s => '<option value="' + esc(s.Id) + '">' + esc(s.Name) + '</option>').join('');
-  const drop = document.createElement('div'); drop.className = 'drop-hint'; drop.textContent = 'Drop a BO_Char_*.sav file'; document.body.appendChild(drop);
+  const drop = document.createElement('div'); drop.className = 'drop-hint'; drop.textContent = 'Drop the SaveGames folder, a BO_Char_*.sav file or BrokenOath.log'; document.body.appendChild(drop);
 
   function fillChars(selectId) {
     $('#charSelect').innerHTML = CHARS.map(c => '<option value="' + esc(c.id) + '">' + esc(c.name) + ' · ' + esc(c.classId) + ' ' + c.level + (c.file ? '' : ' (loaded)') + '</option>').join('') || '<option value="">No characters found</option>';
@@ -2406,7 +2416,7 @@ window.BOStartApp = function () {
   // ---------- right panel ----------
   function render() { renderMain(); treeAfterRender(); }
   function renderMain() {
-    if (!st.ch || !st.skill) { $('#results').innerHTML = '<div class="empty">No character loaded. Use <b>Load save file</b> (or drop a BO_Char_*.sav here) or paste a build code above.<br><small>Saves are in %LOCALAPPDATA%\\BrokenOath\\Saved\\SaveGames\\&lt;number&gt;\\ — paste that into the file picker\'s address bar. Files ending in _bak are older backups.</small></div>'; return; }
+    if (!st.ch || !st.skill) { $('#results').innerHTML = '<div class="empty">No character loaded. Click <b>Copy save path</b>, then <b>Load saves folder</b>: paste the path into the picker\'s address bar, press Enter and choose <b>Select Folder</b>. Every character in it is loaded.<br><small>You can also drop the SaveGames folder or a BO_Char_*.sav file on this page, or paste a build code above. Your browser may ask to "upload" the files: that only lets this page read them; nothing leaves your computer.</small></div>'; return; }
     const r = S.calcSkill(GD, st.ch, st.skill, opts());
     renderControls(r);
     const out = $('#results');
@@ -2726,20 +2736,59 @@ window.BOStartApp = function () {
     if (id) { st.supports = st.supports.filter(s => s !== id); st.off.delete('support:' + id.toLowerCase()); render(); }
   });
 
-  // Loading a save file (picker or drag and drop).
-  function loadFile(file) {
-    const fr = new FileReader();
-    fr.onload = () => {
-      try {
-        const ch = S.extractCharacter(window.parseGvas(new Uint8Array(fr.result)));
-        ch.savedAt = new Date(file.lastModified).toISOString();
-        CHARS = CHARS.filter(c => c.id !== ch.id); CHARS.unshift(ch);
-        fillChars(ch.id); selectChar(ch.id);
-      } catch (err) { alert('Could not read ' + file.name + ':\n' + err.message); }
-    };
-    fr.readAsArrayBuffer(file);
+  // Loading saves: one file, or the whole SaveGames folder (picker or drag and drop). A web page cannot
+  // open a folder by itself, and Chrome/Edge will not let it remember one inside AppData, so "Reload
+  // saves" opens the picker again (Windows starts it in the last folder used).
+  const SAVE_PATH = '%LOCALAPPDATA%\\BrokenOath\\Saved\\SaveGames';
+  const isCharSave = name => /^BO_Char_.*\.sav$/i.test(name) && !/_bak\.sav$/i.test(name);
+  const saveTip = (msg, forget) => { $('#saveTipText').textContent = msg || ''; $('#saveForget').hidden = !forget; $('#saveTip').hidden = !msg; };
+  $('#saveTipOk').addEventListener('click', () => saveTip(''));
+  async function readSave(file) {
+    const ch = S.extractCharacter(window.parseGvas(new Uint8Array(await file.arrayBuffer())));
+    ch.savedAt = new Date(file.lastModified).toISOString();
+    return ch;
+  }
+  // Characters loaded here (not the ones built into the page) stay in this browser, so a refresh keeps them.
+  function keepChars() {
+    try { localStorage.setItem('bods:chars', JSON.stringify(CHARS.filter(c => !c.file).slice(0, 30))); return true; } catch (e) { return false; }
+  }
+  function addChars(list, from, selectId) {
+    if (from === 'folder') CHARS = CHARS.filter(c => c.from !== 'folder'); // a fresh folder read replaces the last one
+    for (const ch of list) { ch.from = from; CHARS = CHARS.filter(c => c.id !== ch.id); }
+    CHARS = [...list, ...CHARS];
+    fillChars(selectId); selectChar(selectId);
+    $('#saveDirLabel').textContent = CHARS.some(c => c.from === 'folder') ? 'Reload saves' : 'Load saves folder';
+    return keepChars();
+  }
+  const KEEP_FAIL = ' (This browser would not keep a copy, so you will load them again next visit.)';
+  async function loadFile(file) {
+    try { const ch = await readSave(file); if (!addChars([ch], 'file', ch.id)) saveTip('Loaded ' + ch.name + '.' + KEEP_FAIL); }
+    catch (err) { alert('Could not read ' + file.name + ':\n' + err.message); }
+  }
+  async function loadFolder(files) {
+    const saves = Array.from(files).filter(f => isCharSave(f.name));
+    if (!saves.length) { saveTip('No character saves (BO_Char_*.sav) in that folder. Pick the SaveGames folder: ' + SAVE_PATH + '. Copy save path copies it for the picker\'s address bar.'); return; }
+    const got = [], bad = [];
+    for (const f of saves) { try { got.push(await readSave(f)); } catch (e) { bad.push(f.name); } }
+    if (!got.length) { saveTip('Could not read any of the ' + saves.length + ' character saves in that folder.'); return; }
+    got.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+    const sel = st.ch && got.some(c => c.id === st.ch.id) ? st.ch.id : got[0].id; // stay on the one you are looking at
+    const kept = addChars(got, 'folder', sel);
+    saveTip('Loaded ' + got.length + ' character' + (got.length > 1 ? 's' : '') + ' (' + got.map(c => c.name).join(', ') + ').' + (bad.length ? ' Skipped ' + bad.length + ' save' + (bad.length > 1 ? 's' : '') + ' it could not read.' : '') +
+      (kept ? ' They stay in this browser after a refresh. After you play, use Reload saves and pick the same folder.' : KEEP_FAIL), kept);
   }
   $('#saveInput').addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; });
+  $('#saveDirInput').addEventListener('change', e => { if (e.target.files.length) loadFolder(e.target.files); e.target.value = ''; });
+  $('#copySavePath').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(SAVE_PATH); } catch (e) { window.prompt('Copy this path:', SAVE_PATH); return; }
+    saveTip('Copied ' + SAVE_PATH + '. Click Load saves folder, click the address bar at the top of the picker, paste (Ctrl+V), press Enter, then choose Select Folder. If your browser asks to "upload", that only lets this page read the files.');
+  });
+  $('#saveForget').addEventListener('click', () => {
+    try { localStorage.removeItem('bods:chars'); } catch (e) { /* storage off */ }
+    CHARS = CHARS.filter(c => c.file); saveTip('');
+    $('#saveDirLabel').textContent = 'Load saves folder';
+    fillChars((CHARS[0] || {}).id); if (CHARS.length) selectChar(CHARS[0].id); else { st.ch = null; render(); }
+  });
   // The game log: read here, kept in memory for this tab only.
   async function loadLog(file) {
     try {
@@ -2770,12 +2819,32 @@ window.BOStartApp = function () {
     try {
       const ch = S.characterFromCode(GD, await decodeBuildCode($('#codeInput').value));
       CHARS = CHARS.filter(c => c.id !== ch.id); CHARS.unshift(ch);
-      fillChars(ch.id); selectChar(ch.id); $('#codeInput').value = '';
+      addChars([ch], 'code', ch.id); $('#codeInput').value = '';
     } catch (err) { alert('Could not load that build code:\n' + err.message); }
   });
   window.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragging'); });
   window.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dragging'); });
-  window.addEventListener('drop', e => { e.preventDefault(); document.body.classList.remove('dragging'); const f = e.dataTransfer.files[0]; if (f) (/\.(log|txt)$/i.test(f.name) ? loadLog(f) : loadFile(f)); });
+  // A dropped folder: walk it (a few levels deep) for character saves. Entries must be taken before any await.
+  async function walkDropped(entries) {
+    const out = [];
+    const walk = async (e, depth) => {
+      if (e.isFile) { if (isCharSave(e.name)) out.push(await new Promise((res, rej) => e.file(res, rej))); return; }
+      if (depth > 3) return;
+      const r = e.createReader();
+      for (;;) { const batch = await new Promise((res, rej) => r.readEntries(res, rej)); if (!batch.length) break; for (const c of batch) await walk(c, depth + 1); }
+    };
+    for (const e of entries) await walk(e, 0);
+    return out;
+  }
+  window.addEventListener('drop', e => {
+    e.preventDefault(); document.body.classList.remove('dragging');
+    const entries = Array.from(e.dataTransfer.items || []).map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+    const files = Array.from(e.dataTransfer.files);
+    if (entries.some(x => x.isDirectory)) { walkDropped(entries).then(loadFolder, err => saveTip('Could not read that folder: ' + err.message)); return; }
+    const saves = files.filter(f => /\.sav$/i.test(f.name));
+    if (saves.length > 1) loadFolder(saves);
+    else if (files[0]) (/\.(log|txt)$/i.test(files[0].name) ? loadLog(files[0]) : loadFile(files[0]));
+  });
 
   // ---------- Skill tree tab ----------
   // Shows the character's passive tree, lets you take/refund nodes (edits apply to st.ch until reset)
@@ -3190,7 +3259,16 @@ window.BOStartApp = function () {
     } catch (err) { alert('Could not make a build code: ' + err.message); }
   };
 
-  // Start.
+  // Start: characters loaded on an earlier visit come back (a newer copy built into the page wins).
+  try {
+    for (const ch of JSON.parse(localStorage.getItem('bods:chars') || '[]')) {
+      const old = CHARS.find(c => c.id === ch.id);
+      if (old && (old.savedAt || '') >= (ch.savedAt || '')) continue;
+      CHARS = CHARS.filter(c => c.id !== ch.id); CHARS.push(ch);
+    }
+    CHARS.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
+  } catch (e) { /* storage off or damaged */ }
+  if (CHARS.some(c => c.from === 'folder')) $('#saveDirLabel').textContent = 'Reload saves';
   const startId = store.get('char', null);
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();

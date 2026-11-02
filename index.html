@@ -2076,6 +2076,13 @@ window.CHARS = [];
       res.notModelled.push(m);
     }
     if (offBase && offBase.DamageMin && isAttack) res.notes.push('Off-hand weapon found: dual wielding alternates weapons in game; this sheet uses the main hand only.');
+    // A Cast on Crit spell's skill panel (in-game tooltip) counts it as cast by hand: its own cast time and no
+    // "25% less" (Ember Bolt tooltip 1 Nov: 67-108, 293 DPS = the sim without the trigger, exactly). The real
+    // rate and damage (triggered casts, 25% less) stay in the "vs enemy" numbers.
+    if (res.coc && !o._panelPass) {
+      const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { coc: false, _col: col, _panelPass: true }));
+      if (p && isFinite(p.panelDps)) { res.cocPanel = { triggered: res.panelDps }; res.panelDps = p.panelDps; }
+    }
     return res;
   }
 
@@ -2420,7 +2427,7 @@ window.BOStartApp = function () {
       stat('Total DPS vs this enemy', num(r.totalDps), delta(r.totalDps, pin && pin.total), 'main', 'Hits + poison + ignite + bleeding, after resistances and curses') +
       stat('Hit DPS', num(r.hitDps), delta(r.hitDps, pin && pin.hit), '', 'After enemy resist, armour and curses') +
       stat('Poison DPS', num(r.poisonDps), delta(r.poisonDps, pin && pin.poison), '', r.ailments.poison ? num(r.ailments.poison.stacks, 1) + ' stacks of ' + r.ailments.poison.cap + ' max' : 'No poison on this skill') +
-      stat('Skill panel DPS', num(r.panelDps), delta(r.panelDps, pin && pin.sheet), '', 'Hits + poison before the enemy: the number the game\'s skill panel shows') +
+      stat('Skill panel DPS', num(r.panelDps), delta(r.panelDps, pin && pin.sheet), '', r.cocPanel ? 'As the game\'s tooltip shows a Cast on Crit spell: cast by hand at its cast time, without the 25% less. In fights it is cast by your crits (' + num(r.coc.rate, 2) + '/s, 25% less), as in the totals above.' : 'Hits + poison before the enemy: the number the game\'s skill panel shows') +
       '</div>';
     st.last = r;
     html += optCard(r);

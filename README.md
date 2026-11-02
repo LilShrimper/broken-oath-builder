@@ -21,7 +21,9 @@ GoatCounter (no cookies, no personal data, never your files).
 3. **Or paste a build code** from the passive tree's copy button (starts with `BO1.`). Codes carry
    the tree, skills, supports, Dragonling and gear bases but not rolled item stats, so numbers for
    rare-heavy gear read low. A save is exact.
-4. Pick a skill, then use **Find best supports**, **Pin as baseline** and **What helps most**. The skill list also has
+4. Pick a skill. The Supports card shows every support that fits it: click one to socket it or take it out,
+   and pin the ones you want to keep while **Find best supports** fills the other sockets. Then use
+   **Pin as baseline** and **What helps most**. The skill list also has
    skills you don't own yet (at the gem level your character could use). A spell with Cast on Crit shows a picker
    for the attack whose crits cast it; the sheet then counts one cast per attack volley that crits (crit is rolled
    once per volley; at most one per 0.15 s, 25% less damage). This rate matched a Ranger's game log.

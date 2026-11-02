@@ -278,6 +278,23 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 .sup-info { min-height: 2.8em; margin: 4px 0 0; }
 .sup-info.bad { color: var(--bad); }
 #curseList .off-bar { color: var(--accent); }
+/* Dragonling tree (Build tab) */
+.dl-tree { width: 100%; max-width: 620px; height: auto; display: block; margin: 8px auto; }
+.dl-links line { stroke: var(--line); stroke-width: 3; }
+.dl-links line.on { stroke: var(--accent); }
+.dl-n circle { fill: var(--panel-2); stroke: var(--faint); stroke-width: 2.5; }
+.dl-n[data-act] { cursor: pointer; }
+.dl-n.dl-open circle { stroke: var(--accent); }
+.dl-n.dl-open:hover circle { fill: var(--panel); stroke-width: 4; }
+.dl-n.dl-taken circle { fill: var(--accent); stroke: var(--accent); }
+.dl-n.dl-taken:hover circle { stroke: var(--text); }
+.dl-n.dl-blocked circle { opacity: .35; }
+.dl-n.dl-locked circle { opacity: .7; }
+.dl-n.dl-core circle { fill: var(--panel); stroke: var(--accent); stroke-width: 3; }
+.dl-n.dl-keystone circle, .dl-n.dl-capstone circle { stroke-dasharray: none; stroke-width: 4; }
+.dl-n text { fill: var(--text); font-size: 13px; text-anchor: middle; pointer-events: none; }
+.dl-list { margin: 4px 0 0; padding-left: 18px; columns: 2 260px; font-size: 13px; }
+.dl-list li { margin: 0 0 4px; break-inside: avoid; }
 
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
@@ -563,11 +580,16 @@ window.CHARS = [];
 
     const dragonFile = J('Gameplay/dragonling.json');
     const asc = dragonFile.Tree.Ascendancy || {};
-    const dragon = { aspects: {}, classes: {}, ascend: { enabled: !!asc.bEnabled, classes: (asc.Classes || []).map(c => c.toLowerCase()) }, rules: dragonFile.Tree.Rules71 || {} };
+    const DT_ = dragonFile.Tree;
+    const dragon = { aspects: {}, classes: {}, ascend: { enabled: !!asc.bEnabled, classes: (asc.Classes || []).map(c => c.toLowerCase()) }, rules: DT_.Rules71 || {},
+      // The tree's own rules (Build tab): points from milestone levels, +1 once hatched, + Gate kills / Pinnacle;
+      // one Keystone or Capstone at a time.
+      tree: { milestones: DT_.MilestoneLevels || [], perGate: DT_.PointsPerGateKill || 1, pinnacle: DT_.PinnaclePoint || 0, hatch: asc.HatchBonusPoints || 0,
+        maxCrowns: DT_.MaxKeystones || 1, crownKinds: DT_.CrownKinds || ['Keystone'] } };
     for (const a of dragonFile.Aspects) dragon.aspects[a.Id] = { Name: a.Name, Mods: a.Mods || [], Text: a.Text };
-    for (const [cls, list] of Object.entries(dragonFile.Tree.Classes)) {
+    for (const [cls, list] of Object.entries(DT_.Classes)) {
       dragon.classes[cls.toLowerCase()] = {};
-      for (const n of list) dragon.classes[cls.toLowerCase()][n.Id] = pick(n, ['Id', 'Name', 'Kind', 'Path', 'Mods', 'AspectMods', 'Text', 'Ascend']);
+      for (const n of list) dragon.classes[cls.toLowerCase()][n.Id] = pick(n, ['Id', 'Name', 'Kind', 'Path', 'Mods', 'AspectMods', 'AspectText', 'Text', 'Ascend', 'AscendOnly', 'X', 'Y', 'Links']);
     }
 
     const curses = {};
@@ -1183,6 +1205,8 @@ window.BOPlanner = function (ctx) {
   function planFrom(ch) {
     const p = JSON.parse(JSON.stringify(ch));
     for (const k of ['file', 'fromCode', 'codeWarnings', 'from']) delete p[k];
+    // Saves don't record Gate kills: give the plan enough of them to hold the Dragonling nodes it already has.
+    if (p.dragonExtra == null) { const R = GD.dragon.tree || {}; p.dragonExtra = Math.max(0, (p.dragonNodes || []).length - (R.milestones || []).filter(l => p.level >= l).length - (R.hatch || 0)); }
     return Object.assign(p, { id: newId(), name: ch.name.replace(/ \((code|edited)\)$/, '') + (ch.plan ? ' (copy)' : ''), plan: true, savedAt: new Date().toISOString() });
   }
   // Rows of the Skills card: each socketed skill, then skills that are only on the bar.
@@ -1248,7 +1272,6 @@ window.BOPlanner = function (ctx) {
         '<label class="field inline" title="Changing class clears the passive tree: each class starts in its own spot"><span>Class</span><select data-f="cls">' + classOpts + '</select></label>' +
         '<label class="field inline"><span>Level</span><input type="number" min="1" max="100" data-f="level" value="' + ch.level + '"></label>' +
         '<label class="field inline" title="Passive points from quests and the like, on top of one a level"><span>Bonus points</span><input type="number" min="0" max="60" data-f="bonus" value="' + (ch.bonusPoints || 0) + '"></label>' +
-        (aspects.length ? '<label class="field inline"><span>Dragonling aspect</span><select data-f="aspect">' + opt('', 'None', !ch.dragonAspect) + aspects.map(a => opt(a, GD.dragon.aspects[a].Name || a, a === ch.dragonAspect)).join('') + '</select></label>' : '') +
         '</div><div class="pl-row">' +
         '<button class="btn small" type="button" data-act="code">Copy plan code</button>' +
         '<button class="btn small ghost" type="button" data-act="dup">Duplicate</button>' +
@@ -1257,8 +1280,82 @@ window.BOPlanner = function (ctx) {
     }
     if (status) h += '<p class="hint pl-status">' + esc(status) + '</p>';
     h += '</div>';
-    if (ch) h += skillsCard(ch, edit, dis) + gearCard(ch, edit, dis);
+    if (ch) h += dragonCard(ch, edit, dis) + skillsCard(ch, edit, dis) + gearCard(ch, edit, dis);
     el.innerHTML = h;
+  }
+
+  // ---------- Dragonling tree ----------
+  // dragonling.json Tree: the class's nodes with their links; the core (the Aspect) is free and always held.
+  // Points: one per milestone level reached, +1 once hatched, + Gate kills and the Pinnacle (ch.dragonExtra).
+  // One path only (Ascendancy: the first path node picks it); one Keystone or Capstone at a time.
+  const dTree = ch => (GD.dragon.classes || {})[lc(ch.classId)] || {};
+  const dRules = () => GD.dragon.tree || { milestones: [40, 45, 50, 55, 60, 70, 80, 90], hatch: 1, maxCrowns: 1, crownKinds: ['Keystone', 'Capstone'] };
+  const dCore = T => Object.values(T).find(n => n.Kind === 'Core');
+  const isCrown = n => (dRules().crownKinds || []).includes(n.Kind);
+  const ascOn = ch => !!(GD.dragon.ascend && GD.dragon.ascend.enabled && (GD.dragon.ascend.classes || []).includes(lc(ch.classId)));
+  function dPoints(ch) { const R = dRules(); return (R.milestones || []).filter(l => ch.level >= l).length + (R.hatch || 0) + (ch.dragonExtra || 0); }
+  function dAdj(T) {
+    const adj = {}; for (const id in T) adj[id] = adj[id] || new Set();
+    for (const n of Object.values(T)) for (const l of n.Links || []) if (T[l]) { adj[n.Id].add(l); (adj[l] = adj[l] || new Set()).add(n.Id); }
+    return adj;
+  }
+  const dTaken = ch => new Set((ch.dragonNodes || []).filter(id => dTree(ch)[id]));
+  function dPathOf(ch) { const T = dTree(ch); for (const id of dTaken(ch)) if (T[id].Path) return T[id].Path; return ''; }
+  // Every taken node still reaches the core once `drop` is refunded.
+  function dConnected(T, set, drop) {
+    const core = dCore(T); if (!core) return true;
+    const adj = dAdj(T), seen = new Set([core.Id]), q = [core.Id];
+    for (let i = 0; i < q.length; i++) for (const v of adj[q[i]] || []) if (set.has(v) && v !== drop && !seen.has(v)) { seen.add(v); q.push(v); }
+    return [...set].every(id => id === drop || seen.has(id));
+  }
+  function dState(ch, id) {
+    const T = dTree(ch), n = T[id], taken = dTaken(ch);
+    if (n.Kind === 'Core') return { s: 'core' };
+    if (taken.has(id)) return dConnected(T, taken, id) ? { s: 'taken' } : { s: 'taken', why: 'other picks hang from it: refund those first' };
+    const path = dPathOf(ch);
+    if (ascOn(ch) && n.Path && path && n.Path !== path) return { s: 'blocked', why: 'your Dragonling follows the ' + path + ' path (the first path node picks it)' };
+    if (isCrown(n) && [...taken].some(t => isCrown(T[t]))) return { s: 'blocked', why: 'one Keystone or Capstone at a time' };
+    const adj = dAdj(T), core = dCore(T);
+    if (![...adj[id] || []].some(v => taken.has(v) || (core && v === core.Id))) return { s: 'locked', why: 'not next to a node you hold' };
+    return { s: 'open' };
+  }
+  function dLabel(ch, n) {
+    const a = ascOn(ch) && n.Ascend;
+    let text = a ? a.Text : n.Text;
+    if (!a && n.Kind === 'Capstone' && n.AspectText && ch.dragonAspect) text = (typeof n.AspectText === 'object' ? n.AspectText[ch.dragonAspect] : n.AspectText) || text;
+    return { name: a ? a.Name + ' (ascended ' + n.Name + ')' : n.Name, text: text || '' };
+  }
+  function dragonCard(ch, edit, dis) {
+    const T = dTree(ch), nodes = Object.values(T);
+    if (!nodes.length) return '';
+    const taken = dTaken(ch), pts = dPoints(ch), used = taken.size, path = dPathOf(ch);
+    const aspects = Object.keys(GD.dragon.aspects || {});
+    const R = { Core: 26, Small: 9, Shared: 9, Notable: 14, Keystone: 17, Capstone: 18 };
+    const adj = dAdj(T);
+    let lines = '';
+    for (const n of nodes) for (const l of adj[n.Id]) if (n.Id < l) {
+      const m = T[l], on = (taken.has(n.Id) || n.Kind === 'Core') && (taken.has(l) || m.Kind === 'Core');
+      lines += '<line x1="' + n.X + '" y1="' + n.Y + '" x2="' + m.X + '" y2="' + m.Y + '" class="' + (on ? 'on' : '') + '"/>';
+    }
+    let dots = '';
+    for (const n of nodes) {
+      const st = dState(ch, n.Id), lab = dLabel(ch, n);
+      const tip = lab.name + ' (' + n.Kind + (n.Path ? ', ' + n.Path : '') + ')\n' + lab.text + (st.why ? '\n— ' + st.why : '') + (edit && (st.s === 'open' || (st.s === 'taken' && !st.why)) ? '\n(click to ' + (st.s === 'taken' ? 'refund' : 'take') + ')' : '');
+      dots += '<g class="dl-n dl-' + st.s + ' dl-' + lc(n.Kind) + '"' + (edit && n.Kind !== 'Core' ? ' data-act="dnode" data-id="' + esc(n.Id) + '"' : '') + '><circle cx="' + n.X + '" cy="' + n.Y + '" r="' + (R[n.Kind] || 9) + '"/>' +
+        (n.Kind === 'Core' ? '<text x="' + n.X + '" y="' + (n.Y + 4) + '">' + esc((ch.dragonAspect || 'Aspect').slice(0, 9)) + '</text>' : '') + '<title>' + esc(tip) + '</title></g>';
+    }
+    const list = [...taken].map(id => T[id]).sort((a, b) => (a.Path || 'zz').localeCompare(b.Path || 'zz') || a.Y - b.Y)
+      .map(n => { const lab = dLabel(ch, n); return '<li><b>' + esc(lab.name) + '</b> <span class="hint">' + esc(lab.text) + '</span></li>'; }).join('');
+    const over = used > pts;
+    let h = '<div class="card"><h2>Dragonling <small>' + used + ' / ' + pts + ' points' + (path ? ' · ' + esc(path) + ' path' : '') + '</small></h2>';
+    h += '<div class="pl-row">' + (aspects.length ? '<label class="field inline"><span>Aspect</span><select data-f="aspect"' + dis + '>' + opt('', 'None', !ch.dragonAspect) + aspects.map(a => opt(a, GD.dragon.aspects[a].Name || a, a === ch.dragonAspect)).join('') + '</select></label>' : '') +
+      '<label class="field inline" title="One point for each end-game Gate killed and one for the Pinnacle"><span>Gate kills + Pinnacle</span><input type="number" min="0" max="40" data-f="dextra" value="' + (ch.dragonExtra || 0) + '"' + dis + '></label>' +
+      (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') + '</div>';
+    h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.' :
+      'Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, + Gate kills and the Pinnacle. ' + (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + 'One path (the first path node picks your Ascendancy) and one Keystone or Capstone. Hover a node for its lines.') + '</p>';
+    h += '<svg class="dl-tree" viewBox="-560 -640 1120 1100" role="img" aria-label="Dragonling tree">' + '<g class="dl-links">' + lines + '</g>' + dots + '</svg>';
+    if (list) h += '<ul class="dl-list">' + list + '</ul>';
+    return h + '</div>';
   }
 
   function skillsCard(ch, edit, dis) {
@@ -1385,6 +1482,7 @@ window.BOPlanner = function (ctx) {
       case 'level': ch.level = Math.max(1, Math.min(100, +v || 1)); return done({ tree: true });
       case 'bonus': ch.bonusPoints = Math.max(0, +v || 0); return done({ tree: true });
       case 'aspect': ch.dragonAspect = v; return done();
+      case 'dextra': ch.dragonExtra = Math.max(0, Math.min(40, +v || 0)); return done();
       case 'addskill': {
         if (!v || rows(ch).some(r => r.skill === v)) return render();
         ensureSocket(ch, v); if (!ch.gemLevels[v]) ch.gemLevels[v] = Math.max(1, ...Object.values(ch.gemLevels).filter(x => x > 0), 1);
@@ -1453,6 +1551,14 @@ window.BOPlanner = function (ctx) {
       ctx.add(p); return render();
     }
     if (!ch || !ch.plan) return;
+    if (act === 'dnode') {
+      const id = b.dataset.id, st = dState(ch, id);
+      if (st.s === 'open') { ch.dragonNodes = [...(ch.dragonNodes || []), id]; status = ''; }
+      else if (st.s === 'taken' && !st.why) ch.dragonNodes = ch.dragonNodes.filter(x => x !== id);
+      else { status = dLabel(ch, dTree(ch)[id]).name + ': ' + (st.why || 'not reachable yet') + '.'; return render(); }
+      return done();
+    }
+    if (act === 'dreset') { ch.dragonNodes = []; status = 'Dragonling points refunded.'; return done(); }
     const row = b.closest('[data-skill]'), skill = row && row.dataset.skill;
     if (act === 'code') {
       const code = await toCode(ch);
@@ -2687,9 +2793,11 @@ window.BOPlanner = function (ctx) {
   //          x 60% more near you x (1 + increased Minion Damage, +1% per 10 Int) x the supports' more x Harmony
   //   pace = AttackEvery x 0.72 / minion speed;   DPS = average hit x crit x minions / pace.
   // The 0.72 is measured (every PetSheet line: Skeletons 0.8 s -> 0.576 s, Golem 1.05 -> 0.756), not in the data.
-  // The Grave Golem's LevelDamage share: the log's 'level' factor sat at 1.07-1.10 (area levels 7-9, hero 7-11)
-  // and the 2 Nov panel needs x1.094, so 1 + LevelDamage x 0.6 is used until deeper fights show how it grows.
-  const MINION_PACE = 0.72, MINION_NEAR = 60, MINION_LEVEL_SHARE = 0.6;
+  // The Grave Golem grows with the level of the zone it fights in (not the hero's: hero 24 showed x1.10 in an area
+  // level 10 zone, x1.23 at Rupture 26). Fitted to 24 log readings (PetHit68 'level', area levels 6-26) and the
+  // panel's 'x1.23 damage now' at Rupture 26: 1 + LevelDamage x 0.0887 x level^0.87 (LevelDamage 0.15).
+  // Beyond level 26 it is the same curve carried on (not yet checked deeper).
+  const MINION_PACE = 0.72, MINION_NEAR = 60, MINION_LEVEL_K = 0.0887, MINION_LEVEL_P = 0.87;
   function minionSheet(GD, ch, sk, res, mods, use, attr, L, o) {
     const H = GD.scaling.Hero, G = GD.scaling.Gem, mi = sk.Minion;
     const tags = new Set([...(sk.Tags || []), sk.Delivery].map(lc));
@@ -2701,15 +2809,18 @@ window.BOPlanner = function (ctx) {
     const d0 = DT.includes(sk.DamageType) ? sk.DamageType : 'Physical';
     const parts = {}; DT.forEach(d => parts[d] = [0, 0]);
     parts[d0] = [sk.SpellMin * growth, sk.SpellMax * growth];
-    // More lines: the summon's own supports only (your own damage lines do not reach minions). Ruthless is
-    // averaged over its three blows.
+    // More lines: the summon's own supports only (your own damage lines do not reach minions). Ruthless (made into
+    // an averaged Physical more line in calcSkill) is kept out of the hit: the game's panel shows the hit without it
+    // and counts it in the DPS only (Grave Golem 2 Nov: 248-454 with or without it, DPS 2,015 -> 2,325).
+    const isRuthless = m => / \(every 3rd blow, averaged\)$/.test(m.src || '');
+    let ruthPct = 0;
+    for (const m of mods) if (fromSupport(m) && isRuthless(m)) { ruthPct += m.v; use(m, 'minion, in the DPS'); }
     const moreFor = d => {
       let k = 1;
       for (const m of mods) {
-        if (!fromSupport(m) || m.mode !== 'More' && m.stat !== 'RuthlessBlow') continue;
+        if (!fromSupport(m) || m.mode !== 'More' || isRuthless(m)) continue;
         const t = fit(m); if (!t || (t.length && !t.includes(d))) continue;
         if (m.stat === 'Damage') { k *= 1 + m.v / 100; use(m, 'minion'); }
-        else if (m.stat === 'RuthlessBlow' && d === 'Physical') { k *= 1 + m.v / 300; use(m, 'every 3rd blow, averaged'); }
       }
       return k;
     };
@@ -2726,11 +2837,19 @@ window.BOPlanner = function (ctx) {
     };
     let minionMore = 1;
     for (const m of pickMods(mods, 'MinionDamage', 'More')) if (fit(m)) { minionMore *= 1 + m.v / 100; use(m, 'minion'); }
+    // Harmony: "X% more Damage for each different kind of Minion you command (up to 4 kinds)". Kinds = the summon gems
+    // on your bar (each raised); the 2 Nov Skeletons panel with all four out fits 1 + 5% x 4.
+    const kinds = Math.max(1, Math.min(4, o.minionKinds || new Set(ch.hotbar.filter(id => { const k = GD.skills[lc(id)]; return k && k.Minion && k.Minion.MonsterId; })).size));
     let kind = 1;
-    for (const m of pickMods(mods, 'MinionKindMore', 'Flat')) { kind *= 1 + m.v / 100; use(m, 'minion'); }
+    for (const m of pickMods(mods, 'MinionKindMore', 'Flat')) { kind *= 1 + m.v / 100 * kinds; use(m, 'minion, ' + kinds + ' kinds'); }
+    // A Grave Golem on your bar blesses every minion near it by its supports' element, itself included: flame (fire
+    // supports) 12.5% more damage, storm (lightning) 15% faster. The game's panel counts it (2 Nov Skeletons and Golem).
+    const golem = golemBlessing(GD, ch, sk, o);
+    if (golem && golem.stat === 'MinionDamage') minionMore *= 1 + golem.v / 100;
     const aff = mi.Affinity && mi.AffinityDamage ? 1 + Math.min(mi.AffinityCap || 50, (attr[mi.Affinity] || 0) * mi.AffinityDamage) / 100 : 1;
     const near = o.minionNear === false ? 1 : 1 + MINION_NEAR / 100;
-    const lvlK = mi.LevelDamage ? 1 + mi.LevelDamage * MINION_LEVEL_SHARE : 1;
+    const zoneLevel = o.enemyLevel || ch.level;
+    const lvlK = mi.LevelDamage ? 1 + mi.LevelDamage * MINION_LEVEL_K * Math.pow(Math.max(1, zoneLevel), MINION_LEVEL_P) : 1;
     const base = (mi.DamageMult || 1) * aff * near * minionMore * kind * lvlK;
     const hit = {}; let avg = 0;
     for (const d of DT) {
@@ -2747,9 +2866,12 @@ window.BOPlanner = function (ctx) {
     let spInc = 0, spMore = 1;
     for (const m of pickMods(mods, 'MinionSpeed', 'Inc')) if (fit(m)) { spInc += m.v; use(m, 'minion'); }
     for (const m of mods) if ((m.stat === 'MinionSpeed' || (m.stat === 'AttackSpeed' && fromSupport(m))) && m.mode === 'More' && fit(m)) { spMore *= 1 + m.v / 100; use(m, 'minion'); }
+    if (golem && golem.stat === 'MinionSpeed') spMore *= 1 + golem.v / 100;
     const pace = (mi.AttackEvery || 1) * MINION_PACE / Math.max(0.05, (1 + spInc / 100) * spMore);
     const hitsPerSec = alive * strikes / pace;
-    const dps = avg * critFactor * hitsPerSec;
+    const physShare = avg > 0 && hit.Physical ? hit.Physical.avg / avg : 0;
+    const ruthK = 1 + ruthPct / 100 * physShare;
+    const dps = avg * critFactor * hitsPerSec * ruthK;
     res.attr = attr;
     res.base = { kind: 'minion', min: sk.SpellMin, max: sk.SpellMax, growth };
     res.hit = hit; res.hitAvg = avg; res.hitAvgCrit = avg * critFactor;
@@ -2758,12 +2880,38 @@ window.BOPlanner = function (ctx) {
     res.hits = { repeats: 0, projectiles: 0, projOnTarget: 1, projWeight: 1, perHitFactor: 1, strikes, hitsPerUse: 1, hitsPerSec, fullHitsPerSec: hitsPerSec };
     res.ailments = {}; res.notModelled = []; res.poisonDps = 0; res.igniteDps = 0; res.bleedDps = 0;
     res.sheetHitDps = res.panelDps = res.hitDps = res.totalDps = dps;
-    res.minion = { monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore * moreFor(d0), kind, level: lvlK, growth };
+    res.minion = { monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.stat === 'MinionDamage' ? 1 + golem.v / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth };
     res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
     if (near > 1) res.notes.push('Counted at your side: minions deal ' + MINION_NEAR + '% more within 7 m of you (fading to none at 12 m), as the game\'s panel counts it.');
-    if (mi.LevelDamage) res.notes.push(sk.Name + ' also grows with the level it fights at: counted as x' + lvlK.toFixed(3) + ', what the game\'s log and panel showed at character levels 7-11. It may grow in deeper Ruptures.');
-    if (mi.GolemAuras) res.notes.push('The golem\'s blessing (by its supports\' element) is not counted here; the game\'s panel leaves it out too.');
+    if (mi.LevelDamage) res.notes.push(sk.Name + ' also grows with the level of the zone it fights in (the Monster level box): x' + lvlK.toFixed(3) + ' at level ' + zoneLevel + '. Fitted to the game\'s log and panel at zone levels 6-26 (x1.23 at Rupture 26); deeper Ruptures carry the same curve on, not yet checked.');
+    if (kind !== 1) res.notes.push('Harmony: ' + kinds + ' kind' + (kinds > 1 ? 's' : '') + ' of minion on your bar, ' + Math.round((kind - 1) * 100) + '% more damage.');
+    if (golem) res.notes.push('Your ' + golem.name + ' blesses minions near it, itself included: ' + golem.text + ' (counted, as the game\'s panel does).');
+    if (ruthK > 1) res.notes.push('Ruthless: every third blow deals ' + Math.round(ruthPct * 3) + '% more physical damage, averaged into the DPS (x' + ruthK.toFixed(3) + '); the hit above leaves it out, as the game\'s panel does.');
     return res;
+  }
+
+  // The Grave Golem's blessing: its element comes from the supports in its sockets (the first non-physical element
+  // they add or convert to). Fire: 12.5% more minion damage; Lightning: 15% faster minions; the others do not
+  // change minion damage. Needs the golem gem on the bar.
+  function golemBlessing(GD, ch, sk, o) {
+    if (o.golemAura === false) return null;
+    const gid = ch.hotbar.find(id => { const k = GD.skills[lc(id)]; return k && k.Minion && k.Minion.GolemAuras; });
+    if (!gid) return null;
+    const g = GD.skills[lc(gid)];
+    const sups = lc(gid) === lc(sk.Id) && o.supportsOverride ? o.supportsOverride : ((ch.sockets.find(s => lc(s.skill) === lc(gid)) || {}).supports || []);
+    let el = null;
+    for (const id of sups) {
+      const sp = GD.supports[lc(id)]; if (!sp || el) continue;
+      for (const m of sp.Mods || []) {
+        const types = splitTags(m.Tags || []).types;
+        const to = m.Stat === 'DamageAsExtra' || m.Stat === 'Convert' ? types[1] : m.Stat === 'AddedDamage' ? types[0] : null;
+        if (to && to !== 'Physical') { el = to; break; }
+      }
+    }
+    const a = (g.Minion.GolemAuras || {})[el || 'Default'];
+    if (!a || !['MinionDamage', 'MinionSpeed'].includes(a.Stat)) return null;
+    const name = el === 'Fire' ? 'flame golem' : el === 'Lightning' ? 'storm golem' : 'golem';
+    return { element: el, stat: a.Stat, v: a.Value, name, text: a.Stat === 'MinionDamage' ? a.Value + '% more damage' : a.Value + '% faster' };
   }
 
   function earlyDamage(cls, level) {
@@ -3343,7 +3491,9 @@ window.BOStartApp = function () {
       (m.affinity !== 1 ? kv(m.affinityAttr + ' affinity', x(m.affinity) + ' (+1% per 10 ' + m.affinityAttr + ')') : '') +
       kv('Near you', m.near > 1 ? x(m.near) + ' (60% more within 7 m)' : 'not counted') +
       kv('Increased minion damage', '+' + num(m.inc, 1) + '% (passives, gear, +1% per 10 Int)') +
-      (m.more !== 1 ? kv('Supports (more)', x(m.more)) : '') + (m.kind !== 1 ? kv('Harmony', x(m.kind)) : '') + (m.level && m.level !== 1 ? kv('Fight level', x(m.level)) : '') +
+      (m.more !== 1 ? kv('Supports (more)', x(m.more)) : '') + (m.kind !== 1 ? kv('Harmony', x(m.kind) + ' (' + m.kinds + ' kinds on your bar)') : '') +
+      (m.golem ? kv('Golem blessing', (m.golem.stat === 'MinionDamage' ? x(1 + m.golem.v / 100) : m.golem.v + '% faster') + ' (' + esc(m.golem.name) + ')') : '') +
+      (m.level && m.level !== 1 ? kv('Zone level', x(m.level)) : '') + (m.ruthless > 1 ? kv('Ruthless (DPS only)', x(m.ruthless)) : '') +
       '</dl></div>';
     h += '<details open><summary>Notes for this skill <span class="count">(' + r.notes.length + ')</span></summary><ul class="notes">' + r.notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul></details>';
     return h;

@@ -53,7 +53,9 @@ GoatCounter (no cookies, no personal data, never your files).
 7. **Plan a build** on the **Build** tab: copy a loaded character into a plan, or start an empty one
    with a class and level. Change the class (that clears the passive tree), level, skills and gem levels, supports, skill bar, gear (base,
    rarity, affixes with tier and value, uniques with a roll slider, runes) and idols; spend points on
-   the Skill tree tab. The Damage tab shows the result as you go, and support or gem level changes
+   the Skill tree tab. The **Dragonling** card draws your class's Dragonling tree: pick the Aspect and click
+   nodes to take or refund them, with the game's rules (points from milestone levels, hatching, Gate kills
+   and the Pinnacle; one path, the first path node picks your Ascendancy; one Keystone or Capstone). The Damage tab shows the result as you go, and support or gem level changes
    made there also go into the plan. Plans stay in your browser. *Copy plan code* gives a `BOP1.`
    code with everything in it, rolled gear included; paste it into the code box to open it in any
    browser. Your saved characters are never changed.

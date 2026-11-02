@@ -1246,7 +1246,7 @@ window.BOPlanner = function (ctx) {
       const aspects = Object.keys(GD.dragon.aspects || {});
       h += '<div class="pl-row">' +
         '<label class="field inline grow"><span>Name</span><input type="text" data-f="name" value="' + esc(ch.name) + '"></label>' +
-        '<label class="field inline"><span>Class</span><input type="text" value="' + esc(ch.classId) + '" disabled></label>' +
+        '<label class="field inline" title="Changing class clears the passive tree: each class starts in its own spot"><span>Class</span><select data-f="cls">' + classOpts + '</select></label>' +
         '<label class="field inline"><span>Level</span><input type="number" min="1" max="100" data-f="level" value="' + ch.level + '"></label>' +
         '<label class="field inline" title="Passive points from quests and the like, on top of one a level"><span>Bonus points</span><input type="number" min="0" max="60" data-f="bonus" value="' + (ch.bonusPoints || 0) + '"></label>' +
         (aspects.length ? '<label class="field inline"><span>Dragonling aspect</span><select data-f="aspect">' + opt('', 'None', !ch.dragonAspect) + aspects.map(a => opt(a, GD.dragon.aspects[a].Name || a, a === ch.dragonAspect)).join('') + '</select></label>' : '') +
@@ -1372,6 +1372,17 @@ window.BOPlanner = function (ctx) {
     const v = t.value;
     switch (f) {
       case 'name': ch.name = v.trim() || ch.name; return done({ name: true });
+      case 'cls': {
+        // Each class starts the tree in its own spot (and has its own Dragonling nodes), so those start over.
+        // Skills and gear stay.
+        if (!v || v === ch.classId) return;
+        const pts = (ch.passives || []).filter(id => !/^start_/.test(id)).length;
+        if ((pts || ch.dragonNodes.length) && !window.confirm('Change ' + ch.name + ' from ' + ch.classId + ' to ' + v + '? Each class starts the passive tree in its own spot, so its ' + pts + ' passive point' + (pts === 1 ? '' : 's') + (ch.dragonNodes.length ? ' and Dragonling nodes' : '') + ' will be cleared. Skills and gear stay.')) return render();
+        if (ch.name === ch.classId + ' plan') ch.name = v + ' plan';
+        status = 'Class changed to ' + v + (pts ? ': the passive tree was cleared, spend points again on the Skill tree tab.' : '.');
+        Object.assign(ch, { classId: v, passives: [], dragonNodes: [] });
+        return done({ cls: true, tree: true });
+      }
       case 'level': ch.level = Math.max(1, Math.min(100, +v || 1)); return done({ tree: true });
       case 'bonus': ch.bonusPoints = Math.max(0, +v || 0); return done({ tree: true });
       case 'aspect': ch.dragonAspect = v; return done();
@@ -2937,6 +2948,7 @@ window.BOStartApp = function () {
   // The Build tab changed the plan: refresh lists and damage, keep the chosen skill unless told otherwise.
   function planChanged(ch, what) {
     st.ch = ch; st.chOrig = ch; st.pinned = null; stopSearch(); st.opt = null; T.scores = new Map();
+    if (what.cls) treeReset(); // a new class: the tree is drawn again from its own start
     ch.savedAt = new Date().toISOString();
     keepChars(); fillChars(ch.id);
     $('#enemyLevel').placeholder = ch.level;

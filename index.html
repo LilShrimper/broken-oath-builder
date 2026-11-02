@@ -1522,6 +1522,19 @@ window.BOPlanner = function (ctx) {
   // 100% (log 1 Nov: 190% of sources -> "second fall for 100%", "SkyfallSheet68 ... on the sheet (x2.00)")
   // and the second fall strikes each enemy once per cast (one boss hit per cast in every Guardian fight).
   const SKYFALL_REPEAT_CAP = 100;
+  // Shortest use time per class and skill (seconds), measured in the game: the clip's speed cap
+  // (scaling.json ActionRateMax 4). Split Shot: every release in the 2 Nov log ends at 0.35 s and the
+  // skill panel says "2.86 uses a second (speed cap)".
+  const CLIP_FLOOR = { ranger: { split_shot: 0.35 } };
+  // Dragonling nodes the game applies differently from their text. Hail of Talons (2 Nov, Split Shot panel
+  // and log): the hit ranges match only without its 8% less, and its extra arrow is not one of the Orbit
+  // arrows (log "arrows=8" with 9 projectiles; the panel counts 8 spheres).
+  const DRAGON_QUIRKS = {
+    ranger_skyhunter_hail_of_talons: {
+      skipLess: 'Hail of Talons: its 8% less damage is left out, as the game\'s skill panel does (Split Shot hit ranges match only without it).',
+      noOrbit: true,
+    },
+  };
 
   // ---------- character extraction (from a parsed GVAS save) ----------
   function extractCharacter(save) {
@@ -1667,7 +1680,11 @@ window.BOPlanner = function (ctx) {
           let list = (a ? a.Mods : n.Mods) || [];
           if (!a && n.AspectMods && n.AspectMods[ch.dragonAspect]) list = list.concat(n.AspectMods[ch.dragonAspect]);
           const label = 'Dragonling · ' + (a ? a.Name + ' (ascended ' + n.Name + ')' : n.Name);
-          for (const m of list) add(m, m.Value, m.Value2, label, 'dragon', a ? { text: a.Text } : null);
+          const quirk = DRAGON_QUIRKS[id] || {};
+          for (const m of list) {
+            if (quirk.skipLess && m.Stat === 'Damage' && m.Mode === 'More' && m.Value < 0) { notes.push(quirk.skipLess); continue; }
+            add(m, m.Value, m.Value2, label, 'dragon', Object.assign(a ? { text: a.Text } : {}, quirk.noOrbit && m.Stat === 'Projectiles' ? { noOrbit: true } : {}));
+          }
         }
       }
     }
@@ -2128,6 +2145,14 @@ window.BOPlanner = function (ctx) {
     if (sk.Channel && sk.Channel.Tick) { usesPerSec = rateMult / sk.Channel.Tick; useTime = sk.Channel.Tick / rateMult; }
     else if (isAttack) { const aps = weapon ? weapon.aps : 1.2; usesPerSec = aps * rateMult; useTime = 1 / usesPerSec; }
     else { const ct = sk.CastTime || 0.5; usesPerSec = rateMult / ct; useTime = ct / rateMult; }
+    // Speed cap: a clip plays at most ActionRateMax (4x) its own speed, so each skill has a shortest use
+    // time; past it more speed adds nothing (game tooltip "2.86 (speed cap)"). Clip lengths are not in the
+    // data files, so only floors measured in the game are known (CLIP_FLOOR).
+    const floor = (CLIP_FLOOR[lc(ch.classId)] || {})[skillId];
+    if (floor && !(sk.Channel && sk.Channel.Tick) && useTime < floor) {
+      res.notes.push('Speed cap: ' + skillId.replace(/_/g, ' ') + ' can\'t be used faster than once per ' + floor + ' s (' + (1 / floor).toFixed(2) + ' a second; the game\'s animation plays at most ' + (H.ActionRateMax || 4) + 'x its speed). You have ' + usesPerSec.toFixed(2) + ' a second of speed, so more attack speed adds nothing to this skill.');
+      usesPerSec = 1 / floor; useTime = floor; res.speedCapped = true;
+    }
     const animUses = animOn ? usesPerSec : null;
     let cooldown = 0;
     if (sk.Cooldown > 0) {
@@ -2274,14 +2299,18 @@ window.BOPlanner = function (ctx) {
     const cocNoEcho = !!res.coc && !res.conduit;
     if (!noEcho && !cocNoEcho) for (const m of pickMods(mods, 'Repeats', 'Flat')) if (applies(ctx, m)) { repeats += m.v; use(m); }
     if (cocNoEcho && pickMods(mods, 'Repeats', 'Flat').some(m => applies(ctx, m))) res.notes.push('Spell Echo does not repeat a spell cast by Cast on Crit (the game log shows one cast per trigger, never an echo), so it only costs this spell 15% damage here. The skill panel still shows it, as the game\'s tooltip does.');
-    let projectiles = 0;
+    let projectiles = 0, noOrbitProj = 0;
     if (ctx.tags.has('projectile')) {
       projectiles = (sk.Projectiles || 1) + (sk.ProjectilesAtLevels || []).filter(l => L >= l).length;
-      for (const m of pickMods(mods, 'Projectiles', 'Flat')) if (applies(ctx, m)) { projectiles += m.v; use(m); }
+      for (const m of pickMods(mods, 'Projectiles', 'Flat')) if (applies(ctx, m)) { projectiles += m.v; if (m.noOrbit) noOrbitProj += m.v; use(m); }
     }
     // Orbit: every projectile strikes; ones sent at an enemy already struck this cast deal 60% less
     // (attacks 90% less). The game's log matches this: 4 projectiles x 2 echoes x 60% = 10.9 poisons/s.
     const orbitOn = shape === 'orbit';
+    if (orbitOn && noOrbitProj > 0) {
+      res.notes.push('Hail of Talons\' extra arrow does not circle with Orbit: ' + (projectiles - noOrbitProj) + ' of ' + projectiles + ' arrows orbit and strike this enemy (game log "arrows=' + (projectiles - noOrbitProj) + '" and the skill panel\'s sphere count).');
+      projectiles -= noOrbitProj;
+    }
     let projOnTarget = 1, projWeight = 1;
     if (projectiles && shape === 'rain_support') {
       // Rain: every enemy inside is struck twice, three times with 4 or more projectiles.

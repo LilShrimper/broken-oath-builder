@@ -503,7 +503,7 @@ window.CHARS = [];
     for (const s of skillsArr) {
       const o = pick(s, SKILL_KEYS);
       if (s.Channel) o.Channel = pick(s.Channel, ['CostPerSec', 'Tick', 'MoveMult']);
-      if (s.Minion) o.Minion = pick(s.Minion, ['MonsterId', 'Count', 'Cap', 'CountEvery', 'DamageMult', 'AttackEvery']);
+      if (s.Minion) o.Minion = pick(s.Minion, ['MonsterId', 'Count', 'Cap', 'CountEvery', 'PerLevels', 'DamageMult', 'AttackEvery', 'Affinity', 'AffinityDamage', 'AffinityCap', 'LevelDamage', 'GolemAuras']);
       if (s.Ground) o.Ground = pick(s.Ground, ['Duration', 'Tick', 'TickScale', 'Radius']);
       if (s.Totem) o.Totem = typeof s.Totem === 'object' ? Object.assign({ on: true }, pick(s.Totem, ['Kind', 'Interval', 'Duration', 'Max', 'PerLevels', 'Effectiveness'])) : true;
       if (s.Rain) o.Rain = pick(s.Rain, ['Delay', 'Waves', 'Interval', 'Arrows']);
@@ -1855,7 +1855,7 @@ window.BOPlanner = function (ctx) {
     const res = { skillId, notes: [], used: new Map() };
     if (!sk) return Object.assign(res, { error: 'Unknown skill ' + skillId });
     res.skill = sk;
-    if (sk.Minion || sk.Delivery === 'Summon') return Object.assign(res, { unsupported: 'Minion skills are not modelled yet: minions have their own damage, speed and AI.' });
+    if ((sk.Minion || sk.Delivery === 'Summon') && !(sk.Minion && sk.Minion.MonsterId && sk.SpellMin)) return Object.assign(res, { unsupported: 'This summon has no damage of its own to count.' });
     const isAttack = (sk.Tags || []).includes('Attack');
     if (!sk.SpellMin && !isAttack) return Object.assign(res, { unsupported: 'This skill has no hit of its own (a buff, curse, Vow or movement skill). Its effects show up on your damage skills.' });
 
@@ -1969,6 +1969,7 @@ window.BOPlanner = function (ctx) {
     bonus = Math.floor(bonus);
     const L = own + bonus;
     res.gem = { own, bonus, total: L };
+    if (sk.Minion) return minionSheet(GD, ch, sk, res, mods, use, attr, L, o);
 
     // Effectiveness ramps: Early (low gem levels) and Late (from -> at), linear, read at the gem's OWN
     // level (gear levels do not move them). Calibrated 31 Oct against the game's log: Death Coil 20+7
@@ -2680,6 +2681,91 @@ window.BOPlanner = function (ctx) {
     return res;
   }
 
+  // Minions (summon gems). Worked out from the game's own minion sheet in the log ("PetSheet68" / "PetHit68")
+  // and three skill panels (2 Nov, Necromancer level 11: Grave Golem 263, Skeletal Mage 94, Skeletons 176 DPS):
+  //   hit  = SpellMin..SpellMax x 1.19^(gem level - 1) x the gem's DamageMult x Str/Int affinity
+  //          x 60% more near you x (1 + increased Minion Damage, +1% per 10 Int) x the supports' more x Harmony
+  //   pace = AttackEvery x 0.72 / minion speed;   DPS = average hit x crit x minions / pace.
+  // The 0.72 is measured (every PetSheet line: Skeletons 0.8 s -> 0.576 s, Golem 1.05 -> 0.756), not in the data.
+  // The Grave Golem's LevelDamage share: the log's 'level' factor sat at 1.07-1.10 (area levels 7-9, hero 7-11)
+  // and the 2 Nov panel needs x1.094, so 1 + LevelDamage x 0.6 is used until deeper fights show how it grows.
+  const MINION_PACE = 0.72, MINION_NEAR = 60, MINION_LEVEL_SHARE = 0.6;
+  function minionSheet(GD, ch, sk, res, mods, use, attr, L, o) {
+    const H = GD.scaling.Hero, G = GD.scaling.Gem, mi = sk.Minion;
+    const tags = new Set([...(sk.Tags || []), sk.Delivery].map(lc));
+    // A line counts when its non-element tags all name the minion skill ("Minion lines that also name Spell,
+    // Physical ..."); element tags pick the damage type it scales.
+    const fit = m => { const { types, conds } = splitTags(m.tags); return conds.every(c => tags.has(lc(c))) ? types : null; };
+    const fromSupport = m => { const k = String(m.key || ''); return k.startsWith('support:') && forMinions(GD.supports[k.slice(8)]); };
+    const growth = Math.pow(G.DamageGrowth || 1.19, L - 1);
+    const d0 = DT.includes(sk.DamageType) ? sk.DamageType : 'Physical';
+    const parts = {}; DT.forEach(d => parts[d] = [0, 0]);
+    parts[d0] = [sk.SpellMin * growth, sk.SpellMax * growth];
+    // More lines: the summon's own supports only (your own damage lines do not reach minions). Ruthless is
+    // averaged over its three blows.
+    const moreFor = d => {
+      let k = 1;
+      for (const m of mods) {
+        if (!fromSupport(m) || m.mode !== 'More' && m.stat !== 'RuthlessBlow') continue;
+        const t = fit(m); if (!t || (t.length && !t.includes(d))) continue;
+        if (m.stat === 'Damage') { k *= 1 + m.v / 100; use(m, 'minion'); }
+        else if (m.stat === 'RuthlessBlow' && d === 'Physical') { k *= 1 + m.v / 300; use(m, 'every 3rd blow, averaged'); }
+      }
+      return k;
+    };
+    const scaled = {}; for (const d of DT) { const k = moreFor(d); scaled[d] = [parts[d][0] * k, parts[d][1] * k]; }
+    // "Gain X% of physical as extra fire" (Added Fire on a golem): taken from the physical after its own more lines.
+    for (const m of mods) if (fromSupport(m) && m.stat === 'DamageAsExtra' && m.mode === 'Flat') {
+      const t = splitTags(m.tags).types; if (t.length < 2) continue;
+      scaled[t[1]][0] += scaled[t[0]][0] * m.v / 100; scaled[t[1]][1] += scaled[t[0]][1] * m.v / 100; use(m, 'minion');
+    }
+    const incFor = d => {
+      let v = attr.Int / 10 * (H.IntMinionDamagePer10 || 0);
+      for (const m of pickMods(mods, 'MinionDamage', 'Inc')) { const t = fit(m); if (t && (!t.length || t.includes(d))) { v += m.v; use(m, 'minion'); } }
+      return v;
+    };
+    let minionMore = 1;
+    for (const m of pickMods(mods, 'MinionDamage', 'More')) if (fit(m)) { minionMore *= 1 + m.v / 100; use(m, 'minion'); }
+    let kind = 1;
+    for (const m of pickMods(mods, 'MinionKindMore', 'Flat')) { kind *= 1 + m.v / 100; use(m, 'minion'); }
+    const aff = mi.Affinity && mi.AffinityDamage ? 1 + Math.min(mi.AffinityCap || 50, (attr[mi.Affinity] || 0) * mi.AffinityDamage) / 100 : 1;
+    const near = o.minionNear === false ? 1 : 1 + MINION_NEAR / 100;
+    const lvlK = mi.LevelDamage ? 1 + mi.LevelDamage * MINION_LEVEL_SHARE : 1;
+    const base = (mi.DamageMult || 1) * aff * near * minionMore * kind * lvlK;
+    const hit = {}; let avg = 0;
+    for (const d of DT) {
+      if (!(scaled[d][1] > 0)) continue;
+      const k = base * (1 + incFor(d) / 100);
+      hit[d] = { min: scaled[d][0] * k, max: scaled[d][1] * k }; hit[d].avg = (hit[d].min + hit[d].max) / 2; avg += hit[d].avg;
+    }
+    const chance = H.SpellCritBase || 6, multi = H.CritMultiBase || 150, critFactor = 1 + chance / 100 * (multi / 100 - 1);
+    // How many stand at once: the gem's Cap, one more every CountEvery gem levels or at PerLevels, + MinionCap lines.
+    let alive = (mi.Cap || mi.Count || 1) + (mi.CountEvery ? Math.floor((L - 1) / mi.CountEvery) : 0) + (mi.PerLevels || []).filter(l => L >= l).length;
+    for (const m of pickMods(mods, 'MinionCap', 'Flat')) if (fit(m)) { alive += m.v; use(m, 'minion'); }
+    let strikes = 1;
+    for (const m of mods) if (fromSupport(m) && m.stat === 'MinionStrikes' && m.mode === 'Flat') { strikes += m.v; use(m, 'minion'); }
+    let spInc = 0, spMore = 1;
+    for (const m of pickMods(mods, 'MinionSpeed', 'Inc')) if (fit(m)) { spInc += m.v; use(m, 'minion'); }
+    for (const m of mods) if ((m.stat === 'MinionSpeed' || (m.stat === 'AttackSpeed' && fromSupport(m))) && m.mode === 'More' && fit(m)) { spMore *= 1 + m.v / 100; use(m, 'minion'); }
+    const pace = (mi.AttackEvery || 1) * MINION_PACE / Math.max(0.05, (1 + spInc / 100) * spMore);
+    const hitsPerSec = alive * strikes / pace;
+    const dps = avg * critFactor * hitsPerSec;
+    res.attr = attr;
+    res.base = { kind: 'minion', min: sk.SpellMin, max: sk.SpellMax, growth };
+    res.hit = hit; res.hitAvg = avg; res.hitAvgCrit = avg * critFactor;
+    res.crit = { base: chance, inc: 0, chance, multi, factor: critFactor };
+    res.speed = { inc: spInc, more: spMore, animRate: 1, rateMult: (1 + spInc / 100) * spMore, usesPerSec: hitsPerSec, useTime: pace, cooldown: sk.Cooldown || 0, stat: 'MinionSpeed', hitFactor: 1 };
+    res.hits = { repeats: 0, projectiles: 0, projOnTarget: 1, projWeight: 1, perHitFactor: 1, strikes, hitsPerUse: 1, hitsPerSec, fullHitsPerSec: hitsPerSec };
+    res.ailments = {}; res.notModelled = []; res.poisonDps = 0; res.igniteDps = 0; res.bleedDps = 0;
+    res.sheetHitDps = res.panelDps = res.hitDps = res.totalDps = dps;
+    res.minion = { monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore * moreFor(d0), kind, level: lvlK, growth };
+    res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
+    if (near > 1) res.notes.push('Counted at your side: minions deal ' + MINION_NEAR + '% more within 7 m of you (fading to none at 12 m), as the game\'s panel counts it.');
+    if (mi.LevelDamage) res.notes.push(sk.Name + ' also grows with the level it fights at: counted as x' + lvlK.toFixed(3) + ', what the game\'s log and panel showed at character levels 7-11. It may grow in deeper Ruptures.');
+    if (mi.GolemAuras) res.notes.push('The golem\'s blessing (by its supports\' element) is not counted here; the game\'s panel leaves it out too.');
+    return res;
+  }
+
   function earlyDamage(cls, level) {
     if (!cls.EarlyDamagePct) return 1;
     const full = cls.EarlyDamageFullToLevel || 0, end = cls.EarlyDamageEndLevel || 0;
@@ -2771,6 +2857,11 @@ window.BOPlanner = function (ctx) {
     'minion_speed', 'channel_conduit', 'channel_mastery', 'woe_bearer', 'cast_on_minion_death']);
   // Supports that only help mana: searched when the search must keep mana sustained.
   const MANA_ONLY = new Set(['siphon', 'tithe']);
+  // On a summon gem only these lines change the minions' damage (minionSheet); other supports add nothing there.
+  // Only supports made for minions (their socket rule names Minion) reach the minions' hits; a spell support on a
+  // summon gem (Controlled Destruction, Spell Echo) changes the summoning spell, not what the minions deal.
+  const forMinions = sp => !!sp && (sp.RequiresAnyTag || []).includes('Minion');
+  const minionCounts = sp => forMinions(sp) && (sp.Mods || []).some(m => (m.Stat === 'Damage' && m.Mode === 'More') || m.Stat === 'DamageAsExtra' || m.Stat === 'MinionStrikes' || m.Stat === 'RuthlessBlow' || ((m.Stat === 'MinionSpeed' || m.Stat === 'AttackSpeed') && m.Mode === 'More'));
   const SHAPES = ['orbit', 'skyfall', 'rain_support', 'trap_support', 'totem_support'];
 
   // Support gems the character has: spares + every support socketed in any skill.
@@ -2800,7 +2891,7 @@ window.BOPlanner = function (ctx) {
     const base = host ? GD.skills[lc(host.skill)] || sk : sk;
     const tags = new Set([...(base.Tags || []), base.Delivery].map(lc));
     const fits = sp => (!(sp.RequiresAnyTag || []).length || sp.RequiresAnyTag.some(t => tags.has(lc(t)))) && !(sp.ExcludeTags || []).some(t => tags.has(lc(t)));
-    return Object.values(GD.supports).filter(fits).map(sp => ({ id: lc(sp.Id), name: sp.Name, desc: sp.Description || '', packOnly: NO_SINGLE_TARGET.has(lc(sp.Id)) && !['cast_on_crit', 'channel_conduit', 'tithe', 'siphon'].includes(lc(sp.Id)), shape: SHAPES.includes(lc(sp.Id)) }))
+    return Object.values(GD.supports).filter(fits).map(sp => ({ id: lc(sp.Id), name: sp.Name, desc: sp.Description || '', packOnly: sk.Minion ? !minionCounts(sp) : NO_SINGLE_TARGET.has(lc(sp.Id)) && !['cast_on_crit', 'channel_conduit', 'tithe', 'siphon'].includes(lc(sp.Id)), shape: SHAPES.includes(lc(sp.Id)) }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -2821,7 +2912,7 @@ window.BOPlanner = function (ctx) {
     let pinned = (opt.pinned || []).map(lc).filter(id => fits.some(s => lc(s.Id) === id));
     const pinnedShapes = pinned.filter(id => SHAPES.includes(id) && id !== 'skyfall');
     if (pinnedShapes.length > 1) pinned = pinned.filter(id => !pinnedShapes.slice(1).includes(id));
-    const pool = fits.map(s => lc(s.Id)).filter(id => !pinned.includes(id) && (!NO_SINGLE_TARGET.has(id) || (opt.manaOk && MANA_ONLY.has(id))) && (opt.pool === 'all' || owned.has(id)));
+    const pool = fits.filter(s => !sk.Minion || minionCounts(s)).map(s => lc(s.Id)).filter(id => !pinned.includes(id) && (sk.Minion || !NO_SINGLE_TARGET.has(id) || (opt.manaOk && MANA_ONLY.has(id))) && (opt.pool === 'all' || owned.has(id)));
     // A Conduit spell rides in the channel's sockets (the granted Conduit takes none).
     const sockets = opt.sockets || (host ? socketsFor(GD, ch, host.skill) : socketsFor(GD, ch, skillId, o.gemLevel));
     if (pinned.length > sockets) pinned = pinned.slice(0, sockets);
@@ -3095,7 +3186,7 @@ window.BOStartApp = function () {
     const moreOn = more.filter(c => inSet.has(c.id)).length;
     box.innerHTML = '<div class="sup-row">' + strays.concat(main).map(tag).join('') + '</div>' +
       (granted.length ? '<div class="sup-row granted"><span class="meta">From your tree or gear:</span>' + granted.map(s => '<span class="sup granted' + (st.off.has(s.key) ? '' : ' on') + '"><button type="button" class="sup-name" data-granted="' + esc(s.key) + '" aria-pressed="' + !st.off.has(s.key) + '" title="Granted: click to see the skill without it">' + esc(s.name.replace(' (granted)', '')) + '</button></span>').join('') + '</div>' : '') +
-      (more.length ? '<details class="sup-more"' + (st.supMore || moreOn ? ' open' : '') + '><summary>Packs and extras <span class="meta">(' + more.length + ', no damage against one enemy)</span></summary><div class="sup-row">' + more.map(tag).join('') + '</div></details>' : '');
+      (more.length ? '<details class="sup-more"' + (st.supMore || moreOn ? ' open' : '') + '><summary>' + (r.minion ? 'No effect on minion damage' : 'Packs and extras') + ' <span class="meta">(' + more.length + (r.minion ? ')' : ', no damage against one enemy)') + '</span></summary><div class="sup-row">' + more.map(tag).join('') + '</div></details>' : '');
     $('#supportInfo').textContent = st.supMsg || SUP_HINT;
     $('#supportInfo').classList.toggle('bad', !!st.supMsg && /^All |cannot/.test(st.supMsg));
   }
@@ -3141,6 +3232,7 @@ window.BOStartApp = function () {
     }
     const pin = st.pinned;
     const delta = (v, base) => base == null ? '' : '<div class="delta ' + (v >= base ? 'up' : 'down') + '">' + pct(base ? v / base - 1 : 0) + ' vs pinned (' + num(base) + ')</div>';
+    if (r.minion) { st.last = r; out.innerHTML = minionHtml(r, pin, delta); bindResults(r, out); return; }
     const hitTypes = Object.keys(r.hit);
     const calib = st.ingame > 0 ? 'This sheet\'s skill panel DPS is ' + num(r.panelDps) + ' (' + pct(r.panelDps / st.ingame - 1) + ' vs the game). Death Coil, Unholy Void and Judgement matched the game within a few percent; a big gap on another skill means a rule the sheet does not model yet.' : 'Type the number from the in-game skill panel to see how close this sheet is.';
     $('#calibOut').textContent = calib;
@@ -3225,10 +3317,40 @@ window.BOStartApp = function () {
       '<li>Curses: a curse\'s damage taken and its element taken add up (its element part counts on hits); increased curse effect raises both, Intelligence does not. Different curses multiply; an enemy holds one Sentence and up to two Woes at a time, Guardians too. Woes build Dread to +30% by themselves on Rares and Guardians.</li>' +
       '<li>Enemy: resistance = monster level × 0.36 (max 25%) for elements and poison; armour = level × 1.5 against physical hits (armour / (armour + 5 × hit), max 80%). The DPS assumes you cast nonstop; on bosses the log shows about 90–95% of that.</li>' +
       '<li>Channel Conduit: a spell linked to a channel (read from the save) uses the channel\'s supports and is cast on its ticks, one cast every ceil(interval ÷ tick) ticks (checked against the game log).</li>' +
-      '<li>Not modelled: minions, War Banner, shock and freeze, bleeding, Skyfall repeat strikes, other triggers (on kill / on crit), keystone flags, dual-wield alternation.</li>' +
+      '<li>Minions: summon gems show their own sheet (the game\'s skill panel DPS, checked 2 Nov on Grave Golem, Skeletal Mage and Skeletons within 0.5%), not yet against an enemy\'s resistances.</li>' +
+      '<li>Not modelled: War Banner, shock and freeze, bleeding, Skyfall repeat strikes, other triggers (on kill / on crit), keystone flags, dual-wield alternation.</li>' +
       '</ul></details></div>';
     out.innerHTML = html;
+    bindResults(r, out);
+  }
 
+  // A summon gem: the minions' own sheet (the game's skill panel numbers).
+  function minionHtml(r, pin, delta) {
+    const m = r.minion, x = v => '×' + num(v, 3);
+    let h = '<div class="headline">' +
+      stat('Skill panel DPS', num(r.panelDps), delta(r.panelDps, pin && pin.sheet), 'main', 'All its minions attacking nonstop, as the game\'s tooltip counts it (before the enemy\'s resistances and curses)') +
+      stat('Minions', m.alive + (m.strikes > 1 ? ' × ' + m.strikes + ' strikes' : ''), '', '', 'Standing at once') +
+      stat('Each attacks every', num(m.pace, 3) + ' s', '', '', m.every + ' s × 0.72 ÷ minion speed') +
+      stat('Average hit', num(r.hitAvg), '', '', 'With crits ' + num(r.hitAvgCrit) + ' (' + num(r.crit.chance, 1) + '% × ' + num(r.crit.multi / 100, 2) + ')') +
+      '</div>';
+    h += optCard();
+    h += '<div class="pinbar"><button class="btn small" id="pinBtn">' + (pin ? 'Re-pin current' : 'Pin as baseline') + '</button>' + (pin ? '<button class="btn small ghost" id="unpinBtn">Clear pin</button><span>Change anything on the left to compare with the pinned setup.</span>' : '<span>Pin this setup, then change supports or passives to see the difference.</span>') + '</div>';
+    h += '<div class="card"><h2>The minion hit <small>' + esc(r.skill.Name) + ' · gem ' + r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus : '') + '</small></h2><div class="table-wrap"><table class="hit"><thead><tr><th>Type</th><th>Hit</th></tr></thead><tbody>' +
+      Object.keys(r.hit).map(d => '<tr><td><span class="type" style="--c:' + typeColor(d) + '">' + d + '</span></td><td>' + num(r.hit[d].min) + '–' + num(r.hit[d].max) + '</td></tr>').join('') + '</tbody></table></div>' +
+      '<h3>What makes the hit</h3><dl class="kv">' +
+      kv('Gem damage', num(r.base.min) + '–' + num(r.base.max) + ' × 1.19<sup>level − 1</sup> = ' + x(m.growth)) +
+      kv('The gem\'s minion multiplier', x(m.dmgMult)) +
+      (m.affinity !== 1 ? kv(m.affinityAttr + ' affinity', x(m.affinity) + ' (+1% per 10 ' + m.affinityAttr + ')') : '') +
+      kv('Near you', m.near > 1 ? x(m.near) + ' (60% more within 7 m)' : 'not counted') +
+      kv('Increased minion damage', '+' + num(m.inc, 1) + '% (passives, gear, +1% per 10 Int)') +
+      (m.more !== 1 ? kv('Supports (more)', x(m.more)) : '') + (m.kind !== 1 ? kv('Harmony', x(m.kind)) : '') + (m.level && m.level !== 1 ? kv('Fight level', x(m.level)) : '') +
+      '</dl></div>';
+    h += '<details open><summary>Notes for this skill <span class="count">(' + r.notes.length + ')</span></summary><ul class="notes">' + r.notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul></details>';
+    return h;
+  }
+
+  // Buttons inside the results (pin, support picks, fight rate, report).
+  function bindResults(r, out) {
     $('#pinBtn').onclick = () => { st.pinned = { total: r.totalDps, hit: r.hitDps, poison: r.poisonDps, sheet: r.panelDps }; render(); };
     const up = $('#unpinBtn'); if (up) up.onclick = () => { st.pinned = null; render(); };
     out.querySelectorAll('[data-use]').forEach(b => b.onclick = () => useSetup(+b.dataset.use));

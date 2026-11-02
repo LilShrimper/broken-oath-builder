@@ -317,6 +317,8 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 .dragon-panel svg.dl-tree { height: auto; width: 100%; }
 .dragon-panel { cursor: default; }
 .dragon-panel h2 { padding-right: 30px; }
+.dl-aspect { margin: 2px 0 8px; padding: 8px 10px; border-radius: 6px; background: var(--panel-2); font-size: 13px; }
+.dl-aspect b { color: var(--accent); }
 
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
@@ -1308,11 +1310,11 @@ window.BOPlanner = function (ctx) {
         '<button class="btn small" type="button" data-act="code">Copy plan code</button>' +
         '<button class="btn small ghost" type="button" data-act="dup">Duplicate</button>' +
         '<button class="btn small ghost" type="button" data-act="del">Delete plan</button>' +
-        '<span class="hint">Edits save in this browser as you go. The tree is on the Skill tree tab; the Damage tab shows what it does.</span></div>';
+        '<span class="hint">Edits save in this browser as you go. The passive tree and the Dragonling (the dragon button) are on the Skill tree tab; the Damage tab shows what it does.</span></div>';
     }
     if (status) h += '<p class="hint pl-status">' + esc(status) + '</p>';
     h += '</div>';
-    if (ch) h += dragonCard(ch, edit, dis) + skillsCard(ch, edit, dis) + gearCard(ch, edit, dis);
+    if (ch) h += skillsCard(ch, edit, dis) + gearCard(ch, edit, dis); // the Dragonling tree is on the Skill tree tab (dragon button)
     el.innerHTML = h;
   }
 
@@ -1386,6 +1388,10 @@ window.BOPlanner = function (ctx) {
     h += '<div class="pl-row">' + (aspects.length ? '<label class="field inline"><span>Aspect</span><select data-f="aspect"' + dis + '>' + opt('', 'None', !ch.dragonAspect) + aspects.map(a => opt(a, GD.dragon.aspects[a].Name || a, a === ch.dragonAspect)).join('') + '</select></label>' : '') +
       '<label class="field inline" title="One point for each end-game Gate killed and one for the Pinnacle"><span>Gate kills + Pinnacle</span><input type="number" min="0" max="40" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
       (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') + '</div>';
+    // What the chosen Aspect gives (dragonling.json Aspects: the sim counts these lines).
+    const asp = GD.dragon.aspects && GD.dragon.aspects[ch.dragonAspect];
+    h += asp ? '<p class="dl-aspect"><b>' + esc(asp.Name || ch.dragonAspect) + ' Aspect:</b> ' + esc(asp.Text || '') + '</p>'
+      : '<p class="hint">No Aspect chosen: each one gives its own bonuses (pick one above to see them).</p>';
     h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.' :
       'Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, + Gate kills and the Pinnacle. ' + (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + 'One path (the first path node picks your Ascendancy) and one Keystone or Capstone. Hover a node for its lines.') + '</p>';
     h += '<svg class="dl-tree" viewBox="-560 -640 1120 1100" role="img" aria-label="Dragonling tree">' + '<g class="dl-links">' + lines + '</g>' + dots + '</svg>';

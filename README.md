@@ -26,7 +26,8 @@ GoatCounter (no cookies, no personal data, never your files).
    **Pin as baseline** and **What helps most**. The skill list also has
    skills you don't own yet (at the gem level your character could use). A spell with Cast on Crit shows a picker
    for the attack whose crits cast it; the sheet then counts one cast per attack volley that crits (crit is rolled
-   once per volley; at most one per 0.15 s, 25% less damage). This rate matched a Ranger's game log.
+   once per volley; at most one per 0.15 s, 25% less damage). This rate matched a Ranger's game log. Spell Echo
+   does not repeat a spell cast by Cast on Crit, so the sheet does not count it there.
    Shock (from the game's own formula and the enemy's life), Executioner (counted over a whole fight) and
    mana are counted too: the Hits & speed card shows mana spent against mana gained a second, how long it
    lasts after Vow and Herald reservations, and *Only setups my mana can sustain* limits the support search

@@ -2270,7 +2270,12 @@ window.BOPlanner = function (ctx) {
     let repeats = 0;
     // Auras, Vows, toggles and dashes are never echoed (game tooltip: "Spell Echo: no, Unholy Void is an aura").
     const noEcho = ['Aura', 'Vow', 'Woe', 'Toll', 'Sentence', 'Blink', 'Dash'].includes(sk.Delivery) || ctx.tags.has('aura');
-    if (!noEcho) for (const m of pickMods(mods, 'Repeats', 'Flat')) if (applies(ctx, m)) { repeats += m.v; use(m); }
+    // A spell cast by Cast on Crit is not echoed: in the 1 Nov logs Ember Bolt (Cast on Crit + Spell Echo) fired one
+    // release per trigger and never wrote an "Echo:" line, while every Repeat shot of Split Shot did (6,140). Spell
+    // Echo's 15% less damage and cast speed still count. The skill panel pass (cast by hand) keeps the echo.
+    const cocNoEcho = !!res.coc && !res.conduit;
+    if (!noEcho && !cocNoEcho) for (const m of pickMods(mods, 'Repeats', 'Flat')) if (applies(ctx, m)) { repeats += m.v; use(m); }
+    if (cocNoEcho && pickMods(mods, 'Repeats', 'Flat').some(m => applies(ctx, m))) res.notes.push('Spell Echo does not repeat a spell cast by Cast on Crit (the game log shows one cast per trigger, never an echo), so it only costs this spell 15% damage here. The skill panel still shows it, as the game\'s tooltip does.');
     let projectiles = 0;
     if (ctx.tags.has('projectile')) {
       projectiles = (sk.Projectiles || 1) + (sk.ProjectilesAtLevels || []).filter(l => L >= l).length;
@@ -3202,6 +3207,10 @@ window.BOStartApp = function () {
     const all = st.log.guardians.filter(g => g.life > 0 && fightTime(g) > 0);
     const mine = all.filter(g => st.ch.fromCode || !g.hero || g.hero.name === name);
     const skill = st.skill, sim = {};
+    // The log counts releases for skills it sees fire (OrbitCast lines: each Repeat shot is one more), and casts
+    // for Conduit and Cast on Crit lines. Releases are turned into uses so they compare with the sheet's uses.
+    const host = (st.log.casts[skill] || {}).host;
+    const perUse = s => host ? 1 : 1 + ((s.hits && s.hits.repeats) || 0);
     const fights = mine.map(g => {
       const key = (g.rupture || 0) + '|' + g.name + '|' + (g.element || '') + '|' + (g.ward || 0);
       if (!sim[key]) sim[key] = S.calcSkill(GD, st.ch, skill, opts({ enemyLevel: g.rupture || undefined, enemyRarity: 'boss', guardianElement: g.element || undefined,
@@ -3214,9 +3223,9 @@ window.BOStartApp = function () {
       const dealt = g.life * (1 + (g.lostPct || 0) / 100), hitTime = Math.max(1, fightTime(g) - (g.away || 0));
       // You keep casting while it is away (at its summons), so the cast rate uses the whole fight and per cast
       // counts only the share of casts made while it could be hit.
-      const castsOnBoss = casts * hitTime / Math.max(1, fightTime(g));
-      return { g, s, time: fightTime(g), hitTime, dealt, real: dealt / hitTime, simDps: s.totalDps, casts, castRate: casts / fightTime(g),
-        perCastReal: casts ? dealt / castsOnBoss : NaN, perCastSim: s.speed && s.speed.usesPerSec ? s.totalDps / s.speed.usesPerSec : NaN,
+      const uses = casts / perUse(s), usesOnBoss = uses * hitTime / Math.max(1, fightTime(g));
+      return { g, s, time: fightTime(g), hitTime, dealt, real: dealt / hitTime, simDps: s.totalDps, casts, perUse: perUse(s), castRate: uses / fightTime(g),
+        perCastReal: casts ? dealt / usesOnBoss : NaN, perCastSim: s.speed && s.speed.usesPerSec ? s.totalDps / s.speed.usesPerSec : NaN,
         levelDiff: g.hero && g.hero.level !== save.level ? g.hero.level : null, gear };
     });
     // The sheet uses today's save, so fights from well below its level (older gear, fewer points) read low:
@@ -3229,7 +3238,7 @@ window.BOStartApp = function () {
     return {
       name, fights, others: all.length - mine.length, skillName: (GD.skills[String(skill).toLowerCase()] || {}).Name || skill,
       realMed: median(use.map(f => f.real)), simMed: median(use.map(f => f.simDps)),
-      rateMed: median(use.filter(f => f.casts).map(f => f.castRate)), simRate: use[0] && use[0].s.speed ? use[0].s.speed.usesPerSec : NaN,
+      perUse: use[0] ? use[0].perUse : 1, rateMed: median(use.filter(f => f.casts).map(f => f.castRate)), simRate: use[0] && use[0].s.speed ? use[0].s.speed.usesPerSec : NaN,
       perCastRatio: median(use.filter(f => f.casts).map(f => f.perCastReal / f.perCastSim)), used: use.length, gearSkipped: fights.filter(f => f.skip && f.gear).length, oldSkipped: fights.filter(f => f.skip && !f.gear).length,
       adjusted: use.filter(f => f.g.away || f.g.lostPct).length,
       cast: st.log.casts[skill] || null, skyfall: st.log.skyfall,
@@ -3244,7 +3253,7 @@ window.BOStartApp = function () {
     const verdict = !isFinite(ratio) ? '' : Math.abs(ratio - 1) <= 0.15 ? 'The sheet matches your kills (within 15%).' : ratio > 1 ? 'You kill Guardians ' + pct(ratio - 1) + ' faster than the sheet says: something adds damage it does not count (see below).' : 'You kill Guardians ' + pct(1 - ratio).replace('+', '') + ' slower than the sheet: likely time spent moving or dodging, or a rule the sheet gets wrong.';
     const rows = c.fights.map(f => '<tr' + (f.skip ? ' class="dim"' : '') + '><td>' + esc(f.g.name.replace(/_/g, ' ')) + (f.g.element ? ' <span class="type" style="--c:' + typeColor(f.g.element) + '">' + esc(f.g.element) + (f.g.ward ? ' +' + f.g.ward : '') + '</span>' : '') + (f.gear ?' <span class="hint">(other weapon)</span>' : '') + (f.levelDiff ? ' <span class="hint">(you were ' + f.levelDiff + ')</span>' : '') + (f.g.away || f.g.lostPct ? ' <span class="hint">(away ' + num(f.g.away || 0, 0) + ' s' + (f.g.lostPct ? ', ' + num(f.g.lostPct, 0) + '% of its life lost at held marks' : '') + ')</span>' : '') +'</td><td>' + (f.g.rupture || '–') + '</td><td>' + num(f.g.life) + '</td><td>' + num(f.time, 1) + ' s</td><td><b>' + num(f.real) + '</b></td><td>' + num(f.simDps) + '</td><td>' + (f.casts ? num(f.castRate, 2) : '–') + '</td><td>' + (f.casts ? num(f.perCastReal / f.perCastSim, 2) + '×' : '–') + '</td></tr>').join('');
     const notes = [];
-    if (isFinite(c.rateMed) && isFinite(c.simRate)) notes.push('In fights you cast ' + c.skillName + ' ' + num(c.rateMed, 2) + ' times a second, against the sheet\'s ' + num(c.simRate, 2) + ' (' + Math.round(c.rateMed / c.simRate * 100) + '%): moving, dodging and phase changes take the rest.' + (c.cast && c.cast.recentGap ? (c.cast.host && String(c.cast.host).startsWith('crit:') ? ' Your recent Cast on Crit casts come every ' : c.cast.host ? ' While spinning, your recent casts land every ' : ' Back to back, your recent shots leave every ') + c.cast.recentGap + ' ms (' + num(1000 / c.cast.recentGap, 2) + '/s).' : ''));
+    if (isFinite(c.rateMed) && isFinite(c.simRate)) notes.push('In fights you cast ' + c.skillName + ' ' + num(c.rateMed, 2) + ' times a second, against the sheet\'s ' + num(c.simRate, 2) + ' (' + Math.round(c.rateMed / c.simRate * 100) + '%): moving, dodging and phase changes take the rest.' + (c.perUse > 1 ? ' (The log counts ' + num(c.rateMed * c.perUse, 2) + ' shots a second: each cast fires ' + c.perUse + ' times with Repeat.)' : '') + (c.cast && c.cast.recentGap ? (c.cast.host && String(c.cast.host).startsWith('crit:') ? ' Your recent Cast on Crit casts come every ' : c.cast.host ? ' While spinning, your recent casts land every ' : ' Back to back, your recent shots leave every ') + c.cast.recentGap + ' ms (' + num(1000 / c.cast.recentGap, 2) + '/s).' : ''));
     if (isFinite(c.perCastRatio)) notes.push('Damage per cast, real ÷ sheet: ' + num(c.perCastRatio, 2) + '×. Real kills also include ' + (r.conduit ? r.conduit.hostName + '\'s own hits, ' : '') + 'Herald kill effects, shocks, freezes and anything else that hit the boss, so a little above 1× is expected.');
     if (c.skyfall && c.skyfall.falls) notes.push('Skyfall repeat strikes: ' + num(c.skyfall.falls) + ' fell, ' + num(c.skyfall.hits) + ' hit something; ' + num(c.skyfall.blocked) + ' were skipped because the target was already struck that cast. ' +
       (r.hits && r.hits.skyfallRepeat > 0 ? 'The sheet counts one second fall on the target per cast at ' + Math.round(r.hits.skyfallRepeat * 100) + '% (the game\'s own sheet does the same).' : 'This skill has no second fall on the sheet.'));

@@ -304,7 +304,8 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
       <button class="btn ghost" type="submit">Load code</button>
     </form>
     <button class="btn ghost" id="planBtn" type="button" title="Plan a build: start from nothing or copy a character, then change its skills, gear and tree">Plan a build</button>
-    <button class="btn ghost" id="dataBtn" type="button" hidden title="Read the game's Data folder again after a patch">Update game data</button>
+    <button class="btn ghost" id="dataBtn" type="button" hidden title="The game data comes with the site. After a game patch the site has not caught up with yet, read your own game's Data folder instead">Use my own game files</button>
+    <button class="btn ghost" id="siteDataBtn" type="button" hidden title="Stop using the game files you picked and go back to the data that comes with the site">Use the site's data</button>
   </div>
 </header>
 <div class="data-old" id="dataOld" role="status" hidden>
@@ -320,8 +321,8 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 </div>
 
 <section class="setup card" id="setup" hidden>
-  <h2>First, point the sim at your game</h2>
-  <p>The sim reads skills, items and the passive tree straight from your own copy of Broken Oath, so it always matches your patch. Nothing is uploaded: every file is read in this browser tab.</p>
+  <h2>Read the game data from your own install</h2>
+  <p>The sim can read skills, items and the passive tree straight from your own copy of Broken Oath. Nothing is uploaded: every file is read in this browser tab.</p>
   <ol>
     <li>Click <b>Pick the Data folder</b>.</li>
     <li>Go to your game folder, usually <code>C:\Program Files (x86)\Steam\steamapps\common\Broken Oath Playtest</code> (in Steam: right-click the game › Manage › Browse local files).</li>
@@ -330,7 +331,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
   <label class="btn"><input type="file" id="dataInput" webkitdirectory directory multiple hidden>Pick the Data folder</label>
   <button class="btn ghost" id="setupCancel" type="button" hidden>Keep current data</button>
   <p class="hint" id="setupStatus"></p>
-  <p class="hint">The page remembers the data in this browser. After a game patch, use <b>Update game data</b> at the top.</p>
+  <p class="hint">The page remembers your files in this browser while they are newer than the site's data; <b>Use the site's data</b> at the top switches back.</p>
 </section>
 
 <main class="layout">
@@ -456,7 +457,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 </main>
 
 <footer class="foot">
-  Fan-made tool, not affiliated with the developers of Broken Oath. Reads the game's own data files and your save in your browser; nothing is uploaded. The page counts anonymous visits (GoatCounter: no cookies, no personal data, never your files). Formulas follow the game's tooltips and design notes; checked against the game for Death Coil, Unholy Void and Judgement, other skills use the same rules unchecked.
+  Fan-made tool, not affiliated with the developers of Broken Oath. Game data comes with the site (extracted from the playtest, shared with the developer's permission). Your save and log are read in your browser; nothing is uploaded. The page counts anonymous visits (GoatCounter: no cookies, no personal data, never your files). Formulas follow the game's tooltips and design notes; checked against the game for Death Coil, Unholy Void and Judgement, other skills use the same rules unchecked.
 </footer>
 
 <script>
@@ -2867,7 +2868,8 @@ window.BOStartApp = function () {
   let planner = null; // the Build tab (planner.js), made at the start
 
   // ---------- setup ----------
-  $('#builtInfo').textContent = 'Game data read ' + new Date(GD.builtAt).toLocaleString() + (GD.filesAt ? ' (game files from ' + new Date(GD.filesAt).toLocaleDateString() + ')' : '') + ' · ' + Object.keys(GD.skills).length + ' skills';
+  const gdDay = new Date(GD.filesAt || GD.builtAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  $('#builtInfo').textContent = 'Game data: ' + (GD.steamBuild ? 'Steam build ' + GD.steamBuild + ' (' + gdDay + ')' : 'game files from ' + gdDay) + (GD.source === 'picked' ? ', your own files' : '') + ' · ' + Object.keys(GD.skills).length + ' skills';
   const resGrid = $('#resGrid');
   resGrid.innerHTML = DT.map(d => '<label class="field"><span><span class="type" style="--c:' + typeColor(d) + '">' + (d === 'Lightning' ? 'Light.' : d) + '</span></span><input type="number" data-res="' + d + '" placeholder="auto"></label>').join('');
   const drop = document.createElement('div'); drop.className = 'drop-hint'; drop.textContent = 'Drop the SaveGames folder, a BO_Char_*.sav file or BrokenOath.log'; document.body.appendChild(drop);
@@ -3279,7 +3281,7 @@ window.BOStartApp = function () {
     const panel = st.log && st.log.panel && st.log.panel[st.skill];
     const fights = c.fights.filter(f => !f.gear);
     const lines = [
-      'Anonymous check report from Broken Oath Builder (game data ' + String(GD.builtAt).slice(0, 10) + ').', '',
+      'Anonymous check report from Broken Oath Builder (game data ' + (GD.steamBuild ? 'Steam build ' + GD.steamBuild + ', ' : '') + String(GD.filesAt || GD.builtAt).slice(0, 10) + ').', '',
       '- Class / level: ' + st.ch.classId + ' ' + st.ch.level + (r.attr ? ' (Str ' + r.attr.Str + ', Dex ' + r.attr.Dex + ', Int ' + r.attr.Int + ')' : ''),
       '- Skill: ' + st.skill + ' gem ' + (r.gem ? r.gem.own + '+' + r.gem.bonus : '?') + (r.conduit ? ', cast by ' + r.conduit.host + ' Channel Conduit (' + num(r.speed.usesPerSec, 2) + '/s, tick ' + Math.round(r.conduit.tick * 1000) + ' ms, interval ' + Math.round(r.conduit.interval * 1000) + ' ms)' : '') + (r.coc ? ', Cast on Crit from ' + r.coc.source + ' (' + f2(r.coc.rate) + '/s)' : ''),
       '- Supports: ' + (sup.join(', ') || 'none'),
@@ -3973,11 +3975,16 @@ window.BOStartApp = function () {
   const store = {
     get(k) { try { return localStorage.getItem('bods:' + k); } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem('bods:' + k, v); return true; } catch (e) { return false; } },
+    del(k) { try { localStorage.removeItem('bods:' + k); } catch (e) { /* storage off */ } },
   };
   let started = false;
+  let bundled = null; // the site's own game data (gamedata.json), when it loaded
+  const newer = (a, b) => (Date.parse(a.filesAt || '') || 0) > (Date.parse(b.filesAt || '') || 0);
   const start = () => {
     setup.hidden = true; document.body.classList.remove('needs-data');
-    if (window.GD && window.GD.source === 'picked') { $('#dataBtn').hidden = false; checkOld(); }
+    // Public site: the game data ships with it ("bundled"); players can still read their own files.
+    if (window.GD && (window.GD.source === 'picked' || window.GD.source === 'bundled')) $('#dataBtn').hidden = false;
+    if (window.GD && window.GD.source === 'picked') { $('#siteDataBtn').hidden = !bundled; checkOld(); }
     if (!started) { started = true; window.BOStartApp(); } else location.reload();
   };
   // Data read from the player's folder stays in this browser; after a patch it is out of date until
@@ -4021,25 +4028,44 @@ window.BOStartApp = function () {
     status.textContent = 'Reading ' + e.target.files.length + ' files…';
     try {
       const gd = await fromFiles(e.target.files);
+      if (bundled && !newer(gd, bundled)) {
+        // Same or older files than the site's: nothing to change.
+        store.del('gd');
+        status.textContent = 'The site’s data is already as new as your game files' + (bundled.steamBuild ? ' (Steam build ' + bundled.steamBuild + ')' : '') + ', so it keeps using that.';
+        e.target.value = '';
+        return;
+      }
       window.GD = gd;
       status.textContent = store.set('gd', JSON.stringify(gd)) ? '' : 'Loaded (your browser would not keep a copy, so you will pick the folder again next visit).';
       start();
     } catch (err) { status.textContent = 'Could not read the game data: ' + err.message; }
     e.target.value = '';
   });
-  $('#dataBtn').addEventListener('click', () => { $('#setupCancel').hidden = false; showSetup('Pick the folder again after a game patch to load the new numbers.'); });
+  $('#dataBtn').addEventListener('click', () => {
+    $('#setupCancel').hidden = false;
+    showSetup(bundled ? 'Only needed when Broken Oath has patched and the site has not caught up yet: your own files are used while they are newer than the site’s.' : 'Pick the folder again after a game patch to load the new numbers.');
+  });
   $('#setupCancel').addEventListener('click', () => { setup.hidden = true; document.body.classList.remove('needs-data'); status.textContent = ''; });
+  $('#siteDataBtn').addEventListener('click', () => { store.del('gd'); location.reload(); });
 
-  if (window.GD) return start();
-  const cached = store.get('gd');
-  if (cached) {
-    try {
-      const gd = JSON.parse(cached);
-      if ((gd.schema || 1) >= window.BOGameData.SCHEMA) { window.GD = gd; return start(); }
-      return showSetup('The sim was updated and reads a little more from your game files now (item affix tiers for the build planner). Pick the Data folder once more.');
-    } catch (e) { /* bad cache: ask again */ }
-  }
-  showSetup();
+  if (window.GD) return start(); // local DamageSim.html: data built in
+  const fresh = gd => gd && (gd.schema || 1) >= window.BOGameData.SCHEMA;
+  let cached = null;
+  try { cached = JSON.parse(store.get('gd') || 'null'); } catch (e) { /* bad cache: ignore */ }
+  status.textContent = 'Loading game data…';
+  fetch('gamedata.json', { cache: 'no-cache' })
+    .then(r => r.ok ? r.json() : null)
+    .catch(() => null)
+    .then(gd => {
+      status.textContent = '';
+      if (fresh(gd)) bundled = gd;
+      // A copy the player read from their own game wins only while it is newer than the site's.
+      if (bundled && fresh(cached) && cached.source === 'picked' && newer(cached, bundled)) { window.GD = cached; return start(); }
+      if (bundled) { if (cached) store.del('gd'); window.GD = bundled; return start(); }
+      // No site data (offline or a saved copy of the page): use what this browser has, else ask.
+      if (fresh(cached)) { window.GD = cached; return start(); }
+      showSetup(cached ? 'The sim was updated and reads a little more from your game files now. Pick the Data folder once more.' : '');
+    });
 })();
 
 </script>

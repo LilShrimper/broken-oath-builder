@@ -1,7 +1,7 @@
 # Broken Oath Builder
 
-A fan-made build planner and damage calculator for the **Broken Oath** playtest, in the spirit of Path of Building. It reads your character's save and
-your own game install, then shows your skill's DPS, finds the best support gems, and compares
+A fan-made build planner and damage calculator for the **Broken Oath** playtest, in the spirit of Path of Building. It reads your character's save
+and shows your skill's DPS, finds the best support gems, and compares
 setups. Everything runs in your browser; nothing is uploaded. The page counts anonymous visits with
 GoatCounter (no cookies, no personal data, never your files).
 
@@ -9,10 +9,11 @@ GoatCounter (no cookies, no personal data, never your files).
 
 ## How to use
 
-1. **Point it at your game (first visit only).** Click *Pick the Data folder* and choose
-   `BrokenOath\Data` inside your game folder (Steam: right-click the game › Manage › Browse local
-   files). The page reads the skills, items and passive tree from your own copy, so it always
-   matches your patch. After a game patch, click *Update game data*.
+1. **Game data comes with the site.** The skills, items and passive tree are already loaded; the top of
+   the page shows which Steam build they are from. If Broken Oath patches before the site catches up,
+   click *Use my own game files* and pick `BrokenOath\Data` inside your game folder (Steam: right-click
+   the game › Manage › Browse local files). Your files are used while they are newer than the site's;
+   *Use the site's data* switches back.
 2. **Load your characters.** Click *Copy save path*, then *Load saves folder*. In the picker, click the
    address bar, paste (Ctrl+V), press Enter and choose *Select Folder*. Every character in
    `%LOCALAPPDATA%\BrokenOath\Saved\SaveGames` is loaded (backups skipped) and stays in your browser
@@ -64,9 +65,9 @@ Coil, Unholy Void and a Channel Conduit Judgement build, and Split Shot, Rain of
 not checked one by one. If the sheet's *Skill panel DPS* differs a lot from your in-game skill
 panel, the skill likely has a mechanic the sheet does not model yet.
 
-## Not included
+## Game data
 
-This repository contains no game files. The page only reads the data from your own install, in
-your browser.
+`gamedata.json` holds the numbers the sim needs (skills, supports, items, the passive tree), extracted
+from the playtest and published with the developer's permission. It is not the raw game files.
 
 Not affiliated with the developers of Broken Oath.

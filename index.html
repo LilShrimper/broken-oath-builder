@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Broken Oath Damage Sim</title>
+<title>Broken Oath Builder</title>
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
 <style>
 :root {
@@ -284,7 +284,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 <body>
 <header class="top">
   <div class="brand">
-    <h1>Broken Oath Damage Sim <button class="theme-btn" id="themeBtn" type="button" title="Switch between dark and light">Light mode</button></h1>
+    <h1>Broken Oath Builder <button class="theme-btn" id="themeBtn" type="button" title="Switch between dark and light">Light mode</button></h1>
     <span class="sub" id="builtInfo"></span>
   </div>
   <div class="top-controls">
@@ -3258,7 +3258,7 @@ window.BOStartApp = function () {
     const panel = st.log && st.log.panel && st.log.panel[st.skill];
     const fights = c.fights.filter(f => !f.gear);
     const lines = [
-      'Anonymous check report from the Broken Oath Damage Sim (game data ' + String(GD.builtAt).slice(0, 10) + ').', '',
+      'Anonymous check report from Broken Oath Builder (game data ' + String(GD.builtAt).slice(0, 10) + ').', '',
       '- Class / level: ' + st.ch.classId + ' ' + st.ch.level + (r.attr ? ' (Str ' + r.attr.Str + ', Dex ' + r.attr.Dex + ', Int ' + r.attr.Int + ')' : ''),
       '- Skill: ' + st.skill + ' gem ' + (r.gem ? r.gem.own + '+' + r.gem.bonus : '?') + (r.conduit ? ', cast by ' + r.conduit.host + ' Channel Conduit (' + num(r.speed.usesPerSec, 2) + '/s, tick ' + Math.round(r.conduit.tick * 1000) + ' ms, interval ' + Math.round(r.conduit.interval * 1000) + ' ms)' : '') + (r.coc ? ', Cast on Crit from ' + r.coc.source + ' (' + f2(r.coc.rate) + '/s)' : ''),
       '- Supports: ' + (sup.join(', ') || 'none'),

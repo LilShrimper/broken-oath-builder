@@ -42,6 +42,13 @@ GoatCounter (no cookies, no personal data, never your files).
    **Plan next points** (box defaults to your unspent points) lists where your next points should go, in
    order and with their paths, without refunding anything. Channel Conduit builds keep their channel
    a little slower than the cast interval so a new point never halves your casts.
+7. **Plan a build** on the **Build** tab: copy a loaded character into a plan, or start an empty one
+   with a class and level. Change the level, skills and gem levels, supports, skill bar, gear (base,
+   rarity, affixes with tier and value, uniques with a roll slider, runes) and idols; spend points on
+   the Skill tree tab. The Damage tab shows the result as you go, and support or gem level changes
+   made there also go into the plan. Plans stay in your browser. *Copy plan code* gives a `BOP1.`
+   code with everything in it, rolled gear included; paste it into the code box to open it in any
+   browser. Your saved characters are never changed.
 
 ## Accuracy
 

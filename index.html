@@ -4,21 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Broken Oath Damage Sim</title>
+<script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
 <style>
 :root {
   --bg: #141116; --panel: #1d1920; --panel-2: #241f28; --line: #352e3a; --text: #ebe4d8; --muted: #a59bab; --faint: #776d7c;
   --accent: #d9a85b; --accent-ink: #1a1408; --good: #7fc46a; --bad: #e0675a;
   --t-physical: #cbb9a2; --t-fire: #ec7b4c; --t-cold: #73b9ea; --t-lightning: #e9d45c; --t-poison: #82c76c;
   --radius: 10px; --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 6px 20px rgba(0,0,0,.25);
+  color-scheme: dark;
 }
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bg: #f4f0ea; --panel: #fffdf9; --panel-2: #f7f2ea; --line: #e2d9cc; --text: #2a2420; --muted: #6d6259; --faint: #9a8f84;
-    --accent: #a8742a; --accent-ink: #fff; --good: #3f8a2e; --bad: #b8433a;
-    --t-physical: #8a7356; --t-fire: #c4521f; --t-cold: #2c7fb8; --t-lightning: #a68a0a; --t-poison: #3f8a2e;
-    --shadow: 0 1px 2px rgba(0,0,0,.06);
-  }
+/* Dark for everyone by default; the header switch picks light (remembered in the browser). */
+:root[data-theme="light"] {
+  --bg: #f4f0ea; --panel: #fffdf9; --panel-2: #f7f2ea; --line: #e2d9cc; --text: #2a2420; --muted: #6d6259; --faint: #9a8f84;
+  --accent: #a8742a; --accent-ink: #fff; --good: #3f8a2e; --bad: #b8433a;
+  --t-physical: #8a7356; --t-fire: #c4521f; --t-cold: #2c7fb8; --t-lightning: #a68a0a; --t-poison: #3f8a2e;
+  --shadow: 0 1px 2px rgba(0,0,0,.06);
+  color-scheme: light;
 }
+.theme-btn { background: none; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer; margin-left: 10px; vertical-align: middle; }
+.theme-btn:hover { color: var(--text); border-color: var(--muted); }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
@@ -221,6 +225,36 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 .plan-list li { cursor: pointer; }
 .plan-list li > span:first-child { line-height: 1.5; }
 .plan-list b { color: var(--accent); font-weight: 600; }
+/* Build tab (planner.js) */
+.build-pane { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.build-pane[hidden] { display: none; }
+.pl-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; margin: 6px 0; }
+.pl-row > select { flex: 1 1 200px; width: auto; }
+.pl-row .field.inline { flex: 0 1 130px; }
+.pl-row .field.inline.grow { flex: 1 1 220px; }
+.pl-row .check-row { align-self: center; }
+.pl-status { color: var(--accent); }
+.pl-skills { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.pl-skill { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--panel-2); }
+.pl-skill .field { margin: 4px 0 2px; }
+.pl-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
+.pl-chips select { flex: 1 1 180px; width: auto; padding: 4px 7px; font-size: 12.5px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); font-size: 12.5px; }
+.build-pane .x { background: none; border: 0; color: var(--faint); cursor: pointer; font-size: 16px; line-height: 1; padding: 0 3px; }
+.build-pane .x:hover { color: var(--bad); }
+.build-pane .meta { color: var(--faint); font-size: 11.5px; }
+.build-pane .bad { color: var(--bad); }
+.pl-item { border-top: 1px solid var(--line); padding: 6px 0; }
+.pl-item summary { cursor: pointer; padding: 4px 0; overflow-wrap: anywhere; }
+.pl-item summary b { display: inline-block; min-width: 92px; }
+.pl-item-body { padding: 4px 0 8px 12px; border-left: 2px solid var(--line); margin: 4px 0 4px 4px; }
+.pl-affix { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 3px 0; }
+.pl-affix select { flex: 0 1 260px; width: auto; padding: 4px 7px; font-size: 12.5px; }
+.pl-affix .mini { width: 72px; padding: 4px 6px; font-size: 12.5px; }
+.pl-type { font-size: 11px; font-weight: 700; color: var(--accent); width: 14px; text-align: center; }
+.pl-text { flex: 1 1 220px; font-size: 12.5px; min-width: 0; }
+.pl-lines { margin: 4px 0; padding-left: 18px; font-size: 12.5px; }
+.pl-item input[type=range] { width: 160px; accent-color: var(--accent); }
 
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
@@ -228,7 +262,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 <body>
 <header class="top">
   <div class="brand">
-    <h1>Broken Oath Damage Sim</h1>
+    <h1>Broken Oath Damage Sim <button class="theme-btn" id="themeBtn" type="button" title="Switch between dark and light">Light mode</button></h1>
     <span class="sub" id="builtInfo"></span>
   </div>
   <div class="top-controls">
@@ -243,10 +277,11 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
     <label class="btn ghost" title="Load BrokenOath.log from %LOCALAPPDATA%\BrokenOath\Saved\Logs to check the sim against your real fights. It is read in this tab only, never uploaded.">
       <input type="file" id="logInput" accept=".log,.txt" hidden>Load game log
     </label>
-    <form class="code-form" id="codeForm" title="Paste a build code from the passive tree's COPY CODE (it starts with BO1.)">
-      <input type="text" id="codeInput" placeholder="Paste a BO1. build code" autocomplete="off" spellcheck="false">
+    <form class="code-form" id="codeForm" title="Paste a build code from the passive tree's COPY CODE (it starts with BO1.) or a plan code from the Build tab (BOP1.)">
+      <input type="text" id="codeInput" placeholder="Paste a BO1. build or BOP1. plan code" autocomplete="off" spellcheck="false">
       <button class="btn ghost" type="submit">Load code</button>
     </form>
+    <button class="btn ghost" id="planBtn" type="button" title="Plan a build: start from nothing or copy a character, then change its skills, gear and tree">Plan a build</button>
     <button class="btn ghost" id="dataBtn" type="button" hidden title="Read the game's Data folder again after a patch">Update game data</button>
   </div>
 </header>
@@ -359,10 +394,12 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
     <nav class="tabs" role="tablist">
       <button class="tab active" type="button" role="tab" data-tab="damage" aria-selected="true">Damage</button>
       <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false">Skill tree</button>
+      <button class="tab" type="button" role="tab" data-tab="build" aria-selected="false">Build</button>
     </nav>
     <section class="results" id="results">
       <div class="empty" id="emptyState">Pick a character to start. Use <b>Load saves folder</b> and pick your SaveGames folder to load every character at once.</div>
     </section>
+    <section class="build-pane" id="buildPane" hidden></section>
     <section class="tree-pane" id="treePane" hidden>
       <div class="tree-bar">
         <span class="tree-points" id="treePoints"></span>
@@ -400,6 +437,18 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 </footer>
 
 <script>
+(function () {
+  const b = document.getElementById('themeBtn'), root = document.documentElement;
+  const show = () => { b.textContent = root.dataset.theme === 'light' ? 'Dark mode' : 'Light mode'; };
+  b.addEventListener('click', () => {
+    if (root.dataset.theme === 'light') delete root.dataset.theme; else root.dataset.theme = 'light';
+    try { localStorage.setItem('bods:theme', root.dataset.theme === 'light' ? 'light' : 'dark'); } catch (e) { /* storage off */ }
+    show();
+  });
+  show();
+})();
+</script>
+<script>
 window.GD = null;
 window.CHARS = [];
 </script>
@@ -416,7 +465,7 @@ window.CHARS = [];
     'Gameplay/animsets.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 6; // 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 7; // 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -476,17 +525,18 @@ window.CHARS = [];
     for (const n of tree.nodes) nodes[n.Id] = pick(n, ['Id', 'Name', 'Kind', 'Mods', 'Text', 'Region', 'X', 'Y', 'Links', 'ClassStart', 'Price', 'Choice']);
 
     const affixes = {};
-    for (const a of J('Items/affixes.json').affixes) affixes[a.Id.toLowerCase()] = pick(a, ['Id', 'Type', 'Group', 'Mod']);
+    for (const a of J('Items/affixes.json').affixes) affixes[a.Id.toLowerCase()] = Object.assign(pick(a, ['Id', 'Type', 'Group', 'Mod', 'BaseTags', 'ExcludeTags']), { Tiers: (a.Tiers || []).map(t => pick(t, ['ILvl', 'Min', 'Max', 'Min2', 'Max2', 'Name'])) });
 
     const uniques = {};
     for (const u of J('Items/uniques.json').uniques) uniques[u.Id.toLowerCase()] = { Id: u.Id, Name: u.Name, BaseId: u.BaseId, Mods: u.Mods.map(m => pick(m, ['Mod', 'Text', 'Min', 'Max', 'Min2', 'Max2'])) };
 
     const bases = {};
-    for (const b of J('Items/item_bases.json').bases) bases[b.Id.toLowerCase()] = pick(b, ['Id', 'Name', 'Slot', 'Class', 'TypeName', 'Tags', 'Implicits', 'DamageMin', 'DamageMax', 'AttacksPerSecond', 'Crit', 'bTwoHanded', 'Weapon']);
+    for (const b of J('Items/item_bases.json').bases) bases[b.Id.toLowerCase()] = pick(b, ['Id', 'Name', 'Slot', 'Class', 'TypeName', 'Tags', 'Implicits', 'DamageMin', 'DamageMax', 'AttacksPerSecond', 'Crit', 'bTwoHanded', 'Weapon', 'Level']);
 
     const runesFile = J('Items/runes.json');
     const runes = {};
     for (const r of [...runesFile.runes, ...runesFile.jewels]) runes[r.Id.toLowerCase()] = pick(r, ['Id', 'Name', 'Weapon', 'Armour']);
+    const runeSockets = (runesFile.Rules || {}).MaxSockets || {};
     const runewords = J('Items/runewords.json').runewords.map(r => pick(r, ['Id', 'Name', 'Runes', 'Bases', 'Mods', 'PowerMods', 'Power2H', 'PowerBandILvl', 'PowerBandCount', 'PowerBandMods', 'Level', 'Sockets', 'Class']));
 
     const dragonFile = J('Gameplay/dragonling.json');
@@ -522,7 +572,7 @@ window.CHARS = [];
     for (const t of J('Items/stat_text.json').texts) statText[t.Key] = t.Text;
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
-      { skills, classes, supports, nodes, moved: tree.Moved || {}, affixes, uniques, bases, runes, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, animRate });
+      { skills, classes, supports, nodes, moved: tree.Moved || {}, affixes, uniques, bases, runes, runeSockets, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, animRate });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, SCHEMA };
@@ -1051,6 +1101,353 @@ window.CHARS = [];
   root.BOTreeOpt = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+// Build planner (the Build tab): start a plan from scratch or copy a loaded character into one, then
+// change its level, skills, supports, gear and (on the Skill tree tab) passives, and see the damage.
+// Plans stay in this browser with the loaded characters and travel as a plan code (BOP1.).
+// app.js calls BOPlanner(ctx) and gets back { render, fromCode, isPlanCode }.
+window.BOPlanner = function (ctx) {
+  'use strict';
+  const { GD, S, $, esc } = ctx;
+  const lc = s => String(s == null ? '' : s).toLowerCase();
+  const SLOTS = ['MainHand', 'OffHand', 'Helm', 'Chest', 'Gloves', 'Boots', 'Amulet', 'Ring1', 'Ring2', 'Belt', 'DwarvenRune'];
+  const SLOT_NAME = { MainHand: 'Weapon', OffHand: 'Off hand', Helm: 'Helm', Chest: 'Body armour', Gloves: 'Gloves', Boots: 'Boots', Amulet: 'Amulet', Ring1: 'Ring 1', Ring2: 'Ring 2', Belt: 'Belt', DwarvenRune: 'Dwarven rune', Idol: 'Idol' };
+  const RARITIES = ['Normal', 'Magic', 'Rare', 'Unique'];
+  const LIMIT = { Normal: 0, Magic: 1, Rare: 3 }; // prefixes and suffixes each
+  const BAR = 8; // skill bar slots
+  const baseSlot = slot => /^Ring\d$/.test(slot) ? 'Ring' : slot;
+  const byName = (a, b) => a.Name.localeCompare(b.Name);
+  const opt = (v, label, sel) => '<option value="' + esc(v) + '"' + (sel ? ' selected' : '') + '>' + esc(label) + '</option>';
+
+  // ---------- lists built once ----------
+  const KIND = { Gem: 'Skill gems', Weapon: 'Weapon skills', Utility: 'Utility', Basic: 'Basic' };
+  const skillOpts = sel => '<option value="">Pick a skill…</option>' + Object.entries(KIND).map(([k, label]) => {
+    const list = Object.values(GD.skills).filter(s => (s.Kind || 'Gem') === k).sort(byName);
+    return list.length ? '<optgroup label="' + label + '">' + list.map(s => opt(s.Id, s.Name, lc(s.Id) === lc(sel))).join('') + '</optgroup>' : '';
+  }).join('');
+  const supportList = Object.values(GD.supports).sort(byName);
+  const basesFor = slot => Object.values(GD.bases).filter(b => b.Slot === baseSlot(slot)).sort((a, b) => (a.Level || 0) - (b.Level || 0) || byName(a, b));
+  const uniquesFor = slot => Object.values(GD.uniques).filter(u => { const b = GD.bases[lc(u.BaseId)]; return b && b.Slot === baseSlot(slot); }).sort(byName);
+  const runeList = Object.values(GD.runes).sort(byName);
+  function affixesFor(base) {
+    const tags = new Set((base && base.Tags) || []);
+    return Object.values(GD.affixes).filter(a => (a.BaseTags || []).some(t => tags.has(t)) && !(a.ExcludeTags || []).some(t => tags.has(t)) && (a.Tiers || []).length);
+  }
+  function runeSlots(base) {
+    if (!base) return 0;
+    const R = GD.runeSockets || {}, tags = base.Tags || [];
+    const keys = Object.keys(R).filter(k => tags.includes(k) || base.Slot === k);
+    return keys.length ? Math.max(...keys.map(k => R[k])) : 0;
+  }
+  const modLine = (m, v, v2) => S.modText(GD, { stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: v != null ? v : m.Value || 0, v2: v2 != null ? v2 : m.Value2 || 0 });
+
+  // ---------- plans ----------
+  const newId = () => 'plan:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  function blankPlan(classId, level) {
+    return { id: newId(), name: classId + ' plan', classId, level, league: '', lastZone: '', items: [], passives: [], bonusPoints: 0, gems: [], gemLevels: {}, sockets: [], hotbar: [],
+      weaponId: '', dragonNodes: [], dragonAspect: '', mainSkill: '', supportGems: [], plan: true, savedAt: new Date().toISOString() };
+  }
+  function planFrom(ch) {
+    const p = JSON.parse(JSON.stringify(ch));
+    for (const k of ['file', 'fromCode', 'codeWarnings', 'from']) delete p[k];
+    return Object.assign(p, { id: newId(), name: ch.name.replace(/ \((code|edited)\)$/, '') + (ch.plan ? ' (copy)' : ''), plan: true, savedAt: new Date().toISOString() });
+  }
+  // Rows of the Skills card: each socketed skill, then skills that are only on the bar.
+  function rows(ch) {
+    const out = [];
+    ch.sockets.forEach((s, i) => { if (s.skill && !out.some(r => r.skill === s.skill)) out.push({ skill: s.skill, sock: s, si: i }); });
+    for (const h of ch.hotbar) if (h && h !== 'move' && !out.some(r => r.skill === h)) out.push({ skill: h, sock: null });
+    return out;
+  }
+  const onBar = ch => ch.hotbar.filter(h => h && h !== 'move');
+  function ensureSocket(ch, skill) {
+    let s = ch.sockets.find(x => x.skill === skill);
+    if (!s) { s = { skill, supports: [], conduit: '' }; ch.sockets.push(s); }
+    if (!ch.gems.includes(skill)) ch.gems.push(skill);
+    return s;
+  }
+  function rollUnique(it, roll) {
+    const u = GD.uniques[lc(it.unique)]; if (!u) return;
+    const at = (lo, hi) => lo == null ? 0 : Math.round((lo + (hi - lo) * roll) * 100) / 100;
+    it.roll = roll;
+    it.affixes = u.Mods.map((m, i) => m.Mod ? { id: 'unique:' + i, tier: 0, v: at(m.Min, m.Max), v2: at(m.Min2, m.Max2) } : null).filter(Boolean);
+  }
+
+  // Plan codes: "BOP1." + base64url(deflate(JSON)). They carry everything, rolled gear included.
+  const isPlanCode = s => /^BOP1\./.test(String(s || '').trim());
+  async function toCode(ch) {
+    const p = Object.assign({}, ch); delete p.id; delete p.from; delete p.savedAt;
+    const z = new Uint8Array(await new Response(new Blob([JSON.stringify(p)]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+    let bin = ''; for (const b of z) bin += String.fromCharCode(b);
+    return 'BOP1.' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  async function fromCode(text) {
+    let b64 = String(text).trim().replace(/\s+/g, '').slice(5).replace(/-/g, '+').replace(/_/g, '/'); while (b64.length % 4) b64 += '=';
+    let p;
+    try {
+      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      p = JSON.parse(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'))).text());
+    } catch (e) { throw new Error('The plan code is damaged or cut short.'); }
+    if (!p || !p.classId || !Array.isArray(p.items) || !Array.isArray(p.sockets)) throw new Error('This is not a build plan.');
+    const base = blankPlan(p.classId, p.level || 1);
+    return Object.assign(base, p, { id: newId(), plan: true, savedAt: new Date().toISOString() });
+  }
+
+  // ---------- view ----------
+  let status = '';
+  const pane = () => $('#buildPane');
+  function render() {
+    const el = pane(); if (!el || el.hidden) return;
+    const ch = ctx.current();
+    const edit = !!(ch && ch.plan), dis = edit ? '' : ' disabled';
+    const classOpts = Object.values(GD.classes).map(c => opt(c.Id, c.Id, ch && c.Id === ch.classId)).join('');
+    let h = '<div class="card"><h2>Plan a build</h2>';
+    if (!ch || !edit) {
+      h += '<p class="hint">' + (ch ? '<b>' + esc(ch.name) + '</b> is ' + (ch.file || ch.from === 'folder' || ch.from === 'file' ? 'your saved character' : 'a loaded build') + ', shown read-only below. Copy it into a plan to change its level, skills, gear and tree; the original stays as it is.' : 'Start from nothing, or load a character and copy it into a plan.') + '</p>' +
+        '<div class="pl-row">' + (ch ? '<button class="btn" type="button" data-act="copy">Copy ' + esc(ch.name) + ' to a plan</button>' : '') +
+        '<label class="field inline"><span>Class</span><select id="plClass">' + classOpts + '</select></label>' +
+        '<label class="field inline"><span>Level</span><input type="number" id="plLevel" min="1" max="100" value="' + (ch ? ch.level : 60) + '"></label>' +
+        '<button class="btn ghost" type="button" data-act="new">Start an empty plan</button></div>';
+    } else {
+      const aspects = Object.keys(GD.dragon.aspects || {});
+      h += '<div class="pl-row">' +
+        '<label class="field inline grow"><span>Name</span><input type="text" data-f="name" value="' + esc(ch.name) + '"></label>' +
+        '<label class="field inline"><span>Class</span><input type="text" value="' + esc(ch.classId) + '" disabled></label>' +
+        '<label class="field inline"><span>Level</span><input type="number" min="1" max="100" data-f="level" value="' + ch.level + '"></label>' +
+        '<label class="field inline" title="Passive points from quests and the like, on top of one a level"><span>Bonus points</span><input type="number" min="0" max="60" data-f="bonus" value="' + (ch.bonusPoints || 0) + '"></label>' +
+        (aspects.length ? '<label class="field inline"><span>Dragonling aspect</span><select data-f="aspect">' + opt('', 'None', !ch.dragonAspect) + aspects.map(a => opt(a, GD.dragon.aspects[a].Name || a, a === ch.dragonAspect)).join('') + '</select></label>' : '') +
+        '</div><div class="pl-row">' +
+        '<button class="btn small" type="button" data-act="code">Copy plan code</button>' +
+        '<button class="btn small ghost" type="button" data-act="dup">Duplicate</button>' +
+        '<button class="btn small ghost" type="button" data-act="del">Delete plan</button>' +
+        '<span class="hint">Edits save in this browser as you go. The tree is on the Skill tree tab; the Damage tab shows what it does.</span></div>';
+    }
+    if (status) h += '<p class="hint pl-status">' + esc(status) + '</p>';
+    h += '</div>';
+    if (ch) h += skillsCard(ch, edit, dis) + gearCard(ch, edit, dis);
+    el.innerHTML = h;
+  }
+
+  function skillsCard(ch, edit, dis) {
+    const rs = rows(ch), bar = onBar(ch);
+    let h = '<div class="card"><h2>Skills <small>' + bar.length + '/' + BAR + ' on the bar</small></h2><p class="hint">Vows, Heralds and curses only count while on the skill bar. A spell triggered by Cast on Crit or a Channel Conduit can stay off the bar.</p><div class="pl-skills">';
+    for (const r of rs) {
+      const sk = GD.skills[lc(r.skill)], lvl = ch.gemLevels[r.skill] || 1;
+      const sups = r.sock ? r.sock.supports : [], slots = S.socketsFor(GD, ch, r.skill, lvl);
+      const link = sups.some(x => ['cast_on_crit', 'channel_conduit'].includes(lc(x)));
+      h += '<div class="pl-skill" data-skill="' + esc(r.skill) + '"><div class="pl-row">' +
+        '<select data-f="skill"' + dis + '>' + skillOpts(r.skill) + '</select>' +
+        '<label class="field inline"><span>Gem level</span><input type="number" min="1" max="40" data-f="glevel" value="' + lvl + '"' + dis + '></label>' +
+        '<label class="check-row"><input type="checkbox" data-f="bar"' + (bar.includes(r.skill) ? ' checked' : '') + dis + '><span>On bar</span></label>' +
+        '<label class="check-row" title="The skill the Damage tab opens on"><input type="radio" name="plMain" data-f="main"' + (ch.mainSkill === r.skill ? ' checked' : '') + dis + '><span>Main</span></label>' +
+        (edit ? '<button class="x" type="button" title="Remove this skill" data-act="rmskill">×</button>' : '') + '</div>' +
+        (sk ? '' : '<p class="hint bad">Unknown skill ' + esc(r.skill) + '</p>') +
+        '<div class="pl-chips">' + sups.map(id => { const s = GD.supports[lc(id)]; return '<span class="chip">' + esc(s ? s.Name : id) + (edit ? '<button class="x" type="button" title="Remove" data-act="rmsup" data-sup="' + esc(id) + '">×</button>' : '') + '</span>'; }).join('') +
+        '<span class="meta' + (sups.length > slots ? ' bad' : '') + '">' + sups.length + '/' + slots + ' support sockets at gem level ' + lvl + '</span>' +
+        (edit ? '<select data-f="addsup"><option value="">Add a support…</option>' + supportList.filter(s => !sups.some(x => lc(x) === lc(s.Id))).map(s => opt(s.Id, s.Name)).join('') + '</select>' : '') + '</div>' +
+        (link ? '<label class="field inline"><span>Linked spell <span class="meta">Cast on Crit in an attack, or a Channel Conduit, casts this</span></span><select data-f="conduit"' + dis + '>' + opt('', 'None (Cast on Crit casts the spell it sits in)', !r.sock.conduit) +
+          rs.filter(x => x.skill !== r.skill && GD.skills[lc(x.skill)] && (GD.skills[lc(x.skill)].Tags || []).includes('Spell')).map(x => opt(x.skill, GD.skills[lc(x.skill)].Name, lc(x.skill) === lc(r.sock.conduit))).join('') + '</select></label>' : '') +
+        '</div>';
+    }
+    if (!rs.length) h += '<p class="hint">No skills yet.</p>';
+    h += '</div>' + (edit ? '<label class="field"><span>Add a skill</span><select data-f="addskill">' + skillOpts('') + '</select></label>' : '') + '</div>';
+    return h;
+  }
+
+  function itemSummary(it) {
+    if (!it) return '<span class="meta">empty</span>';
+    const b = GD.bases[lc(it.base)], u = GD.uniques[lc(it.unique)];
+    const n = it.affixes.filter(a => !a.id.startsWith('unique:')).length;
+    return esc((u ? u.Name + ' · ' : it.rarity + ' ') + (b ? b.Name : it.base)) + (u ? '' : n ? ' · ' + n + ' affix' + (n > 1 ? 'es' : '') : '') + (it.runes.length ? ' · ' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') : '');
+  }
+  function itemEditor(it, slot, idx, edit, dis) {
+    const key = it ? idx : slot; // idols are found by index, other slots by name
+    let h = '<details class="pl-item" data-item="' + esc(key) + '"' + (openItems.has(String(key)) ? ' open' : '') + '><summary><b>' + SLOT_NAME[slot] + '</b> ' + itemSummary(it) + '</summary><div class="pl-item-body">';
+    const bases = basesFor(slot);
+    h += '<div class="pl-row"><label class="field inline grow"><span>Base</span><select data-f="base"' + dis + '>' + opt('', '(empty)', !it) + bases.map(b => opt(b.Id, b.Name + (b.Level ? ' (level ' + b.Level + ')' : ''), it && lc(it.base) === lc(b.Id))).join('') + '</select></label>';
+    if (it) {
+      h += '<label class="field inline"><span>Rarity</span><select data-f="rarity"' + dis + '>' + RARITIES.filter(r => r !== 'Unique' || uniquesFor(slot).length).map(r => opt(r, r, it.rarity === r)).join('') + '</select></label>' +
+        '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"' + dis + '></label>';
+    }
+    h += '</div>';
+    if (!it) return h + '</div></details>';
+    const base = GD.bases[lc(it.base)];
+    if (base) for (const m of base.Implicits || []) h += '<div class="meta">Implicit: ' + esc(modLine(m)) + '</div>';
+    if (it.rarity === 'Unique') {
+      const us = uniquesFor(slot), u = GD.uniques[lc(it.unique)];
+      h += '<div class="pl-row"><label class="field inline grow"><span>Unique</span><select data-f="unique"' + dis + '>' + opt('', 'Pick a unique…', !u) + us.map(x => opt(x.Id, x.Name + (us.filter(y => y.Name === x.Name).length > 1 ? ' (' + ((GD.bases[lc(x.BaseId)] || {}).Name || x.BaseId) + ')' : ''), u && x.Id === u.Id)).join('') + '</select></label>' +
+        (u ? '<label class="field inline" title="Where each line sits between its lowest and highest roll"><span>' + (it.roll == null ? 'Rolls as found' : 'Rolls ' + Math.round(it.roll * 100) + '%') + '</span><input type="range" min="0" max="100" step="5" data-f="roll" value="' + Math.round((it.roll == null ? 0.5 : it.roll) * 100) + '"' + dis + '></label>' : '') + '</div>';
+      if (u) h += '<ul class="pl-lines">' + it.affixes.map(a => { const um = u.Mods[+a.id.slice(7)]; return um ? '<li>' + esc(um.Text ? um.Text.replace(/\{0\}/g, a.v).replace(/\{1\}/g, a.v2).replace(/\+-/g, '-') : modLine(um.Mod, a.v, a.v2)) + '</li>' : ''; }).join('') + '</ul>';
+    } else if (it.rarity !== 'Normal') {
+      const all = affixesFor(base), used = new Set(it.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
+      const count = t => it.affixes.filter(a => (GD.affixes[lc(a.id)] || {}).Type === t).length;
+      it.affixes.forEach((a, ai) => {
+        const af = GD.affixes[lc(a.id)];
+        if (!af) { h += '<div class="pl-affix"><span class="meta bad">Unknown affix ' + esc(a.id) + '</span>' + (edit ? '<button class="x" type="button" data-act="rmaffix" data-ai="' + ai + '">×</button>' : '') + '</div>'; return; }
+        const t = af.Tiers[a.tier] || af.Tiers[0], two = t && t.Min2 != null;
+        h += '<div class="pl-affix" data-ai="' + ai + '"><span class="pl-type">' + af.Type[0] + '</span>' +
+          '<select data-f="tier"' + dis + '>' + af.Tiers.map((x, ti) => opt(ti, 'T' + (ti + 1) + ' ' + x.Min + '-' + x.Max + (x.Min2 != null ? ' / ' + x.Min2 + '-' + x.Max2 : '') + ' (ilvl ' + x.ILvl + ')', ti === a.tier)).join('') + '</select>' +
+          '<input class="mini" type="number" step="any" data-f="v" value="' + a.v + '"' + dis + '>' + (two ? '<input class="mini" type="number" step="any" data-f="v2" value="' + a.v2 + '"' + dis + '>' : '') +
+          '<span class="pl-text">' + esc(modLine(af.Mod, a.v, a.v2)) + (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') + '</span>' +
+          (edit ? '<button class="x" type="button" title="Remove" data-act="rmaffix" data-ai="' + ai + '">×</button>' : '') + '</div>';
+      });
+      const lim = LIMIT[it.rarity] || 0;
+      const over = ['Prefix', 'Suffix'].filter(t => count(t) > lim);
+      if (over.length) h += '<p class="hint bad">' + it.rarity + ' items hold ' + lim + ' prefix' + (lim > 1 ? 'es' : '') + ' and ' + lim + ' suffix' + (lim > 1 ? 'es' : '') + '.</p>';
+      if (edit) {
+        const grp = t => all.filter(a => a.Type === t && !used.has(a.Group)).sort((x, y) => x.Id.localeCompare(y.Id))
+          .map(a => opt(a.Id, modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2) + ' (' + a.Id + ')')).join('');
+        h += '<label class="field"><span>Add an affix <span class="meta">' + count('Prefix') + '/' + lim + ' prefixes, ' + count('Suffix') + '/' + lim + ' suffixes; added at the top tier your item level allows</span></span><select data-f="addaffix"><option value="">Pick an affix…</option>' +
+          '<optgroup label="Prefixes">' + grp('Prefix') + '</optgroup><optgroup label="Suffixes">' + grp('Suffix') + '</optgroup></select></label>';
+      }
+    }
+    const rs = runeSlots(base);
+    if (rs && it.rarity !== 'Unique') {
+      h += '<div class="pl-row"><span class="meta">Runes (' + rs + ' sockets)</span>';
+      for (let i = 0; i < rs; i++) h += '<select data-f="rune" data-ri="' + i + '"' + dis + '>' + opt('', '(none)', !it.runes[i]) + runeList.map(r => opt(r.Id, r.Name, lc(it.runes[i]) === lc(r.Id))).join('') + '</select>';
+      h += '</div>';
+    }
+    if (edit) h += '<button class="btn small ghost" type="button" data-act="rmitem">Remove item</button>';
+    return h + '</div></details>';
+  }
+  const openItems = new Set();
+  function gearCard(ch, edit, dis) {
+    let h = '<div class="card"><h2>Gear</h2><p class="hint">Pick a base, then affixes and their tier. Untick pieces on the Damage tab to see what each is worth.</p>';
+    for (const slot of SLOTS) h += itemEditor(ch.items.find(i => i.slot === slot), slot, ch.items.findIndex(i => i.slot === slot), edit, dis);
+    const idols = ch.items.map((it, i) => ({ it, i })).filter(x => x.it.slot === 'Idol');
+    h += '<h3>Idols <small>' + idols.length + '</small></h3>';
+    for (const x of idols) h += itemEditor(x.it, 'Idol', x.i, edit, dis);
+    if (edit) h += '<button class="btn small ghost" type="button" data-act="addidol">Add an idol</button>';
+    return h + '</div>';
+  }
+
+  // ---------- edits ----------
+  function itemOf(ch, el) {
+    const box = el.closest('[data-item]'); if (!box) return {};
+    const k = box.dataset.item;
+    if (/^-?\d+$/.test(k)) return { it: ch.items[+k] || null, slot: (ch.items[+k] || {}).slot, key: k };
+    return { it: ch.items.find(i => i.slot === k) || null, slot: k, key: k };
+  }
+  function topTier(af, ilvl) { const i = af.Tiers.findIndex(t => t.ILvl <= ilvl); return i < 0 ? af.Tiers.length - 1 : i; }
+  function done(what) { ctx.changed(ctx.current(), what || {}); render(); }
+
+  function onChange(e) {
+    const t = e.target, f = t.dataset.f, ch = ctx.current();
+    if (!ch || !ch.plan || !f) return;
+    const row = t.closest('[data-skill]'), skill = row && row.dataset.skill;
+    const v = t.value;
+    switch (f) {
+      case 'name': ch.name = v.trim() || ch.name; return done({ name: true });
+      case 'level': ch.level = Math.max(1, Math.min(100, +v || 1)); return done({ tree: true });
+      case 'bonus': ch.bonusPoints = Math.max(0, +v || 0); return done({ tree: true });
+      case 'aspect': ch.dragonAspect = v; return done();
+      case 'addskill': {
+        if (!v || rows(ch).some(r => r.skill === v)) return render();
+        ensureSocket(ch, v); if (!ch.gemLevels[v]) ch.gemLevels[v] = Math.max(1, ...Object.values(ch.gemLevels).filter(x => x > 0), 1);
+        if (onBar(ch).length < BAR) ch.hotbar.push(v);
+        if (!ch.mainSkill) ch.mainSkill = v;
+        return done({ skills: true, select: v });
+      }
+      case 'skill': {
+        if (!v || v === skill || rows(ch).some(r => r.skill === v)) return render();
+        for (const s of ch.sockets) { if (s.skill === skill) s.skill = v; if (lc(s.conduit) === lc(skill)) s.conduit = v; }
+        ch.hotbar = ch.hotbar.map(h => h === skill ? v : h);
+        if (!ch.gemLevels[v]) ch.gemLevels[v] = ch.gemLevels[skill] || 1;
+        if (!ch.gems.includes(v)) ch.gems.push(v);
+        if (ch.mainSkill === skill) ch.mainSkill = v;
+        return done({ skills: true, select: v });
+      }
+      case 'glevel': ch.gemLevels[skill] = Math.max(1, Math.min(40, +v || 1)); if (!ch.gems.includes(skill)) ch.gems.push(skill); return done({ skills: true });
+      case 'bar':
+        if (t.checked) { if (onBar(ch).length >= BAR) { status = 'The skill bar holds ' + BAR + ' skills: take one off first.'; return render(); } ch.hotbar.push(skill); }
+        else { ensureSocket(ch, skill); ch.hotbar = ch.hotbar.filter(h => h !== skill); }
+        status = ''; return done({ skills: true });
+      case 'main': ch.mainSkill = skill; return done({ select: skill });
+      case 'addsup': if (v) { const s = ensureSocket(ch, skill); if (!s.supports.some(x => lc(x) === lc(v))) s.supports.push(v); } return done({ skills: true });
+      case 'conduit': ensureSocket(ch, skill).conduit = v; return done({ skills: true });
+    }
+    // gear
+    const { it, slot, key } = itemOf(ch, t); if (!slot) return;
+    openItems.add(String(key));
+    if (f === 'base') {
+      if (!v) { ch.items = ch.items.filter(i => i !== it); openItems.delete(String(key)); return done(); }
+      const u = it && GD.uniques[lc(it.unique)];
+      if (it) { it.base = v; if (u && lc(u.BaseId) !== lc(v)) { it.rarity = 'Rare'; it.unique = 'None'; it.affixes = []; } it.affixes = it.affixes.filter(a => a.id.startsWith('unique:') || affixesFor(GD.bases[lc(v)]).some(x => lc(x.Id) === lc(a.id))); }
+      else { ch.items.push({ slot, base: v, rarity: 'Rare', unique: 'None', name: '', level: ch.level, affixes: [], runes: [] }); openItems.add(slot); }
+      return done();
+    }
+    if (!it) return;
+    const ai = +(t.closest('[data-ai]') || {}).dataset?.ai;
+    switch (f) {
+      case 'rarity':
+        if (v === 'Unique') { it.rarity = 'Unique'; it.unique = 'None'; it.affixes = []; it.runes = []; }
+        else { if (it.rarity === 'Unique') { it.affixes = []; it.unique = 'None'; it.name = ''; } it.rarity = v; if (v === 'Normal') it.affixes = []; }
+        return done();
+      case 'ilvl': it.level = Math.max(1, Math.min(100, +v || 1)); return done();
+      case 'unique': {
+        const u = GD.uniques[lc(v)]; if (!u) return render();
+        Object.assign(it, { unique: u.Id, base: u.BaseId, name: u.Name }); rollUnique(it, it.roll == null ? 0.5 : it.roll); return done();
+      }
+      case 'roll': rollUnique(it, (+v || 0) / 100); return done();
+      case 'addaffix': {
+        const af = GD.affixes[lc(v)]; if (!af) return render();
+        const ti = topTier(af, it.level || ch.level), tt = af.Tiers[ti];
+        it.affixes.push({ id: af.Id, tier: ti, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); return done();
+      }
+      case 'tier': { const a = it.affixes[ai], af = GD.affixes[lc(a.id)], tt = af.Tiers[+v]; Object.assign(a, { tier: +v, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); return done(); }
+      case 'v': it.affixes[ai].v = +v || 0; return done();
+      case 'v2': it.affixes[ai].v2 = +v || 0; return done();
+      case 'rune': { it.runes[+t.dataset.ri] = v; it.runes = Array.from(it.runes, r => r || '').slice(0, runeSlots(GD.bases[lc(it.base)])).filter(Boolean); return done(); } // order matters for runewords: empty sockets close up
+    }
+  }
+  async function onClick(e) {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const act = b.dataset.act, ch = ctx.current();
+    if (act === 'new' || act === 'copy') {
+      const p = act === 'copy' ? planFrom(ctx.workingCopy()) : blankPlan($('#plClass').value, Math.max(1, Math.min(100, +$('#plLevel').value || 1)));
+      status = act === 'copy' ? 'Copied into a plan. Change anything below; the original is untouched.' : 'Empty plan started: add a skill, then gear, then spend points on the Skill tree tab.';
+      ctx.add(p); return render();
+    }
+    if (!ch || !ch.plan) return;
+    const row = b.closest('[data-skill]'), skill = row && row.dataset.skill;
+    if (act === 'code') {
+      const code = await toCode(ch);
+      try { await navigator.clipboard.writeText(code); status = 'Plan code copied (' + code.length + ' characters). Paste it into the code box at the top to open it here or in another browser.'; }
+      catch (err) { window.prompt('Copy this plan code:', code); }
+      return render();
+    }
+    if (act === 'dup') { const p = planFrom(ch); status = 'Duplicated.'; ctx.add(p); return render(); }
+    if (act === 'del') { if (!window.confirm('Delete the plan "' + ch.name + '"? This cannot be undone (copy its plan code first to keep it).')) return; status = ''; ctx.remove(ch); return render(); }
+    if (act === 'rmskill') {
+      ch.sockets = ch.sockets.filter(s => s.skill !== skill); ch.hotbar = ch.hotbar.filter(h => h !== skill);
+      for (const s of ch.sockets) if (s.conduit === skill) s.conduit = '';
+      if (ch.mainSkill === skill) ch.mainSkill = (rows(ch)[0] || {}).skill || '';
+      return done({ skills: true });
+    }
+    if (act === 'rmsup') { const s = ch.sockets.find(x => x.skill === skill); if (s) s.supports = s.supports.filter(x => x !== b.dataset.sup); return done({ skills: true }); }
+    if (act === 'addidol') {
+      const base = basesFor('Idol')[0]; if (!base) return;
+      ch.items.push({ slot: 'Idol', base: base.Id, rarity: 'Magic', unique: 'None', name: '', level: ch.level, affixes: [], runes: [] });
+      openItems.add(String(ch.items.length - 1)); return done();
+    }
+    const { it, key } = itemOf(ch, b);
+    if (act === 'rmitem' && it) { ch.items = ch.items.filter(i => i !== it); openItems.clear(); return done(); }
+    if (act === 'rmaffix' && it) { it.affixes.splice(+b.dataset.ai, 1); openItems.add(String(key)); return done(); }
+  }
+  // Remember which item editors are open across re-renders.
+  function onToggle(e) {
+    const d = e.target; if (!d.matches || !d.matches('details[data-item]')) return;
+    if (d.open) openItems.add(d.dataset.item); else openItems.delete(d.dataset.item);
+  }
+  const el = pane();
+  el.addEventListener('change', onChange);
+  el.addEventListener('click', onClick);
+  el.addEventListener('toggle', onToggle, true);
+
+  return { render, fromCode, isPlanCode, clearStatus: () => { status = ''; } };
+};
 
 </script>
 <script>
@@ -2298,6 +2695,8 @@ window.BOStartApp = function () {
     penFloor: false, opt: null, optJob: null, last: null,
   };
 
+  let planner = null; // the Build tab (planner.js), made at the start
+
   // ---------- setup ----------
   $('#builtInfo').textContent = 'Game data read ' + new Date(GD.builtAt).toLocaleString() + (GD.filesAt ? ' (game files from ' + new Date(GD.filesAt).toLocaleDateString() + ')' : '') + ' · ' + Object.keys(GD.skills).length + ' skills';
   const resGrid = $('#resGrid');
@@ -2307,7 +2706,9 @@ window.BOStartApp = function () {
   const drop = document.createElement('div'); drop.className = 'drop-hint'; drop.textContent = 'Drop the SaveGames folder, a BO_Char_*.sav file or BrokenOath.log'; document.body.appendChild(drop);
 
   function fillChars(selectId) {
-    $('#charSelect').innerHTML = CHARS.map(c => '<option value="' + esc(c.id) + '">' + esc(c.name) + ' · ' + esc(c.classId) + ' ' + c.level + (c.file ? '' : ' (loaded)') + '</option>').join('') || '<option value="">No characters found</option>';
+    const o = c => '<option value="' + esc(c.id) + '">' + esc(c.name) + ' · ' + esc(c.classId) + ' ' + c.level + (c.file || c.plan ? '' : ' (loaded)') + '</option>';
+    const chars = CHARS.filter(c => !c.plan), plans = CHARS.filter(c => c.plan);
+    $('#charSelect').innerHTML = (plans.length ? (chars.length ? '<optgroup label="Characters">' + chars.map(o).join('') + '</optgroup>' : '') + '<optgroup label="Plans">' + plans.map(o).join('') + '</optgroup>' : chars.map(o).join('')) || '<option value="">No characters found</option>';
     if (selectId) $('#charSelect').value = selectId;
   }
 
@@ -2319,15 +2720,22 @@ window.BOStartApp = function () {
     st.curses = {};
     for (const c of Object.values(GD.curses)) st.curses[c.Id] = { on: ch.hotbar.includes(c.Skill), dread: 0 };
     st.enemyLevel = null; $('#enemyLevel').value = ''; $('#enemyLevel').placeholder = ch.level;
+    $('#treeReset').hidden = !!ch.plan; // a plan's tree is the plan itself
+    const { skills, pickable } = fillSkills(ch);
+    const remembered = store.get('skill:' + ch.id, null);
+    const first = [remembered, ch.mainSkill].find(id => id && skills.some(s => s.id === id)) || (pickable[0] || skills[0] || {}).id;
+    selectSkill(first);
+    if (planner) planner.render();
+  }
+  function fillSkills(ch) {
     const skills = S.listSkills(GD, ch);
     const groups = {};
     for (const s of S.listSkills(GD, ch, true)) (groups[s.where] = groups[s.where] || []).push(s);
     $('#skillSelect').innerHTML = Object.entries(groups).map(([g, list]) => '<optgroup label="' + g + '">' + list.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('') + '</optgroup>').join('');
-    const remembered = store.get('skill:' + ch.id, null);
     const pickable = skills.filter(s => { const r = S.calcSkill(GD, ch, s.id, {}); return !r.unsupported && !r.error; });
     $('#optSkill').innerHTML = pickable.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('');
-    const first = [remembered, ch.mainSkill].find(id => id && skills.some(s => s.id === id)) || (pickable[0] || skills[0] || {}).id;
-    selectSkill(first);
+    if (st.skill) { $('#skillSelect').value = st.skill; $('#optSkill').value = st.skill; }
+    return { skills, pickable };
   }
 
   function selectSkill(id) {
@@ -2360,6 +2768,31 @@ window.BOStartApp = function () {
       conduit: st.conduit == null ? undefined : st.conduit,
       coc: st.coc === false ? false : undefined, cocSource: typeof st.coc === 'string' ? st.coc : undefined,
     }, extra || {});
+  }
+
+  // A plan follows what you change on the Damage tab: the selected skill's supports and gem level.
+  function planSync() {
+    const p = st.chOrig; if (!p || !p.plan || !st.skill) return;
+    if (st.gemLevel) p.gemLevels[st.skill] = st.gemLevel;
+    if (!conduitHostNow(st.conduit)) {
+      let s = p.sockets.find(x => x.skill === st.skill);
+      if (!s) { s = { skill: st.skill, supports: [], conduit: '' }; p.sockets.push(s); }
+      s.supports = st.supports.slice();
+    }
+    if (!p.gems.includes(st.skill)) p.gems.push(st.skill);
+    p.savedAt = new Date().toISOString(); keepChars(); fillSkills(p);
+    if (planner) planner.render();
+  }
+  // The Build tab changed the plan: refresh lists and damage, keep the chosen skill unless told otherwise.
+  function planChanged(ch, what) {
+    st.ch = ch; st.chOrig = ch; st.pinned = null; stopSearch(); st.opt = null; T.scores = new Map();
+    ch.savedAt = new Date().toISOString();
+    keepChars(); fillChars(ch.id);
+    $('#enemyLevel').placeholder = ch.level;
+    fillSkills(ch);
+    if (what.select) { selectSkill(what.select); return; }
+    if (what.skills && st.skill) { st.gemLevel = null; $('#gemLevel').value = ''; resetSupports(); }
+    render();
   }
 
   // ---------- left panel ----------
@@ -2416,6 +2849,7 @@ window.BOStartApp = function () {
   // ---------- right panel ----------
   function render() { renderMain(); treeAfterRender(); }
   function renderMain() {
+    if (st.ch && !st.skill) { $('#results').innerHTML = '<div class="empty">This plan has no skills yet. Add one on the <b>Build</b> tab, or pick any skill in the Skill box on the left.</div>'; return; }
     if (!st.ch || !st.skill) { $('#results').innerHTML = '<div class="empty">No character loaded. Click <b>Copy save path</b>, then <b>Load saves folder</b>: paste the path into the picker\'s address bar, press Enter and choose <b>Select Folder</b>. Every character in it is loaded.<br><small>You can also drop the SaveGames folder or a BO_Char_*.sav file on this page, or paste a build code above. Your browser may ask to "upload" the files: that only lets this page read them; nothing leaves your computer.</small></div>'; return; }
     const r = S.calcSkill(GD, st.ch, st.skill, opts());
     renderControls(r);
@@ -2680,7 +3114,7 @@ window.BOStartApp = function () {
     if (!st.pinned && st.last) st.pinned = { total: st.last.totalDps, hit: st.last.hitDps, poison: st.last.poisonDps, sheet: st.last.panelDps };
     st.supports = x.sup.slice();
     for (const k of [...st.off]) if (k.startsWith('support:')) st.off.delete(k);
-    render();
+    planSync(); render();
   }
   function optCard() {
     const O = st.opt; if (!O || O.skill !== st.skill) return '';
@@ -2709,7 +3143,7 @@ window.BOStartApp = function () {
   // ---------- events ----------
   $('#charSelect').addEventListener('change', e => selectChar(e.target.value));
   $('#skillSelect').addEventListener('change', e => selectSkill(e.target.value));
-  $('#gemLevel').addEventListener('input', e => { st.gemLevel = +e.target.value || null; render(); });
+  $('#gemLevel').addEventListener('input', e => { st.gemLevel = +e.target.value || null; if (st.gemLevel) planSync(); render(); });
   $('#enemyLevel').addEventListener('input', e => { st.enemyLevel = +e.target.value || null; render(); });
   $('#enemyRarity').addEventListener('change', e => { st.rarity = e.target.value; render(); });
   $('#guardianElement').addEventListener('change', e => { st.gElem = e.target.value; render(); });
@@ -2723,7 +3157,7 @@ window.BOStartApp = function () {
   $('#ingameDps').addEventListener('input', e => { st.ingame = +e.target.value || null; render(); });
   resGrid.addEventListener('input', e => { const d = e.target.dataset.res; if (d) { st.res[d] = e.target.value; render(); } });
   document.querySelectorAll('[data-charge]').forEach(el => el.addEventListener('input', e => { st.charges[e.target.dataset.charge] = Math.max(0, +e.target.value || 0); render(); }));
-  $('#supportAdd').addEventListener('change', e => { const id = e.target.value; e.target.value = ''; if (id && !st.supports.some(s => s.toLowerCase() === id.toLowerCase())) { st.supports.push(id); render(); } });
+  $('#supportAdd').addEventListener('change', e => { const id = e.target.value; e.target.value = ''; if (id && !st.supports.some(s => s.toLowerCase() === id.toLowerCase())) { st.supports.push(id); planSync(); render(); } });
   $('#controls').addEventListener('change', e => {
     const t = e.target;
     if (t.dataset.src) { if (t.checked) st.off.delete(t.dataset.src); else st.off.add(t.dataset.src); render(); }
@@ -2733,7 +3167,7 @@ window.BOStartApp = function () {
   });
   $('#controls').addEventListener('click', e => {
     const id = e.target.dataset && e.target.dataset.removeSupport;
-    if (id) { st.supports = st.supports.filter(s => s !== id); st.off.delete('support:' + id.toLowerCase()); render(); }
+    if (id) { st.supports = st.supports.filter(s => s !== id); st.off.delete('support:' + id.toLowerCase()); planSync(); render(); }
   });
 
   // Loading saves: one file, or the whole SaveGames folder (picker or drag and drop). A web page cannot
@@ -2750,7 +3184,7 @@ window.BOStartApp = function () {
   }
   // Characters loaded here (not the ones built into the page) stay in this browser, so a refresh keeps them.
   function keepChars() {
-    try { localStorage.setItem('bods:chars', JSON.stringify(CHARS.filter(c => !c.file).slice(0, 30))); return true; } catch (e) { return false; }
+    try { localStorage.setItem('bods:chars', JSON.stringify(CHARS.filter(c => !c.file).slice(0, 60))); return true; } catch (e) { return false; }
   }
   function addChars(list, from, selectId) {
     if (from === 'folder') CHARS = CHARS.filter(c => c.from !== 'folder'); // a fresh folder read replaces the last one
@@ -2784,8 +3218,8 @@ window.BOStartApp = function () {
     saveTip('Copied ' + SAVE_PATH + '. Click Load saves folder, click the address bar at the top of the picker, paste (Ctrl+V), press Enter, then choose Select Folder. If your browser asks to "upload", that only lets this page read the files.');
   });
   $('#saveForget').addEventListener('click', () => {
-    try { localStorage.removeItem('bods:chars'); } catch (e) { /* storage off */ }
-    CHARS = CHARS.filter(c => c.file); saveTip('');
+    CHARS = CHARS.filter(c => c.file || c.plan); saveTip(''); // plans stay (delete them on the Build tab)
+    keepChars();
     $('#saveDirLabel').textContent = 'Load saves folder';
     fillChars((CHARS[0] || {}).id); if (CHARS.length) selectChar(CHARS[0].id); else { st.ch = null; render(); }
   });
@@ -2817,6 +3251,10 @@ window.BOStartApp = function () {
   $('#codeForm').addEventListener('submit', async e => {
     e.preventDefault();
     try {
+      if (planner.isPlanCode($('#codeInput').value)) {
+        const p = await planner.fromCode($('#codeInput').value);
+        addChars([p], 'plan', p.id); $('#codeInput').value = ''; showTab('build'); return;
+      }
       const ch = S.characterFromCode(GD, await decodeBuildCode($('#codeInput').value));
       CHARS = CHARS.filter(c => c.id !== ch.id); CHARS.unshift(ch);
       addChars([ch], 'code', ch.id); $('#codeInput').value = '';
@@ -2913,7 +3351,8 @@ window.BOStartApp = function () {
   function treeReset() { T.undo = []; T.scores = new Map(); T.job++; T.built = false; }
   function setPassives(list, undo) {
     if (undo !== false) T.undo.push(st.ch.passives.slice());
-    st.ch = Object.assign({}, st.chOrig, { passives: list });
+    if (st.chOrig && st.chOrig.plan) { st.chOrig.passives = list; st.ch = st.chOrig; keepChars(); }
+    else st.ch = Object.assign({}, st.chOrig, { passives: list });
     st.pinned = null; stopSearch(); st.opt = null;
     T.scores = new Map();
     render();
@@ -3205,7 +3644,8 @@ window.BOStartApp = function () {
   function showTab(tab) {
     T.visible = tab === 'tree';
     document.querySelectorAll('.tab').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
-    $('#results').hidden = T.visible; $('#treePane').hidden = !T.visible;
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build';
+    if (tab === 'build') planner.render();
     store.set('tab', tab);
     if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); }
   }
@@ -3259,6 +3699,19 @@ window.BOStartApp = function () {
     } catch (err) { alert('Could not make a build code: ' + err.message); }
   };
 
+  // The Build tab (planner.js).
+  planner = window.BOPlanner({
+    GD, S, $, esc,
+    current: () => st.chOrig || st.ch, workingCopy: () => st.ch,
+    changed: planChanged,
+    add: p => { addChars([p], 'plan', p.id); },
+    remove: ch => {
+      CHARS = CHARS.filter(c => c !== ch); keepChars(); fillChars((CHARS[0] || {}).id);
+      if (CHARS.length) selectChar(CHARS[0].id); else { st.ch = st.chOrig = null; render(); planner.render(); }
+    },
+  });
+  $('#planBtn').addEventListener('click', () => showTab('build'));
+
   // Start: characters loaded on an earlier visit come back (a newer copy built into the page wins).
   try {
     for (const ch of JSON.parse(localStorage.getItem('bods:chars') || '[]')) {
@@ -3272,7 +3725,7 @@ window.BOStartApp = function () {
   const startId = store.get('char', null);
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();
-  if (store.get('tab', 'damage') === 'tree') showTab('tree');
+  const lastTab = store.get('tab', 'damage'); if (lastTab === 'tree' || lastTab === 'build') showTab(lastTab);
 };
 
 // ---------- boot: find game data, then start ----------
@@ -3346,7 +3799,7 @@ window.BOStartApp = function () {
     try {
       const gd = JSON.parse(cached);
       if ((gd.schema || 1) >= window.BOGameData.SCHEMA) { window.GD = gd; return start(); }
-      return showSetup('The sim was updated and reads a little more from your game files now (the animation speed of each skill). Pick the Data folder once more.');
+      return showSetup('The sim was updated and reads a little more from your game files now (item affix tiers for the build planner). Pick the Data folder once more.');
     } catch (e) { /* bad cache: ask again */ }
   }
   showSetup();

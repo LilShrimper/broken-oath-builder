@@ -3593,7 +3593,8 @@ window.BOStartApp = function () {
     try { localStorage.setItem('bods:chars', JSON.stringify(CHARS.filter(c => !c.file).slice(0, 60))); return true; } catch (e) { return false; }
   }
   function addChars(list, from, selectId) {
-    if (from === 'folder') CHARS = CHARS.filter(c => c.from !== 'folder'); // a fresh folder read replaces the last one
+    // A fresh folder read replaces the last one, and drops builds loaded from codes (plans stay).
+    if (from === 'folder') CHARS = CHARS.filter(c => c.plan || (c.from !== 'folder' && c.from !== 'code' && !c.fromCode));
     for (const ch of list) { ch.from = from; CHARS = CHARS.filter(c => c.id !== ch.id); }
     CHARS = [...list, ...CHARS];
     fillChars(selectId); selectChar(selectId);
@@ -4093,13 +4094,16 @@ window.BOStartApp = function () {
   $('#treeReset').onclick = () => { if (st.chOrig) { T.undo.push(st.ch.passives.slice()); st.ch = st.chOrig; st.pinned = null; T.scores = new Map(); render(); } };
   $('#treeCopy').onclick = async () => {
     try {
-      const p = [startNode(), ...ordered(allocSet())];
-      const json = new TextEncoder().encode(JSON.stringify({ v: 1, t: st.ch.name.replace(/ \(code\)$/, '') + (st.ch !== st.chOrig ? ' (edited)' : ''), c: st.ch.classId, l: st.ch.level, p }));
+      // While a planned or optimized tree is shown (green / red on the tree), the code is that tree: the one to follow.
+      const shown = T.opt && T.opt.list && T.opt.list.length ? T.opt : null;
+      const p = [startNode(), ...(shown ? shown.list : ordered(allocSet()))];
+      const tag = shown ? (shown.addOnly ? ' (planned)' : ' (optimized)') : st.ch !== st.chOrig ? ' (edited)' : '';
+      const json = new TextEncoder().encode(JSON.stringify({ v: 1, t: st.ch.name.replace(/ \(code\)$/, '') + tag, c: st.ch.classId, l: st.ch.level, p }));
       const z = new Uint8Array(await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
       const all = new Uint8Array(4 + z.length); new DataView(all.buffer).setUint32(0, json.length, true); all.set(z, 4);
       let bin = ''; for (const b of all) bin += String.fromCharCode(b);
       const code = 'BO1.' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      try { await navigator.clipboard.writeText(code); $('#treeStatus').textContent = 'Build code copied: paste it into the game\'s passive tree (FOLLOW CODE).'; }
+      try { await navigator.clipboard.writeText(code); $('#treeStatus').textContent = (shown ? (shown.addOnly ? 'Planned tree' : 'Optimized tree') + ' (your points plus the green picks' + (shown.addOnly ? '' : ', without the red') + ') copied as a build code' : 'Build code copied') + ': paste it into the game\'s passive tree (FOLLOW CODE).'; }
       catch (e) { window.prompt('Copy this build code:', code); }
     } catch (err) { alert('Could not make a build code: ' + err.message); }
   };

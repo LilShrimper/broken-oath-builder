@@ -336,7 +336,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
           <label class="field"><span>Search</span><select id="optPool"><option value="owned">Gems you own</option><option value="all">Every support</option></select></label>
           <label class="field"><span>Aim for</span><select id="optTarget"><option value="enemy">The enemy below</option><option value="panel">Skill panel DPS</option></select></label>
         </div>
-        <label class="check-row" title="Skips setups that spend more mana a second than you regain (this skill alone). Tithe and Siphon join the search."><input type="checkbox" id="optMana"><span>Only setups my mana can sustain</span></label>
+        <label class="check-row" title="Skips setups that would run you dry within a minute of nonstop use (this skill alone, after Vow and Herald reservations). Tithe and Siphon join the search."><input type="checkbox" id="optMana"><span>Only setups my mana can sustain</span></label>
         <button class="btn wide" id="optBtn" type="button">Find best supports</button>
         <p class="hint">Tries every combination against the enemy set below. Pack-only supports (Chain, Pierce, Fork, area, leech, on-kill) are left out.</p>
       </div>
@@ -554,7 +554,7 @@ window.CHARS = [];
     const curses = {};
     for (const c of J('Gameplay/curses.json').curses) curses[c.Id] = pick(c, ['Id', 'Name', 'Kind', 'Skill', 'TakenPct', 'ElementTakenPct', 'BossEffect', 'Dread', 'Tough', 'Text']);
     const blessings = {};
-    for (const b of J('Gameplay/blessings.json').blessings) blessings[b.Id] = pick(b, ['Id', 'Name', 'Kind', 'Skill', 'Mods', 'Text', 'Vowbreak']);
+    for (const b of J('Gameplay/blessings.json').blessings) blessings[b.Id] = pick(b, ['Id', 'Name', 'Kind', 'Skill', 'Mods', 'Text', 'Vowbreak', 'ReserveFlat', 'ReserveFlatPerLevel', 'ReservePct']);
 
     const sc = J('Gameplay/scaling.json');
     const noDocs = o => Object.fromEntries(Object.entries(o).filter(([k]) => !k.startsWith('_')));
@@ -743,7 +743,7 @@ window.CHARS = [];
 //   OrbitCast: release <skill> spheres=N arrows=N ...                (LogTemp; one per projectile volley)
 //   ArenaPhase: <guardian> returns after N s away                    (off the field: nothing to hit)
 //   GateBeat71: <guardian> mark N played - held N s, stored hits land L% of its life (stored S%)  (S-L% lost)
-//   Trigger: Crit -> CastLinked <spell> via <skill> (N hits, fired N)  (a Cast on Crit cast; counted like Conduit)
+//   Trigger: Crit -> CastLinked <spell> via <skill> (N hits, fired N)  (Cast on Crit; logged every 25th, "fired" is a running count)
 //   Guardian: <guardian> element signature <Name> (<Element>...   (its colour variant's element)
 //   Guardian: <guardian> gate mechanics - ..., ward N, ...       (extra resistance to that element)
 (function (root) {
@@ -779,8 +779,12 @@ window.CHARS = [];
       if (!l.includes('LogBrokenOath')) continue;
       const t = time(l); if (t == null) continue;
       if (out.start == null) out.start = t; out.end = t;
-      if ((m = /Conduit: (\w+) cast (\w+)/.exec(l)) || (m = /Trigger: Crit -> CastLinked (\w+) via (\w+)/.exec(l))) {
-        if (m[0].startsWith('Trigger')) m = [m[0], 'crit:' + m[2], m[1]]; // [_, host, spell] like the Conduit line
+      if ((m = /Trigger: Crit -> CastLinked (\w+) via (\w+) \(\d+ hits?, fired (\d+)\)/.exec(l))) {
+        // Written only every 25th trigger ("fired 1150, 1175"), so it is a running counter, not one line a cast.
+        // A fight's casts = the counter's rise; OrbitCast releases (casts + echoes) win when the spell has them.
+        if (cur) { const fr = (cur.fired = cur.fired || {})[m[1]] = cur.fired[m[1]] || { first: +m[3], last: +m[3] }; fr.last = +m[3]; }
+        (out.cocHosts = out.cocHosts || {})[m[1]] = 'crit:' + m[2];
+      } else if ((m = /Conduit: (\w+) cast (\w+)/.exec(l))) {
         conduitSkills.add(m[2]);
         const c = out.casts[m[2]] = out.casts[m[2]] || { host: m[1], times: [] }; c.times.push(t);
         if (cur) cur.casts[m[2]] = (cur.casts[m[2]] || 0) + 1;
@@ -842,7 +846,12 @@ window.CHARS = [];
       }
     }
     for (const [sk, times] of Object.entries(self)) if (!conduitSkills.has(sk)) out.casts[sk] = { host: null, times };
-    for (const g of out.guardians) { for (const [sk, n] of Object.entries(g.self || {})) if (!conduitSkills.has(sk)) g.casts[sk] = n; delete g.self; }
+    for (const g of out.guardians) {
+      for (const [sk, n] of Object.entries(g.self || {})) if (!conduitSkills.has(sk)) g.casts[sk] = n;
+      for (const [sk, fr] of Object.entries(g.fired || {})) if (!g.casts[sk] && fr.last > fr.first) g.casts[sk] = fr.last - fr.first;
+      delete g.self; delete g.fired;
+    }
+    for (const [sk, host] of Object.entries(out.cocHosts || {})) if (out.casts[sk] && !out.casts[sk].host) out.casts[sk].host = host;
     // Cast rate while channelling: the typical gap between back-to-back casts (gaps over 0.8 s are breaks).
     for (const c of Object.values(out.casts)) {
       const g = []; for (let i = 1; i < c.times.length; i++) { const d = c.times[i] - c.times[i - 1]; if (d > 0 && d < 800) g.push(d); }
@@ -2188,9 +2197,10 @@ window.BOPlanner = function (ctx) {
         res.notes.push('Cast by ' + host.name + '\'s Channel Conduit' + (host.linked ? '' : ' (no saved link: assumed)') + ' with ' + host.name + '\'s supports: one cast every ' + ticks + ' ' + host.name + ' tick' + (ticks > 1 ? 's' : '') + ' (tick ' + Math.round(tick * 1000) + ' ms, Conduit interval ' + Math.round(interval * 1000) + ' ms) = ' + usesPerSec.toFixed(2) + ' casts a second while you channel. Faster ' + host.name + ' (attack speed) means more casts until a tick is shorter than the interval.');
       }
     }
-    // Cast on Crit: one cast per attack volley that lands at least one crit, at most once per TrigCooldown
-    // (0.15 s; a totem's trigger once per second). A volley = the projectiles that strike together (Orbit's
-    // arrows all fly at once), so per volley P = 1 - (1 - crit)^arrows on the target. Repeats, Rain waves and
+    // Cast on Crit: one cast per attack volley that crits, at most once per TrigCooldown (0.15 s; a totem's trigger
+    // once per second). The game rolls crit once per volley, so all its arrows share one roll: P = crit chance.
+    // Shrimpbow's log (1 Nov, 10 Guardian fights, boss present): Ember Bolt cast 0.62 times per Split Shot release
+    // at 66.6% crit (sheet with this rule 0.62-0.67; with a roll per arrow it was ~1.0). Repeats, Rain waves and
     // second falls are separate volleys. Triggered casts add to Conduit casts; your own casting is not counted.
     if (coc) {
       if (!coc.counted) {
@@ -2207,14 +2217,14 @@ window.BOPlanner = function (ctx) {
           const per = Math.max(1, hr.hits.projOnTarget || 1);
           const volleys = (hr.hits.hitsPerSec || 0) / per;
           const c = clamp(hr.crit.chance / 100, 0, 1);
-          const p = 1 - Math.pow(1 - c, per);
+          const p = c;
           const lam = volleys * p, T = volleys > 0 ? 1 / volleys : Infinity;
           let rate = lam / (1 + lam * Math.max(0, tau - T));
           rate = Math.min(rate, 1 / tau);
           if (cooldown > 0) rate = Math.min(rate, 1 / cooldown);
           usesPerSec = (res.conduit ? usesPerSec : 0) + rate; useTime = usesPerSec > 0 ? 1 / usesPerSec : Infinity;
           res.coc = { source: coc.skill, sourceName: coc.name, mode: coc.mode, crit: hr.crit.chance, perVolley: per, volleysPerSec: volleys, pVolley: p, rate, tau, cooldown };
-          res.notes.push('Cast on Crit from ' + coc.name + (coc.mode === 'self' ? ' (the first attack on your bar)' : coc.mode === 'chosen' ? ' (picked on the page)' : ' (its link)') + ': ' + volleys.toFixed(2) + ' volleys a second of ' + per + ' hit' + (per > 1 ? 's' : '') + ' at ' + hr.crit.chance.toFixed(1) + '% crit = ' + Math.round(p * 100) + '% of volleys crit; at most one cast per ' + tau + ' s' + (cooldown > 0 ? ' and per ' + cooldown.toFixed(2) + ' s cooldown' : '') + ' = ' + rate.toFixed(2) + ' casts a second' + (res.conduit ? ' on top of the Conduit casts' : '') + '. Each triggered cast deals 25% less. Not checked against the game yet.');
+          res.notes.push('Cast on Crit from ' + coc.name + (coc.mode === 'self' ? ' (the first attack on your bar)' : coc.mode === 'chosen' ? ' (picked on the page)' : ' (its link)') + ': ' + volleys.toFixed(2) + ' volleys a second at ' + hr.crit.chance.toFixed(1) + '% crit (one roll per volley, so ' + Math.round(p * 100) + '% of volleys crit); at most one cast per ' + tau + ' s' + (cooldown > 0 ? ' and per ' + cooldown.toFixed(2) + ' s cooldown' : '') + ' = ' + rate.toFixed(2) + ' casts a second' + (res.conduit ? ' on top of the Conduit casts' : '') + '. Each triggered cast deals 25% less. Rate matched the 1 Nov log (Ember Bolt from Split Shot).');
         }
       }
     }
@@ -2535,7 +2545,10 @@ window.BOPlanner = function (ctx) {
     // x ManaRegenPct% a second (+ ManaRegen % lines, + flat mana a second such as Vow of Clarity's), plus Tithe's
     // mana a hit and mana leech of hit damage (at most Hero.LeechRatePct of max mana a second). Int at 100/200/300
     // (Hero.AttrPipAt) refunds ClarityRefundPct of each cost. Cast on Crit casts cost half.
-    // Not counted: Vow reservations, mana on kill.
+    // Vows and Heralds reserve ReserveFlat + ReserveFlatPerLevel x (level - 1) + ReservePct of max mana (blessings.json;
+    // the log: Clarity level 20 reserves 58, Herald of Embers 143 of 571). A deficit is fine if the mana left lasts:
+    // ok = sustained, or at least 60 s of nonstop use from full (Guardian fights in the log last 8-27 s).
+    // Not counted: mana on kill.
     res.mana = null;
     const bloodMagic = mods.some(m => m.stat === 'BloodMagic');
     const skipMana = bloodMagic ? 'paid with life (Blood Magic)' : !sk.ManaCost ? 'no mana cost' : res.conduit ? 'cast by the channel' : res.totem || shape === 'totem_support' || shape === 'trap_support' ? 'paid when placed' : sk.Channel ? 'a channel' : res.orbitRing ? 'a toggle' : '';
@@ -2555,7 +2568,17 @@ window.BOPlanner = function (ctx) {
       let leech = 0; for (const m of pickMods(mods, 'ManaLeech', 'Flat')) if (applies(ctx, m)) leech += m.v;
       const leechGain = Math.min(leech / 100 * hitDpsVs, max * (H.LeechRatePct || 20) / 100);
       const gain = regen + onHit * hitsPerSec + leechGain;
-      res.mana = { max, regen, cost, mult, costInc, cut, refund, spend, onHit: onHit * hitsPerSec, leech: leechGain, gain, ok: gain >= spend };
+      let reserved = 0; const resInc = inc('Reservation');
+      for (const b of Object.values(GD.blessings)) {
+        if (!b.Skill || !ch.hotbar.includes(b.Skill) || (o.off && o.off.has('vow:' + b.Id))) continue;
+        if (!b.ReserveFlat && !b.ReservePct) continue;
+        const vsk = GD.skills[lc(b.Skill)];
+        const lvl = (ch.gemLevels[b.Skill] || 1) + (vsk ? levelBonus(vsk, ch.gems.includes(b.Skill) || vsk.Kind === 'Gem', mods) : 0);
+        reserved += Math.round(((b.ReserveFlat || 0) + (b.ReserveFlatPerLevel || 0) * (lvl - 1) + (b.ReservePct || 0) / 100 * max) * Math.max(0, 1 + resInc / 100));
+      }
+      const pool = Math.max(0, max - reserved), deficit = spend - gain;
+      const lasts = deficit > 0 ? pool / deficit : Infinity;
+      res.mana = { max, reserved, pool, regen, cost, mult, costInc, cut, refund, spend, onHit: onHit * hitsPerSec, leech: leechGain, gain, sustained: deficit <= 0, lasts, ok: lasts >= 60 };
     } else res.mana = { skip: skipMana };
 
     // Lines that matched this skill but that the model does not use.
@@ -2940,10 +2963,11 @@ window.BOStartApp = function () {
     if (!m) return '';
     if (m.skip) return '<h3>Mana</h3><p class="hint">Not counted: ' + esc(m.skip) + '.</p>';
     const back = [num(m.regen, 1) + ' regen'].concat(m.onHit ? [num(m.onHit, 1) + ' on hit'] : [], m.leech ? [num(m.leech, 1) + ' leech'] : []).join(' + ');
+    const lasts = m.sustained ? 'sustained' : m.lasts >= 600 ? 'lasts 10+ min of nonstop use' : 'lasts ' + num(m.lasts, 0) + ' s of nonstop use';
     return '<h3>Mana</h3><dl class="kv">' + kv('Cost a use', num(m.cost, 1) + (m.mult > 1.001 ? ' (supports ×' + num(m.mult, 2) + ')' : '') + (m.refund ? ', ' + m.refund + '% refunded (Int)' : '')) +
-      kv('Spent / gained a second', '<span class="' + (m.ok ? 'good' : 'bad') + '">' + num(m.spend, 1) + ' / ' + num(m.gain, 1) + '</span>', true) +
-      kv('Gained from', back + ' (max mana ' + num(m.max, 0) + ')') + '</dl>' +
-      (m.ok ? '' : '<p class="hint bad">This skill alone spends more mana than comes back: about ' + num(m.max / Math.max(0.01, m.spend - m.gain), 0) + ' s of nonstop use from full. Other skills on the bar spend more.</p>');
+      kv('Spent / gained a second', '<span class="' + (m.sustained ? 'good' : m.ok ? '' : 'bad') + '">' + num(m.spend, 1) + ' / ' + num(m.gain, 1) + ' · ' + lasts + '</span>', true) +
+      kv('Gained from', back) + kv('Mana to spend', num(m.pool, 0) + ' of ' + num(m.max, 0) + (m.reserved ? ' (' + num(m.reserved, 0) + ' reserved by Vows and Heralds)' : '')) + '</dl>' +
+      (m.ok ? '' : '<p class="hint bad">This skill alone runs you dry in about ' + num(m.lasts, 0) + ' s of nonstop use. Other skills on the bar spend more.</p>');
   }
 
   // ---------- right panel ----------
@@ -3237,7 +3261,7 @@ window.BOStartApp = function () {
         '<span class="nums">' + num(x.v) + ' (' + pct(x.v / O.currentValue - 1) + ') · ' + (x.manaPerSec != null ? 'mana ' + num(x.manaPerSec, 1) + '/s of ' + num(x.manaGain, 1) : 'mana ×' + x.mana.toFixed(1)) + (x.notOwned.length ? ' · not owned: ' + esc(x.notOwned.map(supName).join(', ')) : '') + '</span></span>' +
         (same(x.sup) ? '<span class="hint">in use</span>' : '<button class="btn small" data-use="' + i + '"' + (O.running ? ' disabled' : '') + '>Use</button>') + '</div>';
     });
-    if (O.manaOk && O.manaDropped) h += '<p class="hint">' + O.manaDropped.toLocaleString('en-US') + ' setups were skipped: they spend more mana a second than you regain.</p>';
+    if (O.manaOk && O.manaDropped) h += '<p class="hint">' + O.manaDropped.toLocaleString('en-US') + ' setups were skipped: they would run you dry within a minute of nonstop use.</p>';
     h += '<p class="hint">New gems are highlighted; struck-through ones come out. <b>Use</b> loads a setup into this page and pins your current one as the baseline; change the gems in game to match. Socket the shape gem (Orbit, Skyfall, Rain, Trap or Totem) first.</p></div>';
     return h;
   }

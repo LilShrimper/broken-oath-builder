@@ -277,6 +277,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 .sup-more summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
 .sup-info { min-height: 2.8em; margin: 4px 0 0; }
 .sup-info.bad { color: var(--bad); }
+#curseList .off-bar { color: var(--accent); }
 
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
@@ -570,7 +571,7 @@ window.CHARS = [];
     }
 
     const curses = {};
-    for (const c of J('Gameplay/curses.json').curses) curses[c.Id] = pick(c, ['Id', 'Name', 'Kind', 'Skill', 'TakenPct', 'ElementTakenPct', 'BossEffect', 'Dread', 'Tough', 'Text']);
+    for (const c of J('Gameplay/curses.json').curses) curses[c.Id] = pick(c, ['Id', 'Name', 'Kind', 'Skill', 'TakenPct', 'ElementTakenPct', 'ResistDown', 'BossEffect', 'Dread', 'Tough', 'Text']);
     const blessings = {};
     for (const b of J('Gameplay/blessings.json').blessings) blessings[b.Id] = pick(b, ['Id', 'Name', 'Kind', 'Skill', 'Mods', 'Text', 'Vowbreak', 'ReserveFlat', 'ReserveFlatPerLevel', 'ReservePct']);
 
@@ -2410,6 +2411,9 @@ window.BOPlanner = function (ctx) {
       const eff = (1 + curseEffInc / 100) * (1 + dreadPct / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
       const row = { id, name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0 };
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
+      // Woes of Cinders / Rime / the Tempest lower a resistance instead (curses.json ResistDown), grown by
+      // Dread and halved on a Guardian like the rest of the Woe.
+      row.resDown = {}; for (const [d, v] of Object.entries(c.ResistDown || {})) row.resDown[d] = v * eff;
       curseRows.push(row);
     }
     const takenFor = (rows, d) => rows.reduce((p, r) => p * (1 + (r.taken + (r.elem[d] || 0)) / 100), 1);
@@ -2420,7 +2424,7 @@ window.BOPlanner = function (ctx) {
     let woeExtra = 0; for (const m of pickMods(mods, 'CurseLimit', 'Flat')) { woeExtra += m.v; use(m); }
     const LIMIT = { Sentence: 1, Woe: 2 + woeExtra };
     const hitTotal = Object.values(hit).reduce((a, h) => a + h.avg, 0) || 1;
-    const worth = r => Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTotal * (r.taken + (r.elem[d] || 0)), 0);
+    const worth = r => Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTotal * (r.taken + (r.elem[d] || 0) + (r.resDown[d] || 0)), 0);
     const kindOf = r => (GD.curses[r.id] || {}).Kind || '';
     let activeCurses = [];
     for (const kind of new Set(curseRows.map(kindOf))) {
@@ -2455,7 +2459,9 @@ window.BOPlanner = function (ctx) {
     const mitig = {};
     for (const d of DT) {
       // Unknown whether penetration can take resistance below 0; o.penFloor = it cannot.
-      const effRes = o.penFloor ? Math.min(resist[d], Math.max(0, resist[d] - pen[d])) : resist[d] - pen[d];
+      // A Woe's resistance cut lowers the resistance itself (it can go below 0); penetration comes after.
+      const down = activeCurses.reduce((a, r) => a + (r.resDown[d] || 0), 0), base = resist[d] - down;
+      const effRes = o.penFloor ? Math.min(base, Math.max(0, base - pen[d])) : base - pen[d];
       let k = 1 - Math.min(H.ResistHardCap || 90, effRes) / 100;
       if (d === 'Physical') {
         const ph = hit.Physical ? hit.Physical.avg * critFactor : 0;
@@ -3027,12 +3033,16 @@ window.BOStartApp = function () {
     // Curses
     const isBoss = st.rarity === 'boss';
     $('#guardianRow').hidden = !isBoss; $('#guardianElement').value = st.gElem || '';
-    $('#curseList').innerHTML = Object.values(GD.curses).filter(c => c.TakenPct || c.ElementTakenPct).map(c => {
+    $('#curseList').innerHTML = Object.values(GD.curses).filter(c => c.Kind !== 'Ailment').map(c => {
       const cs = st.curses[c.Id] || { on: false, dread: 0 };
       const row = (r.enemy && r.enemy.curses || []).find(x => x.id === c.Id);
       const onBar = ch.hotbar.includes(c.Skill);
-      const effect = row ? 'now: +' + num(row.taken, 1) + '% taken' + Object.entries(row.elem).map(([d, v]) => ', +' + num(v, 1) + '% ' + d).join('') : (c.Text || '').replace('{0}', c.TakenPct || 0).replace('{1}', Object.values(c.ElementTakenPct || {})[0] || '').replace(/\{2\}%? ?/, '');
-      return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + (onBar ? '' : ' <span class="meta" style="display:inline">(not on bar)</span>') + '<span class="meta">' + esc(effect) + (cs.on && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · not counted: an enemy holds ' + (c.Kind === 'Woe' ? 'two Woes' : 'one ' + c.Kind) + ' at a time' : '') + '</span></span></label>' +
+      const parts = row ? [].concat(row.taken ? ['+' + num(row.taken, 1) + '% taken'] : [],
+        Object.entries(row.elem).map(([d, v]) => '+' + num(v, 1) + '% ' + d + ' taken'),
+        Object.entries(row.resDown || {}).map(([d, v]) => '-' + num(v, 1) + '% ' + d + ' resistance')) : [];
+      const effect = row ? (parts.length ? 'now: ' + parts.join(', ') : 'does not change your damage')
+        : (c.Text || '').replace('{0}', c.TakenPct || 0).replace('{1}', Object.values(c.ElementTakenPct || {})[0] || '').replace('{3}', Object.values(c.ResistDown || {})[0] || '').replace(/[;,]? ?[^;]*\{[24]\}[^;]*/g, '').trim() || 'does not change your damage';
+      return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + '<span class="meta">' + esc(effect) + (cs.on && !onBar && c.Skill ? ' · <span class="off-bar">not on your skill bar, counted anyway</span>' : '') + (cs.on && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · not counted: an enemy holds ' + (c.Kind === 'Woe' ? 'two Woes' : 'one ' + c.Kind) + ' at a time' : '') + '</span></span></label>' +
         (c.Dread && c.Dread.Cap ? '<input class="mini" type="number" min="0" max="' + c.Dread.Cap + '" value="' + (cs.dread || 0) + '" title="Dread on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + c.Dread.Cap + ', bosses ' + c.Dread.BossCap + ')" data-dread="' + esc(c.Id) + '">' : '') + '</li>';
     }).join('');
   }

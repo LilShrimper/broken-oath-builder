@@ -70,13 +70,20 @@ h3 { font-size: 11.5px; margin: 14px 0 6px; color: var(--muted); text-transform:
 .warn ul { margin: 6px 0 0; padding-left: 18px; }
 
 .layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 18px 20px; max-width: 1500px; margin: 0 auto; }
-@media (max-width: 900px) { .layout { grid-template-columns: 1fr; padding: 14px 16px; } .toolbar { padding: 0 16px; } }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; padding: 14px 16px; } .toolbar, .fight-check-banner { padding: 0 16px; } }
 .controls { order: 1; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .results-wrap { order: 2; min-width: 0; }
 .configure-heading { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-top: 2px; }
 .configure-heading .eyebrow { color: var(--dashboard-gold); font-size: 10px; font-weight: 700; letter-spacing: .16em; }
 .configure-heading h2 { display: block; margin: 1px 0 0; font: 600 24px/1.2 Georgia, "Times New Roman", serif; letter-spacing: -.02em; }
 .configure-heading p { max-width: 420px; margin: 0; color: var(--muted); font-size: 12.5px; text-align: right; }
+.support-simulator-heading { display: none; }
+.support-simulator-heading .eyebrow { color: var(--dashboard-gold); font-size: 10px; font-weight: 700; letter-spacing: .16em; }
+.support-simulator-heading h2 { margin: 2px 0 4px; font: 600 24px/1.2 Georgia, "Times New Roman", serif; letter-spacing: -.02em; }
+.support-simulator-heading p { margin: 0; color: var(--muted); font-size: 13px; }
+.fight-check-banner { max-width: 1500px; margin: 12px auto 0; padding: 0 20px; }
+.fight-check-banner[hidden] { display: none; }
+.fight-check-banner > .card { width: 100%; }
 .config-tabs { display: flex; gap: 4px; overflow-x: auto; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .config-tab { position: relative; flex: 0 0 auto; padding: 8px 17px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .config-tab:hover { color: var(--text); background: var(--panel-2); }
@@ -149,6 +156,7 @@ select:focus, input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 
 .res-grid .field > span { font-size: 11px; }
 
 .results { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.dashboard-summary, .analysis-details { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .empty { color: var(--muted); padding: 40px; text-align: center; border: 1px dashed var(--line); border-radius: var(--radius); }
 .results-heading { padding: 2px 2px 0; }
 .results-heading .eyebrow { color: var(--dashboard-gold); font-size: 10px; font-weight: 700; letter-spacing: .16em; }
@@ -183,15 +191,38 @@ select:focus, input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 
 .mix-bar { display: flex; height: 12px; overflow: hidden; border-radius: 999px; background: var(--panel-2); }
 .mix-segment { min-width: 2px; background: var(--mix-color); }
 .mix-legend { display: grid; gap: 7px; margin-top: 13px; }
+.mix-breakdowns { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: 12px; align-items: start; margin-top: 13px; }
+.mix-breakdowns .mix-legend { margin-top: 0; }
+.source-breakdown { min-width: 0; padding-left: 12px; border-left: 1px solid var(--line); }
+.source-breakdown h3 { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin: 0 0 8px; font-size: 11px; text-transform: none; letter-spacing: 0; }
+.source-breakdown h3 span { color: var(--muted); font-size: 9px; font-weight: 400; white-space: nowrap; }
+.source-chart { display: grid; grid-template-columns: minmax(66px, .7fr) minmax(0, 1.3fr); gap: 9px; align-items: center; }
+.source-pie { display: block; width: min(100%, 112px); aspect-ratio: 1; justify-self: center; overflow: visible; }
+.source-slice { cursor: help; stroke: color-mix(in srgb, var(--panel) 86%, transparent); stroke-width: .8; transition: filter .12s ease, stroke-width .12s ease; }
+.source-slice:hover, .source-slice:focus { filter: brightness(1.2); stroke: var(--text); stroke-width: 1.8; outline: none; }
+.source-slice:focus-visible { stroke: var(--dashboard-gold); stroke-width: 2.5; }
+.source-tooltip { position: fixed; z-index: 1000; display: grid; gap: 3px; max-width: min(250px, calc(100vw - 16px)); padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--dashboard-gold) 40%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--panel) 96%, var(--bg)); box-shadow: var(--shadow), 0 5px 18px #0006; color: var(--text); font-size: 11px; line-height: 1.35; pointer-events: none; }
+.source-tooltip[hidden] { display: none; }
+.source-tooltip strong { color: var(--dashboard-gold); font-weight: 650; }
+.source-tooltip span { color: var(--muted); font-variant-numeric: tabular-nums; }
+.source-legend { display: grid; gap: 6px; min-width: 0; }
+.source-row { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 5px; align-items: center; font-size: 9.5px; }
+.source-row > i { width: 8px; height: 8px; border-radius: 2px; background: var(--source-color); }
+.source-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-row > b { text-align: right; font-size: 9px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.source-breakdown > p { margin: 8px 0 0; color: var(--faint); font-size: 9px; line-height: 1.35; }
 .mix-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 48px; gap: 10px; align-items: center; font-size: 12px; font-variant-numeric: tabular-nums; }
 .mix-row > b { font-weight: 600; }
 .mix-row > span:last-child { color: var(--muted); text-align: right; }
 .mix-name { display: flex; gap: 7px; align-items: center; color: var(--muted); }
 .mix-name i { width: 9px; height: 9px; border-radius: 3px; background: var(--mix-color); }
-.snapshot-card .kv { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
-.snapshot-card .kv dt { font-size: 12px; }
-.snapshot-card .kv dd { font-weight: 550; }
-.snapshot-card .kv dd.strong { color: var(--dashboard-green); font-size: 16px; }
+.build-overview-grid { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: 12px; align-items: stretch; }
+.build-summary-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; margin: 0; }
+.build-summary-list > div { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 8px; align-items: center; min-width: 0; }
+.build-summary-list > .wide { grid-column: 1 / -1; grid-template-columns: minmax(0, .4fr) minmax(0, 1.6fr); }
+.build-summary-list dt { color: var(--muted); font-size: 12px; }
+.build-summary-list dd { margin: 0; text-align: right; font-size: 12.5px; font-weight: 550; overflow-wrap: anywhere; }
+.build-summary-list dd.strong { color: var(--dashboard-green); font-size: 16px; font-weight: 650; }
 .comparison-card { display: flex; flex-direction: column; }
 .comparison-change { margin: -4px 0 8px; color: var(--dashboard-green); font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .comparison-change.down { color: var(--bad); }
@@ -204,19 +235,31 @@ select:focus, input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 
 .comparison-track .current-bar { background: linear-gradient(180deg, #5ade9b, #1d9a68); }
 .comparison-track .baseline-bar { background: linear-gradient(180deg, #a873dd, #6e49a9); }
 .upgrade-card { grid-column: 1 / -1; }
-.upgrade-card .weights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; }
-.upgrade-card .weight { grid-template-columns: minmax(0, 1fr) 64px; }
+.upgrade-card .weights { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; }
+.upgrade-card .weight { grid-template-columns: 24px minmax(0, 1fr) 64px; gap: 8px; }
+.upgrade-card .weight::before { content: counter(recommendation); counter-increment: recommendation; display: grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 700; }
+.upgrade-card > .weights { counter-reset: recommendation; }
+.build-overview-grid > .upgrade-card { grid-column: auto; }
 .upgrade-card .weight .bar { height: 27px; }
 .upgrade-card .weight .fill { background: color-mix(in srgb, var(--dashboard-gold) 24%, transparent); border-color: var(--dashboard-gold); }
 .upgrade-card .weight .pct { color: var(--dashboard-green); font-size: 12px; }
 .upgrade-card details { grid-column: 1 / -1; }
 .support-results { border-color: color-mix(in srgb, var(--dashboard-gold) 30%, var(--line)); }
+@media (min-width: 701px) and (max-width: 1000px) {
+  .overview-grid.has-comparison { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .overview-grid.has-comparison .comparison-card { grid-column: 1 / -1; }
+}
 @media (max-width: 700px) {
   .overview-grid { grid-template-columns: 1fr; }
   .overview-grid.has-comparison { grid-template-columns: 1fr; }
   .upgrade-card { grid-column: auto; }
-  .upgrade-card .weights { grid-template-columns: 1fr; }
   .upgrade-card details { grid-column: auto; }
+}
+@media (max-width: 1100px) { .mix-breakdowns { grid-template-columns: minmax(0, 1fr); } .source-breakdown { padding: 12px 0 0; border-top: 1px solid var(--line); border-left: 0; } }
+@media (max-width: 1100px) { .build-overview-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+  .build-summary-list { grid-template-columns: minmax(0, 1fr); }
+  .build-summary-list > div { grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); }
 }
 .pinbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 12.5px; }
 
@@ -347,6 +390,8 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 .pl-row .field.inline { flex: 0 1 130px; }
 .pl-row .field.inline.grow { flex: 1 1 220px; }
 .pl-row .check-row { align-self: center; }
+.pl-item-modes { display: flex; flex-direction: column; gap: 2px; align-self: center; }
+.pl-item-modes .check-row { align-self: flex-start; margin: 0; white-space: nowrap; }
 .pl-status { color: var(--accent); }
 .pl-skills { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
 .pl-skill { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--panel-2); }
@@ -514,17 +559,17 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
 @media (max-width: 520px) { .hero-tiles { grid-template-columns: 1fr; } .hero-cta .btn { flex: 1 1 auto; } .hero-title br { display: none; } .hero-alternatives { flex-direction: column; align-items: flex-start; gap: 4px; } }
 /* Top bar on small screens: tabs get their own row */
 .results { gap: 16px; }
-.results > .card > h2, .results > .grid2 > .card > h2 {
+.results .analysis-details > .card > h2, .results .analysis-details > .grid2 > .card > h2 {
   margin: 0 0 14px;
   padding: 0 0 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
   font: 600 17px/1.25 Georgia, "Times New Roman", serif;
   letter-spacing: -.01em;
 }
-.results > .card > h2 small, .results > .grid2 > .card > h2 small { font: 400 11px/1.4 Inter, "Segoe UI", sans-serif; }
-.results > .card, .results > .grid2 > .card { padding: 18px; }
-.results > .card .kv, .results > .grid2 > .card .kv { row-gap: 7px; }
-.results > .grid2 h3 {
+.results .analysis-details > .card > h2 small, .results .analysis-details > .grid2 > .card > h2 small { font: 400 11px/1.4 Inter, "Segoe UI", sans-serif; }
+.results .analysis-details > .card, .results .analysis-details > .grid2 > .card { padding: 18px; }
+.results .analysis-details > .card .kv, .results .analysis-details > .grid2 > .card .kv { row-gap: 7px; }
+.results .analysis-details > .grid2 h3 {
   margin: 16px 0 7px;
   padding-top: 11px;
   border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
@@ -532,7 +577,7 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
   font-size: 10px;
   letter-spacing: .13em;
 }
-.results > .grid2 .hint { line-height: 1.55; }
+.results .analysis-details > .grid2 .hint { line-height: 1.55; }
 .results .table-wrap {
   border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
   border-radius: 10px;
@@ -543,7 +588,7 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
 .results .table-wrap td { padding-top: 8px; padding-bottom: 8px; }
 .results .table-wrap tbody tr:nth-child(even) { background: color-mix(in srgb, var(--panel-2) 25%, transparent); }
 .results .table-wrap tbody tr:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
-.results > details {
+.results .analysis-details > details {
   margin: 0;
   padding: 12px 16px;
   border: 1px solid var(--line);
@@ -551,7 +596,7 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
   background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, transparent), color-mix(in srgb, var(--panel) 76%, var(--bg)));
   box-shadow: var(--shadow);
 }
-.results > details > summary { padding: 2px 0; font-size: 13px; }
+.results .analysis-details > details > summary { padding: 2px 0; font-size: 13px; }
 .results details > summary::marker { color: var(--dashboard-gold); }
 .results .notes { margin-top: 8px; line-height: 1.6; }
 .results .validation-notes { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--panel-2) 32%, transparent); }
@@ -559,7 +604,7 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
 .results .modgroup { padding: 2px 0 5px; }
 .results .modgroup h4 { padding-bottom: 5px; border-bottom: 1px solid color-mix(in srgb, var(--line) 65%, transparent); }
 .results .modline { padding: 6px 2px; line-height: 1.45; }
-.results > .card .pinbar { margin-top: 14px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.results .analysis-details > .card .pinbar { margin-top: 14px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
 @media (max-width: 760px) {
   .nav { flex-wrap: wrap; padding: 10px 16px; gap: 10px; }
   .nav .tabs { order: 3; width: 100%; } .nav .tab { flex: 1; padding: 7px 8px; }
@@ -593,6 +638,10 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
 .brand h1 small { display: block; margin-top: 6px; color: var(--muted); font: 600 9px/1.3 Inter, "Segoe UI", sans-serif; letter-spacing: .13em; text-transform: uppercase; }
 .tabs { flex-direction: column; gap: 5px; padding: 0; border: 0; border-radius: 0; background: transparent; }
 .tab { display: flex; align-items: center; gap: 11px; width: 100%; min-height: 42px; padding: 8px 10px; border-radius: 8px; color: var(--muted); text-align: left; }
+.tab[data-tab="build"],
+.tab[data-tab="supports"] { white-space: normal; }
+.tab[data-tab="build"] span,
+.tab[data-tab="supports"] span { min-width: 0; }
 .tab svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .tab:hover { background: var(--panel); }
 .tab.active { color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 12%, var(--panel)); box-shadow: inset 3px 0 0 var(--dashboard-gold); }
@@ -609,7 +658,9 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
 .code-import input { padding: 11px 12px; }
 .nav-end { flex-direction: column-reverse; align-items: flex-start; gap: 10px; margin: auto 0 0; padding: 12px 9px 0; border-top: 1px solid var(--line); }
 .nav-end .sub { display: block; max-width: 100%; white-space: normal; overflow-wrap: anywhere; font-size: 10px; line-height: 1.45; }
-.toolbar { width: min(1500px, calc(100% - 216px)); margin: 14px 20px 0 max(196px, calc(196px + (100% - 1696px) / 2)); padding: 0; }
+.toolbar, .fight-check-banner { width: min(1500px, calc(100% - 216px)); margin-left: max(196px, calc(196px + (100% - 1696px) / 2)); margin-right: 20px; padding: 0; }
+.toolbar { margin-top: 14px; }
+.fight-check-banner { margin-top: 12px; }
 .top-controls { align-items: end; gap: 10px; padding: 10px 12px; }
 .character-picker { flex: 0 1 270px; margin: 0; }
 .character-picker select { min-width: 0; padding-top: 7px; padding-bottom: 7px; }
@@ -644,8 +695,9 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
   .nav-end .sub { display: none; }
   .nav-reset { width: 34px; height: 34px; justify-content: center; padding: 0; }
   .nav-reset span { display: none; }
-  .toolbar, .data-old, .hero, .layout { width: auto; max-width: none; margin: 10px 12px 0; }
+  .toolbar, .data-old, .hero, .layout, .fight-check-banner { width: auto; max-width: none; margin: 10px 12px 0; }
   .toolbar { padding: 0; }
+  .fight-check-banner { margin-top: 12px; }
   .layout { padding: 14px 0; }
   .setup { width: auto; margin: 18px 12px; }
   .foot { width: auto; margin: 0 12px; }
@@ -720,10 +772,68 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
 body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-damage { display: inline; }
 body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { display: none; }
 
+body.tree-page .layout,
+body.build-page .layout,
+body.support-page .layout,
+body.code-page .layout { grid-template-columns: minmax(0, 1fr); }
+body.tree-page #controls,
+body.build-page #controls,
+body.code-page #controls { display: none; }
+body.code-page #codePane { grid-column: 1; width: 100%; }
+body.support-page .controls { order: 1; grid-column: 1; }
+body.support-page .build-settings-summary,
+body.support-page .configure-heading,
+body.support-page .config-tabs { display: none; }
+body.support-page .support-simulator-heading { display: block; margin: 2px 0 14px; }
+body.support-page .config-panel:not([data-config-panel="supports"]) { display: none; }
+body.dashboard-view .layout { grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 20px; }
+body.dashboard-view .results-wrap, body.dashboard-view #results { display: contents; }
+body.dashboard-view .dashboard-summary { order: 1; grid-column: 1; }
+body.dashboard-view .controls {
+  order: 2;
+  grid-column: 1;
+  position: static;
+  top: auto;
+  max-height: none;
+  overflow: visible;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel) 94%, var(--bg));
+  box-shadow: var(--shadow);
+}
+body.dashboard-view .analysis-details { order: 3; grid-column: 1; }
+body.dashboard-view .config-tabs { grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); }
+body.dashboard-view .configure-heading { display: flex; }
+@media (min-width: 1200px) {
+  body.dashboard-view .layout:has(.dashboard-summary) {
+    grid-template-columns: minmax(0, 1.1fr) minmax(400px, .9fr);
+    align-items: start;
+  }
+  body.dashboard-view .dashboard-summary { display: contents; }
+  body.dashboard-view .results-heading,
+  body.dashboard-view .pinbar,
+  body.dashboard-view .headline,
+  body.dashboard-view .build-overview-grid,
+  body.dashboard-view .analysis-details,
+  body.dashboard-view .support-results { grid-column: 1 / -1; }
+  body.dashboard-view .results-heading { grid-row: 1; }
+  body.dashboard-view .pinbar { grid-row: 2; }
+  body.dashboard-view .headline { grid-row: 3; }
+  body.dashboard-view .overview-grid { grid-column: 1; grid-row: 4; }
+  body.dashboard-view .overview-grid:not(.has-comparison) { grid-template-columns: minmax(0, 1fr); }
+  body.dashboard-view .overview-grid.has-comparison { grid-template-columns: minmax(0, 1fr); }
+  body.dashboard-view .overview-grid.has-comparison .comparison-card { grid-column: auto; }
+  body.dashboard-view .controls { grid-column: 2; grid-row: 4; order: 0; }
+  body.dashboard-view .build-overview-grid { grid-row: 5; }
+  body.dashboard-view .support-results { grid-row: 6; }
+  body.dashboard-view .analysis-details { grid-row: 7; }
+}
+
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
-<body>
+<body class="dashboard-view">
 <header class="top">
   <div class="nav">
     <div class="brand">
@@ -733,23 +843,26 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
       <h1>Broken <span>Oath</span><small><span class="sub-builder">Builder</span><span class="sub-damage">Damage Simulator</span></small></h1>
     </div>
     <nav class="tabs" role="tablist" aria-label="Views">
-      <button class="tab active" type="button" role="tab" data-tab="damage" aria-selected="true" aria-label="Damage">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h17M8 16v-5M13 16V7M18 16V3"/></svg><span>Damage</span>
+      <button class="tab active" type="button" role="tab" data-tab="damage" aria-selected="true" aria-label="Damage Analysis">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h17M8 16v-5M13 16V7M18 16V3"/></svg><span>Damage Analysis</span>
       </button>
-      <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false" aria-label="Skill tree">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M12 7v4M12 11 6 16M12 11l6 5"/></svg><span>Skill tree</span>
+      <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false" aria-label="Skill Tree">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M12 7v4M12 11 6 16M12 11l6 5"/></svg><span>Skill Tree</span>
       </button>
-      <button class="tab" type="button" role="tab" data-tab="build" aria-selected="false" aria-label="Build">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M6 17V8l6-4 6 4v9M9 17v-5h6v5"/></svg><span>Build</span>
+      <button class="tab" type="button" role="tab" data-tab="build" aria-selected="false" aria-label="Current Build Setup">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M6 17V8l6-4 6 4v9M9 17v-5h6v5"/></svg><span>Current Build Setup</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="supports" aria-selected="false" aria-label="Support Gem Simulator">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 9l-8 12L4 9zM4 9h16M9 9l3 12 3-12"/></svg><span>Support Gem Simulator</span>
       </button>
     </nav>
     <div class="nav-divider" role="separator" aria-label="Build tools"></div>
     <nav class="tabs secondary-tabs" role="tablist" aria-label="Build tools">
-      <button class="tab" type="button" role="tab" data-tab="plan" aria-selected="false" aria-label="Plan a new build">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2zM8 7h8M8 11h6"/></svg><span>Plan a new build</span>
+      <button class="tab" type="button" role="tab" data-tab="plan" aria-selected="false" aria-label="Plan a New Build">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2zM8 7h8M8 11h6"/></svg><span>Plan a New Build</span>
       </button>
-      <button class="tab" type="button" role="tab" data-tab="code" aria-selected="false" aria-label="Load code">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8 4 12l4 4M16 8l4 4-4 4M14 5l-4 14"/></svg><span>Load code</span>
+      <button class="tab" type="button" role="tab" data-tab="code" aria-selected="false" aria-label="Load Code">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8 4 12l4 4M16 8l4 4-4 4M14 5l-4 14"/></svg><span>Load Code</span>
       </button>
     </nav>
     <div class="nav-end">
@@ -835,14 +948,16 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
       <input type="file" id="saveDirInput" webkitdirectory directory multiple hidden><span id="saveDirLabel">Load saves folder</span>
     </label>
     <button class="btn ghost" id="copySavePath" type="button" title="Copies %LOCALAPPDATA%\BrokenOath\Saved\SaveGames. Paste it into the file picker's address bar and press Enter.">Copy save path</button>
-    <label class="btn ghost" title="Load BrokenOath.log from %LOCALAPPDATA%\BrokenOath\Saved\Logs to check the sim against your real fights. It is read in this tab only, never uploaded.">
+    <label class="btn" title="Pick BrokenOath.log from %LOCALAPPDATA%\BrokenOath\Saved\Logs to check the sim against your real fights. It is read in this tab only, never uploaded.">
       <input type="file" id="logInput" accept=".log,.txt" hidden>Load game log
     </label>
+    <button class="btn ghost" id="copyLogPath" type="button" title="Copies %LOCALAPPDATA%\BrokenOath\Saved\Logs\BrokenOath.log. Paste it into the file picker's address bar and press Enter.">Copy log path</button>
     <button class="btn ghost" id="dataBtn" type="button" hidden title="The game data comes with the site. After a game patch the site has not caught up with yet, read your own game's Data folder instead">Use my own game files</button>
     <button class="btn ghost" id="siteDataBtn" type="button" hidden title="Stop using the game files you picked and go back to the data that comes with the site">Use the site's data</button>
     </div>
   </div>
 </div>
+<section class="fight-check-banner" id="logCheckBanner" aria-live="polite" hidden></section>
 <div class="data-old" id="dataOld" role="status" hidden>
   <span id="dataOldText"></span>
   <button class="btn small" type="button" id="dataOldUpdate">Update game data</button>
@@ -875,7 +990,7 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
       <summary class="build-settings-summary">
         <span class="eyebrow">BUILD SETUP</span>
         <strong>Configure Your Build</strong>
-        <span class="settings-summary-hint">Skill, supports, gear and enemy</span>
+        <span class="settings-summary-hint">Skill, supports and enemy</span>
       </summary>
       <div class="build-settings-content">
     <div class="configure-heading">
@@ -883,13 +998,17 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
         <div class="eyebrow">BUILD SETUP</div>
         <h2>Configure Your Build</h2>
       </div>
-      <p>Change your skill, supports, gear or enemy to update the results.</p>
+      <p>Change your skill, supports, Vows or enemy to update the results.</p>
+    </div>
+    <div class="support-simulator-heading">
+      <div class="eyebrow">BUILD TOOLS</div>
+      <h2>Support Gem Simulator</h2>
+      <p>Compare support gems and find the strongest setup for your skill.</p>
     </div>
     <div class="config-tabs" role="tablist" aria-label="Build settings">
       <button class="config-tab active" id="configTabSkill" type="button" role="tab" aria-selected="true" aria-controls="configSkill" tabindex="0" data-config-tab="skill">Skill</button>
       <button class="config-tab" id="configTabSupports" type="button" role="tab" aria-selected="false" aria-controls="configSupports" tabindex="-1" data-config-tab="supports">Supports</button>
-      <button class="config-tab" id="configTabGear" type="button" role="tab" aria-selected="false" aria-controls="configGear" tabindex="-1" data-config-tab="gear">Gear</button>
-      <button class="config-tab" id="configTabCharacter" type="button" role="tab" aria-selected="false" aria-controls="configCharacter" tabindex="-1" data-config-tab="character">Character</button>
+      <button class="config-tab" id="configTabCharacter" type="button" role="tab" aria-selected="false" aria-controls="configCharacter" tabindex="-1" data-config-tab="character">Vows/Heralds</button>
       <button class="config-tab" id="configTabEnemy" type="button" role="tab" aria-selected="false" aria-controls="configEnemy" tabindex="-1" data-config-tab="enemy">Enemy</button>
       <button class="config-tab" id="configTabAdvanced" type="button" role="tab" aria-selected="false" aria-controls="configAdvanced" tabindex="-1" data-config-tab="advanced">Advanced</button>
     </div>
@@ -910,16 +1029,18 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
     <div class="config-panel" id="configSupports" role="tabpanel" aria-labelledby="configTabSupports" data-config-panel="supports" hidden>
     <section class="card">
       <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 20 9l-8 12L4 9z M4 9h16 M9 9l3 12 3-12"/></svg></span>Supports <small id="supportCount"></small></h2>
+      <label class="field"><span>Skill or gem to test</span><select id="supportSkillSelect"></select></label>
       <div class="sup-picker" id="supportChips"></div>
       <p class="hint sup-info" id="supportInfo" aria-live="polite"></p>
       <div class="opt">
         <div class="row2">
-          <label class="field"><span>Search</span><select id="optPool"><option value="owned">Gems you own</option><option value="all">Every support</option></select></label>
-          <label class="field"><span>Aim for</span><select id="optTarget"><option value="enemy">The enemy below</option><option value="panel">Skill panel DPS</option></select></label>
+          <label class="field"><span>Search</span><select id="optPool"><option value="all" selected>Every support</option><option value="owned">Supports you own</option></select></label>
+          <label class="field"><span>Optimize for</span><select id="optTarget"><option value="enemy">Damage vs enemy set in Damage Analysis</option><option value="panel">Skill panel DPS</option></select></label>
         </div>
         <label class="check-row" title="Skips setups that would run you dry within a minute of nonstop use (this skill alone, after Vow and Herald reservations). Tithe and Siphon join the search."><input type="checkbox" id="optMana"><span>Only setups my mana can sustain</span></label>
         <button class="btn wide" id="optBtn" type="button">Find best supports</button>
-        <p class="hint">Tries every combination against the enemy set below. Pack-only supports (Chain, Pierce, Fork, area, leech, on-kill) are left out.</p>
+        <p class="hint">Uses the enemy type and settings selected in Damage Analysis; this page does not display or change the target. Go to Damage Analysis to choose the enemy. Tries each valid support combination for this skill; pack-only supports (Chain, Pierce, Fork, area, leech, on-kill) are left out.</p>
+        <div id="supportSearchResults"></div>
       </div>
     </section>
     </div>
@@ -936,14 +1057,6 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
       <label class="field" title="0.6% more damage a stack, at most 50 + your maximum Bloodlust lines. Gained on kills (and boss crits with The Wolf's Due), each lasting 5 seconds."><span>Bloodlust stacks <span class="meta">0.6% more damage each, up to 50 + gear and tree</span></span><input type="number" min="0" max="200" value="0" data-charge="bloodlust"></label>
     </section>
 
-    </div>
-
-    <div class="config-panel" id="configGear" role="tabpanel" aria-labelledby="configTabGear" data-config-panel="gear" hidden>
-    <section class="card">
-      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/></svg></span>Gear</h2>
-      <p class="hint">Untick a piece to see what it is worth.</p>
-      <ul class="checklist" id="sourceList"></ul>
-    </section>
     </div>
 
     <div class="config-panel" id="configEnemy" role="tabpanel" aria-labelledby="configTabEnemy" data-config-panel="enemy" hidden>
@@ -1772,9 +1885,23 @@ window.BOPlanner = function (ctx) {
   const supportList = Object.values(GD.supports).sort(byName);
   const basesFor = slot => Object.values(GD.bases).filter(b => b.Slot === baseSlot(slot)).sort((a, b) => (a.Level || 0) - (b.Level || 0) || byName(a, b));
   const uniquesFor = slot => Object.values(GD.uniques).filter(u => { const b = GD.bases[lc(u.BaseId)]; return b && b.Slot === baseSlot(slot); }).sort(byName);
+  const oathwordBases = (slot, word) => {
+    const allowed = new Set((word && word.Bases || []).map(lc));
+    return basesFor(slot).filter(b => [b.Class, b.Slot, ...(b.Tags || [])].some(tag => tag && allowed.has(lc(tag))));
+  };
+  const oathwordsFor = slot => (GD.runewords || []).filter(w => oathwordBases(slot, w).length).sort(byName);
+  const oathwordByRunes = (slot, runes) => (GD.runewords || []).find(w =>
+    w.Runes.map(lc).join(',') === (runes || []).map(lc).join(',') && oathwordBases(slot, w).length);
+  const oathwordForItem = (it, slot) => {
+    const word = it && oathwordByRunes(slot, it.runes);
+    const base = it && GD.bases[lc(it.base)];
+    return word && oathwordBases(slot, word).some(b => lc(b.Id) === lc(base && base.Id)) ? word : null;
+  };
   // "Oathbreaker (Two-Handed Sword)": weapons and off hands show their type; other slots their base ("Ashen Crown (Silver Circlet)").
   const uniqueLabel = u => { const b = GD.bases[lc(u.BaseId)] || {}; return u.Name + ' (' + (b.TypeName || b.Name || u.BaseId) + ')'; };
   const uniqueMode = new Set(); // item boxes with "Unique" ticked before a unique is picked
+  const oathwordMode = new Set();
+  const oathwordSelection = new Map();
   const runeList = Object.values(GD.runes).sort(byName);
   function affixesFor(base) {
     const tags = new Set((base && base.Tags) || []);
@@ -1848,15 +1975,13 @@ window.BOPlanner = function (ctx) {
   function render() {
     const el = pane(); if (!el || el.hidden) return;
     const ch = ctx.current();
-    const edit = !!(ch && ch.plan), dis = edit ? '' : ' disabled';
+    const plan = !!(ch && ch.plan), test = !!(ch && !ch.plan && ctx.testChangesEnabled());
+    const edit = plan || test, dis = edit ? '' : ' disabled';
     const classOpts = Object.values(GD.classes).map(c => opt(c.Id, c.Id, ch && c.Id === ch.classId)).join('');
-    let h = '<div class="card"><h2>Plan a build</h2>';
-    if (!ch || !edit) {
-      h += '<p class="hint">' + (ch ? '<b>' + esc(ch.name) + '</b> is ' + (ch.file || ch.from === 'folder' || ch.from === 'file' ? 'your saved character' : 'a loaded build') + ', shown read-only below. Copy it into a plan to change its level, skills, gear and tree; the original stays as it is.' : 'Start from nothing, or load a character and copy it into a plan.') + '</p>' +
-        '<div class="pl-row">' + (ch ? '<button class="btn" type="button" data-act="copy">Copy ' + esc(ch.name) + ' to a plan</button>' : '') +
-        '<label class="field inline"><span>Class</span><select id="plClass">' + classOpts + '</select></label>' +
-        '<label class="field inline"><span>Level</span><input type="number" id="plLevel" min="1" max="100" value="' + (ch ? ch.level : 60) + '"></label>' +
-        '<button class="btn ghost" type="button" data-act="new">Start an empty plan</button></div>';
+    let h = '<div class="card"><h2>' + (plan ? 'Build Plan Setup' : 'Current Build Setup') + '</h2>';
+    if (!ch || !plan) {
+      h += '<p class="hint">' + (ch ? (test ? 'Changes here are temporary and used to test your build. Turn off <b>Test Changes</b> to discard them.' : '<b>' + esc(ch.name) + '</b> is shown read-only. Turn on <b>Test Changes</b> to temporarily edit the skills and gear below.') : 'Load a character to see its current setup, or use <b>Plan a new build</b> to start from scratch.') + '</p>';
+      if (ch) h += '<label class="check-row test-changes-toggle"><input type="checkbox" id="testChangesToggle"' + (test ? ' checked' : '') + '><span>Test Changes</span></label>';
     } else {
       const aspects = Object.keys(GD.dragon.aspects || {});
       h += '<div class="pl-row">' +
@@ -2006,27 +2131,46 @@ window.BOPlanner = function (ctx) {
   function itemSummary(it) {
     if (!it) return '<span class="meta">empty</span>';
     const b = GD.bases[lc(it.base)], u = GD.uniques[lc(it.unique)];
+    const word = oathwordForItem(it, it.slot);
     const n = it.affixes.filter(a => !a.id.startsWith('unique:')).length;
-    return esc((u ? u.Name + ' · ' : it.rarity + ' ') + (b ? b.Name : it.base)) + (u ? '' : n ? ' · ' + n + ' affix' + (n > 1 ? 'es' : '') : '') + (it.runes.length ? ' · ' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') : '');
+    return esc((u ? u.Name + ' · ' : word ? word.Name + ' · ' : it.rarity + ' ') + (b ? b.Name : it.base)) + (u ? '' : n ? ' · ' + n + ' affix' + (n > 1 ? 'es' : '') : '') + (it.runes.length ? ' · ' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') : '');
   }
   function itemEditor(it, slot, idx, edit, dis) {
     const key = it ? idx : slot; // idols are found by index, other slots by name
     let h = '<details class="pl-item" data-item="' + esc(key) + '"' + (openItems.has(String(key)) ? ' open' : '') + '><summary><b>' + SLOT_NAME[slot] + '</b> ' + itemSummary(it) + '</summary><div class="pl-item-body">';
-    // "Unique" ticked: the list holds this slot's uniques ("Name (weapon type)") instead of the bases.
-    const us = uniquesFor(slot), isU = !!us.length && ((it && it.rarity === 'Unique') || uniqueMode.has(String(key)));
+    const us = uniquesFor(slot), words = oathwordsFor(slot), currentWord = oathwordForItem(it, slot);
+    const isU = !!us.length && !currentWord && ((it && it.rarity === 'Unique') || uniqueMode.has(String(key)));
+    const isOathword = !isU && !!words.length && (oathwordMode.has(String(key)) || !!currentWord);
+    const selectedWord = oathwordSelection.get(String(key)) || (currentWord && currentWord.Id) || '';
     h += '<div class="pl-row">';
     if (isU) {
       const u = it && GD.uniques[lc(it.unique)];
       h += '<label class="field inline grow"><span>Unique</span><select data-f="unique"' + dis + '>' + opt('', it ? 'Pick a unique…' : '(empty)', !u) + us.map(x => opt(x.Id, uniqueLabel(x), u && x.Id === u.Id)).join('') + '</select></label>';
+    } else if (isOathword) {
+      const word = words.find(w => lc(w.Id) === lc(selectedWord));
+      h += '<label class="field inline grow"><span>Oathword</span><select data-f="oathword"' + dis + '>' + opt('', 'Pick an Oathword…', !word) + words.map(w => opt(w.Id, w.Name, word && lc(w.Id) === lc(word.Id))).join('') + '</select></label>';
+      if (word) {
+        const validBases = oathwordBases(slot, word), base = it && validBases.find(b => lc(b.Id) === lc(it.base));
+        h += '<label class="field inline grow"><span>Base item type</span><select data-f="oathbase"' + dis + '>' + opt('', 'Pick a base…', !base) + validBases.map(b => opt(b.Id, b.Name + (b.Level ? ' (level ' + b.Level + ')' : ''), base && lc(b.Id) === lc(base.Id))).join('') + '</select></label>';
+      }
     } else {
       const bases = basesFor(slot);
       h += '<label class="field inline grow"><span>Base</span><select data-f="base"' + dis + '>' + opt('', '(empty)', !it) + bases.map(b => opt(b.Id, b.Name + (b.Level ? ' (level ' + b.Level + ')' : ''), it && lc(it.base) === lc(b.Id))).join('') + '</select></label>';
     }
-    if (us.length) h += '<label class="check-row pl-uniq" title="List this slot\'s uniques instead of the bases"><input type="checkbox" data-f="uniqmode"' + (isU ? ' checked' : '') + dis + '><span>Unique</span></label>';
+    if (us.length || words.length) {
+      h += '<div class="pl-item-modes">';
+      if (us.length) h += '<label class="check-row pl-uniq" title="List this slot\'s uniques instead of the bases"><input type="checkbox" data-f="uniqmode"' + (isU ? ' checked' : '') + dis + '><span>Unique</span></label>';
+      if (words.length) h += '<label class="check-row pl-uniq" title="Choose an Oathword and a compatible base item type"><input type="checkbox" data-f="oathmode"' + (isOathword ? ' checked' : '') + dis + '><span>Oathword</span></label>';
+      h += '</div>';
+    }
     if (it && !isU) h += '<label class="field inline"><span>Rarity</span><select data-f="rarity"' + dis + '>' + RARITIES.filter(r => r !== 'Unique').map(r => opt(r, r, it.rarity === r)).join('') + '</select></label>';
     if (it) h += '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"' + dis + '></label>';
     h += '</div>';
     if (!it) return h + '</div></details>';
+    const chosenWord = words.find(w => lc(w.Id) === lc(selectedWord));
+    if (isOathword && chosenWord && !oathwordBases(slot, chosenWord).some(b => lc(b.Id) === lc(it.base))) {
+      return h + '<p class="hint">Choose a base item type compatible with ' + esc(chosenWord.Name) + '.</p></div></details>';
+    }
     const base = GD.bases[lc(it.base)];
     if (base) for (const m of base.Implicits || []) h += '<div class="meta">Implicit: ' + esc(modLine(m)) + '</div>';
     if (it.rarity === 'Unique') {
@@ -2057,7 +2201,7 @@ window.BOPlanner = function (ctx) {
       }
     }
     const rs = runeSlots(base);
-    if (rs && it.rarity !== 'Unique') {
+    if (rs && it.rarity !== 'Unique' && !isOathword) {
       h += '<div class="pl-row"><span class="meta">Runes (' + rs + ' sockets)</span>';
       for (let i = 0; i < rs; i++) h += '<select data-f="rune" data-ri="' + i + '"' + dis + '>' + opt('', '(none)', !it.runes[i]) + runeList.map(r => opt(r.Id, r.Name, lc(it.runes[i]) === lc(r.Id))).join('') + '</select>';
       h += '</div>';
@@ -2084,11 +2228,15 @@ window.BOPlanner = function (ctx) {
     return { it: ch.items.find(i => i.slot === k) || null, slot: k, key: k };
   }
   function topTier(af, ilvl) { const i = af.Tiers.findIndex(t => t.ILvl <= ilvl); return i < 0 ? af.Tiers.length - 1 : i; }
-  function done(what) { ctx.changed(ctx.current(), what || {}); render(); }
+  function done(what) {
+    if (ctx.testChangesEnabled()) ctx.testChanged(ctx.current(), what || {});
+    else ctx.changed(ctx.current(), what || {});
+    render();
+  }
 
   function onChange(e) {
     const t = e.target, f = t.dataset.f, ch = ctx.current();
-    if (!ch || !ch.plan || !f) return;
+    if (!ch || (!ch.plan && !ctx.testChangesEnabled()) || !f) return;
     const row = t.closest('[data-skill]'), skill = row && row.dataset.skill;
     const v = t.value;
     switch (f) {
@@ -2136,6 +2284,51 @@ window.BOPlanner = function (ctx) {
     // gear
     const { it, slot, key } = itemOf(ch, t); if (!slot) return;
     openItems.add(String(key));
+    if (f === 'uniqmode') {
+      if (t.checked) {
+        oathwordMode.delete(String(key)); oathwordSelection.delete(String(key));
+        if (oathwordForItem(it, slot)) it.runes = [];
+        uniqueMode.add(String(key));
+      } else {
+        uniqueMode.delete(String(key));
+        if (it && it.rarity === 'Unique') Object.assign(it, { rarity: 'Rare', unique: 'None', name: '', affixes: [], roll: undefined });
+      }
+      return it ? done() : render();
+    }
+    if (f === 'oathmode') {
+      if (t.checked) {
+        uniqueMode.delete(String(key)); oathwordMode.add(String(key));
+        if (it && it.rarity === 'Unique') Object.assign(it, { rarity: 'Rare', unique: 'None', name: '', affixes: it.affixes.filter(a => !a.id.startsWith('unique:')), roll: undefined });
+      } else {
+        oathwordMode.delete(String(key)); oathwordSelection.delete(String(key));
+        if (oathwordForItem(it, slot)) it.runes = [];
+      }
+      return it ? done() : render();
+    }
+    if (f === 'oathword') {
+      const word = oathwordsFor(slot).find(w => lc(w.Id) === lc(v));
+      if (!word) { oathwordSelection.delete(String(key)); return render(); }
+      oathwordSelection.set(String(key), word.Id);
+      const base = it && oathwordBases(slot, word).find(b => lc(b.Id) === lc(it.base));
+      if (base) { it.runes = word.Runes.slice(); it.unique = 'None'; return done(); }
+      return render();
+    }
+    if (f === 'oathbase') {
+      const word = (GD.runewords || []).find(w => lc(w.Id) === lc(oathwordSelection.get(String(key)) || (oathwordForItem(it, slot) || {}).Id));
+      const base = word && oathwordBases(slot, word).find(b => lc(b.Id) === lc(v));
+      if (!word || !base) return render();
+      if (!it) {
+        ch.items.push({ slot, base: base.Id, rarity: 'Rare', unique: 'None', name: '', level: ch.level, affixes: [], runes: word.Runes.slice() });
+        openItems.add(String(ch.items.length - 1));
+        oathwordMode.delete(String(key)); oathwordSelection.delete(String(key));
+      } else {
+        it.base = base.Id;
+        if (it.rarity === 'Unique') Object.assign(it, { rarity: 'Rare', unique: 'None', name: '', affixes: [], roll: undefined });
+        else it.affixes = it.affixes.filter(a => affixesFor(base).some(x => lc(x.Id) === lc(a.id)));
+        it.unique = 'None'; it.runes = word.Runes.slice();
+      }
+      return done();
+    }
     if (f === 'base') {
       if (!v) { ch.items = ch.items.filter(i => i !== it); openItems.delete(String(key)); return done(); }
       const u = it && GD.uniques[lc(it.unique)];
@@ -2144,12 +2337,6 @@ window.BOPlanner = function (ctx) {
       return done();
     }
     // The "Unique" box: ticking lists the slot's uniques; unticking turns a unique back into a Rare of the same base.
-    if (f === 'uniqmode') {
-      if (t.checked) { uniqueMode.add(String(key)); return render(); }
-      uniqueMode.delete(String(key));
-      if (it && it.rarity === 'Unique') Object.assign(it, { rarity: 'Rare', unique: 'None', name: '', affixes: [], roll: undefined });
-      return it ? done() : render();
-    }
     if (f === 'unique') {
       if (!v) { if (it) { ch.items = ch.items.filter(i => i !== it); openItems.delete(String(key)); return done(); } return render(); }
       const u = GD.uniques[lc(v)]; if (!u) return render();
@@ -2182,13 +2369,7 @@ window.BOPlanner = function (ctx) {
   async function onClick(e) {
     const b = e.target.closest('[data-act]'); if (!b) return;
     const act = b.dataset.act, ch = ctx.current();
-    if (act === 'new') { if (await startNewPlan($('#plClass').value, $('#plLevel').value)) render(); return; }
-    if (act === 'copy') {
-      const p = planFrom(ctx.workingCopy());
-      status = 'Copied into a plan. Change anything below; the original is untouched.';
-      ctx.add(p); return render();
-    }
-    if (!ch || !ch.plan) return;
+    if (!ch || (!ch.plan && !ctx.testChangesEnabled())) return;
     if (act === 'dnode') {
       const r = dToggle(ch, b.dataset.id);
       if (!r.nodes) { status = r.msg; return render(); }
@@ -2196,14 +2377,14 @@ window.BOPlanner = function (ctx) {
     }
     if (act === 'dreset') { ch.dragonNodes = []; status = 'Dragonling points refunded.'; return done(); }
     const row = b.closest('[data-skill]'), skill = row && row.dataset.skill;
-    if (act === 'code') {
+    if (act === 'code' && ch.plan) {
       const code = await toCode(ch);
       try { await navigator.clipboard.writeText(code); status = 'Plan code copied (' + code.length + ' characters). Paste it into the code box at the top to open it here or in another browser.'; }
       catch (err) { window.prompt('Copy this plan code:', code); }
       return render();
     }
-    if (act === 'dup') { const p = planFrom(ch); status = 'Duplicated.'; ctx.add(p); return render(); }
-    if (act === 'del') { if (!window.confirm('Delete the plan "' + ch.name + '"? This cannot be undone (copy its plan code first to keep it).')) return; status = ''; ctx.remove(ch); return render(); }
+    if (act === 'dup' && ch.plan) { const p = planFrom(ch); status = 'Duplicated.'; ctx.add(p); return render(); }
+    if (act === 'del' && ch.plan) { if (!window.confirm('Delete the plan "' + ch.name + '"? This cannot be undone (copy its plan code first to keep it).')) return; status = ''; ctx.remove(ch); return render(); }
     if (act === 'rmskill') {
       ch.sockets = ch.sockets.filter(s => s.skill !== skill); ch.hotbar = ch.hotbar.filter(h => h !== skill);
       for (const s of ch.sockets) if (s.conduit === skill) s.conduit = '';
@@ -3866,9 +4047,10 @@ window.BOStartApp = function () {
   const buildSettings = document.querySelector('.build-settings');
   const compactSettings = window.matchMedia('(max-width: 1199px)');
   let settingsManuallyToggled = false;
+  let testChangesEnabled = false, testChangesSource = null, testChangesSkill = null;
   buildSettings.querySelector('summary').addEventListener('click', () => { settingsManuallyToggled = true; });
   const syncSettingsToViewport = () => {
-    if (!settingsManuallyToggled) buildSettings.open = !compactSettings.matches;
+    if (!settingsManuallyToggled) buildSettings.open = document.body.classList.contains('dashboard-view') || document.body.classList.contains('support-page') || !compactSettings.matches;
   };
   syncSettingsToViewport();
   compactSettings.addEventListener('change', syncSettingsToViewport);
@@ -3931,6 +4113,7 @@ window.BOStartApp = function () {
 
   function selectChar(id) {
     const ch = CHARS.find(c => c.id === id) || CHARS[0];
+    testChangesEnabled = false; testChangesSource = null; testChangesSkill = null;
     document.body.classList.remove('landing-view');
     st.ch = ch; st.chOrig = ch; st.pinned = null; stopSearch(); st.opt = null; treeReset();
     if (!ch) return;
@@ -3967,6 +4150,9 @@ window.BOStartApp = function () {
     resetSupports();
     render();
   }
+  $('#supportSkillSelect').addEventListener('change', e => {
+    if (e.target.value && e.target.value !== st.skill) selectSkill(e.target.value);
+  });
 
   // A spell on a channel's Conduit uses the channel's supports; otherwise its own sockets.
   function conduitHostNow(force) { return S.conduitHost(GD, st.ch, st.skill, S.collectMods(GD, st.ch, { off: st.off }).mods, force); }
@@ -4013,6 +4199,32 @@ window.BOStartApp = function () {
     if (what.skills && st.skill) { st.gemLevel = null; $('#gemLevel').value = ''; resetSupports(); }
     render();
   }
+  function testBuildChanged(ch, what) {
+    st.ch = ch; st.pinned = null; stopSearch(); st.opt = null; T.scores = new Map();
+    fillSkills(ch);
+    if (what.select) { selectSkill(what.select); return; }
+    if (what.skills && st.skill) { st.gemLevel = null; $('#gemLevel').value = ''; resetSupports(); }
+    render();
+  }
+  function setTestChanges(enabled) {
+    if (enabled === testChangesEnabled || !st.chOrig || st.chOrig.plan) return;
+    if (enabled) {
+      testChangesSource = st.ch;
+      testChangesSkill = st.skill;
+      st.ch = JSON.parse(JSON.stringify(st.ch));
+      testChangesEnabled = true;
+    } else {
+      st.ch = testChangesSource || st.chOrig;
+      testChangesSource = null;
+      testChangesEnabled = false;
+      const { skills, pickable } = fillSkills(st.ch);
+      if (!skills.some(s => s.id === testChangesSkill)) testChangesSkill = (pickable[0] || skills[0] || {}).id;
+      selectSkill(testChangesSkill);
+      testChangesSkill = null;
+    }
+    if (planner) planner.render();
+    render();
+  }
 
   // ---------- left panel ----------
   function renderControls(r) {
@@ -4046,7 +4258,6 @@ window.BOStartApp = function () {
     $('#vowList').innerHTML = vows.length ? vows.map(s => '<li><label><input type="checkbox" data-src="' + esc(s.key) + '"' + (st.off.has(s.key) ? '' : ' checked') + '><span class="name">' + esc(s.label) + '</span></label>' +
       (s.vowbreak ? '<label title="Vowbreak: the Herald\'s extra damage x2.5 for 4 s"><input type="checkbox" data-vowbreak="' + esc(s.vowId) + '"' + (st.vowbreak.has(s.vowId) ? ' checked' : '') + '><span class="meta">Vowbreak</span></label>' : '') + '</li>').join('')
       : '<li class="hint">No Vows or Heralds on your hotbar.</li>';
-    $('#sourceList').innerHTML = src.filter(s => s.group !== 'Vows & Heralds').map(s => '<li><label><input type="checkbox" data-src="' + esc(s.key) + '"' + (st.off.has(s.key) ? '' : ' checked') + '><span class="name">' + esc(s.label) + (s.detail ? '<span class="meta">' + esc(s.detail) + '</span>' : '') + '</span></label></li>').join('');
     // Curses
     const isBoss = st.rarity === 'boss';
     $('#guardianRow').hidden = !isBoss; $('#guardianElement').value = st.gElem || '';
@@ -4082,6 +4293,15 @@ window.BOStartApp = function () {
   const PIN = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M9.8 1.2l5 5-1.6.4-2.6 2.6.4 3.5-1.4 1.4-2.9-2.9L3.2 15l-1.1-.3-.1-1.1 3.8-3.8L2.9 6.9l1.4-1.4 3.5.4 2.6-2.6z"/></svg>';
   const SUP_HINT = 'Click a support to socket it or take it out. Pin one to keep it in every setup the search tries.';
   function supSockets() { const h = conduitHostNow(st.conduit); return h ? S.socketsFor(GD, st.ch, h.skill) : S.socketsFor(GD, st.ch, st.skill, st.gemLevel || undefined); }
+  function renderSupportSkillSelect() {
+    const skillSelect = $('#supportSkillSelect');
+    if (skillSelect) {
+      const skills = st.ch ? S.listSkills(GD, st.ch, true) : [];
+      skillSelect.innerHTML = skills.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name + (s.where.startsWith('Other skills') ? ' (not owned)' : '')) + '</option>').join('');
+      skillSelect.disabled = !skills.length;
+      if (st.skill) skillSelect.value = st.skill;
+    }
+  }
   function renderSupportPicker(r) {
     const box = $('#supportChips'); if (!box) return;
     const inSet = new Set((st.supports || []).map(s => s.toLowerCase()));
@@ -4136,14 +4356,19 @@ window.BOStartApp = function () {
   $('#supportChips').addEventListener('mouseleave', () => { st.supMsg = ''; if (st.last) renderSupportPicker(st.last); });
 
   // ---------- right panel ----------
-  function render() { renderMain(); treeAfterRender(); }
+  function render() { renderSupportSkillSelect(); renderMain(); renderSupportSearchResults(); treeAfterRender(); }
   function renderMain() {
     // The welcome banner shows until a character or plan is loaded.
     document.body.classList.toggle('no-char', !st.ch);
+    $('#logCheckBanner').hidden = true;
+    $('#logCheckBanner').innerHTML = '';
     if (st.ch && !st.skill) { $('#results').innerHTML = '<div class="empty">This plan has no skills yet. Add one on the <b>Build</b> tab, or pick any skill in the Skill box on the left.</div>'; return; }
     if (!st.ch || !st.skill) { $('#results').innerHTML = '<div class="empty">No character loaded. Click <b>Copy save path</b>, then <b>Load saves folder</b>: paste the path into the picker\'s address bar, press Enter and choose <b>Select Folder</b>. Every character in it is loaded.<br><small>You can also drop the SaveGames folder or a BO_Char_*.sav file on this page, or paste a build code above. Your browser may ask to "upload" the files: that only lets this page read them; nothing leaves your computer.</small></div>'; return; }
     const r = S.calcSkill(GD, st.ch, st.skill, opts());
     renderControls(r);
+    const fightCheck = $('#logCheckBanner');
+    fightCheck.innerHTML = r.minion ? '' : logCard(r);
+    fightCheck.hidden = !fightCheck.innerHTML;
     const out = $('#results');
     if (r.error || r.unsupported) {
       out.innerHTML = '<div class="card"><h2>' + esc(r.skill ? r.skill.Name : st.skill) + '</h2><p class="warn">' + esc(r.error || r.unsupported) + '</p></div>';
@@ -4156,11 +4381,13 @@ window.BOStartApp = function () {
     const calib = st.ingame > 0 ? 'This sheet\'s skill panel DPS is ' + num(r.panelDps) + ' (' + pct(r.panelDps / st.ingame - 1) + ' vs the game). Death Coil, Unholy Void and Judgement matched the game within a few percent; a big gap on another skill means a rule the sheet does not model yet.' : 'Type the number from the in-game skill panel to see how close this sheet is.';
     $('#calibOut').textContent = calib;
 
-    let html = '';
+    let html = '<div class="dashboard-summary">';
     if (st.ch.fromCode) html += '<div class="warn" style="margin-bottom:12px"><b>Loaded from a build code.</b> Gear numbers may run low: codes don\'t carry rolled item stats, and they don\'t record a Channel Conduit link (pick the linked spell in the skill list).' +
       (st.ch.codeWarnings.length ? '<ul>' + st.ch.codeWarnings.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '') + '</div>';
     const w = S.statWeights(GD, st.ch, st.skill, opts(), r);
-    html += resultsHeading(r) + '<div class="headline">' +
+    html += resultsHeading(r) +
+      '<div class="pinbar"><button class="btn small" id="pinBtn">' + (pin ? 'Re-pin current' : 'Pin as baseline') + '</button>' + (pin ? '<button class="btn small ghost" id="unpinBtn">Clear pin</button><span>Change anything on the left to compare with the pinned setup.</span>' : '<span>Pin this setup, then change gear, supports or the enemy to see the difference.</span>') + (r.igniteDps > 0 ? '<span>· Ignite DPS ' + num(r.igniteDps) + '</span>' : '') + (r.bleedDps > 0 ? '<span>· Bleeding DPS ' + num(r.bleedDps) + '</span>' : '') + '</div>' +
+      '<div class="headline">' +
       stat('Total DPS vs this enemy', num(r.totalDps), delta(r.totalDps, pin && pin.total), 'main', 'Hits + poison + ignite + bleeding, after resistances and curses') +
       stat('Hit DPS', num(r.hitDps), delta(r.hitDps, pin && pin.hit), '', 'After enemy resist, armour, curses' + (r.ailments.shock ? ' and shock' : '')) +
       stat('Poison DPS', num(r.poisonDps), delta(r.poisonDps, pin && pin.poison), '', r.ailments.poison ? num(r.ailments.poison.stacks, 1) + ' stacks of ' + r.ailments.poison.cap + ' max' : 'No poison on this skill') +
@@ -4168,13 +4395,12 @@ window.BOStartApp = function () {
       '</div>';
     st.last = r;
     html += '<div class="overview-grid' + (pin && pin.total != null ? ' has-comparison' : '') + '">' +
-      damageMixCard(r) + snapshotCard(r, 'Total DPS', r.totalDps) +
+      damageMixCard(r) +
       (pin && pin.total != null ? comparisonCard(r.totalDps, pin.total) : '') +
-      upgradeCard(w) + '</div>';
-    html += optCard(r);
-    html += logCard(r);
-    html += '<div class="pinbar"><button class="btn small" id="pinBtn">' + (pin ? 'Re-pin current' : 'Pin as baseline') + '</button>' + (pin ? '<button class="btn small ghost" id="unpinBtn">Clear pin</button><span>Change anything on the left to compare with the pinned setup.</span>' : '<span>Pin this setup, then change gear, supports or the enemy to see the difference.</span>') + (r.igniteDps > 0 ? '<span>· Ignite DPS ' + num(r.igniteDps) + '</span>' : '') + (r.bleedDps > 0 ? '<span>· Bleeding DPS ' + num(r.bleedDps) + '</span>' : '') + '</div>';
-
+      '</div><div class="build-overview-grid">' +
+      snapshotCard(r, 'Total DPS', r.totalDps) + upgradeCard(w) + '</div>';
+    if (!document.body.classList.contains('support-page')) html += optCard(r);
+    html += '</div><div class="analysis-details">';
     // Hit table
     html += '<div class="card"><h2>Damage Breakdown <small>' + esc(r.skill.Name) + ' · gem ' + r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus : '') + ' · ' + (r.base.kind === 'attack' ? 'attack with ' + esc(r.base.weapon.name) : 'spell') + '</small></h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Base</th><th>Increased</th><th>More</th><th>Hit range</th><th>Enemy res</th><th>Taken</th><th>DPS</th></tr></thead><tbody>' +
       hitTypes.map(d => {
@@ -4238,17 +4464,26 @@ window.BOStartApp = function () {
       '<li>Minions: summon gems show their own sheet (the game\'s skill panel DPS, checked 2 Nov on Grave Golem, Skeletal Mage and Skeletons within 0.5%), not yet against an enemy\'s resistances.</li>' +
       '<li>Not modelled: War Banner, shock and freeze, bleeding, Skyfall repeat strikes, other triggers (on kill / on crit), keystone flags, dual-wield alternation.</li>' +
       '</ul></details></div>';
+    html += '</div>';
     out.innerHTML = html;
     bindResults(r, out);
   }
 
   function snapshotCard(r, dpsLabel, dps) {
-    return '<section class="card snapshot-card"><h2>Build Snapshot</h2><dl class="kv">' +
-      kv('Character', esc(st.ch.name)) +
-      kv('Class / Level', esc(st.ch.classId + ' ' + st.ch.level)) +
-      kv('Active skill', esc(r.skill.Name)) +
-      kv('Supports', String((st.supports || []).length)) +
-      kv(dpsLabel, num(dps), true) +
+    const vows = (r.sources || []).filter(source => source.group === 'Vows & Heralds' && !st.off.has(source.key)).map(source => source.label);
+    const enemy = (r.enemy && r.enemy.level || st.enemyLevel || st.ch.level) + ' · ' + ({ normal: 'Normal', magic: 'Magic', rare: 'Rare', boss: 'Guardian' }[st.rarity] || 'Enemy');
+    const fields = [
+      ['Active skill', esc(r.skill.Name)],
+      ['Character', esc(st.ch.classId + ' · level ' + st.ch.level)],
+      ['Weapon', esc(r.base && r.base.weapon ? r.base.weapon.name : 'Not applicable')],
+      ['Passive tree', st.ch.passives.length + ' allocated'],
+      ['Supports', String((st.supports || []).length) + ' linked'],
+      ['Enemy', esc(enemy)],
+      ['Vows / Heralds', esc(vows.join(', ') || 'None active'), '', 'wide'],
+      [dpsLabel, num(dps), 'strong']
+    ];
+    return '<section class="card snapshot-card"><h2>Build Summary</h2><dl class="build-summary-list">' +
+      fields.map(field => '<div' + (field[3] ? ' class="' + field[3] + '"' : '') + '><dt>' + field[0] + '</dt><dd' + (field[2] ? ' class="' + field[2] + '"' : '') + '>' + field[1] + '</dd></div>').join('') +
       '</dl></section>';
   }
 
@@ -4279,9 +4514,59 @@ window.BOStartApp = function () {
     const bar = active.map(source => '<span class="mix-segment" style="--mix-color:' + source.color + ';width:' + (source.value / total * 100).toFixed(2) + '%" title="' + esc(source.label + ': ' + num(source.value) + ' DPS') + '"></span>').join('');
     const rows = active.sort((a, b) => b.value - a.value).map(source =>
       '<div class="mix-row"><span class="mix-name"><i style="--mix-color:' + source.color + '"></i>' + esc(source.label) + '</span><b>' + num(source.value) + '</b><span>' + pct(source.value / total) + '</span></div>').join('');
+    const breakdown = damageSourceBreakdown(r);
+    let sourceProgress = 0;
+    const sourceSlices = breakdown.rows.filter(source => source.share > 0).map(source => {
+      const start = sourceProgress;
+      sourceProgress += source.share;
+      const startAngle = (start / 100 * 360 - 90) * Math.PI / 180;
+      const endAngle = (sourceProgress / 100 * 360 - 90) * Math.PI / 180;
+      const startX = 50 + 48 * Math.cos(startAngle), startY = 50 + 48 * Math.sin(startAngle);
+      const endX = 50 + 48 * Math.cos(endAngle), endY = 50 + 48 * Math.sin(endAngle);
+      const path = source.share >= 99.999
+        ? 'M50 2 A48 48 0 1 1 50 98 A48 48 0 1 1 50 2 Z'
+        : 'M50 50 L' + startX.toFixed(3) + ' ' + startY.toFixed(3) + ' A48 48 0 ' + (source.share > 50 ? 1 : 0) + ' 1 ' + endX.toFixed(3) + ' ' + endY.toFixed(3) + ' Z';
+      return '<path class="source-slice" d="' + path + '" fill="' + source.color + '" tabindex="0" role="img" aria-label="' + esc(source.label + ': ' + num(source.share, 1) + '%, estimated impact ' + num(source.dps) + ' DPS') + '" data-source-label="' + esc(source.label) + '" data-source-share="' + num(source.share, 1) + '%" data-source-dps="' + num(source.dps) + ' DPS estimated impact"></path>';
+    }).join('');
+    const sourceRows = breakdown.rows.map(source => '<div class="source-row" title="' + esc(num(source.dps) + ' DPS estimated impact when removed') + '">' +
+      '<i style="--source-color:' + source.color + '"></i><span>' + source.label + '</span><b>' + num(source.share, 1) + '%</b></div>').join('');
     return '<section class="card mix-card"><h2>Damage Composition</h2>' +
-      (total > 0 ? '<div class="mix-total"><b>' + num(total) + '</b><span>' + (r.minion ? 'skill panel DPS' : 'DPS contribution') + '</span></div><div class="mix-bar" role="img" aria-label="Damage composition">' + bar + '</div><div class="mix-legend">' + rows + '</div>' : '<p class="hint">Nothing to show for this skill.</p>') +
+      (total > 0 ?       '<div class="mix-total"><b>' + num(total) + '</b><span>' + (r.minion ? 'skill panel DPS' : 'DPS contribution') + '</span></div><div class="mix-bar" role="img" aria-label="Damage composition">' + bar + '</div><div class="mix-breakdowns"><div class="mix-legend">' + rows + '</div><section class="source-breakdown" aria-label="Damage source breakdown"><h3>Damage source breakdown <span>Estimated share</span></h3><div class="source-chart"><svg class="source-pie" viewBox="0 0 100 100" aria-label="Damage source share">' + sourceSlices + '</svg><div class="source-legend">' + sourceRows + '</div></div><div class="source-tooltip" id="sourceTooltip" role="tooltip" hidden></div><p>Estimated from the DPS lost when each source is removed; shares are normalized and may overlap.</p></section></div>' : '<p class="hint">Nothing to show for this skill.</p>') +
       '</section>';
+  }
+
+  function damageSourceBreakdown(r) {
+    const sources = r.sources || S.collectMods(GD, st.ch, opts()).sources;
+    const activeKeys = keys => keys.filter(key => !st.off.has(key));
+    const itemSources = sources.filter(source => source.group === 'Gear');
+    const supportKeys = [...new Set((r.supports || []).map(support => support.key))];
+    const sourceGroups = [
+      { label: 'Passive tree', keys: activeKeys(sources.filter(source => source.key === 'passives' || source.key === 'dragon').map(source => source.key)), color: '#8b4bd1' },
+      { label: 'Weapon', keys: activeKeys(itemSources.filter(source => source.key === 'item:MainHand' || source.key === 'item:OffHand').map(source => source.key)), color: '#f3922c', weapon: true },
+      { label: 'Support gems', keys: activeKeys(supportKeys), color: '#438ddd', supports: true },
+      { label: 'Gear (other)', keys: activeKeys(itemSources.filter(source => source.key !== 'item:MainHand' && source.key !== 'item:OffHand').map(source => source.key)), color: '#49bd72' },
+      { label: 'Vows / Heralds', keys: activeKeys(sources.filter(source => source.group === 'Vows & Heralds').map(source => source.key)), color: '#e5c72e' }
+    ].filter(group => group.keys.length);
+    const hasCharges = Object.values(st.charges || {}).some(value => value > 0);
+    if (hasCharges) sourceGroups.push({ label: 'Other', keys: [], color: '#48b9b1', charges: true });
+
+    const currentDps = r.minion ? r.panelDps : r.totalDps;
+    const rows = sourceGroups.map(group => {
+      const off = new Set(st.off);
+      group.keys.forEach(key => off.add(key));
+      const character = group.weapon
+        ? Object.assign({}, st.ch, { items: st.ch.items.filter(item => item.slot !== 'MainHand' && item.slot !== 'OffHand') })
+        : st.ch;
+      const extra = { off };
+      if (group.supports) extra.supportsOverride = [];
+      if (group.charges) extra.charges = Object.fromEntries(Object.keys(st.charges).map(key => [key, 0]));
+      const without = S.calcSkill(GD, character, st.skill, opts(extra));
+      const dps = r.minion ? without.panelDps : without.totalDps;
+      return Object.assign(group, { dps: Math.max(0, currentDps - (isFinite(dps) ? dps : currentDps)) });
+    });
+    const impactTotal = rows.reduce((sum, row) => sum + row.dps, 0);
+    rows.forEach(row => { row.share = impactTotal > 0 ? row.dps / impactTotal * 100 : 0; });
+    return { rows };
   }
 
   function comparisonCard(current, baseline) {
@@ -4299,7 +4584,7 @@ window.BOStartApp = function () {
   function upgradeCard(weights) {
     const maxGain = Math.max(0.0001, ...weights.map(x => x.gain));
     const row = x => '<div class="weight"><div class="bar"><div class="fill" style="width:' + Math.max(0, x.gain / maxGain * 100).toFixed(1) + '%"></div><div class="lbl">' + esc(x.label) + '</div></div><div class="pct">' + pct(x.gain) + '</div></div>';
-    return '<section class="card upgrade-card"><h2>Upgrade Opportunities <small>Estimated DPS gain</small></h2><div class="weights">' +
+    return '<section class="card upgrade-card"><h2>Top Optimization Suggestions <small>Estimated DPS gain · stat estimates</small></h2><div class="weights">' +
       weights.slice(0, 5).map(row).join('') +
       (weights.length > 5 ? '<details><summary>More upgrade estimates (' + (weights.length - 5) + ')</summary><div class="weights">' + weights.slice(5).map(row).join('') + '</div></details>' : '') +
       '</div></section>';
@@ -4308,16 +4593,19 @@ window.BOStartApp = function () {
   // A summon gem: the minions' own sheet (the game's skill panel numbers).
   function minionHtml(r, pin, delta) {
     const m = r.minion, x = v => '×' + num(v, 3);
-    let h = resultsHeading(r) + '<div class="headline">' +
+    let h = '<div class="dashboard-summary">' + resultsHeading(r) +
+      '<div class="pinbar"><button class="btn small" id="pinBtn">' + (pin ? 'Re-pin current' : 'Pin as baseline') + '</button>' + (pin ? '<button class="btn small ghost" id="unpinBtn">Clear pin</button><span>Change anything on the left to compare with the pinned setup.</span>' : '<span>Pin this setup, then change supports or passives to see the difference.</span>') + '</div>' +
+      '<div class="headline">' +
       stat('Skill panel DPS', num(r.panelDps), delta(r.panelDps, pin && pin.sheet), 'main', 'All its minions attacking nonstop, as the game\'s tooltip counts it (before the enemy\'s resistances and curses)') +
       stat('Minions', m.alive + (m.strikes > 1 ? ' × ' + m.strikes + ' strikes' : ''), '', '', 'Standing at once') +
       stat('Each attacks every', num(m.pace, 3) + ' s', '', '', m.every + ' s × 0.72 ÷ minion speed') +
       stat('Average hit', num(r.hitAvg), '', '', 'With crits ' + num(r.hitAvgCrit) + ' (' + num(r.crit.chance, 1) + '% × ' + num(r.crit.multi / 100, 2) + ')') +
       '</div>';
     const weights = S.statWeights(GD, st.ch, st.skill, opts(), r);
-    h += '<div class="overview-grid minion-overview">' + damageMixCard(r) + snapshotCard(r, 'Skill panel DPS', r.panelDps) + upgradeCard(weights) + '</div>';
-    h += optCard();
-    h += '<div class="pinbar"><button class="btn small" id="pinBtn">' + (pin ? 'Re-pin current' : 'Pin as baseline') + '</button>' + (pin ? '<button class="btn small ghost" id="unpinBtn">Clear pin</button><span>Change anything on the left to compare with the pinned setup.</span>' : '<span>Pin this setup, then change supports or passives to see the difference.</span>') + '</div>';
+    h += '<div class="overview-grid minion-overview">' + damageMixCard(r) + '</div>' +
+      '<div class="build-overview-grid">' + snapshotCard(r, 'Skill panel DPS', r.panelDps) + upgradeCard(weights) + '</div>';
+    if (!document.body.classList.contains('support-page')) h += optCard();
+    h += '</div><div class="analysis-details">';
     h += '<div class="card"><h2>The minion hit <small>' + esc(r.skill.Name) + ' · gem ' + r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus : '') + '</small></h2><div class="table-wrap"><table class="hit"><thead><tr><th>Type</th><th>Hit</th></tr></thead><tbody>' +
       Object.keys(r.hit).map(d => '<tr><td><span class="type" style="--c:' + typeColor(d) + '">' + d + '</span></td><td>' + num(r.hit[d].min) + '–' + num(r.hit[d].max) + '</td></tr>').join('') + '</tbody></table></div>' +
       '<h3>What makes the hit</h3><dl class="kv">' +
@@ -4331,6 +4619,7 @@ window.BOStartApp = function () {
       (m.level && m.level !== 1 ? kv('Zone level', x(m.level)) : '') + (m.ruthless > 1 ? kv('Ruthless (DPS only)', x(m.ruthless)) : '') +
       '</dl></div>';
     h += '<details><summary>Notes for this skill <span class="count">(' + r.notes.length + ')</span></summary><ul class="notes">' + r.notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul></details>';
+    h += '</div>';
     return h;
   }
 
@@ -4338,13 +4627,53 @@ window.BOStartApp = function () {
   function bindResults(r, out) {
     $('#pinBtn').onclick = () => { st.pinned = { total: r.totalDps, hit: r.hitDps, poison: r.poisonDps, sheet: r.panelDps }; render(); };
     const up = $('#unpinBtn'); if (up) up.onclick = () => { st.pinned = null; render(); };
+    const pie = out.querySelector('.source-pie'), tooltip = out.querySelector('.source-tooltip');
+    if (pie && tooltip) {
+      let activeSlice = null;
+      const showSourceTip = (slice, x, y) => {
+        tooltip.innerHTML = '<strong>' + esc(slice.dataset.sourceLabel) + '</strong><span>' +
+          esc(slice.dataset.sourceShare + ' of estimated impact · ' + slice.dataset.sourceDps) + '</span>';
+        tooltip.hidden = false;
+        const rect = tooltip.getBoundingClientRect(), gap = 12;
+        tooltip.style.left = Math.max(8, Math.min(x + gap, innerWidth - rect.width - 8)) + 'px';
+        tooltip.style.top = Math.max(8, Math.min(y + gap, innerHeight - rect.height - 8)) + 'px';
+        if (activeSlice && activeSlice !== slice) activeSlice.removeAttribute('aria-describedby');
+        activeSlice = slice;
+        tooltip.id = 'sourceTooltip';
+        slice.setAttribute('aria-describedby', 'sourceTooltip');
+      };
+      const hideSourceTip = slice => {
+        if (slice) slice.removeAttribute('aria-describedby');
+        if (activeSlice) activeSlice.removeAttribute('aria-describedby');
+        activeSlice = null;
+        tooltip.hidden = true;
+      };
+      pie.addEventListener('pointerover', e => {
+        const slice = e.target.closest('.source-slice');
+        if (slice) showSourceTip(slice, e.clientX, e.clientY);
+      });
+      pie.addEventListener('pointermove', e => {
+        const slice = e.target.closest('.source-slice');
+        if (slice) showSourceTip(slice, e.clientX, e.clientY);
+      });
+      pie.addEventListener('pointerleave', () => hideSourceTip());
+      pie.addEventListener('focusin', e => {
+        const slice = e.target.closest('.source-slice');
+        if (slice) {
+          const rect = slice.getBoundingClientRect();
+          showSourceTip(slice, rect.left + rect.width / 2, rect.top + rect.height / 2);
+        }
+      });
+      pie.addEventListener('focusout', e => {
+        if (e.target.closest('.source-slice') && !pie.contains(e.relatedTarget)) hideSourceTip(e.target);
+      });
+    }
     out.querySelectorAll('[data-use]').forEach(b => b.onclick = () => useSetup(+b.dataset.use));
     const oc = $('#optClose'); if (oc) oc.onclick = () => { st.opt = null; render(); };
     const ur = $('#useFightRate'); if (ur) ur.onclick = () => { st.cps = +ur.dataset.rate; render(); };
     const cfr = $('#clearFightRate'); if (cfr) cfr.onclick = () => { st.cps = null; render(); };
-    const lb = $('#logLoadInline'); if (lb) lb.onclick = () => $('#logInput').click();
     const crb = $('#copyReport'); if (crb) crb.onclick = async () => {
-      const pre = out.querySelector('details.report pre');
+      const pre = document.querySelector('#logCheckBanner details.report pre');
       try { await navigator.clipboard.writeText(pre ? pre.textContent : ''); crb.textContent = 'Copied'; } catch (e) { crb.textContent = 'Copy failed: select the text below'; }
     };
   }
@@ -4400,9 +4729,9 @@ window.BOStartApp = function () {
   }
   function logCard(r) {
     if (r.error || r.unsupported) return '';
-    if (!st.log) return '<div class="card log-cta"><h2>Check against your fights</h2><p class="hint">Load your game log (<code>%LOCALAPPDATA%\\BrokenOath\\Saved\\Logs\\BrokenOath.log</code>) to compare this sheet with your real Guardian kills: boss life ÷ fight time, your cast rate and damage per cast. The log is read in this tab only and never uploaded. <button class="btn small ghost" id="logLoadInline" type="button">Load game log</button></p></div>';
+    if (!st.log) return '<div class="card log-cta"><h2>Check Against Your Fights</h2><p class="hint">Use <b>Load game log</b> in the character bar to compare this sheet with your real Guardian kills: boss life ÷ fight time, your cast rate and damage per cast. The log is read in this tab only and never uploaded.</p></div>';
     const c = logCheck(); if (!c) return '';
-    if (!c.fights.length) return '<div class="card"><h2>Check against your fights</h2><p class="hint">This log has no Guardian kills by ' + esc(c.name) + (c.others ? ' (' + c.others + ' by other characters)' : '') + '. Kill a Guardian, then load the log again (the game writes it as you play).</p></div>';
+    if (!c.fights.length) return '<div class="card"><h2>Check Against Your Fights</h2><p class="hint">This log has no Guardian kills by ' + esc(c.name) + (c.others ? ' (' + c.others + ' by other characters)' : '') + '. Kill a Guardian, then load the log again (the game writes it as you play).</p></div>';
     const ratio = c.realMed / c.simMed;
     const verdict = !isFinite(ratio) ? '' : Math.abs(ratio - 1) <= 0.15 ? 'The sheet matches your kills (within 15%).' : ratio > 1 ? 'You kill Guardians ' + pct(ratio - 1) + ' faster than the sheet says: something adds damage it does not count (see below).' : 'You kill Guardians ' + pct(1 - ratio).replace('+', '') + ' slower than the sheet: likely time spent moving or dodging, or a rule the sheet gets wrong.';
     const rows = c.fights.map(f => '<tr' + (f.skip ? ' class="dim"' : '') + '><td>' + esc(f.g.name.replace(/_/g, ' ')) + (f.g.element ? ' <span class="type" style="--c:' + typeColor(f.g.element) + '">' + esc(f.g.element) + (f.g.ward ? ' +' + f.g.ward : '') + '</span>' : '') + (f.gear ?' <span class="hint">(other weapon)</span>' : '') + (f.levelDiff ? ' <span class="hint">(you were ' + f.levelDiff + ')</span>' : '') + (f.g.away || f.g.lostPct ? ' <span class="hint">(away ' + num(f.g.away || 0, 0) + ' s' + (f.g.lostPct ? ', ' + num(f.g.lostPct, 0) + '% of its life lost at held marks' : '') + ')</span>' : '') +'</td><td>' + (f.g.rupture || '–') + '</td><td>' + num(f.g.life) + '</td><td>' + num(f.time, 1) + ' s</td><td><b>' + num(f.real) + '</b></td><td>' + num(f.simDps) + '</td><td>' + (f.casts ? num(f.castRate, 2) : '–') + '</td><td>' + (f.casts ? num(f.perCastReal / f.perCastSim, 2) + '×' : '–') + '</td></tr>').join('');
@@ -4417,7 +4746,7 @@ window.BOStartApp = function () {
     if (!c.fights.some(f => f.casts) && r.conduit) notes.push('No ' + c.skillName + ' casts during these fights: was it linked then?');
     const rateBtn = isFinite(c.rateMed) && c.rateMed > 0 ? (st.cps ? '<button class="btn small ghost" type="button" id="clearFightRate">Back to the sheet\'s cast rate</button>' : '<button class="btn small" type="button" id="useFightRate" data-rate="' + (Math.round(c.rateMed * 100) / 100) + '">Use my fight cast rate (' + num(c.rateMed, 2) + '/s)</button>') : '';
     const report = reportText(r, c);
-    return '<div class="card"><h2>Check against your fights <span class="hint">' + c.fights.length + ' Guardian kill' + (c.fights.length > 1 ? 's' : '') + ' in the log</span></h2>' +
+    return '<div class="card"><h2>Check Against Your Fights <span class="hint">' + c.fights.length + ' Guardian kill' + (c.fights.length > 1 ? 's' : '') + ' in the log</span></h2>' +
       '<div class="headline small">' + stat('Real boss DPS (median)', num(c.realMed), '', 'main', 'Boss life ÷ time from engaging it to the kill') + stat('Sheet vs a Guardian', num(c.simMed), '', '', 'Same Rupture levels, settings on the left') + stat('Real ÷ sheet', isFinite(ratio) ? num(ratio, 2) + '×' : '–', '', '', verdict) + '</div>' +
       '<div class="table-wrap"><table class="tbl"><thead><tr><th>Guardian</th><th>Rupture</th><th>Life</th><th>Fight</th><th>Real DPS</th><th>Sheet</th><th>Casts/s</th><th>Per cast</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       (notes.length ? '<details class="validation-notes"><summary>Notes on these fights <span class="count">(' + notes.length + ')</span></summary><ul class="notes">' + notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul></details>' : '') +
@@ -4516,7 +4845,7 @@ window.BOStartApp = function () {
     const cur = O.baseSup; // compare with the setup you had when you searched
     const inUse = (st.supports || []).map(s => s.toLowerCase());
     const same = sup => sup.length === inUse.length && sup.every(id => inUse.includes(id));
-    let h = '<div class="card support-results"><h2>Best support setups <small>' + (O.target === 'panel' ? 'skill panel DPS' : 'vs the enemy on the left') + ' · ' + (O.pool === 'all' ? 'every support' : 'gems you own') + (O.manaOk ? ' · mana sustained' : '') + (O.pinnedN ? ' · ' + O.pinnedN + ' pinned' : '') + ' · ' + O.sockets + ' sockets · ' + O.tried.toLocaleString('en-US') + ' setups <button class="x" id="optClose" title="Close" style="background:none;border:0;color:var(--faint);cursor:pointer;font-size:16px">×</button></small></h2>';
+    let h = '<div class="card support-results"><h2>Best support setups <small>' + (O.target === 'panel' ? 'skill panel DPS' : 'enemy set in Damage Analysis') + ' · ' + (O.pool === 'all' ? 'every support' : 'supports you own') + (O.manaOk ? ' · mana sustained' : '') + (O.pinnedN ? ' · ' + O.pinnedN + ' pinned' : '') + ' · ' + O.sockets + ' sockets · ' + O.tried.toLocaleString('en-US') + ' setups <button class="x" id="optClose" title="Close" style="background:none;border:0;color:var(--faint);cursor:pointer;font-size:16px">×</button></small></h2>';
     if (O.running) h += '<p class="hint">Searching… ' + Math.round(O.tried / Math.max(1, O.total) * 100) + '% (' + O.poolSize + ' supports, ' + O.total.toLocaleString('en-US') + ' combinations)</p>';
     else if (O.sig !== optSig()) h += '<p class="warn">Settings changed after this search. Run it again for picks that match them.</p>';
     h += '<div class="optrow current"><span class="rank">was</span><span class="names">' + esc(cur.map(supName).join(', ') || 'no supports') + '<span class="nums">' + num(O.currentValue) + ' · your setup when you searched</span></span>' +
@@ -4530,8 +4859,16 @@ window.BOStartApp = function () {
         (same(x.sup) ? '<span class="hint">in use</span>' : '<button class="btn small" data-use="' + i + '"' + (O.running ? ' disabled' : '') + '>Use</button>') + '</div>';
     });
     if (O.manaOk && O.manaDropped) h += '<p class="hint">' + O.manaDropped.toLocaleString('en-US') + ' setups were skipped: they would run you dry within a minute of nonstop use.</p>';
-    h += '<p class="hint">New gems are highlighted; struck-through ones come out. <b>Use</b> loads a setup into this page and pins your current one as the baseline; change the gems in game to match. Socket the shape gem (Orbit, Skyfall, Rain, Trap or Totem) first.</p></div>';
+    h += '<p class="hint">New supports are highlighted; struck-through ones come out. <b>Use</b> loads a setup for this skill and pins your current one as the baseline. Socket the shape gem (Orbit, Skyfall, Rain, Trap or Totem) first.</p></div>';
     return h;
+  }
+  function renderSupportSearchResults() {
+    const box = $('#supportSearchResults');
+    if (!box) return;
+    box.innerHTML = document.body.classList.contains('support-page') ? optCard() : '';
+    box.querySelectorAll('[data-use]').forEach(button => { button.onclick = () => useSetup(+button.dataset.use); });
+    const close = box.querySelector('#optClose');
+    if (close) close.onclick = () => { st.opt = null; render(); };
   }
 
   const kv = (k, v, strong) => '<dt>' + k + '</dt><dd' + (strong ? ' class="strong"' : '') + '>' + v + '</dd>';
@@ -4565,6 +4902,7 @@ window.BOStartApp = function () {
   // open a folder by itself, and Chrome/Edge will not let it remember one inside AppData, so "Reload
   // saves" opens the picker again (Windows starts it in the last folder used).
   const SAVE_PATH = '%LOCALAPPDATA%\\BrokenOath\\Saved\\SaveGames';
+  const LOG_PATH = '%LOCALAPPDATA%\\BrokenOath\\Saved\\Logs\\BrokenOath.log';
   const isCharSave = name => /^BO_Char_.*\.sav$/i.test(name) && !/_bak\.sav$/i.test(name);
   const saveTip = (msg, forget) => { $('#saveTipText').textContent = msg || ''; $('#saveForget').hidden = !forget; $('#saveTip').hidden = !msg; };
   // withPlans: the sidebar's Reset also removes build plans; the save tip's "Forget" keeps them.
@@ -4618,6 +4956,10 @@ window.BOStartApp = function () {
   $('#copySavePath').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(SAVE_PATH); } catch (e) { window.prompt('Copy this path:', SAVE_PATH); return; }
     saveTip('Copied ' + SAVE_PATH + '. Click Load saves folder, click the address bar at the top of the picker, paste (Ctrl+V), press Enter, then choose Select Folder. If your browser asks to "upload", that only lets this page read the files.');
+  });
+  $('#copyLogPath').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(LOG_PATH); } catch (e) { window.prompt('Copy this path:', LOG_PATH); return; }
+    saveTip('Copied ' + LOG_PATH + '. Click Load game log, click the address bar at the top of the picker, paste (Ctrl+V), then press Enter. If your browser asks to "upload", that only lets this page read the file.');
   });
   $('#saveForget').addEventListener('click', () => forgetLoadedCharacters(false));
   $('#resetLoadedCharacters').addEventListener('click', () => {
@@ -5167,8 +5509,19 @@ window.BOStartApp = function () {
     T.visible = tab === 'tree';
     document.body.classList.remove('landing-view');
     document.body.classList.toggle('other-view', tab !== 'damage');
+    document.body.classList.toggle('dashboard-view', tab === 'damage');
+    document.body.classList.toggle('tree-page', tab === 'tree');
+    document.body.classList.toggle('build-page', tab === 'build');
+    document.body.classList.toggle('support-page', tab === 'supports');
+    document.body.classList.toggle('code-page', tab === 'code');
+    if (tab === 'supports') {
+      showConfigTab('supports', false);
+      buildSettings.open = true;
+    }
+    syncSettingsToViewport();
     document.querySelectorAll('.tab').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
     $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code';
+    renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     if (tab === 'code') setTimeout(() => $('#codeInput').focus(), 0);
     store.set('tab', tab);
@@ -5234,13 +5587,18 @@ window.BOStartApp = function () {
   // The Build tab (planner.js).
   planner = window.BOPlanner({
     GD, S, $, esc, confirm: confirmInPage,
-    current: () => st.chOrig || st.ch, workingCopy: () => st.ch,
+    current: () => testChangesEnabled ? st.ch : st.chOrig || st.ch, workingCopy: () => st.ch,
+    testChangesEnabled: () => testChangesEnabled,
     changed: planChanged,
+    testChanged: testBuildChanged,
     add: p => { addChars([p], 'plan', p.id); },
     remove: ch => {
       CHARS = CHARS.filter(c => c !== ch); keepChars(); fillChars((CHARS[0] || {}).id);
       if (CHARS.length) selectChar(CHARS[0].id); else { st.ch = st.chOrig = null; render(); planner.render(); }
     },
+  });
+  $('#buildPane').addEventListener('change', e => {
+    if (e.target && e.target.id === 'testChangesToggle') setTestChanges(e.target.checked);
   });
   // Welcome banner buttons: the same actions as the toolbar's.
   document.querySelectorAll('[data-hero]').forEach(b => b.addEventListener('click', async () => {
@@ -5269,7 +5627,7 @@ window.BOStartApp = function () {
   const startId = store.get('char', null);
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();
-  const lastTab = store.get('tab', 'damage'); if (['tree', 'build', 'plan', 'code'].includes(lastTab)) showTab(lastTab);
+  const lastTab = store.get('tab', 'damage'); if (['tree', 'build', 'supports', 'plan', 'code'].includes(lastTab)) showTab(lastTab);
 };
 
 // ---------- boot: find game data, then start ----------

@@ -2960,7 +2960,12 @@ window.BOPlanner = function (ctx) {
     let alive = (mi.Cap || mi.Count || 1) + (mi.CountEvery ? Math.floor((L - 1) / mi.CountEvery) : 0) + (mi.PerLevels || []).filter(l => L >= l).length;
     for (const m of pickMods(mods, 'MinionCap', 'Flat')) if (fit(m)) { alive += m.v; use(m, 'minion'); }
     let strikes = 1;
-    for (const m of mods) if (fromSupport(m) && m.stat === 'MinionStrikes' && m.mode === 'Flat') { strikes += m.v; use(m, 'minion'); }
+    // Multistrike's extra strikes are melee only: a shooting minion (Skeletal Mage) still fires one bolt a blow but
+    // takes the 52% less (2 Nov boss tests: bolt 2126 with it, 4489 without; blows did not drop). The game's panel counts
+    // the extra strikes anyway.
+    const ranged = (sk.Tags || []).includes('Projectile');
+    let shotOnly = false;
+    for (const m of mods) if (fromSupport(m) && m.stat === 'MinionStrikes' && m.mode === 'Flat') { if (ranged) { shotOnly = true; continue; } strikes += m.v; use(m, 'minion'); }
     let spInc = 0, spMore = 1;
     for (const m of pickMods(mods, 'MinionSpeed', 'Inc')) if (fit(m)) { spInc += m.v; use(m, 'minion'); }
     for (const m of mods) if ((m.stat === 'MinionSpeed' || (m.stat === 'AttackSpeed' && fromSupport(m))) && m.mode === 'More' && fit(m)) { spMore *= 1 + m.v / 100; use(m, 'minion'); }
@@ -2983,6 +2988,7 @@ window.BOPlanner = function (ctx) {
     if (near > 1) res.notes.push('Counted at your side: minions deal ' + MINION_NEAR + '% more within 7 m of you (fading to none at 12 m), as the game\'s panel counts it.');
     if (mi.LevelDamage) res.notes.push(sk.Name + ' also grows with the level of the zone it fights in (the Monster level box): x' + lvlK.toFixed(3) + ' at level ' + zoneLevel + '. Fitted to the game\'s log and panel at zone levels 6-26 (x1.23 at Rupture 26); deeper Ruptures carry the same curve on, not yet checked.');
     if (kind !== 1) res.notes.push('Harmony: ' + kinds + ' kind' + (kinds > 1 ? 's' : '') + ' of minion on your bar, ' + Math.round((kind - 1) * 100) + '% more damage.');
+    if (shotOnly) res.notes.push('Multistrike does not repeat a shooting minion\'s attack: ' + sk.Name + ' still fires one bolt a blow, and each takes Multistrike\'s 52% less (checked in the game\'s log). The game\'s skill panel counts 3 strikes anyway, so it shows more than you get. Use another support.');
     if (golem) res.notes.push('Your ' + golem.name + ' blesses minions near it, itself included: ' + golem.text + ' (counted, as the game\'s panel does).');
     if (ruthK > 1) res.notes.push('Ruthless: every third blow deals ' + Math.round(ruthPct * 3) + '% more physical damage, averaged into the DPS (x' + ruthK.toFixed(3) + '); the hit above leaves it out, as the game\'s panel does.');
     return res;

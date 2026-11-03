@@ -6,58 +6,85 @@
 <title>Broken Oath Builder</title>
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
 <style>
+/* Dark for everyone by default; the header switch picks light (remembered in the browser).
+   --accent is the readable violet for text and lines; --accent-strong fills buttons (white text on it). */
 :root {
-  --bg: #141116; --panel: #1d1920; --panel-2: #241f28; --line: #352e3a; --text: #ebe4d8; --muted: #a59bab; --faint: #776d7c;
-  --accent: #d9a85b; --accent-ink: #1a1408; --good: #7fc46a; --bad: #e0675a;
-  --t-physical: #cbb9a2; --t-fire: #ec7b4c; --t-cold: #73b9ea; --t-lightning: #e9d45c; --t-poison: #82c76c;
-  --radius: 10px; --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 6px 20px rgba(0,0,0,.25);
+  --bg: #0b0f1e; --bg-2: #0e1428; --panel: #131a2e; --panel-2: #1a2240; --line: #273152; --text: #e7e9f4; --muted: #a0a8c4; --faint: #6f789a;
+  --accent: #a78bfa; --accent-strong: #7c3aed; --accent-2: #6366f1; --accent-ink: #fff; --good: #34d399; --bad: #f87171;
+  --t-physical: #cbb9a2; --t-fire: #f0834f; --t-cold: #73b9ea; --t-lightning: #e9d45c; --t-poison: #82c76c;
+  --radius: 14px; --radius-sm: 9px;
+  --shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 8px 28px rgba(2,4,16,.45);
+  --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 10px 34px color-mix(in srgb, var(--accent-strong) 30%, transparent);
   color-scheme: dark;
 }
-/* Dark for everyone by default; the header switch picks light (remembered in the browser). */
 :root[data-theme="light"] {
-  --bg: #f4f0ea; --panel: #fffdf9; --panel-2: #f7f2ea; --line: #e2d9cc; --text: #2a2420; --muted: #6d6259; --faint: #9a8f84;
-  --accent: #a8742a; --accent-ink: #fff; --good: #3f8a2e; --bad: #b8433a;
+  --bg: #f4f5fb; --bg-2: #eceefa; --panel: #ffffff; --panel-2: #f1f2fa; --line: #dde0ef; --text: #1b1f33; --muted: #565d7c; --faint: #858ba6;
+  --accent: #6d28d9; --accent-strong: #6d28d9; --accent-2: #4f46e5; --accent-ink: #fff; --good: #15803d; --bad: #c2312f;
   --t-physical: #8a7356; --t-fire: #c4521f; --t-cold: #2c7fb8; --t-lightning: #a68a0a; --t-poison: #3f8a2e;
-  --shadow: 0 1px 2px rgba(0,0,0,.06);
+  --shadow: 0 1px 2px rgba(20,24,60,.06), 0 6px 18px rgba(20,24,60,.06);
+  --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 8px 24px rgba(109,40,217,.12);
   color-scheme: light;
 }
-.theme-btn { background: none; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer; margin-left: 10px; vertical-align: middle; }
-.theme-btn:hover { color: var(--text); border-color: var(--muted); }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
-body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-code { font-family: ui-monospace, Consolas, monospace; font-size: .92em; background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
-h1 { font-size: 18px; margin: 0; letter-spacing: .02em; }
-h2 { font-size: 13px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; }
-h2 small { color: var(--muted); text-transform: none; letter-spacing: 0; font-weight: 400; }
-h3 { font-size: 12px; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+body { background: var(--bg); color: var(--text); font: 14px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(1100px 520px at 85% -10%, color-mix(in srgb, var(--accent-strong) 16%, transparent), transparent 70%),
+              radial-gradient(900px 500px at -10% 10%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 70%); }
+code { font-family: ui-monospace, Consolas, monospace; font-size: .92em; background: var(--panel-2); padding: 1px 5px; border-radius: 5px; }
+h1 { font-size: 17px; margin: 0; letter-spacing: .01em; font-weight: 700; }
+h2 { font-size: 13px; margin: 0 0 12px; letter-spacing: .02em; color: var(--text); font-weight: 650; display: flex; gap: 9px; align-items: center; }
+h2 small { color: var(--muted); font-weight: 400; margin-left: auto; }
+h3 { font-size: 11.5px; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+.h-ic { display: inline-grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-strong) 18%, transparent); color: var(--accent); }
+.h-ic svg, .tile-ic svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-.top { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
-  padding: 12px 20px; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
-.brand { display: flex; flex-direction: column; }
+/* Top bar: brand, view tabs, theme switch */
+.top { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.nav { display: flex; align-items: center; gap: 16px; padding: 10px 20px; max-width: 1500px; margin: 0 auto; }
+.brand { display: flex; align-items: center; gap: 10px; flex: none; }
+.brand h1 span { color: var(--accent); font-weight: 600; }
+.logo { width: 30px; height: 30px; flex: none; }
+.logo-shield { fill: color-mix(in srgb, var(--accent-strong) 30%, var(--panel)); stroke: var(--accent); stroke-width: 1.6; }
+.logo-star { fill: var(--accent); }
+.nav-end { display: flex; align-items: center; gap: 12px; margin-left: auto; min-width: 0; }
 .sub { color: var(--faint); font-size: 12px; }
-.top-controls { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+.nav-end .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 420px; }
+.icon-btn { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); cursor: pointer; flex: none; }
+.icon-btn:hover { color: var(--text); border-color: var(--accent); }
+.icon-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.theme-btn .i-moon { display: none; } :root[data-theme="light"] .theme-btn .i-sun { display: none; } :root[data-theme="light"] .theme-btn .i-moon { display: block; }
+.toolbar { max-width: 1500px; margin: 14px auto 0; padding: 0 20px; }
+.top-controls { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 .code-form { display: flex; gap: 6px; align-items: center; margin: 0; }
 .code-form input { width: 220px; }
 @media (max-width: 600px) { .code-form { width: 100%; } .code-form input { width: auto; flex: 1; } }
 .warn ul { margin: 6px 0 0; padding-left: 18px; }
 
 .layout { display: grid; grid-template-columns: minmax(300px, 360px) 1fr; gap: 18px; padding: 18px 20px; max-width: 1500px; margin: 0 auto; }
-@media (max-width: 900px) { .layout { grid-template-columns: 1fr; padding: 14px 16px; } .top { padding: 10px 16px; position: static; } }
-.controls { display: flex; flex-direction: column; gap: 12px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); min-width: 0; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; padding: 14px 16px; } .toolbar { padding: 0 16px; } }
+.controls { display: flex; flex-direction: column; gap: 14px; }
+.card { background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 100%, transparent), color-mix(in srgb, var(--panel) 92%, var(--bg))); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); min-width: 0; }
 
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; min-width: 0; }
 .field > span { font-size: 12px; color: var(--muted); }
 .field.inline { margin: 0; }
-select, input[type=number], input[type=text] { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; font: inherit; min-width: 0; }
+select, input[type=number], input[type=text] { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; font: inherit; min-width: 0; }
+select:hover, input[type=number]:hover, input[type=text]:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
 select:focus, input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 0; border-color: var(--accent); }
 .top select { min-width: 220px; }
 .readout { display: block; padding: 7px 9px; border: 1px dashed var(--line); border-radius: 7px; color: var(--muted); }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); font-weight: 600; cursor: pointer; border: 0; font: inherit; font-weight: 600; white-space: nowrap; }
-.btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border-radius: var(--radius-sm); background: linear-gradient(135deg, var(--accent-strong), var(--accent-2)); color: var(--accent-ink); cursor: pointer; border: 1px solid transparent; font: inherit; font-weight: 600; white-space: nowrap;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent-strong) 28%, transparent); transition: filter .15s, transform .15s, border-color .15s; }
+.btn:hover { filter: brightness(1.1); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.ghost { background: color-mix(in srgb, var(--accent-strong) 8%, transparent); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: none; }
+.btn.ghost:hover { border-color: var(--accent); filter: none; background: color-mix(in srgb, var(--accent-strong) 16%, transparent); }
+.btn.big { padding: 11px 18px; font-size: 14.5px; border-radius: 11px; }
 .btn.small { padding: 4px 9px; font-size: 12px; }
 .btn.wide { width: 100%; justify-content: center; }
 .btn:disabled { opacity: .6; cursor: progress; }
@@ -100,8 +127,10 @@ select:focus, input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 
 .stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); min-width: 0; }
 .stat .label { color: var(--muted); font-size: 12px; }
 .stat .value { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.01em; margin-top: 2px; }
-.stat.main { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
-.stat.main .value { font-size: 36px; color: var(--accent); }
+.stat.main { border-color: transparent; box-shadow: var(--glow);
+  background: linear-gradient(140deg, color-mix(in srgb, var(--accent-strong) 22%, var(--panel)), var(--panel) 65%); }
+.stat.main .value { font-size: 36px; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent-2) 70%, #fff)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+:root[data-theme="light"] .stat.main .value { color: var(--accent); background: none; }
 .stat .delta { font-size: 12.5px; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .delta.up { color: var(--good); } .delta.down { color: var(--bad); }
 .stat .foot-note { color: var(--faint); font-size: 11.5px; margin-top: 4px; }
@@ -151,9 +180,10 @@ details.report { margin-top: 10px; }
 details.report pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px; color: var(--muted); max-height: 280px; overflow: auto; }
 .log-cta p { margin: 0; }
 .results-wrap { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
-.tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; font-weight: 600; padding: 8px 14px; cursor: pointer; margin-bottom: -1px; }
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tabs { display: flex; gap: 4px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.tab { background: none; border: 0; border-radius: 9px; color: var(--muted); font: inherit; font-weight: 600; font-size: 13.5px; padding: 7px 16px; cursor: pointer; white-space: nowrap; }
+.tab:hover { color: var(--text); background: var(--panel-2); }
+.tab.active { color: #fff; background: linear-gradient(135deg, var(--accent-strong), var(--accent-2)); box-shadow: 0 4px 14px color-mix(in srgb, var(--accent-strong) 35%, transparent); }
 .tree-pane { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .tree-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .tree-bar .check-row { margin: 0; }
@@ -342,16 +372,139 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 .dragon-btn.tiled { padding: 0; background: transparent; border: 0; box-shadow: var(--shadow); width: 60px; height: 60px; }
 .dragon-btn.tiled:hover, .dragon-btn.tiled[aria-expanded="true"] { filter: brightness(1.18); }
 .dragon-art { display: block; width: 100%; height: 100%; border-radius: 6px; background-repeat: no-repeat; background-size: 600% 100%; }
+/* Welcome banner (shown until a character or plan is loaded) */
+.hero { display: none; position: relative; overflow: hidden; max-width: min(1460px, calc(100% - 40px)); margin: 16px auto 0; border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow);
+  grid-template-columns: minmax(0, 1fr); gap: 26px; padding: 36px 36px 28px; isolation: isolate; }
+body.no-char .hero { display: grid; }
+body.no-char .controls, body.no-char #results .empty, body.needs-data .hero { display: none; }
+body.no-char .layout { grid-template-columns: 1fr; }
+.hero-art { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+.hs-1 { stop-color: #1b1240; } .hs-2 { stop-color: #2a1d5c; } .hs-3 { stop-color: #120e2a; }
+.hm-1 { stop-color: #c9b8ff; stop-opacity: .55; } .hm-2 { stop-color: #8b5cf6; stop-opacity: .22; } .hm-3 { stop-color: #8b5cf6; stop-opacity: 0; }
+.h-moon { fill: #ece6ff; opacity: .9; }
+.h-far { fill: #2c2366; opacity: .9; } .h-castle { fill: #150f33; } .h-near { fill: #0f0b26; }
+.h-win { fill: #c4b5fd; filter: drop-shadow(0 0 6px #a78bfa); } .h-win .h-gate { fill: #0b0820; filter: none; }
+.hf-1 { stop-color: var(--bg); stop-opacity: .97; } .hf-2 { stop-color: var(--bg); stop-opacity: .72; } .hf-3 { stop-color: var(--bg); stop-opacity: .05; }
+:root[data-theme="light"] .hs-1 { stop-color: #cfc6f7; } :root[data-theme="light"] .hs-2 { stop-color: #b6a6f0; } :root[data-theme="light"] .hs-3 { stop-color: #9d8ae0; }
+:root[data-theme="light"] .h-win { fill: #fff7d6; } :root[data-theme="light"] .h-far { fill: #8e7bd8; } :root[data-theme="light"] .h-castle { fill: #4b3a99; } :root[data-theme="light"] .h-near { fill: #3a2c80; }
+.hero-body { max-width: 620px; }
+.hero-title { font-size: clamp(28px, 4vw, 42px); line-height: 1.1; margin: 0 0 6px; letter-spacing: -.02em; font-weight: 800; display: block; color: var(--text); }
+.hero-tag { font-size: 18px; margin: 0 0 12px; font-weight: 600; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent-2) 75%, #fff)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+:root[data-theme="light"] .hero-tag { color: var(--accent); background: none; }
+.hero-text { color: var(--muted); margin: 0 0 18px; max-width: 540px; }
+.hero-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+.hero-cta .btn.ghost { background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(4px); }
+.hero-steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 8px; max-width: 560px; }
+.hero-steps li { counter-increment: s; position: relative; padding: 2px 0 0 36px; min-height: 26px; color: var(--muted); font-size: 13.5px; }
+.hero-steps li::before { content: counter(s); position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; font-size: 12px; font-weight: 700;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line)); background: color-mix(in srgb, var(--panel) 70%, transparent); }
+.hero-steps b { color: var(--text); }
+.hero-small { color: var(--faint); font-size: 12px; margin: 12px 0 0; max-width: 560px; }
+.hero-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.tile { display: grid; grid-template-columns: 34px 1fr; grid-template-rows: auto auto; column-gap: 10px; padding: 12px; border-radius: 13px;
+  background: color-mix(in srgb, var(--panel) 72%, transparent); border: 1px solid color-mix(in srgb, var(--line) 80%, transparent); backdrop-filter: blur(6px); }
+.tile b { font-size: 13px; align-self: end; } .tile small { grid-column: 2; color: var(--muted); font-size: 12px; line-height: 1.35; }
+.tile-ic { grid-row: span 2; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; color: var(--accent);
+  background: color-mix(in srgb, var(--accent-strong) 20%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+@media (max-width: 1000px) { .hero { padding: 26px 20px; margin: 14px 16px 0; } .hero-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero-art { opacity: .55; } }
+@media (max-width: 520px) { .hero-tiles { grid-template-columns: 1fr; } .hero-cta .btn { flex: 1 1 auto; } }
+/* Top bar on small screens: tabs get their own row */
+@media (max-width: 760px) {
+  .nav { flex-wrap: wrap; padding: 10px 16px; gap: 10px; }
+  .nav .tabs { order: 3; width: 100%; } .nav .tab { flex: 1; padding: 7px 8px; }
+  .nav-end .sub { display: none; }
+}
+@media (max-width: 1100px) { .nav-end .sub { max-width: 240px; } }
+/* Supports as tokens */
+.sup { border-radius: 999px; }
+.sup-name { padding: 5px 10px; }
+.sup.on { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent); }
+.sup-pin { border-radius: 0 999px 999px 0; }
+.chip { background: var(--panel-2); }
+/* Softer surfaces for the rest */
+.stat, .tree-view, .opt-bar, .data-old, .dragon-panel { border-radius: var(--radius); }
+.stat { background: var(--panel); }
+.empty { border-radius: var(--radius); background: color-mix(in srgb, var(--panel) 60%, transparent); }
+.optrow.current, .best-list li, .opt-cols li, .checklist li { border-radius: 8px; }
+.data-old { max-width: 1460px; margin-left: auto; margin-right: auto; border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.tree-view { background: radial-gradient(circle at 50% 40%, var(--panel-2), var(--panel) 75%); }
 
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body>
 <header class="top">
-  <div class="brand">
-    <h1>Broken Oath Builder <button class="theme-btn" id="themeBtn" type="button" title="Switch between dark and light">Light mode</button></h1>
-    <span class="sub" id="builtInfo"></span>
+  <div class="nav">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2 4 7v8c0 7.4 5.1 13.3 12 15 6.9-1.7 12-7.6 12-15V7z" class="logo-shield"/><path d="M16 7.5 18 14l6 .3-4.8 3.7 1.7 6.2L16 20.6l-4.9 3.6 1.7-6.2L8 14.3l6-.3z" class="logo-star"/></svg>
+      <h1>Broken Oath <span>Builder</span></h1>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button class="tab active" type="button" role="tab" data-tab="damage" aria-selected="true">Damage</button>
+      <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false">Skill tree</button>
+      <button class="tab" type="button" role="tab" data-tab="build" aria-selected="false">Build</button>
+    </nav>
+    <div class="nav-end">
+      <span class="sub" id="builtInfo"></span>
+      <button class="icon-btn theme-btn" id="themeBtn" type="button" title="Switch between dark and light" aria-label="Switch between dark and light">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="i-sun"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="i-moon"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
+      </button>
+    </div>
   </div>
+</header>
+<section class="hero" id="hero">
+  <svg class="hero-art" viewBox="0 0 1200 420" preserveAspectRatio="xMaxYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="hSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="hs-1"/><stop offset=".65" class="hs-2"/><stop offset="1" class="hs-3"/></linearGradient>
+      <radialGradient id="hMoon" cx="0.5" cy="0.5" r="0.5"><stop offset="0" class="hm-1"/><stop offset=".35" class="hm-2"/><stop offset="1" class="hm-3"/></radialGradient>
+      <linearGradient id="hFade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" class="hf-1"/><stop offset=".55" class="hf-2"/><stop offset="1" class="hf-3"/></linearGradient>
+    </defs>
+    <rect width="1200" height="420" fill="url(#hSky)"/>
+    <circle cx="1000" cy="112" r="190" fill="url(#hMoon)"/>
+    <circle cx="1000" cy="112" r="44" class="h-moon"/>
+    <path class="h-far" d="M0 300 L120 250 L210 275 L330 215 L430 262 L540 228 L640 270 L760 214 L860 252 L980 222 L1080 246 L1200 220 L1200 420 L0 420Z"/>
+    <g class="h-castle">
+      <path d="M836 330V206h44v124z M830 208l28-58 28 58z"/>
+      <path d="M880 330v-78h7v-9h9v9h8v-9h9v9h8v-9h9v9h5v78z"/>
+      <path d="M935 330V184h6v-10h10v10h8v-10h10v10h8v-10h10v10h8v-10h10v10h6v146z"/>
+      <path d="M954 176V118h36v58z M948 120l24-84 24 84z"/>
+      <path d="M1011 330v-78h5v-9h9v9h8v-9h9v9h8v-9h9v9h7v78z"/>
+      <path d="M1066 330V220h40v110z M1060 222l26-52 26 52z"/>
+    </g>
+    <g class="h-win">
+      <path d="M967 140a5 5 0 0 1 10 0v12h-10z M852 236a4 4 0 0 1 8 0v10h-8z M1082 246a4 4 0 0 1 8 0v10h-8z M950 214a4 4 0 0 1 8 0v10h-8z M986 214a4 4 0 0 1 8 0v10h-8z"/>
+      <path d="M962 330v-30a10 10 0 0 1 20 0v30z" class="h-gate"/>
+    </g>
+    <path class="h-near" d="M0 352 L90 318 L190 336 L300 300 L420 330 L560 296 L700 326 L790 312 L900 340 L1010 304 L1110 330 L1200 312 L1200 420 L0 420Z"/>
+    <rect width="1200" height="420" fill="url(#hFade)"/>
+  </svg>
+  <div class="hero-body">
+    <h2 class="hero-title">Broken Oath Builder</h2>
+    <p class="hero-tag">Plan. Optimize. Play stronger.</p>
+    <p class="hero-text">A damage sim and build planner that reads your own characters. The game data comes with the site; your saves and log are read in this tab and never uploaded.</p>
+    <div class="hero-cta">
+      <button class="btn big" type="button" data-hero="saves">Load saves folder</button>
+      <button class="btn big ghost" type="button" data-hero="plan">Plan a build</button>
+      <button class="btn big ghost" type="button" data-hero="code">Paste a build code</button>
+    </div>
+    <ol class="hero-steps">
+      <li><b>Copy save path</b> below, then <b>Load saves folder</b>.</li>
+      <li>Paste the path into the picker's address bar, press Enter and choose <b>Select Folder</b>. Every character in it loads.</li>
+      <li>Pick a skill to see its damage, the best supports and where your next points go.</li>
+    </ol>
+    <p class="hero-small">You can also drop the SaveGames folder or a BO_Char_*.sav file on this page. Your browser may ask to "upload" the files: that only lets this page read them.</p>
+  </div>
+  <div class="hero-tiles">
+    <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M5 19 19 5M14 5h5v5M5 14l5 5"/></svg></span><b>Skill &amp; supports</b><small>Every link, ranked against the enemy you set</small></div>
+    <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5 1-8.5z"/></svg></span><b>Vows, Heralds &amp; charges</b><small>Reservations and buffs counted</small></div>
+    <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/></svg></span><b>Gear &amp; character</b><small>Untick a piece to see what it's worth</small></div>
+    <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9.5 11.5h.01M14.5 11.5h.01M10 19v2M14 19v2"/></svg></span><b>Enemy &amp; curses</b><small>Resistances, Guardians and curses</small></div>
+    <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="10" cy="18" r="2.5"/><path d="M8.3 7.2 15.6 8M7 8.4l2.2 7.2M16.4 10.1l-4.6 6.2"/></svg></span><b>Skill tree &amp; Dragonling</b><small>Optimize the tree, plan your next points</small></div>
+    <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><b>Check against the game</b><small>Load your log to compare real fights</small></div>
+  </div>
+</section>
+<div class="toolbar">
   <div class="top-controls">
     <label class="field inline"><span>Character</span><select id="charSelect"></select></label>
     <label class="btn" id="saveDirBtn" title="Pick your SaveGames folder (%LOCALAPPDATA%\BrokenOath\Saved\SaveGames): every character in it is loaded, newest first. Read in this tab only, never uploaded.">
@@ -369,7 +522,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
     <button class="btn ghost" id="dataBtn" type="button" hidden title="The game data comes with the site. After a game patch the site has not caught up with yet, read your own game's Data folder instead">Use my own game files</button>
     <button class="btn ghost" id="siteDataBtn" type="button" hidden title="Stop using the game files you picked and go back to the data that comes with the site">Use the site's data</button>
   </div>
-</header>
+</div>
 <div class="data-old" id="dataOld" role="status" hidden>
   <span id="dataOldText"></span>
   <button class="btn small" type="button" id="dataOldUpdate">Update game data</button>
@@ -399,7 +552,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 <main class="layout">
   <aside class="controls" id="controls">
     <section class="card">
-      <h2>Skill</h2>
+      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 19 19 5M14 5h5v5M5 14l5 5"/></svg></span>Skill</h2>
       <label class="field"><span>Skill</span><select id="skillSelect"></select></label>
       <div class="row2">
         <label class="field"><span>Gem level</span><input type="number" id="gemLevel" min="1" max="40"></label>
@@ -411,7 +564,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
     </section>
 
     <section class="card">
-      <h2>Supports <small id="supportCount"></small></h2>
+      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 20 9l-8 12L4 9z M4 9h16 M9 9l3 12 3-12"/></svg></span>Supports <small id="supportCount"></small></h2>
       <div class="sup-picker" id="supportChips"></div>
       <p class="hint sup-info" id="supportInfo" aria-live="polite"></p>
       <div class="opt">
@@ -426,7 +579,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
     </section>
 
     <section class="card">
-      <h2>Vows, Heralds &amp; charges</h2>
+      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5 1-8.5z"/></svg></span>Vows, Heralds &amp; charges</h2>
       <ul class="checklist" id="vowList"></ul>
       <div class="row3">
         <label class="field"><span>Fury</span><input type="number" min="0" max="10" value="0" data-charge="fury"></label>
@@ -437,13 +590,13 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
     </section>
 
     <section class="card">
-      <h2>Gear &amp; character</h2>
+      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/></svg></span>Gear &amp; character</h2>
       <p class="hint">Untick a piece to see what it is worth.</p>
       <ul class="checklist" id="sourceList"></ul>
     </section>
 
     <section class="card">
-      <h2>Enemy</h2>
+      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9.5 11.5h.01M14.5 11.5h.01M10 19v2M14 19v2"/></svg></span>Enemy</h2>
       <div class="row2">
         <label class="field"><span>Monster level</span><input type="number" id="enemyLevel" min="1" max="300"></label>
         <label class="field"><span>Rarity</span>
@@ -470,18 +623,13 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
     </section>
 
     <section class="card">
-      <h2>Check against the game</h2>
+      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Check against the game</h2>
       <label class="field"><span>DPS shown in game for this skill</span><input type="number" id="ingameDps" placeholder="optional"></label>
       <p class="hint" id="calibOut">Type the number from the in-game skill panel to see how close this sheet is.</p>
     </section>
   </aside>
 
   <div class="results-wrap">
-    <nav class="tabs" role="tablist">
-      <button class="tab active" type="button" role="tab" data-tab="damage" aria-selected="true">Damage</button>
-      <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false">Skill tree</button>
-      <button class="tab" type="button" role="tab" data-tab="build" aria-selected="false">Build</button>
-    </nav>
     <section class="results" id="results">
       <div class="empty" id="emptyState">Pick a character to start. Use <b>Load saves folder</b> and pick your SaveGames folder to load every character at once.</div>
     </section>
@@ -537,7 +685,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 <script>
 (function () {
   const b = document.getElementById('themeBtn'), root = document.documentElement;
-  const show = () => { b.textContent = root.dataset.theme === 'light' ? 'Dark mode' : 'Light mode'; };
+  const show = () => { const t = root.dataset.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'; b.title = t; b.setAttribute('aria-label', t); };
   b.addEventListener('click', () => {
     if (root.dataset.theme === 'light') delete root.dataset.theme; else root.dataset.theme = 'light';
     try { localStorage.setItem('bods:theme', root.dataset.theme === 'light' ? 'light' : 'dark'); } catch (e) { /* storage off */ }
@@ -3502,6 +3650,8 @@ window.BOStartApp = function () {
   // ---------- right panel ----------
   function render() { renderMain(); treeAfterRender(); }
   function renderMain() {
+    // The welcome banner shows until a character or plan is loaded.
+    document.body.classList.toggle('no-char', !st.ch);
     if (st.ch && !st.skill) { $('#results').innerHTML = '<div class="empty">This plan has no skills yet. Add one on the <b>Build</b> tab, or pick any skill in the Skill box on the left.</div>'; return; }
     if (!st.ch || !st.skill) { $('#results').innerHTML = '<div class="empty">No character loaded. Click <b>Copy save path</b>, then <b>Load saves folder</b>: paste the path into the picker\'s address bar, press Enter and choose <b>Select Folder</b>. Every character in it is loaded.<br><small>You can also drop the SaveGames folder or a BO_Char_*.sav file on this page, or paste a build code above. Your browser may ask to "upload" the files: that only lets this page read them; nothing leaves your computer.</small></div>'; return; }
     const r = S.calcSkill(GD, st.ch, st.skill, opts());
@@ -4522,6 +4672,13 @@ window.BOStartApp = function () {
     },
   });
   $('#planBtn').addEventListener('click', () => showTab('build'));
+  // Welcome banner buttons: the same actions as the toolbar's.
+  document.querySelectorAll('[data-hero]').forEach(b => b.addEventListener('click', () => {
+    const act = b.dataset.hero;
+    if (act === 'saves') $('#saveDirInput').click();
+    else if (act === 'plan') showTab('build');
+    else if (act === 'code') { const i = $('#codeInput'); i.scrollIntoView({ block: 'center', behavior: 'smooth' }); i.focus(); }
+  }));
 
   // Start: characters loaded on an earlier visit come back (a newer copy built into the page wins).
   try {

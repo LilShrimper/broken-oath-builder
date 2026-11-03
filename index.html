@@ -1752,6 +1752,9 @@ window.BOPlanner = function (ctx) {
   const supportList = Object.values(GD.supports).sort(byName);
   const basesFor = slot => Object.values(GD.bases).filter(b => b.Slot === baseSlot(slot)).sort((a, b) => (a.Level || 0) - (b.Level || 0) || byName(a, b));
   const uniquesFor = slot => Object.values(GD.uniques).filter(u => { const b = GD.bases[lc(u.BaseId)]; return b && b.Slot === baseSlot(slot); }).sort(byName);
+  // "Oathbreaker (Two-Handed Sword)": weapons and off hands show their type; other slots their base ("Ashen Crown (Silver Circlet)").
+  const uniqueLabel = u => { const b = GD.bases[lc(u.BaseId)] || {}; return u.Name + ' (' + (b.TypeName || b.Name || u.BaseId) + ')'; };
+  const uniqueMode = new Set(); // item boxes with "Unique" ticked before a unique is picked
   const runeList = Object.values(GD.runes).sort(byName);
   function affixesFor(base) {
     const tags = new Set((base && base.Tags) || []);
@@ -1979,21 +1982,27 @@ window.BOPlanner = function (ctx) {
   function itemEditor(it, slot, idx, edit, dis) {
     const key = it ? idx : slot; // idols are found by index, other slots by name
     let h = '<details class="pl-item" data-item="' + esc(key) + '"' + (openItems.has(String(key)) ? ' open' : '') + '><summary><b>' + SLOT_NAME[slot] + '</b> ' + itemSummary(it) + '</summary><div class="pl-item-body">';
-    const bases = basesFor(slot);
-    h += '<div class="pl-row"><label class="field inline grow"><span>Base</span><select data-f="base"' + dis + '>' + opt('', '(empty)', !it) + bases.map(b => opt(b.Id, b.Name + (b.Level ? ' (level ' + b.Level + ')' : ''), it && lc(it.base) === lc(b.Id))).join('') + '</select></label>';
-    if (it) {
-      h += '<label class="field inline"><span>Rarity</span><select data-f="rarity"' + dis + '>' + RARITIES.filter(r => r !== 'Unique' || uniquesFor(slot).length).map(r => opt(r, r, it.rarity === r)).join('') + '</select></label>' +
-        '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"' + dis + '></label>';
+    // "Unique" ticked: the list holds this slot's uniques ("Name (weapon type)") instead of the bases.
+    const us = uniquesFor(slot), isU = !!us.length && ((it && it.rarity === 'Unique') || uniqueMode.has(String(key)));
+    h += '<div class="pl-row">';
+    if (isU) {
+      const u = it && GD.uniques[lc(it.unique)];
+      h += '<label class="field inline grow"><span>Unique</span><select data-f="unique"' + dis + '>' + opt('', it ? 'Pick a unique…' : '(empty)', !u) + us.map(x => opt(x.Id, uniqueLabel(x), u && x.Id === u.Id)).join('') + '</select></label>';
+    } else {
+      const bases = basesFor(slot);
+      h += '<label class="field inline grow"><span>Base</span><select data-f="base"' + dis + '>' + opt('', '(empty)', !it) + bases.map(b => opt(b.Id, b.Name + (b.Level ? ' (level ' + b.Level + ')' : ''), it && lc(it.base) === lc(b.Id))).join('') + '</select></label>';
     }
+    if (us.length) h += '<label class="check-row pl-uniq" title="List this slot\'s uniques instead of the bases"><input type="checkbox" data-f="uniqmode"' + (isU ? ' checked' : '') + dis + '><span>Unique</span></label>';
+    if (it && !isU) h += '<label class="field inline"><span>Rarity</span><select data-f="rarity"' + dis + '>' + RARITIES.filter(r => r !== 'Unique').map(r => opt(r, r, it.rarity === r)).join('') + '</select></label>';
+    if (it) h += '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"' + dis + '></label>';
     h += '</div>';
     if (!it) return h + '</div></details>';
     const base = GD.bases[lc(it.base)];
     if (base) for (const m of base.Implicits || []) h += '<div class="meta">Implicit: ' + esc(modLine(m)) + '</div>';
     if (it.rarity === 'Unique') {
-      const us = uniquesFor(slot), u = GD.uniques[lc(it.unique)];
-      h += '<div class="pl-row"><label class="field inline grow"><span>Unique</span><select data-f="unique"' + dis + '>' + opt('', 'Pick a unique…', !u) + us.map(x => opt(x.Id, x.Name + (us.filter(y => y.Name === x.Name).length > 1 ? ' (' + ((GD.bases[lc(x.BaseId)] || {}).Name || x.BaseId) + ')' : ''), u && x.Id === u.Id)).join('') + '</select></label>' +
-        (u ? '<label class="field inline" title="Where each line sits between its lowest and highest roll"><span>' + (it.roll == null ? 'Rolls as found' : 'Rolls ' + Math.round(it.roll * 100) + '%') + '</span><input type="range" min="0" max="100" step="5" data-f="roll" value="' + Math.round((it.roll == null ? 0.5 : it.roll) * 100) + '"' + dis + '></label>' : '') + '</div>';
-      if (u) h += '<ul class="pl-lines">' + it.affixes.map(a => { const um = u.Mods[+a.id.slice(7)]; return um ? '<li>' + esc(um.Text ? um.Text.replace(/\{0\}/g, a.v).replace(/\{1\}/g, a.v2).replace(/\+-/g, '-') : modLine(um.Mod, a.v, a.v2)) + '</li>' : ''; }).join('') + '</ul>';
+      const u = GD.uniques[lc(it.unique)];
+      if (u) h += '<div class="pl-row"><span class="meta">Base: ' + esc((base || {}).Name || it.base) + '</span><label class="field inline" title="Where each line sits between its lowest and highest roll"><span>' + (it.roll == null ? 'Rolls as found' : 'Rolls ' + Math.round(it.roll * 100) + '%') + '</span><input type="range" min="0" max="100" step="5" data-f="roll" value="' + Math.round((it.roll == null ? 0.5 : it.roll) * 100) + '"' + dis + '></label></div>';
+      if (u) h += '<ul class="pl-lines">' + it.affixes.map(a => { const um = u.Mods[+a.id.slice(7)]; return um ? '<li>' + esc(um.Text ? um.Text.replace(/\{(0|v)\}/g, a.v).replace(/\{1\}/g, a.v2).replace(/\+-/g, '-') : modLine(um.Mod, a.v, a.v2)) + '</li>' : ''; }).join('') + '</ul>';
     } else if (it.rarity !== 'Normal') {
       const all = affixesFor(base), used = new Set(it.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
       const count = t => it.affixes.filter(a => (GD.affixes[lc(a.id)] || {}).Type === t).length;
@@ -2104,6 +2113,22 @@ window.BOPlanner = function (ctx) {
       else { ch.items.push({ slot, base: v, rarity: 'Rare', unique: 'None', name: '', level: ch.level, affixes: [], runes: [] }); openItems.add(slot); }
       return done();
     }
+    // The "Unique" box: ticking lists the slot's uniques; unticking turns a unique back into a Rare of the same base.
+    if (f === 'uniqmode') {
+      if (t.checked) { uniqueMode.add(String(key)); return render(); }
+      uniqueMode.delete(String(key));
+      if (it && it.rarity === 'Unique') Object.assign(it, { rarity: 'Rare', unique: 'None', name: '', affixes: [], roll: undefined });
+      return it ? done() : render();
+    }
+    if (f === 'unique') {
+      if (!v) { if (it) { ch.items = ch.items.filter(i => i !== it); openItems.delete(String(key)); return done(); } return render(); }
+      const u = GD.uniques[lc(v)]; if (!u) return render();
+      let item = it;
+      if (!item) { item = { slot, base: u.BaseId, rarity: 'Unique', unique: u.Id, name: u.Name, level: ch.level, affixes: [], runes: [] }; ch.items.push(item); openItems.add(slot); }
+      Object.assign(item, { rarity: 'Unique', unique: u.Id, base: u.BaseId, name: u.Name, runes: [] });
+      rollUnique(item, item.roll == null ? 0.5 : item.roll);
+      return done();
+    }
     if (!it) return;
     const ai = +(t.closest('[data-ai]') || {}).dataset?.ai;
     switch (f) {
@@ -2112,10 +2137,6 @@ window.BOPlanner = function (ctx) {
         else { if (it.rarity === 'Unique') { it.affixes = []; it.unique = 'None'; it.name = ''; } it.rarity = v; if (v === 'Normal') it.affixes = []; }
         return done();
       case 'ilvl': it.level = Math.max(1, Math.min(100, +v || 1)); return done();
-      case 'unique': {
-        const u = GD.uniques[lc(v)]; if (!u) return render();
-        Object.assign(it, { unique: u.Id, base: u.BaseId, name: u.Name }); rollUnique(it, it.roll == null ? 0.5 : it.roll); return done();
-      }
       case 'roll': rollUnique(it, (+v || 0) / 100); return done();
       case 'addaffix': {
         const af = GD.affixes[lc(v)]; if (!af) return render();

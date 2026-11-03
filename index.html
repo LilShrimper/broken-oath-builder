@@ -86,6 +86,15 @@ h3 { font-size: 11.5px; margin: 14px 0 6px; color: var(--muted); text-transform:
 .config-panel[hidden] { display: none; }
 .config-panel > .card { width: 100%; }
 .card { background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 100%, transparent), color-mix(in srgb, var(--panel) 92%, var(--bg))); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); min-width: 0; }
+.confirm-dialog { width: min(440px, calc(100% - 32px)); padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(180deg, var(--panel), color-mix(in srgb, var(--panel) 90%, var(--bg))); color: var(--text); box-shadow: var(--shadow), 0 24px 80px rgba(0, 0, 0, .45); }
+.confirm-dialog::backdrop { background: rgba(5, 8, 20, .68); backdrop-filter: blur(3px); }
+.confirm-dialog form { padding: 20px; }
+.confirm-dialog h2 { margin: 0 0 8px; font-size: 16px; }
+.confirm-dialog p { margin: 0; color: var(--muted); }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.confirm-dialog button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.confirm-dialog #confirmAction.danger { background: color-mix(in srgb, var(--bad) 18%, var(--panel)); border-color: color-mix(in srgb, var(--bad) 55%, var(--line)); color: var(--bad); }
+.confirm-dialog #confirmAction.danger:hover { background: color-mix(in srgb, var(--bad) 27%, var(--panel)); border-color: var(--bad); }
 
 .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; min-width: 0; }
 .field > span { font-size: 12px; color: var(--muted); }
@@ -736,8 +745,8 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
     </nav>
     <div class="nav-divider" role="separator" aria-label="Build tools"></div>
     <nav class="tabs secondary-tabs" role="tablist" aria-label="Build tools">
-      <button class="tab" type="button" role="tab" data-tab="plan" aria-selected="false" aria-label="Plan a build">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2zM8 7h8M8 11h6"/></svg><span>Plan a build</span>
+      <button class="tab" type="button" role="tab" data-tab="plan" aria-selected="false" aria-label="Plan a new build">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2zM8 7h8M8 11h6"/></svg><span>Plan a new build</span>
       </button>
       <button class="tab" type="button" role="tab" data-tab="code" aria-selected="false" aria-label="Load code">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8 4 12l4 4M16 8l4 4-4 4M14 5l-4 14"/></svg><span>Load code</span>
@@ -790,7 +799,7 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
       <p class="hero-text">See the DPS your character really deals, find upgrades, and plan what's next. Load a save, paste a build code, or start a plan from scratch.</p>
       <div class="hero-cta">
         <button class="btn big" type="button" data-hero="saves">Load a character</button>
-        <button class="btn big ghost" type="button" data-hero="plan">Start a build plan</button>
+        <button class="btn big ghost" type="button" data-hero="plan">Plan a new build</button>
       </div>
       <div class="hero-alternatives">
         <button type="button" data-hero="code">Have a build code? <b>Load it</b></button>
@@ -1036,6 +1045,17 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
     </section>
   </div>
 </main>
+
+<dialog class="confirm-dialog" id="confirmDialog" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+  <form method="dialog">
+    <h2 id="confirmTitle"></h2>
+    <p id="confirmMessage"></p>
+    <div class="confirm-actions">
+      <button class="btn ghost" type="submit" value="cancel" autofocus>Cancel</button>
+      <button class="btn" id="confirmAction" type="submit" value="confirm"></button>
+    </div>
+  </form>
+</dialog>
 
 <footer class="foot">
   Fan-made tool, not affiliated with the developers of Broken Oath. Game data comes with the site (extracted from the playtest, shared with the developer's permission). Your save and log are read in your browser; nothing is uploaded. The page counts anonymous visits (GoatCounter: no cookies, no personal data, never your files). Formulas follow the game's tooltips and design notes; checked against the game for Death Coil, Unholy Void and Judgement, other skills use the same rules unchecked.
@@ -1855,6 +1875,16 @@ window.BOPlanner = function (ctx) {
     if (ch) h += skillsCard(ch, edit, dis) + gearCard(ch, edit, dis); // the Dragonling tree is on the Skill tree tab (dragon button)
     el.innerHTML = h;
   }
+  async function startNewPlan(classId, level) {
+    if (!await ctx.confirm('Start a new build?', 'A new empty build plan will be started. You can keep any existing plans.', 'Start plan')) return false;
+    const current = ctx.current();
+    const defaultClass = current && current.classId || Object.values(GD.classes)[0].Id;
+    const defaultLevel = current && current.level || 60;
+    const p = blankPlan(classId || defaultClass, Math.max(1, Math.min(100, +(level || defaultLevel) || 1)));
+    status = 'Empty plan started: add a skill, then gear, then spend points on the Skill tree tab.';
+    ctx.add(p);
+    return true;
+  }
 
   // ---------- Dragonling tree ----------
   // dragonling.json Tree: the class's nodes with their links; the core (the Aspect) is free and always held.
@@ -2152,9 +2182,10 @@ window.BOPlanner = function (ctx) {
   async function onClick(e) {
     const b = e.target.closest('[data-act]'); if (!b) return;
     const act = b.dataset.act, ch = ctx.current();
-    if (act === 'new' || act === 'copy') {
-      const p = act === 'copy' ? planFrom(ctx.workingCopy()) : blankPlan($('#plClass').value, Math.max(1, Math.min(100, +$('#plLevel').value || 1)));
-      status = act === 'copy' ? 'Copied into a plan. Change anything below; the original is untouched.' : 'Empty plan started: add a skill, then gear, then spend points on the Skill tree tab.';
+    if (act === 'new') { if (await startNewPlan($('#plClass').value, $('#plLevel').value)) render(); return; }
+    if (act === 'copy') {
+      const p = planFrom(ctx.workingCopy());
+      status = 'Copied into a plan. Change anything below; the original is untouched.';
       ctx.add(p); return render();
     }
     if (!ch || !ch.plan) return;
@@ -2220,7 +2251,7 @@ window.BOPlanner = function (ctx) {
   }
   const dragon = { html: ch => dragonCard(ch, true, ''), toggle: dToggle, info: dInfo, points: ch => ({ total: dPoints(ch), used: dTaken(ch).size }), extra: dExtra };
 
-  return { render, fromCode, isPlanCode, dragon, clearStatus: () => { status = ''; } };
+  return { render, fromCode, isPlanCode, startNewPlan, dragon, clearStatus: () => { status = ''; } };
 };
 
 </script>
@@ -3821,6 +3852,17 @@ window.BOStartApp = function () {
     get(k, def) { try { const v = localStorage.getItem('bods:' + k); return v == null ? def : JSON.parse(v); } catch (e) { return def; } },
     set(k, v) { try { localStorage.setItem('bods:' + k, JSON.stringify(v)); } catch (e) { /* storage off */ } },
   };
+  function confirmInPage(title, message, action, danger) {
+    const dialog = $('#confirmDialog'), button = $('#confirmAction');
+    $('#confirmTitle').textContent = title;
+    $('#confirmMessage').textContent = message;
+    button.textContent = action;
+    button.classList.toggle('danger', !!danger);
+    return new Promise(resolve => {
+      dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), { once: true });
+      dialog.showModal();
+    });
+  }
   const buildSettings = document.querySelector('.build-settings');
   const compactSettings = window.matchMedia('(max-width: 1199px)');
   let settingsManuallyToggled = false;
@@ -4582,7 +4624,8 @@ window.BOStartApp = function () {
     const count = CHARS.filter(c => !c.file && !c.plan).length, plans = CHARS.filter(c => c.plan && !c.file).length;
     if (!count && !plans) { saveTip('There are no loaded characters or build plans to reset.'); return; }
     const what = [count ? count + ' character' + (count === 1 ? '' : 's') + ' loaded from saves or codes' : '', plans ? plans + ' build plan' + (plans === 1 ? '' : 's') : ''].filter(Boolean).join(' and ');
-    if (window.confirm('Remove ' + what + '? This cannot be undone (copy a plan\'s code on the Build tab first to keep it).')) forgetLoadedCharacters(true);
+    confirmInPage('Reset loaded characters?', 'Remove ' + what + '? This cannot be undone. Copy a plan\'s code on the Build tab first to keep it.', 'Reset loaded', true)
+      .then(confirmed => { if (confirmed) forgetLoadedCharacters(true); });
   });
   // The game log: read here, kept in memory for this tab only.
   async function loadLog(file) {
@@ -5131,7 +5174,10 @@ window.BOStartApp = function () {
     store.set('tab', tab);
     if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
   }
-  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', async () => {
+    if (b.dataset.tab === 'plan') { if (await planner.startNewPlan()) showTab('plan'); }
+    else showTab(b.dataset.tab);
+  }));
 
   // Pan, zoom, hover, click.
   const view = $('#treeView'), tip = $('#treeTip');
@@ -5187,7 +5233,7 @@ window.BOStartApp = function () {
 
   // The Build tab (planner.js).
   planner = window.BOPlanner({
-    GD, S, $, esc,
+    GD, S, $, esc, confirm: confirmInPage,
     current: () => st.chOrig || st.ch, workingCopy: () => st.ch,
     changed: planChanged,
     add: p => { addChars([p], 'plan', p.id); },
@@ -5197,10 +5243,10 @@ window.BOStartApp = function () {
     },
   });
   // Welcome banner buttons: the same actions as the toolbar's.
-  document.querySelectorAll('[data-hero]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('[data-hero]').forEach(b => b.addEventListener('click', async () => {
     const act = b.dataset.hero;
     if (act === 'saves') { document.body.classList.remove('landing-view'); $('#saveDirInput').click(); }
-    else if (act === 'plan') showTab('plan');
+    else if (act === 'plan') { if (await planner.startNewPlan()) showTab('plan'); }
     else if (act === 'code') showTab('code');
     else if (act === 'savepath') $('#copySavePath').click();
   }));

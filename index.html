@@ -4719,7 +4719,7 @@ window.BOStartApp = function () {
     return out;
   }
 
-  function treeReset() { T.undo = []; T.scores = new Map(); T.job++; T.built = false; }
+  function treeReset() { clearOpt(); T.undo = []; T.scores = new Map(); T.job++; T.built = false; }
   function setPassives(list, undo) {
     if (undo !== false) T.undo.push(st.ch.passives.slice());
     if (st.chOrig && st.chOrig.plan) { st.chOrig.passives = list; st.ch = st.chOrig; keepChars(); }
@@ -5168,7 +5168,7 @@ window.BOStartApp = function () {
   $('#treeSearch').addEventListener('input', paintTree);
   $('#treeHeat').addEventListener('change', paintTree);
   $('#treeUndo').onclick = () => { if (T.undo.length) setPassives(T.undo.pop(), false); };
-  $('#treeReset').onclick = () => { if (st.chOrig) { T.undo.push(st.ch.passives.slice()); st.ch = st.chOrig; st.pinned = null; T.scores = new Map(); render(); } };
+  $('#treeReset').onclick = () => { if (st.chOrig) { clearOpt(); T.undo.push(st.ch.passives.slice()); st.ch = st.chOrig; st.pinned = null; T.job++; T.scores = new Map(); render(); } };
   $('#treeCopy').onclick = async () => {
     try {
       // While a planned or optimized tree is shown (green / red on the tree), the code is that tree: the one to follow.

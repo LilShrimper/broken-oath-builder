@@ -736,8 +736,8 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
     </nav>
     <div class="nav-divider" role="separator" aria-label="Build tools"></div>
     <nav class="tabs secondary-tabs" role="tablist" aria-label="Build tools">
-      <button class="tab" type="button" role="tab" data-tab="plan" aria-selected="false" aria-label="Plan a Build">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2zM8 7h8M8 11h6"/></svg><span>Plan a Build</span>
+      <button class="tab" type="button" role="tab" data-tab="plan" aria-selected="false" aria-label="Plan a build">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2zM8 7h8M8 11h6"/></svg><span>Plan a build</span>
       </button>
       <button class="tab" type="button" role="tab" data-tab="code" aria-selected="false" aria-label="Load code">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8 4 12l4 4M16 8l4 4-4 4M14 5l-4 14"/></svg><span>Load code</span>
@@ -784,10 +784,10 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
   </svg>
   <div class="hero-main">
     <div class="hero-body">
-      <div class="hero-kicker"><span class="hero-ready-dot"></span> GAME DATA READY <span>·</span> YOUR SAVES STAY LOCAL</div>
-      <h2 class="hero-title">Make every point<br>in your build count.</h2>
-      <p class="hero-tag">Plan. Optimize. Play stronger.</p>
-      <p class="hero-text">See what your character really deals, find the upgrades that matter, and plan what to change next. Start with a save, a build code, or a fresh plan.</p>
+      
+      <h2 class="hero-title">Broken Oath Builder</h2>
+      
+      <p class="hero-text">See the DPS your character really deals, find upgrades, and plan what's next. Load a save, paste a build code, or start a plan from scratch.</p>
       <div class="hero-cta">
         <button class="btn big" type="button" data-hero="saves">Load a character</button>
         <button class="btn big ghost" type="button" data-hero="plan">Start a build plan</button>
@@ -800,8 +800,8 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
     </div>
     <aside class="onboarding-card" aria-label="Getting started">
       <div class="onboarding-heading">
-        <span class="eyebrow">YOUR FIRST BUILD</span>
-        <span class="onboarding-time">ABOUT A MINUTE</span>
+        <span class="eyebrow">GETTING STARTED</span>
+        
       </div>
       <ol class="onboarding-steps">
         <li class="current"><span class="step-number">1</span><span><b>Load a character</b><small>Pick your SaveGames folder or one save file.</small></span></li>
@@ -815,7 +815,7 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
     <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M5 19 19 5M14 5h5v5M5 14l5 5"/></svg></span><b>Damage &amp; supports</b><small>See your damage mix and compare support setups.</small></div>
     <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/></svg></span><b>Gear &amp; passives</b><small>Find what each item and passive adds to your build.</small></div>
     <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9.5 11.5h.01M14.5 11.5h.01M10 19v2M14 19v2"/></svg></span><b>Test the encounter</b><small>Set enemy defenses, curses and fight conditions.</small></div>
-    <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><b>Validate &amp; plan</b><small>Compare with game logs and save build ideas.</small></div>
+    <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><b>Check &amp; plan</b><small>Check the sim against your log and save build plans.</small></div>
   </div>
 </section>
 <div class="toolbar">
@@ -874,7 +874,7 @@ body:not(.other-view):not(.landing-view):not(.no-char) .brand h1 .sub-builder { 
         <div class="eyebrow">BUILD SETUP</div>
         <h2>Configure Your Build</h2>
       </div>
-      <p>Adjust your skill, supports, gear and enemy to update the results above.</p>
+      <p>Change your skill, supports, gear or enemy to update the results.</p>
     </div>
     <div class="config-tabs" role="tablist" aria-label="Build settings">
       <button class="config-tab active" id="configTabSkill" type="button" role="tab" aria-selected="true" aria-controls="configSkill" tabindex="0" data-config-tab="skill">Skill</button>
@@ -4134,7 +4134,7 @@ window.BOStartApp = function () {
       '</dl>' + manaBlock(r.mana) + '<h3>Critical strikes</h3><dl class="kv">' +
       kv('Base chance', num(cr.base, 1) + '%') + kv('Increased', '+' + num(cr.inc, 0) + '%') + kv('Crit chance', num(cr.chance, 1) + '%', true) +
       kv('Crit multiplier', num(cr.multi, 0) + '%') + kv('Damage from crits', '×' + num(cr.factor, 3)) +
-      '</dl></div><div class="card"><h2>Status Effects</h2>' +
+      '</dl></div><div class="card"><h2>Ailments</h2>' +
       (po ? '<dl class="kv">' + kv('Poison chance', num(po.chance, 0) + '%') + kv('Poison duration', num(po.duration, 2) + ' s' + (po.virulence ? ' in combat' : '')) + (po.virulence ? kv('Tooltip duration', num(po.tipDuration, 2) + ' s (leaves out Virulence)') : '') + kv('Poisoning part of a hit', num(po.eligible)) +
         kv('Increased poison / DoT multi', '+' + num(po.inc, 0) + '% / +' + num(r.ailments.dotMulti, 0) + '%') + kv('Each poison deals', num(po.perStack) + '/s (' + num(po.perHitTotal) + ' total)') +
         kv('Stacks on target', num(po.stacks, 1) + ' / ' + po.cap + (po.stacksRaw >= po.cap ? ' (capped)' : '')) + kv('Poison DPS vs enemy', num(po.dps), true) + '</dl>' : '<p class="hint">No poison: this skill has no Poison damage and no chance to poison.</p>') +
@@ -4191,7 +4191,7 @@ window.BOStartApp = function () {
 
   function resultsHeading(r) {
     return '<div class="results-heading"><div><div class="eyebrow">BUILD RESULTS</div><h2>Damage Analysis</h2>' +
-      '<p>' + esc(r.skill.Name) + ' · ' + esc(st.ch.name) + ' · performance against the selected enemy</p></div></div>';
+      '<p>' + esc(st.ch.name) + ' · ' + esc(r.skill.Name) + ' · performance against a level ' + ((r.enemy && r.enemy.level) || st.enemyLevel || st.ch.level) + ' ' + ({ normal: 'normal monster', magic: 'Magic monster', rare: 'Rare', boss: 'Guardian' }[st.rarity] || 'enemy') + '</p></div></div>';
   }
 
   function damageMixCard(r) {
@@ -4217,7 +4217,7 @@ window.BOStartApp = function () {
     const rows = active.sort((a, b) => b.value - a.value).map(source =>
       '<div class="mix-row"><span class="mix-name"><i style="--mix-color:' + source.color + '"></i>' + esc(source.label) + '</span><b>' + num(source.value) + '</b><span>' + pct(source.value / total) + '</span></div>').join('');
     return '<section class="card mix-card"><h2>Damage Composition</h2>' +
-      (total > 0 ? '<div class="mix-total"><b>' + num(total) + '</b><span>' + (r.minion ? 'minion skill-panel DPS contribution' : 'DPS contribution') + '</span></div><div class="mix-bar" role="img" aria-label="Damage composition">' + bar + '</div><div class="mix-legend">' + rows + '</div>' : '<p class="hint">No damage contribution to display for this skill.</p>') +
+      (total > 0 ? '<div class="mix-total"><b>' + num(total) + '</b><span>' + (r.minion ? 'skill panel DPS' : 'DPS contribution') + '</span></div><div class="mix-bar" role="img" aria-label="Damage composition">' + bar + '</div><div class="mix-legend">' + rows + '</div>' : '<p class="hint">Nothing to show for this skill.</p>') +
       '</section>';
   }
 
@@ -4337,9 +4337,9 @@ window.BOStartApp = function () {
   }
   function logCard(r) {
     if (r.error || r.unsupported) return '';
-    if (!st.log) return '<div class="card log-cta"><h2>Fight Validation</h2><p class="hint">Load your game log (<code>%LOCALAPPDATA%\\BrokenOath\\Saved\\Logs\\BrokenOath.log</code>) to compare this sheet with your real Guardian kills: boss life ÷ fight time, your cast rate and damage per cast. The log is read in this tab only and never uploaded. <button class="btn small ghost" id="logLoadInline" type="button">Load game log</button></p></div>';
+    if (!st.log) return '<div class="card log-cta"><h2>Check against your fights</h2><p class="hint">Load your game log (<code>%LOCALAPPDATA%\\BrokenOath\\Saved\\Logs\\BrokenOath.log</code>) to compare this sheet with your real Guardian kills: boss life ÷ fight time, your cast rate and damage per cast. The log is read in this tab only and never uploaded. <button class="btn small ghost" id="logLoadInline" type="button">Load game log</button></p></div>';
     const c = logCheck(); if (!c) return '';
-    if (!c.fights.length) return '<div class="card"><h2>Fight Validation</h2><p class="hint">This log has no Guardian kills by ' + esc(c.name) + (c.others ? ' (' + c.others + ' by other characters)' : '') + '. Kill a Guardian, then load the log again (the game writes it as you play).</p></div>';
+    if (!c.fights.length) return '<div class="card"><h2>Check against your fights</h2><p class="hint">This log has no Guardian kills by ' + esc(c.name) + (c.others ? ' (' + c.others + ' by other characters)' : '') + '. Kill a Guardian, then load the log again (the game writes it as you play).</p></div>';
     const ratio = c.realMed / c.simMed;
     const verdict = !isFinite(ratio) ? '' : Math.abs(ratio - 1) <= 0.15 ? 'The sheet matches your kills (within 15%).' : ratio > 1 ? 'You kill Guardians ' + pct(ratio - 1) + ' faster than the sheet says: something adds damage it does not count (see below).' : 'You kill Guardians ' + pct(1 - ratio).replace('+', '') + ' slower than the sheet: likely time spent moving or dodging, or a rule the sheet gets wrong.';
     const rows = c.fights.map(f => '<tr' + (f.skip ? ' class="dim"' : '') + '><td>' + esc(f.g.name.replace(/_/g, ' ')) + (f.g.element ? ' <span class="type" style="--c:' + typeColor(f.g.element) + '">' + esc(f.g.element) + (f.g.ward ? ' +' + f.g.ward : '') + '</span>' : '') + (f.gear ?' <span class="hint">(other weapon)</span>' : '') + (f.levelDiff ? ' <span class="hint">(you were ' + f.levelDiff + ')</span>' : '') + (f.g.away || f.g.lostPct ? ' <span class="hint">(away ' + num(f.g.away || 0, 0) + ' s' + (f.g.lostPct ? ', ' + num(f.g.lostPct, 0) + '% of its life lost at held marks' : '') + ')</span>' : '') +'</td><td>' + (f.g.rupture || '–') + '</td><td>' + num(f.g.life) + '</td><td>' + num(f.time, 1) + ' s</td><td><b>' + num(f.real) + '</b></td><td>' + num(f.simDps) + '</td><td>' + (f.casts ? num(f.castRate, 2) : '–') + '</td><td>' + (f.casts ? num(f.perCastReal / f.perCastSim, 2) + '×' : '–') + '</td></tr>').join('');
@@ -4354,10 +4354,10 @@ window.BOStartApp = function () {
     if (!c.fights.some(f => f.casts) && r.conduit) notes.push('No ' + c.skillName + ' casts during these fights: was it linked then?');
     const rateBtn = isFinite(c.rateMed) && c.rateMed > 0 ? (st.cps ? '<button class="btn small ghost" type="button" id="clearFightRate">Back to the sheet\'s cast rate</button>' : '<button class="btn small" type="button" id="useFightRate" data-rate="' + (Math.round(c.rateMed * 100) / 100) + '">Use my fight cast rate (' + num(c.rateMed, 2) + '/s)</button>') : '';
     const report = reportText(r, c);
-    return '<div class="card"><h2>Fight Validation <span class="hint">' + c.fights.length + ' Guardian kill' + (c.fights.length > 1 ? 's' : '') + ' in the log</span></h2>' +
+    return '<div class="card"><h2>Check against your fights <span class="hint">' + c.fights.length + ' Guardian kill' + (c.fights.length > 1 ? 's' : '') + ' in the log</span></h2>' +
       '<div class="headline small">' + stat('Real boss DPS (median)', num(c.realMed), '', 'main', 'Boss life ÷ time from engaging it to the kill') + stat('Sheet vs a Guardian', num(c.simMed), '', '', 'Same Rupture levels, settings on the left') + stat('Real ÷ sheet', isFinite(ratio) ? num(ratio, 2) + '×' : '–', '', '', verdict) + '</div>' +
       '<div class="table-wrap"><table class="tbl"><thead><tr><th>Guardian</th><th>Rupture</th><th>Life</th><th>Fight</th><th>Real DPS</th><th>Sheet</th><th>Casts/s</th><th>Per cast</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      (notes.length ? '<details class="validation-notes"><summary>Fight context and caveats <span class="count">(' + notes.length + ')</span></summary><ul class="notes">' + notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul></details>' : '') +
+      (notes.length ? '<details class="validation-notes"><summary>Notes on these fights <span class="count">(' + notes.length + ')</span></summary><ul class="notes">' + notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul></details>' : '') +
       '<div class="pinbar">' + rateBtn + '<a class="btn small ghost" target="_blank" rel="noopener" href="' + esc(reportLink(r, c)) + '">Send a check report</a><button class="btn small ghost" type="button" id="copyReport">Copy full report</button><span>Opens a GitHub issue with only the numbers below (no names, no IDs), for improving the sim. You can edit it before posting.</span></div>' +
       '<details class="report"><summary>What the report contains</summary><pre>' + esc(report) + '</pre></details></div>';
   }

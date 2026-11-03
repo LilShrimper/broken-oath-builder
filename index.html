@@ -1705,6 +1705,11 @@ window.BOPlanner = function (ctx) {
   'use strict';
   const DT = ['Physical', 'Fire', 'Cold', 'Lightning', 'Poison'];
   const CONVERT_ORDER = ['Physical', 'Lightning', 'Cold', 'Fire', 'Poison'];
+  // Brutality ("Deals no elemental damage", flag Keystone/NoElemental): the linked skill loses all Fire, Cold and
+  // Lightning, added, converted or extra. The game marks Added Fire "idle" beside it, and a Grave Golem linked with
+  // both stays a plain grave golem (2 Nov log: "the grave golem lends LifeRegenPct", no flame blessing).
+  const ELEMENTS = ['Fire', 'Cold', 'Lightning'];
+  const isNoElem = m => m.stat === 'Keystone' && m.mode === 'Flag' && (m.tags || []).includes('NoElemental');
   const lc = s => String(s == null ? '' : s).toLowerCase();
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
   const sum = a => a.reduce((s, x) => s + x, 0);
@@ -1722,7 +1727,7 @@ window.BOPlanner = function (ctx) {
   const HANDLED = new Set(['StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
     'Cooldown', 'Repeats', 'Projectiles', 'Penetration', 'SkillLevel', 'PoisonChance', 'PoisonDamage', 'IgniteChance', 'IgniteDamage', 'BleedChance', 'BleedDamage',
     'DotMulti', 'AilmentDuration', 'CurseEffect', 'Str', 'Dex', 'Int', 'Attributes', 'GrantSupport', 'SkyfallRepeat', 'OrbitCount',
-    'ShockChance', 'ShockEffect', 'ShockStacks', 'LowLifeMore', 'CullingStrike']);
+    'ShockChance', 'ShockEffect', 'ShockStacks', 'LowLifeMore', 'CullingStrike', 'Keystone']);
   // Skyfall second fall: "falls again 0.4 seconds later for X% of their Damage". The game caps the sum at
   // 100% (log 1 Nov: 190% of sources -> "second fall for 100%", "SkyfallSheet68 ... on the sheet (x2.00)")
   // and the second fall strikes each enemy once per cast (one boss hit per cast in every Guardian fight).
@@ -2295,6 +2300,13 @@ window.BOPlanner = function (ctx) {
       use(m, 'extra ' + to);
     }
     pieces = pieces.concat(extras);
+    const noElem = mods.filter(isNoElem);
+    if (noElem.length) {
+      const lost = pieces.filter(p => ELEMENTS.includes(p.type));
+      pieces = pieces.filter(p => !ELEMENTS.includes(p.type));
+      noElem.forEach(m => use(m, 'no elemental damage'));
+      if (lost.length) res.notes.push('Brutality: this skill deals no elemental damage, so its ' + [...new Set(lost.map(p => p.type))].join(', ') + ' part is lost (added, converted or extra). Supports that only add elemental damage do nothing beside it (the game shows them "idle").');
+    }
     DT.forEach(d => parts[d] = [0, 0]);
     for (const p of pieces) addPart(p.type, p.min, p.max);
     res.convertedParts = clone(parts);
@@ -2928,6 +2940,13 @@ window.BOPlanner = function (ctx) {
       const t = splitTags(m.tags).types; if (t.length < 2) continue;
       scaled[t[1]][0] += scaled[t[0]][0] * m.v / 100; scaled[t[1]][1] += scaled[t[0]][1] * m.v / 100; use(m, 'minion');
     }
+    const minionNoElem = mods.filter(m => fromSupport(m) && isNoElem(m));
+    if (minionNoElem.length) {
+      const lost = ELEMENTS.filter(d => scaled[d][1] > 0);
+      for (const d of ELEMENTS) scaled[d] = [0, 0];
+      minionNoElem.forEach(m => use(m, 'minion, no elemental damage'));
+      if (lost.length) res.notes.push('Brutality: these minions deal no elemental damage, so the ' + lost.join(', ') + ' from other supports is lost (the game shows those supports "idle").');
+    }
     const incFor = d => {
       let v = attr.Int / 10 * (H.IntMinionDamagePer10 || 0);
       for (const m of pickMods(mods, 'MinionDamage', 'Inc')) { const t = fit(m); if (t && (!t.length || t.includes(d))) { v += m.v; use(m, 'minion'); } }
@@ -3012,7 +3031,10 @@ window.BOPlanner = function (ctx) {
         if (to && to !== 'Physical') { el = to; break; }
       }
     }
-    const a = (g.Minion.GolemAuras || {})[el || 'Default'];
+    // Brutality on the golem: no elemental damage, so no fire/ice/storm golem (2 Nov log: plain grave golem).
+    const brutal = sups.some(id => ((GD.supports[lc(id)] || {}).Mods || []).some(m => isNoElem({ stat: m.Stat, mode: m.Mode, tags: m.Tags })));
+    if (brutal && ELEMENTS.includes(el)) el = null;
+    const a =(g.Minion.GolemAuras || {})[el || 'Default'];
     if (!a || !['MinionDamage', 'MinionSpeed'].includes(a.Stat)) return null;
     const name = el === 'Fire' ? 'flame golem' : el === 'Lightning' ? 'storm golem' : 'golem';
     return { element: el, stat: a.Stat, v: a.Value, name, text: a.Stat === 'MinionDamage' ? a.Value + '% more damage' : a.Value + '% faster' };

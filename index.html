@@ -911,6 +911,16 @@ body:not(.build-page) .build-subtabs { display: none !important; }
 .pl-skills .pl-skill > .pl-row > select { flex: 1 1 150px; }
 .pl-skills .pl-skill > .pl-row > .field.inline { flex: 0 1 90px; }
 @media (max-width: 760px) { .view-bar .build-subtabs { width: auto; } }
+/* Gear slot hover tooltip (Build tab) */
+.pl-tip { position: fixed; z-index: 1000; max-width: min(360px, calc(100vw - 16px)); padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--dashboard-gold) 40%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--panel) 96%, var(--bg)); box-shadow: var(--shadow), 0 5px 18px #0006; color: var(--text); font-size: 12px; line-height: 1.4; pointer-events: none; }
+.pl-tip b { display: block; color: var(--dashboard-gold); font-weight: 650; }
+.pl-tip-sub { display: block; color: var(--faint); font-size: 11px; margin-bottom: 4px; }
+.pl-tip ul { margin: 5px 0 0; padding: 5px 0 0 16px; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.pl-tip-imp, .pl-tip-runes { color: var(--muted); }
+.pl-tip .bad { color: var(--bad); }
+.pl-tip .pl-tier { display: inline-block; min-width: 22px; color: var(--dashboard-gold); font-weight: 650; font-variant-numeric: tabular-nums; }
+.pl-tip .pl-range { color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pl-tip .pl-open { color: var(--faint); }
 
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
@@ -2088,6 +2098,7 @@ window.BOPlanner = function (ctx) {
     const edit = !!ch, dis = edit ? '' : ' disabled';
     const classOpts = Object.values(GD.classes).map(c => opt(c.Id, c.Id, ch && c.Id === ch.classId)).join('');
     syncSubTabs(!!ch);
+    hideItemTip();
     let h = '<div class="card"><h2>' + (plan ? 'Build Plan Setup' : 'Current Build Setup') + '</h2>';
     if (!ch || !plan) {
       h += '<p class="hint">' + (ch ? 'Edit the skills and gear below to see what they do to your damage. Changes stay in this page and are never written to your save.' : 'Load a character to see its current setup, or use <b>Plan a new build</b> to start from scratch.') + '</p>';
@@ -2320,6 +2331,67 @@ window.BOPlanner = function (ctx) {
     return h + '</div></details>';
   }
   const openItems = new Set();
+  // Hover tooltip on a closed gear slot: the item's lines, as the Damage tab counts them.
+  function itemTip(it, slot) {
+    const base = GD.bases[lc(it.base)], u = it.rarity === 'Unique' && GD.uniques[lc(it.unique)], word = oathwordForItem(it, slot);
+    const li = (t, cls) => '<li' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(t) + '</li>';
+    let h = '<b>' + esc(u ? u.Name : word ? word.Name : it.rarity + ' ' + ((base && base.Name) || it.base)) + '</b>';
+    h += '<span class="pl-tip-sub">' + esc(SLOT_NAME[slot] + (u || word ? ' · ' + ((base && base.Name) || it.base) : '') + ' · item level ' + (it.level || 1)) + '</span>';
+    const imp = (base && base.Implicits) || [];
+    if (imp.length) h += '<ul class="pl-tip-imp">' + imp.map(m => li(modLine(m))).join('') + '</ul>';
+    // Each roll: its tier (affixes) on the left, the tier's roll range on the right.
+    const span = (lo, hi) => lo + (lo < 0 || hi < 0 ? ' – ' : '-') + hi; // -25 – -15 reads better than -25--15
+    const range = r => r && r.Min != null && !(r.Min === r.Max && (r.Min2 == null || r.Min2 === r.Max2))
+      ? ' <span class="pl-range">[' + span(r.Min, r.Max) + (r.Min2 != null ? ' / ' + span(r.Min2, r.Max2) : '') + ']</span>' : '';
+    const roll = (tier, text, r) => '<li>' + (tier ? '<span class="pl-tier">' + tier + '</span> ' : '') + esc(text) + range(r) + '</li>';
+    // Prefixes first, then suffixes; open slots (magic and rare) close each group as -Pre / -Suf.
+    const uniq = [], pre = [], suf = [], other = [];
+    for (const a of it.affixes) {
+      if (a.id.startsWith('unique:')) {
+        const um = u && u.Mods[+a.id.slice(7)];
+        if (um) uniq.push(roll('', um.Text ? um.Text.replace(/\{(0|v)\}/g, a.v).replace(/\{1\}/g, a.v2).replace(/\+-/g, '-') : modLine(um.Mod, a.v, a.v2), um));
+      } else {
+        const af = GD.affixes[lc(a.id)];
+        if (!af) { other.push(li('Unknown affix ' + a.id, 'bad')); continue; }
+        (af.Type === 'Prefix' ? pre : af.Type === 'Suffix' ? suf : other).push(roll('T' + ((a.tier || 0) + 1), modLine(af.Mod, a.v, a.v2), af.Tiers[a.tier] || af.Tiers[0]));
+      }
+    }
+    if (!u && it.rarity !== 'Normal') {
+      const lim = LIMIT[it.rarity] || 0;
+      while (pre.length < lim) pre.push('<li class="pl-open">-Pre</li>');
+      while (suf.length < lim) suf.push('<li class="pl-open">-Suf</li>');
+    }
+    const lines = uniq.concat(pre, suf, other);
+    if (lines.length) h += '<ul>' + lines.join('') + '</ul>';
+    if (word) {
+      const twoHand = base && (base.bTwoHanded || (base.Tags || []).includes('TwoHand')), pm = twoHand && word.Power2H ? word.Power2H : 1;
+      const lv = word.PowerBandILvl || [], cnt = word.PowerBandCount || [];
+      let band = -1; for (let i = 0; i < lv.length; i++) if ((it.level || 0) >= lv[i]) band = i;
+      const from = cnt.slice(0, band).reduce((x, y) => x + y, 0);
+      const power = band < 0 || !word.PowerBandMods ? word.PowerMods || [] : word.PowerBandMods.slice(from, from + cnt[band]);
+      h += '<ul>' + word.Mods.map(mm => li(modLine(mm.Mod))).join('') + power.map(mm => li(modLine(mm.Mod, (mm.Mod.Value || 0) * pm, (mm.Mod.Value2 || 0) * pm))).join('') + '</ul>';
+    }
+    const weaponSlot = slot === 'MainHand' || slot === 'OffHand';
+    const runes = it.runes.map(r => GD.runes[lc(r)]).filter(Boolean);
+    if (runes.length) h += '<ul class="pl-tip-runes">' + runes.map(rd => li('Rune ' + rd.Name + ': ' + (((weaponSlot ? rd.Weapon : rd.Armour) || []).map(m => modLine(m)).join(', ') || 'no effect here'))).join('') + '</ul>';
+    return h;
+  }
+  let tipEl = null;
+  function showItemTip(e) {
+    const sum = e.target.closest && e.target.closest('.pl-item > summary');
+    const box = sum && sum.parentElement, ch = ctx.current();
+    if (!sum || box.open || !ch) return hideItemTip();
+    const { it, slot } = itemOf(ch, box);
+    if (!it) return hideItemTip();
+    if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'pl-tip'; tipEl.setAttribute('role', 'tooltip'); document.body.appendChild(tipEl); }
+    if (tipEl.dataset.key !== box.dataset.item) { tipEl.innerHTML = itemTip(it, slot); tipEl.dataset.key = box.dataset.item; }
+    tipEl.hidden = false;
+    const r = sum.getBoundingClientRect(), w = tipEl.offsetWidth, hgt = tipEl.offsetHeight;
+    let x = Math.min(e.clientX + 14, innerWidth - w - 8), y = r.bottom + 6;
+    if (y + hgt > innerHeight - 8) y = Math.max(8, r.top - hgt - 6);
+    tipEl.style.left = Math.max(8, x) + 'px'; tipEl.style.top = y + 'px';
+  }
+  function hideItemTip() { if (tipEl) { tipEl.hidden = true; tipEl.dataset.key = ''; } }
   function gearCard(ch, edit, dis) {
     let h = '<div class="card"><h2>Gear</h2><p class="hint">Pick a base, then affixes and their tier. Untick pieces on the Damage tab to see what each is worth.</p>';
     h += '<div class="pl-gear-grid">';
@@ -2525,6 +2597,9 @@ window.BOPlanner = function (ctx) {
   el.addEventListener('change', onChange);
   el.addEventListener('click', onClick);
   el.addEventListener('toggle', onToggle, true);
+  el.addEventListener('mousemove', showItemTip);
+  el.addEventListener('mouseleave', hideItemTip);
+  el.addEventListener('toggle', hideItemTip, true);
 
   // Take or refund one Dragonling node: { nodes } (the new list) or { msg } (why not).
   function dToggle(ch, id) {

@@ -94,6 +94,12 @@ h3 { font-size: 11.5px; margin: 14px 0 6px; color: var(--muted); text-transform:
 .support-simulator-heading p { margin: 0; color: var(--muted); font-size: 13px; }
 .fight-check-banner { max-width: 1500px; margin: 12px auto 0; padding: 0 20px; }
 .fight-check-banner[hidden] { display: none; }
+/* The fight check belongs to the Damage Analysis view only. */
+body:not(.dashboard-view) .fight-check-banner { display: none; }
+.combo-list { display: grid; gap: 2px; max-height: 180px; overflow-y: auto; padding: 4px 0; }
+.combo-list .check-row { margin: 0; }
+.results .combo-card .table-wrap table { min-width: 0; }
+.combo-card .headline { margin-bottom: 12px; }
 .fight-check-banner > .card { width: 100%; }
 .config-tabs { display: flex; gap: 4px; overflow-x: auto; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .config-tab { position: relative; flex: 0 0 auto; padding: 8px 17px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
@@ -1146,6 +1152,7 @@ body:not(.build-page) .build-subtabs { display: none !important; }
     <section class="card">
       <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 19 19 5M14 5h5v5M5 14l5 5"/></svg></span>Skill</h2>
       <label class="field"><span><span id="skillGem"></span>Skill</span><select id="skillSelect"></select></label>
+      <div class="field combo-field" id="comboField" hidden><span>Also count <span class="meta">skills you use alongside it</span></span><div class="combo-list" id="comboList"></div></div>
       <div class="row2">
         <label class="field"><span>Gem level</span><input type="number" id="gemLevel" min="1" max="40"></label>
         <div class="field"><span>From gear</span><output id="gemBonus" class="readout">+0</output></div>
@@ -1320,7 +1327,7 @@ body:not(.build-page) .build-subtabs { display: none !important; }
 <script>
 window.GD = null;
 window.CHARS = [];
-window.SITE_VERSION = {"v":69,"at":"2026-11-04T20:20:33.862Z"};
+window.SITE_VERSION = {"v":70,"at":"2026-11-04T20:54:55.620Z"};
 window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"aegis_N":0,"aegis_N_D":1,"aegis_S":2,"aegis_S_D":3,"affliction_N":4,"affliction_N_D":5,"affliction_S":6,"affliction_S_D":7,"anvil_oath_N":8,"anvil_oath_N_D":9,"anvil_oath_S":10,"anvil_oath_S_D":11,"area_N":12,"area_N_D":13,"area_S":14,"area_S_D":15,"armour_N":16,"armour_N_D":17,"armour_S":18,"armour_S_D":19,"artillery_N":20,"artillery_N_D":21,"artillery_S":22,"artillery_S_D":23,"attack_N":24,"attack_N_D":25,"attack_S":26,"attack_S_D":27,"blightword_N":28,"blightword_N_D":29,"bone_N":30,"bone_N_D":31,"bone_S":32,"bone_S_D":33,"bone_choir_N":34,"bone_choir_N_D":35,"bone_choir_S":36,"bone_choir_S_D":37,"bow_N":38,"bow_N_D":39,"bow_S":40,"bow_S_D":41,"bulwark_N":42,"bulwark_N_D":43,"bulwark_S":44,"bulwark_S_D":45,"carrion_hunt_N":46,"carrion_hunt_N_D":47,"carrion_hunt_S":48,"carrion_hunt_S_D":49,"chain_N":50,"chain_N_D":51,"chain_S":52,"chain_S_D":53,"channel_N":54,"channel_N_D":55,"channel_S":56,"channel_S_D":57,"cleave_N":58,"cleave_N_D":59,"cleave_S":60,"cleave_S_D":61,"cold_N":62,"cold_N_D":63,"cold_S":64,"cold_S_D":65,"conduit_N":66,"conduit_N_D":67,"conduit_S":68,"conduit_S_D":69,"crest_Mage":70,"crest_Mage_D":71,"crest_Necromancer":72,"crest_Necromancer_D":73,"crest_Paladin":74,"crest_Paladin_D":75,"crest_Ranger":76,"crest_Ranger_D":77,"crest_Samurai":78,"crest_Samurai_D":79,"crest_Warrior":80,"crest_Warrior_D":81,"crit_N":82,"crit_N_D":83,"crit_S":84,"crit_S_D":85,"crusade_N":86,"crusade_N_D":87,"crusade_S":88,"crusade_S_D":89,"dawn_N":90,"dawn_N_D":91,"dawn_S":92,"dawn_S_D":93,"dawnstorm_N":94,"dawnstorm_N_D":95,"dawnstorm_S":96,"dawnstorm_S_D":97,"dawnsworn_N":98,"dawnsworn_N_D":99,"deadeye_N":100,"deadeye_N_D":101,"deadeye_S":102,"deadeye_S_D":103,"deathknell_N":104,"deathknell_N_D":105,"deathknell_S":106,"deathknell_S_D":107,"edge_N":108,"edge_N_D":109,"edge_S":110,"edge_S_D":111,"elemental_N":112,"elemental_N_D":113,"elemental_S":114,"elemental_S_D":115,"energy_shield_N":116,"energy_shield_N_D":117,"energy_shield_S":118,"energy_shield_S_D":119,"evasion_N":120,"evasion_N_D":121,"evasion_S":122,"evasion_S_D":123,"faith_N":124,"faith_N_D":125,"faith_S":126,"faith_S_D":127,"falling_leaf_N":128,"falling_leaf_N_D":129,"falling_leaf_S":130,"falling_leaf_S_D":131,"fire_N":132,"fire_N_D":133,"fire_S":134,"fire_S_D":135,"fury_N":136,"fury_N_D":137,"fury_S":138,"fury_S_D":139,"grave_N":140,"grave_N_D":141,"grave_S":142,"grave_S_D":143,"holy_N":144,"holy_N_D":145,"holy_S":146,"holy_S_D":147,"iron_tempest_N":148,"iron_tempest_N_D":149,"iron_tempest_S":150,"iron_tempest_S_D":151,"ki_N":152,"ki_N_D":153,"ki_S":154,"ki_S_D":155,"ks_aegis_rebuke":156,"ks_aegis_rebuke_D":157,"ks_ancestral_host":158,"ks_ancestral_host_D":159,"ks_blood_magic":160,"ks_blood_magic_D":161,"ks_cascade_of_ruin":162,"ks_cascade_of_ruin_D":163,"ks_chain_reaction":164,"ks_chain_reaction_D":165,"ks_choir_of_bones":166,"ks_choir_of_bones_D":167,"ks_comet_step":168,"ks_comet_step_D":169,"ks_dawnstorm_covenant":170,"ks_dawnstorm_covenant_D":171,"ks_eagle_eye":172,"ks_eagle_eye_D":173,"ks_earthbreaker_stride":174,"ks_earthbreaker_stride_D":175,"ks_elemental_overload":176,"ks_elemental_overload_D":177,"ks_forked_sky":178,"ks_forked_sky_D":179,"ks_glass_cannon":180,"ks_glass_cannon_D":181,"ks_hammer_of_judgement":182,"ks_hammer_of_judgement_D":183,"ks_hollow_covenant":184,"ks_hollow_covenant_D":185,"ks_iron_resolve":186,"ks_iron_resolve_D":187,"ks_lord_of_the_dead":188,"ks_lord_of_the_dead_D":189,"ks_oath_of_a_thousand_cuts":190,"ks_oath_of_a_thousand_cuts_D":191,"ks_oath_of_many_fires":192,"ks_oath_of_many_fires_D":193,"ks_oath_of_slow_ruin":194,"ks_oath_of_slow_ruin_D":195,"ks_oath_of_the_living_storm":196,"ks_oath_of_the_living_storm_D":197,"ks_oath_of_the_long_night":198,"ks_oath_of_the_long_night_D":199,"ks_oath_of_the_pyre":200,"ks_oath_of_the_pyre_D":201,"ks_oath_of_the_red_harvest":202,"ks_oath_of_the_red_harvest_D":203,"ks_oath_of_the_snare":204,"ks_oath_of_the_snare_D":205,"ks_oath_of_the_white_silence":206,"ks_oath_of_the_white_silence_D":207,"ks_one_breath":208,"ks_one_breath_D":209,"ks_pyre_covenant":210,"ks_pyre_covenant_D":211,"ks_r59_hold_k3":212,"ks_r59_hold_k3_D":213,"ks_r59_mountain_k3":214,"ks_r59_mountain_k3_D":215,"ks_r59_sure_strike_k3":216,"ks_r59_sure_strike_k3_D":217,"ks_r74_bone_sovereign":218,"ks_r74_bone_sovereign_D":219,"ks_radiant_crusade":220,"ks_radiant_crusade_D":221,"ks_rotting_gospel":222,"ks_rotting_gospel_D":223,"ks_sanctified":224,"ks_sanctified_D":225,"ks_siege_pact":226,"ks_siege_pact_D":227,"ks_spellblade":228,"ks_spellblade_D":229,"ks_tempest_vow":230,"ks_tempest_vow_D":231,"ks_the_hunting_dead":232,"ks_the_hunting_dead_D":233,"ks_thousand_hands":234,"ks_thousand_hands_D":235,"ks_twice_fallen_sky":236,"ks_twice_fallen_sky_D":237,"ks_unbroken_wall":238,"ks_unbroken_wall_D":239,"ks_wake_of_spells":240,"ks_wake_of_spells_D":241,"ks_way_of_the_blade":242,"ks_way_of_the_blade_D":243,"ks_wind_and_steel_oath":244,"ks_wind_and_steel_oath_D":245,"leech_N":246,"leech_N_D":247,"leech_S":248,"leech_S_D":249,"lichfire_N":250,"lichfire_N_D":251,"lichfire_S":252,"lichfire_S_D":253,"life_N":254,"life_N_D":255,"life_S":256,"life_S_D":257,"life_big_N":258,"life_big_N_D":259,"life_big_S":260,"life_big_S_D":261,"lightning_N":262,"lightning_N_D":263,"lightning_S":264,"lightning_S_D":265,"lingering_N":266,"lingering_N_D":267,"lingering_S":268,"lingering_S_D":269,"malediction_N":270,"malediction_N_D":271,"malediction_S":272,"malediction_S_D":273,"mana_N":274,"mana_N_D":275,"mana_S":276,"mana_S_D":277,"manasteal_N":278,"manasteal_N_D":279,"manasteal_S":280,"manasteal_S_D":281,"melee_N":282,"melee_N_D":283,"melee_S":284,"melee_S_D":285,"mirrorblade_N":286,"mirrorblade_N_D":287,"mirrorblade_S":288,"mirrorblade_S_D":289,"orbit_N":290,"orbit_N_D":291,"orbit_S":292,"orbit_S_D":293,"ossuary_N":294,"ossuary_N_D":295,"ossuary_S":296,"ossuary_S_D":297,"overcharge_N":298,"overcharge_N_D":299,"overcharge_S":300,"overcharge_S_D":301,"permafrost_N":302,"permafrost_N_D":303,"permafrost_S":304,"permafrost_S_D":305,"plague_quiver_N":306,"plague_quiver_N_D":307,"plague_quiver_S":308,"plague_quiver_S_D":309,"poison_N":310,"poison_N_D":311,"poison_S":312,"poison_S_D":313,"portrait_Mage":314,"portrait_Mage_D":315,"portrait_Necromancer":316,"portrait_Necromancer_D":317,"portrait_Paladin":318,"portrait_Paladin_D":319,"portrait_Ranger":320,"portrait_Ranger_D":321,"portrait_Samurai":322,"portrait_Samurai_D":323,"portrait_Warrior":324,"portrait_Warrior_D":325,"projectile_N":326,"projectile_N_D":327,"projectile_S":328,"projectile_S_D":329,"radiance_N":330,"radiance_N_D":331,"radiance_S":332,"radiance_S_D":333,"radiant_ward_N":334,"radiant_ward_N_D":335,"radiant_ward_S":336,"radiant_ward_S_D":337,"rain_N":338,"rain_N_D":339,"rain_S":340,"rain_S_D":341,"reaper_N":342,"reaper_N_D":343,"reaper_S":344,"reaper_S_D":345,"regrowth_N":346,"regrowth_N_D":347,"regrowth_S":348,"regrowth_S_D":349,"resist_N":350,"resist_N_D":351,"resist_S":352,"resist_S_D":353,"shatter_N":354,"shatter_N_D":355,"shatter_S":356,"shatter_S_D":357,"siege_N":358,"siege_N_D":359,"siege_S":360,"siege_S_D":361,"sigil_N":362,"sigil_N_D":363,"sigil_S":364,"sigil_S_D":365,"slam_N":366,"slam_N_D":367,"slam_S":368,"slam_S_D":369,"souls_N":370,"souls_N_D":371,"souls_S":372,"souls_S_D":373,"speed_N":374,"speed_N_D":375,"speed_S":376,"speed_S_D":377,"spell_N":378,"spell_N_D":379,"spell_S":380,"spell_S_D":381,"spell_crit_N":382,"spell_crit_N_D":383,"spell_crit_S":384,"spell_crit_S_D":385,"spellsword_N":386,"spellsword_N_D":387,"spellsword_S":388,"spellsword_S_D":389,"starfall_N":390,"starfall_N_D":391,"starfall_S":392,"starfall_S_D":393,"stillness_N":394,"stillness_N_D":395,"stillness_S":396,"stillness_S_D":397,"swift_N":398,"swift_N_D":399,"swift_S":400,"swift_S_D":401,"tether_N":402,"tether_N_D":403,"tether_S":404,"tether_S_D":405,"trap_N":406,"trap_N_D":407,"trap_S":408,"trap_S_D":409,"two_storms_N":410,"two_storms_N_D":411,"two_storms_S":412,"two_storms_S_D":413,"vigil_N":414,"vigil_N_D":415,"vigil_S":416,"vigil_S_D":417,"voidbound_N":418,"voidbound_N_D":419,"voidbound_S":420,"voidbound_S_D":421,"vowkeeper_N":422,"vowkeeper_N_D":423,"vowkeeper_S":424,"vowkeeper_S_D":425,"warcaller_N":426,"warcaller_N_D":427,"warcaller_S":428,"warcaller_S_D":429,"warpath_N":430,"warpath_N_D":431,"warpath_S":432,"warpath_S_D":433,"waygate_S":434,"waygate_S_D":435,"wellspring_N":436,"wellspring_N_D":437,"wellspring_S":438,"wellspring_S_D":439,"wind_and_steel_N":440,"wind_and_steel_N_D":441,"wind_and_steel_S":442,"wind_and_steel_S_D":443,"windstep_N":444,"windstep_N_D":445,"windstep_S":446,"windstep_S_D":447,"zeal_N":448,"zeal_N_D":449,"zeal_S":450,"zeal_S_D":451},"dragons":"icons/dragons.webp","dragonOrder":["Fire","Lightning","Cold","Arcane","Poison","Physical"]};
 </script>
 <script>
@@ -2714,7 +2721,7 @@ window.BOPlanner = function (ctx) {
   const HANDLED = new Set(['StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
     'Cooldown', 'Repeats', 'Projectiles', 'Penetration', 'SkillLevel', 'PoisonChance', 'PoisonDamage', 'IgniteChance', 'IgniteDamage', 'BleedChance', 'BleedDamage',
     'DotMulti', 'AilmentDuration', 'CurseEffect', 'Str', 'Dex', 'Int', 'Attributes', 'GrantSupport', 'SkyfallRepeat', 'OrbitCount',
-    'ShockChance', 'ShockEffect', 'ShockStacks', 'LowLifeMore', 'CullingStrike', 'Keystone']);
+    'ShockChance', 'ShockEffect', 'ShockStacks', 'LowLifeMore', 'CullingStrike', 'Keystone', 'BrandCount']);
   // Skyfall second fall: "falls again 0.4 seconds later for X% of their Damage". The game caps the sum at
   // 100% (log 1 Nov: 190% of sources -> "second fall for 100%", "SkyfallSheet68 ... on the sheet (x2.00)")
   // and the second fall strikes each enemy once per cast (one boss hit per cast in every Guardian fight).
@@ -3079,7 +3086,9 @@ window.BOPlanner = function (ctx) {
     const supportList = (o.supportsOverride || (host ? host.supports : (socket ? socket.supports : []))).slice();
     for (const m of mods) if (m.stat === 'GrantSupport') {
       const sid = (m.tags || []).find(t => GD.supports[lc(t)]);
-      if (sid && !supportList.some(s => lc(s) === lc(sid))) supportList.push(sid + '@granted');
+      // Once per support, however many lines grant it: Meteor Lore has three Skyfall lines (Projectile, Chain,
+      // Nova). Storm Spark tooltip 4 Nov: Lightning 2,630-8,546 matches one Skyfall's 20% more, not three.
+      if (sid && !supportList.some(s => lc(s.replace('@granted', '')) === lc(sid))) supportList.push(sid + '@granted');
     }
     res.supports = [];
     for (const raw of supportList) {
@@ -3390,6 +3399,13 @@ window.BOPlanner = function (ctx) {
         cooldown = Math.max(META.RainCooldownFloor || 0, cooldown / speedRate);
         res.notes.push('Rain cooldown recovers with attack speed: ' + cooldown.toFixed(2) + ' s (at least ' + (META.RainCooldownFloor || 0) + ' s).');
       }
+      // A Spark's cooldown recovers with cast speed. Storm Spark tooltip 4 Nov (38% increased cast speed):
+      // cast time 0.36 s (0.5 / 1.38), "Cooldown 1.1 s" (1.5 / 1.38 = 1.09), "Casts per second 0.92"; the log's
+      // fastest recasts are 1.09 s apart.
+      if (!isAttack && sk.Delivery === 'Brand' && speedRate > 0) {
+        cooldown = cooldown / speedRate;
+        res.notes.push('Spark cooldown recovers with cast speed: ' + cooldown.toFixed(2) + ' s.');
+      }
       usesPerSec = Math.min(usesPerSec, 1 / cooldown);
     }
     // Shape supports: a skill takes one shape, the first of these socketed (Skyfall's text). The others
@@ -3429,14 +3445,18 @@ window.BOPlanner = function (ctx) {
       // cooldown keeps min(K, duration x throws a second) sparks on one boss, each striking every X s.
       const ev = /Every ([\d.]+) seconds? it strikes/i.exec(desc);
       if (ev) {
-        const lasts = /Lasts ([\d.]+) seconds/i.exec(desc), cap = /up to (\d+) sparks/i.exec(desc);
+        const lasts = /Lasts ([\d.]+) seconds/i.exec(desc), capM = /up to (\d+) sparks/i.exec(desc);
         let durInc = 0; for (const m of pickMods(mods, 'SkillDuration', 'Inc')) if (applies(ctx, m)) { durInc += m.v; use(m); }
         const dur = lasts ? +lasts[1] * Math.max(0, 1 + durInc / 100) : 0;
+        // "+N to the maximum number of Sparks (at most 27 Sparks in all)". Storm Spark tooltip 4 Nov: base 3,
+        // Thunderhead + Brand Smith + Crown of Sparks -> "Counted with 6 brands on the enemy".
+        let extra = 0; for (const m of pickMods(mods, 'BrandCount', 'Flat')) if (applies(ctx, m)) { extra += m.v; use(m); }
+        const cap = capM ? Math.min(27, +capM[1] + extra) : 0;
         const throwsPerSec = usesPerSec; // cast rate, already capped by the cooldown
-        const sparks = cap && dur ? Math.max(1, Math.min(+cap[1], dur * throwsPerSec)) : 1;
+        const sparks = cap && dur ? Math.max(1, Math.min(cap, dur * throwsPerSec)) : 1;
         usesPerSec = sparks / +ev[1]; useTime = 1 / usesPerSec;
-        res.brand = { sparks, every: +ev[1], duration: dur, cap: cap ? +cap[1] : 1 };
-        res.notes.push('Spark: ' + (sparks % 1 ? sparks.toFixed(1) : sparks) + ' on the target' + (cap ? ' (up to ' + cap[1] + ', each lasting ' + dur.toFixed(1) + ' s, thrown ' + throwsPerSec.toFixed(2) + ' times a second)' : '') + ', each striking every ' + ev[1] + ' s. Different Spark skills stack on the same enemy.');
+        res.brand = { sparks, every: +ev[1], duration: dur, cap: cap || 1 };
+        res.notes.push('Spark: ' + (sparks % 1 ? sparks.toFixed(1) : sparks) + ' on the target' + (cap ? ' (up to ' + cap + ', each lasting ' + dur.toFixed(1) + ' s, thrown ' + throwsPerSec.toFixed(2) + ' times a second)' : '') + ', each striking every ' + ev[1] + ' s. Different Spark skills stack on the same enemy.');
       }
     } else if (sk.Orbit && sk.Orbit.AngularSpeed && sk.Delivery === 'Orbit') {
       // A toggled ring (Orbiting Hammers): every hammer passes a target once per turn, so it is hit
@@ -3564,7 +3584,9 @@ window.BOPlanner = function (ctx) {
     }
     // Skyfall second fall: one more strike on the target per cast at the repeat's share of the damage.
     let skyRep = 0;
-    if (sk.Delivery === 'Skyfall' || shape === 'skyfall') {
+    // Not on Sparks: Storm Spark tooltip 4 Nov with Twice Judged (50%) = hit x crit x 6 sparks x 2 strikes a
+    // second + ignite (91,918 vs the game's 91,880), no second fall; the log has no second-fall line for them.
+    if ((sk.Delivery === 'Skyfall' || shape === 'skyfall') && sk.Delivery !== 'Brand') {
       for (const m of pickMods(mods, 'SkyfallRepeat', 'Flat')) if (applies(ctx, m)) { skyRep += m.v; use(m); }
       skyRep = Math.min(SKYFALL_REPEAT_CAP, skyRep) / 100;
       if (skyRep > 0) res.notes.push('Skyfall falls again 0.4 s later for ' + Math.round(skyRep * 100) + '% of the damage' + (skyRep >= SKYFALL_REPEAT_CAP / 100 ? ' (the game caps this at ' + SKYFALL_REPEAT_CAP + '%)' : '') + ': the target is struck a second time each cast.');
@@ -4474,6 +4496,7 @@ window.BOStartApp = function () {
     st.curses = {};
     for (const c of Object.values(GD.curses)) st.curses[c.Id] = { on: ch.hotbar.includes(c.Skill), dread: 0 };
     st.enemyLevel = null; $('#enemyLevel').value = ''; $('#enemyLevel').placeholder = ch.level;
+    st.combo = store.get('combo:' + ch.id, []) || [];
     $('#treeReset').hidden = !!ch.plan; // a plan's tree is the plan itself
     const { skills, pickable } = fillSkills(ch);
     const remembered = store.get('skill:' + ch.id, null);
@@ -4487,6 +4510,7 @@ window.BOStartApp = function () {
     for (const s of S.listSkills(GD, ch, true)) (groups[s.where] = groups[s.where] || []).push(s);
     $('#skillSelect').innerHTML = Object.entries(groups).map(([g, list]) => '<optgroup label="' + g + '">' + list.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('') + '</optgroup>').join('');
     const pickable = skills.filter(s => { const r = S.calcSkill(GD, ch, s.id, {}); return !r.unsupported && !r.error; });
+    st.pickable = pickable;
     $('#optSkill').innerHTML = pickable.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('');
     if (st.skill) { $('#skillSelect').value = st.skill; $('#optSkill').value = st.skill; }
     return { skills, pickable };
@@ -4525,6 +4549,40 @@ window.BOStartApp = function () {
       conduit: st.conduit == null ? undefined : st.conduit,
       coc: st.coc === false ? false : undefined, cocSource: typeof st.coc === 'string' ? st.coc : undefined,
     }, extra || {});
+  }
+
+  // Several damage skills (a Spark build throws Storm, Ember and Rime Spark): the extra skills use their own
+  // saved supports and gem level, and share the enemy and character settings.
+  function comboOpts(extra) {
+    const o = opts(extra);
+    for (const k of ['supportsOverride', 'gemLevel', 'projOnTarget', 'hitsPerSecOverride', 'castsPerSecOverride', 'conduit', 'coc', 'cocSource']) delete o[k];
+    o.off = new Set([...st.off].filter(k => !/^support:/.test(k)));
+    return o;
+  }
+  const comboIds = () => (st.combo || []).filter(id => id !== st.skill && (st.pickable || []).some(s => s.id === id));
+  function comboRuns(extra) {
+    return comboIds().map(id => ({ id, r: S.calcSkill(GD, st.ch, id, comboOpts(extra)) })).filter(x => !x.r.error && !x.r.unsupported && isFinite(x.r.totalDps));
+  }
+  function renderCombo() {
+    const on = new Set(st.combo || []);
+    const list = (st.pickable || []).filter(s => s.id !== st.skill && (s.where !== 'Owned gem' || on.has(s.id)));
+    $('#comboField').hidden = !st.ch || !list.length;
+    $('#comboList').innerHTML = list.map(s => '<label class="check-row"><input type="checkbox" value="' + esc(s.id) + '"' + (on.has(s.id) ? ' checked' : '') + '><span>' + skillDot(s.id) + esc(s.name) + '</span></label>').join('');
+  }
+  $('#comboList').addEventListener('change', () => {
+    st.combo = [...document.querySelectorAll('#comboList input:checked')].map(i => i.value);
+    if (st.ch) store.set('combo:' + st.ch.id, st.combo);
+    render();
+  });
+  function comboCard(r, runs) {
+    if (!runs.length) return '';
+    const rows = [{ id: st.skill, r }].concat(runs);
+    const total = rows.reduce((a, x) => a + x.r.totalDps, 0);
+    return '<div class="card combo-card"><h2>All Counted Skills <span class="hint">' + rows.length + ' skills vs this enemy</span></h2>' +
+      '<div class="headline small">' + stat('Combined DPS', num(total), '', 'main', 'Each skill\'s total DPS added up, as if you keep all of them going') + '</div>' +
+      '<div class="table-wrap"><table class="tbl"><thead><tr><th>Skill</th><th>Total DPS</th><th>Share</th></tr></thead><tbody>' +
+      rows.map(x => '<tr><td>' + skillDot(x.id) + esc(x.r.skill ? x.r.skill.Name : x.id) + (x.id === st.skill ? ' <span class="hint">(selected)</span>' : '') + '</td><td>' + num(x.r.totalDps) + '</td><td>' + Math.round(x.r.totalDps / (total || 1) * 100) + '%</td></tr>').join('') +
+      '</tbody></table></div><p class="hint">Extra skills use their own supports and gem level from the save; enemy settings on the left apply to all. Cast rates assume you keep every skill going at its sheet rate.</p></div>';
   }
 
   // A plan follows what you change on the Damage tab: the selected skill's supports and gem level.
@@ -4717,6 +4775,7 @@ window.BOStartApp = function () {
     if (!st.ch || !st.skill) { $('#results').innerHTML = '<div class="empty">No character loaded. Click <b>Copy save path</b>, then <b>Load saves folder</b>: paste the path into the picker\'s address bar, press Enter and choose <b>Select Folder</b>. Every character in it is loaded.<br><small>You can also drop the SaveGames folder or a BO_Char_*.sav file on this page, or paste a build code above. Your browser may ask to "upload" the files: that only lets this page read them; nothing leaves your computer.</small></div>'; return; }
     const r = S.calcSkill(GD, st.ch, st.skill, opts());
     renderControls(r);
+    renderCombo();
     const fightCheck = $('#logCheckBanner');
     fightCheck.innerHTML = r.minion ? '' : logCard(r);
     fightCheck.hidden = !fightCheck.innerHTML;
@@ -4745,7 +4804,7 @@ window.BOStartApp = function () {
       stat('Skill panel DPS', num(r.panelDps), delta(r.panelDps, pin && pin.sheet), '', r.cocPanel ? 'As the game\'s tooltip shows a Cast on Crit spell: cast by hand at its cast time, without the 25% less. In fights it is cast by your crits (' + num(r.coc.rate, 2) + '/s, 25% less), as in the totals above.' : 'Hits + poison before the enemy: the number the game\'s skill panel shows') +
       '</div>';
     st.last = r;
-    html += '<div class="overview-grid' + (pin && pin.total != null ? ' has-comparison' : '') + '">' +
+    html += '<div class="overview-grid' + (pin && pin.total != null ? ' has-comparison' : '') + '">' + comboCard(r, comboRuns()) +
       damageMixCard(r) +
       (pin && pin.total != null ? comparisonCard(r.totalDps, pin.total) : '') +
       '</div><div class="build-overview-grid">' +
@@ -5302,10 +5361,12 @@ window.BOStartApp = function () {
     // for Conduit and Cast on Crit lines. Releases are turned into uses so they compare with the sheet's uses.
     const host = (st.log.casts[skill] || {}).host;
     const perUse = s => host ? 1 : 1 + ((s.hits && s.hits.repeats) || 0);
+    const combo = {};
     const fights = mine.map(g => {
       const key = (g.rupture || 0) + '|' + g.name + '|' + (g.element || '') + '|' + (g.ward || 0);
-      if (!sim[key]) sim[key] = S.calcSkill(GD, st.ch, skill, opts({ enemyLevel: g.rupture || undefined, enemyRarity: 'boss', guardianElement: g.element || undefined,
-        guardianVariantResist: g.element ? S.guardianVariantResist(GD, g.name, g.element) : undefined, guardianWard: g.element ? g.ward || 0 : undefined }));
+      const fo = { enemyLevel: g.rupture || undefined, enemyRarity: 'boss', guardianElement: g.element || undefined,
+        guardianVariantResist: g.element ? S.guardianVariantResist(GD, g.name, g.element) : undefined, guardianWard: g.element ? g.ward || 0 : undefined };
+      if (!sim[key]) { sim[key] = S.calcSkill(GD, st.ch, skill, opts(fo)); combo[key] = comboRuns(fo).reduce((a, x) => a + x.r.totalDps, 0); }
       const s = sim[key], casts = g.casts[skill] || 0;
       const save = st.chOrig || st.ch;
       const gear = g.hero && save.weaponId && g.hero.weapon && g.hero.weapon !== save.weaponId;
@@ -5315,7 +5376,7 @@ window.BOStartApp = function () {
       // You keep casting while it is away (at its summons), so the cast rate uses the whole fight and per cast
       // counts only the share of casts made while it could be hit.
       const uses = casts / perUse(s), usesOnBoss = uses * hitTime / Math.max(1, fightTime(g));
-      return { g, s, time: fightTime(g), hitTime, dealt, real: dealt / hitTime, simDps: s.totalDps, casts, perUse: perUse(s), castRate: uses / fightTime(g),
+      return { g, s, time: fightTime(g), hitTime, dealt, real: dealt / hitTime, simDps: s.totalDps + combo[key], casts, perUse: perUse(s), castRate: uses / fightTime(g),
         perCastReal: casts ? dealt / usesOnBoss : NaN, perCastSim: s.speed && s.speed.usesPerSec ? s.totalDps / s.speed.usesPerSec : NaN,
         levelDiff: g.hero && g.hero.level !== save.level ? g.hero.level : null, gear };
     });
@@ -5355,8 +5416,8 @@ window.BOStartApp = function () {
     const rateBtn = isFinite(c.rateMed) && c.rateMed > 0 ? (st.cps ? '<button class="btn small ghost" type="button" id="clearFightRate">Back to the sheet\'s cast rate</button>' : '<button class="btn small" type="button" id="useFightRate" data-rate="' + (Math.round(c.rateMed * 100) / 100) + '">Use my fight cast rate (' + num(c.rateMed, 2) + '/s)</button>') : '';
     const report = reportText(r, c);
     return '<div class="card"><h2>Check Against Your Fights <span class="hint">' + c.fights.length + ' Guardian kill' + (c.fights.length > 1 ? 's' : '') + ' in the log</span></h2>' +
-      '<div class="headline small">' + stat('Real boss DPS (median)', num(c.realMed), '', 'main', 'Boss life ÷ time from engaging it to the kill') + stat('Sheet vs a Guardian', num(c.simMed), '', '', 'Same Rupture levels, settings on the left') + stat('Real ÷ sheet', isFinite(ratio) ? num(ratio, 2) + '×' : '–', '', '', verdict) + '</div>' +
-      '<div class="table-wrap"><table class="tbl"><thead><tr><th>Guardian</th><th>Rupture</th><th>Life</th><th>Fight</th><th>Real DPS</th><th>Sheet</th><th>Casts/s</th><th>Per cast</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="headline small">' + stat('Real boss DPS (median)', num(c.realMed), '', 'main', 'Boss life ÷ time from engaging it to the kill') + stat('Sheet vs a Guardian', num(c.simMed), '', '', 'Same Rupture levels, settings on the left' + (comboIds().length ? '; ' + (comboIds().length + 1) + ' skills added up (Also count)' : '')) + stat('Real ÷ sheet', isFinite(ratio) ? num(ratio, 2) + '×' : '–', '', '', verdict) + '</div>' +
+      '<div class="table-wrap"><table class="tbl"><thead><tr><th>Guardian</th><th>Rupture</th><th>Life</th><th>Fight</th><th>Real DPS</th><th>Sheet' + (comboIds().length ? ' (' + (comboIds().length + 1) + ' skills)' : '') + '</th><th>Casts/s</th><th>Per cast</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       (notes.length ? '<details class="validation-notes"><summary>Notes on these fights <span class="count">(' + notes.length + ')</span></summary><ul class="notes">' + notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul></details>' : '') +
       '<div class="pinbar">' + rateBtn + '<a class="btn small ghost" target="_blank" rel="noopener" href="' + esc(reportLink(r, c)) + '">Send a check report</a><button class="btn small ghost" type="button" id="copyReport">Copy full report</button><span>Opens a GitHub issue with only the numbers below (no names, no IDs), for improving the sim. You can edit it before posting.</span></div>' +
       '<details class="report"><summary>What the report contains</summary><pre>' + esc(report) + '</pre></details></div>';

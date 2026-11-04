@@ -664,7 +664,7 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
 .tree-view { background: radial-gradient(circle at 50% 40%, var(--panel-2), var(--panel) 75%); }
 
 /* Compact navigation rail and character toolbar */
-.top { position: fixed; inset: 0 auto 0 0; width: 176px; border-right: 1px solid var(--line); border-bottom: 0; }
+.top { position: fixed; inset: 0 auto 0 0; width: var(--rail); border-right: 1px solid var(--line); border-bottom: 0; }
 .nav { height: 100%; max-width: none; margin: 0; padding: 22px 12px 14px; flex-direction: column; align-items: stretch; gap: 28px; }
 .brand { flex-direction: column; align-items: flex-start; gap: 9px; padding: 0 10px; white-space: normal; }
 .brand .logo-frame { width: 96px; height: 96px; overflow: visible; background: transparent; }
@@ -698,7 +698,7 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
 .code-import input { padding: 11px 12px; }
 .nav-end { flex-direction: column-reverse; align-items: flex-start; gap: 10px; margin: auto 0 0; padding: 12px 9px 0; border-top: 1px solid var(--line); }
 .nav-end .sub { display: block; max-width: 100%; white-space: normal; overflow-wrap: anywhere; font-size: 10px; line-height: 1.45; }
-.toolbar, .fight-check-banner { width: min(1500px, calc(100% - 216px)); margin-left: max(196px, calc(196px + (100% - 1696px) / 2)); margin-right: 20px; padding: 0; }
+.view-bar, .fight-check-banner { width: min(1500px, calc(100% - (var(--rail) + 40px))); margin-left: max(calc(var(--rail) + 20px), calc(var(--rail) + 20px + (100% - (var(--rail) + 1520px)) / 2)); margin-right: 20px; padding: 0; }
 .toolbar { margin-top: 14px; }
 .fight-check-banner { margin-top: 12px; }
 .top-controls { align-items: end; gap: 10px; padding: 10px 12px; }
@@ -709,11 +709,11 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
 .toolbar-actions .code-form { flex: 1 1 250px; min-width: 200px; }
 .toolbar-actions .code-form input { width: auto; flex: 1 1 120px; min-width: 80px; padding: 7px 9px; font-size: 12px; }
 .toolbar-actions .code-form .btn { padding: 7px 10px; font-size: 12px; }
-.data-old { width: min(1500px, calc(100% - 216px)); margin: 10px 20px 0 max(196px, calc(196px + (100% - 1696px) / 2)); }
-.hero { width: min(1460px, calc(100% - 216px)); max-width: none; margin: 16px 20px 0 max(196px, calc(196px + (100% - 1696px) / 2)); }
-.setup { width: min(720px, calc(100% - 216px)); margin: 24px max(20px, calc((100% - 1696px) / 2)) 24px max(196px, calc(196px + (100% - 1696px) / 2)); }
-.layout { width: min(1500px, calc(100% - 216px)); margin: 0 20px 0 max(196px, calc(196px + (100% - 1696px) / 2)); }
-.foot { width: min(1500px, calc(100% - 216px)); margin: 0 20px 0 max(196px, calc(196px + (100% - 1696px) / 2)); }
+.data-old { width: min(1500px, calc(100% - (var(--rail) + 40px))); margin: 10px 20px 0 max(calc(var(--rail) + 20px), calc(var(--rail) + 20px + (100% - (var(--rail) + 1520px)) / 2)); }
+.hero { width: min(1460px, calc(100% - (var(--rail) + 40px))); max-width: none; margin: 16px 20px 0 max(calc(var(--rail) + 20px), calc(var(--rail) + 20px + (100% - (var(--rail) + 1520px)) / 2)); }
+.setup { width: min(720px, calc(100% - (var(--rail) + 40px))); margin: 24px max(20px, calc((100% - (var(--rail) + 1520px)) / 2)) 24px max(calc(var(--rail) + 20px), calc(var(--rail) + 20px + (100% - (var(--rail) + 1520px)) / 2)); }
+.layout { width: min(1500px, calc(100% - (var(--rail) + 40px))); margin: 0 20px 0 max(calc(var(--rail) + 20px), calc(var(--rail) + 20px + (100% - (var(--rail) + 1520px)) / 2)); }
+.foot { width: min(1500px, calc(100% - (var(--rail) + 40px))); margin: 0 20px 0 max(calc(var(--rail) + 20px), calc(var(--rail) + 20px + (100% - (var(--rail) + 1520px)) / 2)); }
 .results-wrap { min-width: 0; }
 @media (max-width: 760px) {
   .top { position: sticky; inset: auto; width: auto; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
@@ -737,7 +737,7 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
   .nav-end .sub { display: none; }
   .nav-reset { width: 34px; height: 34px; justify-content: center; padding: 0; }
   .nav-reset span { display: none; }
-  .toolbar, .data-old, .hero, .layout, .fight-check-banner { width: auto; max-width: none; margin: 10px 12px 0; }
+  .view-bar, .data-old, .hero, .layout, .fight-check-banner { width: auto; max-width: none; margin: 10px 12px 0; }
   .toolbar { padding: 0; }
   .fight-check-banner { margin-top: 12px; }
   .layout { padding: 14px 0; }
@@ -874,6 +874,44 @@ body.dashboard-view .configure-heading { display: flex; }
   body.dashboard-view .analysis-details { grid-row: 8; }
 }
 
+/* Layout: character picker in the sidebar, the four views in a row above the content */
+:root { --rail: 236px; }
+.top { overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.nav { gap: 20px; }
+.nav-divider { margin: -10px 10px; }
+.nav .toolbar { width: auto; margin: 0; padding: 0; }
+.nav .top-controls { flex-direction: column; align-items: stretch; gap: 9px; padding: 10px; }
+.nav .character-picker { flex: none; }
+.nav .toolbar-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; flex: none; }
+.nav .toolbar-actions > .btn, .nav .toolbar-actions > label.btn { padding: 6px; font-size: 11.5px; line-height: 1.2; white-space: normal; text-align: center; }
+.nav #dataBtn, .nav #siteDataBtn { grid-column: 1 / -1; }
+.view-bar { margin-top: 14px; }
+.view-bar .tabs { flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.view-bar .tab { width: auto; flex: 0 1 auto; white-space: nowrap; }
+.view-bar .tab:hover { background: var(--panel-2); }
+@media (max-width: 760px) {
+  .top { position: static; overflow: visible; }
+  .nav-end { order: 1; }
+  .nav .toolbar { order: 2; width: 100%; }
+  .nav-divider { margin: -3px auto; }
+  .view-bar { margin-top: 10px; }
+  .view-bar .tabs { flex-wrap: nowrap; gap: 4px; padding: 3px; border-radius: 10px; }
+  .view-bar .tab { justify-content: center; flex: 1; min-height: 36px; gap: 6px; padding: 6px 5px; font-size: 12px; white-space: normal; text-align: center; }
+  .view-bar .tab svg { width: 15px; height: 15px; }
+  .view-bar .tab.active { box-shadow: inset 0 -2px 0 var(--dashboard-gold); }
+}
+/* Build tab: Gear / Skills sub-tabs (top bar), skills and gear in columns */
+body:not(.build-page) .build-subtabs { display: none !important; }
+.view-bar .build-subtabs { width: fit-content; max-width: 100%; margin-top: 8px; }
+.view-bar .build-subtabs .tab { min-width: 140px; justify-content: center; }
+.pl-skills { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 8px; align-items: start; }
+.pl-gear-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 8px; align-items: start; margin-bottom: 8px; }
+.pl-gear-grid .pl-item { margin: 0; padding: 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.pl-gear-grid .pl-item[open] { padding-bottom: 8px; }
+.pl-skills .pl-skill > .pl-row > select { flex: 1 1 150px; }
+.pl-skills .pl-skill > .pl-row > .field.inline { flex: 0 1 90px; }
+@media (max-width: 760px) { .view-bar .build-subtabs { width: auto; } }
+
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
@@ -886,20 +924,23 @@ body.dashboard-view .configure-heading { display: flex; }
       </button>
       <h1>Broken <span>Oath</span><small><span class="sub-builder">Builder</span><span class="sub-damage">Damage Simulator</span></small></h1>
     </div>
-    <nav class="tabs" role="tablist" aria-label="Views">
-      <button class="tab active" type="button" role="tab" data-tab="damage" aria-selected="true" aria-label="Damage Analysis">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h17M8 16v-5M13 16V7M18 16V3"/></svg><span>Damage Analysis</span>
-      </button>
-      <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false" aria-label="Skill Tree">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M12 7v4M12 11 6 16M12 11l6 5"/></svg><span>Skill Tree</span>
-      </button>
-      <button class="tab" type="button" role="tab" data-tab="build" aria-selected="false" aria-label="Current Build Setup">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M6 17V8l6-4 6 4v9M9 17v-5h6v5"/></svg><span>Current Build Setup</span>
-      </button>
-      <button class="tab" type="button" role="tab" data-tab="supports" aria-selected="false" aria-label="Support Gem Simulator">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 9l-8 12L4 9zM4 9h16M9 9l3 12 3-12"/></svg><span>Support Gem Simulator</span>
-      </button>
-    </nav>
+    <div class="toolbar">
+      <div class="top-controls">
+        <label class="field inline character-picker"><span>Character</span><select id="charSelect"></select></label>
+        <div class="toolbar-actions" aria-label="Character and build actions">
+        <label class="btn" id="saveDirBtn" title="Pick your SaveGames folder (%LOCALAPPDATA%\BrokenOath\Saved\SaveGames): every character in it is loaded, newest first. Read in this tab only, never uploaded.">
+          <input type="file" id="saveDirInput" webkitdirectory directory multiple hidden><span id="saveDirLabel">Load saves folder</span>
+        </label>
+        <button class="btn ghost" id="copySavePath" type="button" title="Copies %LOCALAPPDATA%\BrokenOath\Saved\SaveGames. Paste it into the file picker's address bar and press Enter.">Copy save path</button>
+        <label class="btn" title="Pick BrokenOath.log from %LOCALAPPDATA%\BrokenOath\Saved\Logs to check the sim against your real fights. It is read in this tab only, never uploaded.">
+          <input type="file" id="logInput" accept=".log,.txt" hidden>Load game log
+        </label>
+        <button class="btn ghost" id="copyLogPath" type="button" title="Copies %LOCALAPPDATA%\BrokenOath\Saved\Logs\BrokenOath.log. Paste it into the file picker's address bar and press Enter.">Copy log path</button>
+        <button class="btn ghost" id="dataBtn" type="button" hidden title="The game data comes with the site. After a game patch the site has not caught up with yet, read your own game's Data folder instead">Use my own game files</button>
+        <button class="btn ghost" id="siteDataBtn" type="button" hidden title="Stop using the game files you picked and go back to the data that comes with the site">Use the site's data</button>
+        </div>
+      </div>
+    </div>
     <div class="nav-divider" role="separator" aria-label="Build tools"></div>
     <nav class="tabs secondary-tabs" role="tablist" aria-label="Build tools">
       <button class="tab" type="button" role="tab" data-tab="plan" aria-selected="false" aria-label="Plan a New Build">
@@ -926,6 +967,26 @@ body.dashboard-view .configure-heading { display: flex; }
     </div>
   </div>
 </header>
+<div class="view-bar">
+    <nav class="tabs main-tabs" role="tablist" aria-label="Views">
+      <button class="tab" type="button" role="tab" data-tab="build" aria-selected="false" aria-label="Current Build Setup">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M6 17V8l6-4 6 4v9M9 17v-5h6v5"/></svg><span>Current Build Setup</span>
+      </button>
+      <button class="tab active" type="button" role="tab" data-tab="damage" aria-selected="true" aria-label="Damage Analysis">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h17M8 16v-5M13 16V7M18 16V3"/></svg><span>Damage Analysis</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false" aria-label="Skill Tree">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M12 7v4M12 11 6 16M12 11l6 5"/></svg><span>Skill Tree</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="supports" aria-selected="false" aria-label="Support Gem Simulator">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 9l-8 12L4 9zM4 9h16M9 9l3 12 3-12"/></svg><span>Support Gem Simulator</span>
+      </button>
+    </nav>
+    <nav class="tabs build-subtabs" id="buildSubtabs" role="tablist" aria-label="Build setup" hidden>
+      <button class="tab" type="button" role="tab" data-sub="gear" aria-selected="false"><span>Gear</span></button>
+      <button class="tab" type="button" role="tab" data-sub="skills" aria-selected="false"><span>Skills</span></button>
+    </nav>
+</div>
 <section class="hero" id="hero">
   <svg class="hero-art" viewBox="0 0 1200 420" preserveAspectRatio="xMaxYMid slice" aria-hidden="true">
     <defs>
@@ -988,23 +1049,6 @@ body.dashboard-view .configure-heading { display: flex; }
     <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><b>Check &amp; plan</b><small>Check the sim against your log and save build plans.</small></div>
   </div>
 </section>
-<div class="toolbar">
-  <div class="top-controls">
-    <label class="field inline character-picker"><span>Character</span><select id="charSelect"></select></label>
-    <div class="toolbar-actions" aria-label="Character and build actions">
-    <label class="btn" id="saveDirBtn" title="Pick your SaveGames folder (%LOCALAPPDATA%\BrokenOath\Saved\SaveGames): every character in it is loaded, newest first. Read in this tab only, never uploaded.">
-      <input type="file" id="saveDirInput" webkitdirectory directory multiple hidden><span id="saveDirLabel">Load saves folder</span>
-    </label>
-    <button class="btn ghost" id="copySavePath" type="button" title="Copies %LOCALAPPDATA%\BrokenOath\Saved\SaveGames. Paste it into the file picker's address bar and press Enter.">Copy save path</button>
-    <label class="btn" title="Pick BrokenOath.log from %LOCALAPPDATA%\BrokenOath\Saved\Logs to check the sim against your real fights. It is read in this tab only, never uploaded.">
-      <input type="file" id="logInput" accept=".log,.txt" hidden>Load game log
-    </label>
-    <button class="btn ghost" id="copyLogPath" type="button" title="Copies %LOCALAPPDATA%\BrokenOath\Saved\Logs\BrokenOath.log. Paste it into the file picker's address bar and press Enter.">Copy log path</button>
-    <button class="btn ghost" id="dataBtn" type="button" hidden title="The game data comes with the site. After a game patch the site has not caught up with yet, read your own game's Data folder instead">Use my own game files</button>
-    <button class="btn ghost" id="siteDataBtn" type="button" hidden title="Stop using the game files you picked and go back to the data that comes with the site">Use the site's data</button>
-    </div>
-  </div>
-</div>
 <section class="fight-check-banner" id="logCheckBanner" aria-live="polite" hidden></section>
 <div class="data-old" id="dataOld" role="status" hidden>
   <span id="dataOldText"></span>
@@ -2022,16 +2066,32 @@ window.BOPlanner = function (ctx) {
   // ---------- view ----------
   let status = '';
   const pane = () => $('#buildPane');
+  // Gear / Skills sub-tab, remembered in this browser.
+  let subTab = 'gear';
+  try { if (localStorage.getItem('bods:buildTab') === 'skills') subTab = 'skills'; } catch (e) { /* storage off */ }
+  // The Gear / Skills buttons sit in the top bar, under the main tabs (shown on this tab only).
+  function syncSubTabs(show) {
+    const bar = $('#buildSubtabs'); if (!bar) return;
+    bar.hidden = !show;
+    bar.querySelectorAll('[data-sub]').forEach(b => { const on = b.dataset.sub === subTab; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+  }
+  if ($('#buildSubtabs')) $('#buildSubtabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-sub]'); if (!b) return;
+    subTab = b.dataset.sub === 'skills' ? 'skills' : 'gear';
+    try { localStorage.setItem('bods:buildTab', subTab); } catch (err) { /* storage off */ }
+    render();
+  });
   function render() {
     const el = pane(); if (!el || el.hidden) return;
     const ch = ctx.current();
-    const plan = !!(ch && ch.plan), test = !!(ch && !ch.plan && ctx.testChangesEnabled());
-    const edit = plan || test, dis = edit ? '' : ' disabled';
+    const plan = !!(ch && ch.plan);
+    const edit = !!ch, dis = edit ? '' : ' disabled';
     const classOpts = Object.values(GD.classes).map(c => opt(c.Id, c.Id, ch && c.Id === ch.classId)).join('');
+    syncSubTabs(!!ch);
     let h = '<div class="card"><h2>' + (plan ? 'Build Plan Setup' : 'Current Build Setup') + '</h2>';
     if (!ch || !plan) {
-      h += '<p class="hint">' + (ch ? (test ? 'Changes here are temporary and used to test your build. Turn off <b>Test Changes</b> to discard them.' : '<b>' + esc(ch.name) + '</b> is shown read-only. Turn on <b>Test Changes</b> to temporarily edit the skills and gear below.') : 'Load a character to see its current setup, or use <b>Plan a new build</b> to start from scratch.') + '</p>';
-      if (ch) h += '<label class="check-row test-changes-toggle"><input type="checkbox" id="testChangesToggle"' + (test ? ' checked' : '') + '><span>Test Changes</span></label>';
+      h += '<p class="hint">' + (ch ? 'Edit the skills and gear below to see what they do to your damage. Changes stay in this page and are never written to your save.' : 'Load a character to see its current setup, or use <b>Plan a new build</b> to start from scratch.') + '</p>';
+      if (ch && ctx.isEdited()) h += '<div class="pl-row"><button class="btn small ghost" type="button" id="buildResetSave">Reset to save</button></div>';
     } else {
       const aspects = Object.keys(GD.dragon.aspects || {});
       h += '<div class="pl-row">' +
@@ -2047,7 +2107,7 @@ window.BOPlanner = function (ctx) {
     }
     if (status) h += '<p class="hint pl-status">' + esc(status) + '</p>';
     h += '</div>';
-    if (ch) h += skillsCard(ch, edit, dis) + gearCard(ch, edit, dis); // the Dragonling tree is on the Skill tree tab (dragon button)
+    if (ch) h += subTab === 'skills' ? skillsCard(ch, edit, dis) : gearCard(ch, edit, dis); // the Dragonling tree is on the Skill tree tab (dragon button)
     el.innerHTML = h;
   }
   async function startNewPlan(classId, level) {
@@ -2262,10 +2322,12 @@ window.BOPlanner = function (ctx) {
   const openItems = new Set();
   function gearCard(ch, edit, dis) {
     let h = '<div class="card"><h2>Gear</h2><p class="hint">Pick a base, then affixes and their tier. Untick pieces on the Damage tab to see what each is worth.</p>';
+    h += '<div class="pl-gear-grid">';
     for (const slot of SLOTS) h += itemEditor(ch.items.find(i => i.slot === slot), slot, ch.items.findIndex(i => i.slot === slot), edit, dis);
+    h += '</div>';
     const idols = ch.items.map((it, i) => ({ it, i })).filter(x => x.it.slot === 'Idol');
     h += '<h3>Idols <small>' + idols.length + '</small></h3>';
-    for (const x of idols) h += itemEditor(x.it, 'Idol', x.i, edit, dis);
+    if (idols.length) h += '<div class="pl-gear-grid">' + idols.map(x => itemEditor(x.it, 'Idol', x.i, edit, dis)).join('') + '</div>';
     if (edit) h += '<button class="btn small ghost" type="button" data-act="addidol">Add an idol</button>';
     return h + '</div>';
   }
@@ -2279,14 +2341,16 @@ window.BOPlanner = function (ctx) {
   }
   function topTier(af, ilvl) { const i = af.Tiers.findIndex(t => t.ILvl <= ilvl); return i < 0 ? af.Tiers.length - 1 : i; }
   function done(what) {
-    if (ctx.testChangesEnabled()) ctx.testChanged(ctx.current(), what || {});
-    else ctx.changed(ctx.current(), what || {});
+    const ch = ctx.current();
+    if (ch.plan) ctx.changed(ch, what || {});
+    else ctx.edited(ch, what || {});
     render();
   }
 
   function onChange(e) {
-    const t = e.target, f = t.dataset.f, ch = ctx.current();
-    if (!ch || (!ch.plan && !ctx.testChangesEnabled()) || !f) return;
+    const t = e.target, f = t.dataset.f;
+    if (!ctx.current() || !f) return;
+    const ch = ctx.editable();
     const row = t.closest('[data-skill]'), skill = row && row.dataset.skill;
     const v = t.value;
     switch (f) {
@@ -2418,8 +2482,9 @@ window.BOPlanner = function (ctx) {
   }
   async function onClick(e) {
     const b = e.target.closest('[data-act]'); if (!b) return;
-    const act = b.dataset.act, ch = ctx.current();
-    if (!ch || (!ch.plan && !ctx.testChangesEnabled())) return;
+    const act = b.dataset.act;
+    if (!ctx.current()) return;
+    const ch = ctx.editable();
     if (act === 'dnode') {
       const r = dToggle(ch, b.dataset.id);
       if (!r.nodes) { status = r.msg; return render(); }
@@ -4182,7 +4247,8 @@ window.BOStartApp = function () {
   const buildSettings = document.querySelector('.build-settings');
   const compactSettings = window.matchMedia('(max-width: 1199px)');
   let settingsManuallyToggled = false;
-  let testChangesEnabled = false, testChangesSource = null, testChangesSkill = null;
+  // The Build tab edits a full copy of a loaded character (saves are never written); the tree tab only copies shallowly.
+  let buildCopy = null;
   buildSettings.querySelector('summary').addEventListener('click', () => { settingsManuallyToggled = true; });
   const syncSettingsToViewport = () => {
     if (!settingsManuallyToggled) buildSettings.open = document.body.classList.contains('dashboard-view') || document.body.classList.contains('support-page') || !compactSettings.matches;
@@ -4249,7 +4315,7 @@ window.BOStartApp = function () {
 
   function selectChar(id) {
     const ch = CHARS.find(c => c.id === id) || CHARS[0];
-    testChangesEnabled = false; testChangesSource = null; testChangesSkill = null;
+    buildCopy = null;
     document.body.classList.remove('landing-view');
     st.ch = ch; st.chOrig = ch; st.pinned = null; stopSearch(); st.opt = null; treeReset();
     if (!ch) return;
@@ -4335,29 +4401,26 @@ window.BOStartApp = function () {
     if (what.skills && st.skill) { st.gemLevel = null; $('#gemLevel').value = ''; resetSupports(); }
     render();
   }
-  function testBuildChanged(ch, what) {
+  function buildEdited(ch, what) {
     st.ch = ch; st.pinned = null; stopSearch(); st.opt = null; T.scores = new Map();
     fillSkills(ch);
     if (what.select) { selectSkill(what.select); return; }
     if (what.skills && st.skill) { st.gemLevel = null; $('#gemLevel').value = ''; resetSupports(); }
     render();
   }
-  function setTestChanges(enabled) {
-    if (enabled === testChangesEnabled || !st.chOrig || st.chOrig.plan) return;
-    if (enabled) {
-      testChangesSource = st.ch;
-      testChangesSkill = st.skill;
-      st.ch = JSON.parse(JSON.stringify(st.ch));
-      testChangesEnabled = true;
-    } else {
-      st.ch = testChangesSource || st.chOrig;
-      testChangesSource = null;
-      testChangesEnabled = false;
-      const { skills, pickable } = fillSkills(st.ch);
-      if (!skills.some(s => s.id === testChangesSkill)) testChangesSkill = (pickable[0] || skills[0] || {}).id;
-      selectSkill(testChangesSkill);
-      testChangesSkill = null;
-    }
+  // Loaded characters: edits go to a full copy, made before the first one.
+  function buildEditable() {
+    if (!st.ch || st.ch.plan) return st.ch;
+    if (st.ch !== buildCopy) st.ch = buildCopy = JSON.parse(JSON.stringify(st.ch));
+    return st.ch;
+  }
+  // Back to the character as loaded (gear, skills and tree edits all go).
+  function resetToSave() {
+    if (!st.chOrig || st.chOrig.plan) return;
+    const skill = st.skill;
+    st.ch = st.chOrig; buildCopy = null; st.pinned = null; stopSearch(); st.opt = null; T.scores = new Map();
+    const { skills, pickable } = fillSkills(st.ch);
+    selectSkill(skills.some(s => s.id === skill) ? skill : (pickable[0] || skills[0] || {}).id);
     if (planner) planner.render();
     render();
   }
@@ -5984,18 +6047,19 @@ window.BOStartApp = function () {
   // The Build tab (planner.js).
   planner = window.BOPlanner({
     GD, S, $, esc, confirm: confirmInPage,
-    current: () => testChangesEnabled ? st.ch : st.chOrig || st.ch, workingCopy: () => st.ch,
-    testChangesEnabled: () => testChangesEnabled,
+    current: () => st.ch, workingCopy: () => st.ch,
+    editable: buildEditable,
+    isEdited: () => !!st.ch && !st.ch.plan && st.ch !== st.chOrig,
     changed: planChanged,
-    testChanged: testBuildChanged,
+    edited: buildEdited,
     add: p => { addChars([p], 'plan', p.id); },
     remove: ch => {
       CHARS = CHARS.filter(c => c !== ch); keepChars(); fillChars((CHARS[0] || {}).id);
       if (CHARS.length) selectChar(CHARS[0].id); else { st.ch = st.chOrig = null; render(); planner.render(); }
     },
   });
-  $('#buildPane').addEventListener('change', e => {
-    if (e.target && e.target.id === 'testChangesToggle') setTestChanges(e.target.checked);
+  $('#buildPane').addEventListener('click', e => {
+    if (e.target && e.target.id === 'buildResetSave') resetToSave();
   });
   // Welcome banner buttons: the same actions as the toolbar's.
   document.querySelectorAll('[data-hero]').forEach(b => b.addEventListener('click', async () => {

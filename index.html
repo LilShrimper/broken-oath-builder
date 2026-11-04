@@ -953,6 +953,63 @@ body:not(.build-page) .build-subtabs { display: none !important; }
 .site-version a { color: var(--bad); }
 .nav #shareLinkBtn { grid-column: 1 / -1; }
 @media (max-width: 760px) { .site-version { max-width: 120px; text-align: right; } }
+/* Item Compare tab */
+body.compare-page .layout { grid-template-columns: minmax(0, 1fr); }
+body.compare-page #controls { display: none; }
+.cmp-intro .eyebrow { color: var(--dashboard-gold); font-size: 10px; font-weight: 700; letter-spacing: .16em; }
+.cmp-intro h2 { display: block; margin: 3px 0 5px; font: 600 26px/1.2 Georgia, "Times New Roman", serif; }
+.cmp-intro p { margin: 0; color: var(--muted); }
+.cmp-pick .pl-row { margin: 0; }
+.cmp-pick .pl-status { margin: 8px 0 0; }
+.cmp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 14px; align-items: start; }
+.cmp-side h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cmp-side-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.cmp-tip.pl-tip { position: static; max-width: none; margin: 0 0 10px; box-shadow: none; pointer-events: auto; }
+.compare-pane .pl-gear-grid { grid-template-columns: minmax(0, 1fr); }
+.compare-pane .pl-item > summary { cursor: default; list-style: none; }
+.compare-pane .pl-item > summary::-webkit-details-marker { display: none; }
+.cmp-drop { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; padding: 14px; border: 1.5px dashed color-mix(in srgb, var(--dashboard-gold) 50%, var(--line)); border-radius: 10px; background: color-mix(in srgb, var(--dashboard-gold) 5%, transparent); text-align: center; cursor: pointer; }
+.cmp-drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cmp-drop span { color: var(--muted); font-size: 12.5px; }
+.cmp-drop small { color: var(--faint); font-size: 11px; }
+.linkish { color: var(--accent); text-decoration: underline; cursor: pointer; }
+.cmp-readout { margin-bottom: 10px; font-size: 12.5px; }
+.cmp-readout summary { cursor: pointer; }
+.cmp-readout ul { margin: 6px 0; padding-left: 18px; }
+.cmp-readout li.good { color: var(--text); }
+.cmp-readout li.good::marker { color: var(--good); }
+.cmp-readout li.bad { color: var(--bad); }
+.compare-pane .up { color: var(--good); } .compare-pane .down { color: var(--bad); }
+.cmp-lines td { font-size: 12.5px; vertical-align: top; }
+.cmp-lines th:nth-child(-n+2), .cmp-lines td:nth-child(-n+2) { text-align: left; }
+.cmp-lines td:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cmp-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.cmp-actions .hint { flex: 1 1 260px; margin: 0; }
+/* Five main tabs: on phones they wrap to two rows instead of running off the screen */
+@media (max-width: 760px) {
+  .view-bar .main-tabs { flex-wrap: wrap; }
+  .view-bar .main-tabs .tab { flex: 1 1 calc(33.333% - 4px); }
+}
+/* Item Compare: slot buttons, the winning item */
+.cmp-pick-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 16px; margin-bottom: 10px; }
+.cmp-pick-head h2 { margin: 0; }
+.cmp-skill { flex: 0 1 300px; margin: 0; }
+.cmp-pick h3 { margin: 12px 0 6px; }
+.cmp-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.cmp-slot { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.cmp-slot:hover { border-color: color-mix(in srgb, var(--dashboard-gold) 55%, var(--line)); }
+.cmp-slot:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cmp-slot.on { border-color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 12%, var(--panel-2)); box-shadow: inset 0 -2px 0 var(--dashboard-gold); }
+.cmp-slot-name { color: var(--faint); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.cmp-slot-item { max-width: 100%; overflow: hidden; font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-slot.unique .cmp-slot-item { color: var(--dashboard-gold); }
+.cmp-slot.empty .cmp-slot-item { color: var(--faint); font-style: italic; }
+.cmp-side.cmp-win { border-color: var(--good); box-shadow: 0 0 0 1px var(--good), var(--shadow); background: color-mix(in srgb, var(--good) 6%, var(--panel)); }
+.cmp-badge { padding: 2px 9px; border-radius: 999px; background: var(--good); color: #06281a; font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+:root[data-theme="light"] .cmp-badge { color: #fff; }
+.cmp-side .cmp-actions { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+@media (max-width: 520px) { .cmp-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cmp-skill { flex: 1 1 100%; } }
+.pl-nobox { width: 72px; flex: none; } /* fixed unique lines line up with the ones that have a number box */
 
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
@@ -1024,6 +1081,9 @@ body:not(.build-page) .build-subtabs { display: none !important; }
       </button>
       <button class="tab" type="button" role="tab" data-tab="supports" aria-selected="false" aria-label="Support Gem Simulator">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 9l-8 12L4 9zM4 9h16M9 9l3 12 3-12"/></svg><span>Support Gem Simulator</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="compare" aria-selected="false" aria-label="Item Compare">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4"/></svg><span>Item Compare</span>
       </button>
     </nav>
     <nav class="tabs build-subtabs" id="buildSubtabs" role="tablist" aria-label="Build setup" hidden>
@@ -1241,6 +1301,7 @@ body:not(.build-page) .build-subtabs { display: none !important; }
       <div class="empty" id="emptyState">Pick a character to start. Use <b>Load saves folder</b> and pick your SaveGames folder to load every character at once.</div>
     </section>
     <section class="build-pane" id="buildPane" hidden></section>
+    <section class="build-pane compare-pane" id="comparePane" hidden></section>
     <section class="code-pane" id="codePane" hidden>
       <div class="code-intro">
         <div class="eyebrow">IMPORT A LOADOUT</div>
@@ -1327,7 +1388,7 @@ body:not(.build-page) .build-subtabs { display: none !important; }
 <script>
 window.GD = null;
 window.CHARS = [];
-window.SITE_VERSION = {"v":70,"at":"2026-11-04T20:54:55.620Z"};
+window.SITE_VERSION = {"v":71,"at":"2026-11-04T21:41:33.045Z"};
 window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"aegis_N":0,"aegis_N_D":1,"aegis_S":2,"aegis_S_D":3,"affliction_N":4,"affliction_N_D":5,"affliction_S":6,"affliction_S_D":7,"anvil_oath_N":8,"anvil_oath_N_D":9,"anvil_oath_S":10,"anvil_oath_S_D":11,"area_N":12,"area_N_D":13,"area_S":14,"area_S_D":15,"armour_N":16,"armour_N_D":17,"armour_S":18,"armour_S_D":19,"artillery_N":20,"artillery_N_D":21,"artillery_S":22,"artillery_S_D":23,"attack_N":24,"attack_N_D":25,"attack_S":26,"attack_S_D":27,"blightword_N":28,"blightword_N_D":29,"bone_N":30,"bone_N_D":31,"bone_S":32,"bone_S_D":33,"bone_choir_N":34,"bone_choir_N_D":35,"bone_choir_S":36,"bone_choir_S_D":37,"bow_N":38,"bow_N_D":39,"bow_S":40,"bow_S_D":41,"bulwark_N":42,"bulwark_N_D":43,"bulwark_S":44,"bulwark_S_D":45,"carrion_hunt_N":46,"carrion_hunt_N_D":47,"carrion_hunt_S":48,"carrion_hunt_S_D":49,"chain_N":50,"chain_N_D":51,"chain_S":52,"chain_S_D":53,"channel_N":54,"channel_N_D":55,"channel_S":56,"channel_S_D":57,"cleave_N":58,"cleave_N_D":59,"cleave_S":60,"cleave_S_D":61,"cold_N":62,"cold_N_D":63,"cold_S":64,"cold_S_D":65,"conduit_N":66,"conduit_N_D":67,"conduit_S":68,"conduit_S_D":69,"crest_Mage":70,"crest_Mage_D":71,"crest_Necromancer":72,"crest_Necromancer_D":73,"crest_Paladin":74,"crest_Paladin_D":75,"crest_Ranger":76,"crest_Ranger_D":77,"crest_Samurai":78,"crest_Samurai_D":79,"crest_Warrior":80,"crest_Warrior_D":81,"crit_N":82,"crit_N_D":83,"crit_S":84,"crit_S_D":85,"crusade_N":86,"crusade_N_D":87,"crusade_S":88,"crusade_S_D":89,"dawn_N":90,"dawn_N_D":91,"dawn_S":92,"dawn_S_D":93,"dawnstorm_N":94,"dawnstorm_N_D":95,"dawnstorm_S":96,"dawnstorm_S_D":97,"dawnsworn_N":98,"dawnsworn_N_D":99,"deadeye_N":100,"deadeye_N_D":101,"deadeye_S":102,"deadeye_S_D":103,"deathknell_N":104,"deathknell_N_D":105,"deathknell_S":106,"deathknell_S_D":107,"edge_N":108,"edge_N_D":109,"edge_S":110,"edge_S_D":111,"elemental_N":112,"elemental_N_D":113,"elemental_S":114,"elemental_S_D":115,"energy_shield_N":116,"energy_shield_N_D":117,"energy_shield_S":118,"energy_shield_S_D":119,"evasion_N":120,"evasion_N_D":121,"evasion_S":122,"evasion_S_D":123,"faith_N":124,"faith_N_D":125,"faith_S":126,"faith_S_D":127,"falling_leaf_N":128,"falling_leaf_N_D":129,"falling_leaf_S":130,"falling_leaf_S_D":131,"fire_N":132,"fire_N_D":133,"fire_S":134,"fire_S_D":135,"fury_N":136,"fury_N_D":137,"fury_S":138,"fury_S_D":139,"grave_N":140,"grave_N_D":141,"grave_S":142,"grave_S_D":143,"holy_N":144,"holy_N_D":145,"holy_S":146,"holy_S_D":147,"iron_tempest_N":148,"iron_tempest_N_D":149,"iron_tempest_S":150,"iron_tempest_S_D":151,"ki_N":152,"ki_N_D":153,"ki_S":154,"ki_S_D":155,"ks_aegis_rebuke":156,"ks_aegis_rebuke_D":157,"ks_ancestral_host":158,"ks_ancestral_host_D":159,"ks_blood_magic":160,"ks_blood_magic_D":161,"ks_cascade_of_ruin":162,"ks_cascade_of_ruin_D":163,"ks_chain_reaction":164,"ks_chain_reaction_D":165,"ks_choir_of_bones":166,"ks_choir_of_bones_D":167,"ks_comet_step":168,"ks_comet_step_D":169,"ks_dawnstorm_covenant":170,"ks_dawnstorm_covenant_D":171,"ks_eagle_eye":172,"ks_eagle_eye_D":173,"ks_earthbreaker_stride":174,"ks_earthbreaker_stride_D":175,"ks_elemental_overload":176,"ks_elemental_overload_D":177,"ks_forked_sky":178,"ks_forked_sky_D":179,"ks_glass_cannon":180,"ks_glass_cannon_D":181,"ks_hammer_of_judgement":182,"ks_hammer_of_judgement_D":183,"ks_hollow_covenant":184,"ks_hollow_covenant_D":185,"ks_iron_resolve":186,"ks_iron_resolve_D":187,"ks_lord_of_the_dead":188,"ks_lord_of_the_dead_D":189,"ks_oath_of_a_thousand_cuts":190,"ks_oath_of_a_thousand_cuts_D":191,"ks_oath_of_many_fires":192,"ks_oath_of_many_fires_D":193,"ks_oath_of_slow_ruin":194,"ks_oath_of_slow_ruin_D":195,"ks_oath_of_the_living_storm":196,"ks_oath_of_the_living_storm_D":197,"ks_oath_of_the_long_night":198,"ks_oath_of_the_long_night_D":199,"ks_oath_of_the_pyre":200,"ks_oath_of_the_pyre_D":201,"ks_oath_of_the_red_harvest":202,"ks_oath_of_the_red_harvest_D":203,"ks_oath_of_the_snare":204,"ks_oath_of_the_snare_D":205,"ks_oath_of_the_white_silence":206,"ks_oath_of_the_white_silence_D":207,"ks_one_breath":208,"ks_one_breath_D":209,"ks_pyre_covenant":210,"ks_pyre_covenant_D":211,"ks_r59_hold_k3":212,"ks_r59_hold_k3_D":213,"ks_r59_mountain_k3":214,"ks_r59_mountain_k3_D":215,"ks_r59_sure_strike_k3":216,"ks_r59_sure_strike_k3_D":217,"ks_r74_bone_sovereign":218,"ks_r74_bone_sovereign_D":219,"ks_radiant_crusade":220,"ks_radiant_crusade_D":221,"ks_rotting_gospel":222,"ks_rotting_gospel_D":223,"ks_sanctified":224,"ks_sanctified_D":225,"ks_siege_pact":226,"ks_siege_pact_D":227,"ks_spellblade":228,"ks_spellblade_D":229,"ks_tempest_vow":230,"ks_tempest_vow_D":231,"ks_the_hunting_dead":232,"ks_the_hunting_dead_D":233,"ks_thousand_hands":234,"ks_thousand_hands_D":235,"ks_twice_fallen_sky":236,"ks_twice_fallen_sky_D":237,"ks_unbroken_wall":238,"ks_unbroken_wall_D":239,"ks_wake_of_spells":240,"ks_wake_of_spells_D":241,"ks_way_of_the_blade":242,"ks_way_of_the_blade_D":243,"ks_wind_and_steel_oath":244,"ks_wind_and_steel_oath_D":245,"leech_N":246,"leech_N_D":247,"leech_S":248,"leech_S_D":249,"lichfire_N":250,"lichfire_N_D":251,"lichfire_S":252,"lichfire_S_D":253,"life_N":254,"life_N_D":255,"life_S":256,"life_S_D":257,"life_big_N":258,"life_big_N_D":259,"life_big_S":260,"life_big_S_D":261,"lightning_N":262,"lightning_N_D":263,"lightning_S":264,"lightning_S_D":265,"lingering_N":266,"lingering_N_D":267,"lingering_S":268,"lingering_S_D":269,"malediction_N":270,"malediction_N_D":271,"malediction_S":272,"malediction_S_D":273,"mana_N":274,"mana_N_D":275,"mana_S":276,"mana_S_D":277,"manasteal_N":278,"manasteal_N_D":279,"manasteal_S":280,"manasteal_S_D":281,"melee_N":282,"melee_N_D":283,"melee_S":284,"melee_S_D":285,"mirrorblade_N":286,"mirrorblade_N_D":287,"mirrorblade_S":288,"mirrorblade_S_D":289,"orbit_N":290,"orbit_N_D":291,"orbit_S":292,"orbit_S_D":293,"ossuary_N":294,"ossuary_N_D":295,"ossuary_S":296,"ossuary_S_D":297,"overcharge_N":298,"overcharge_N_D":299,"overcharge_S":300,"overcharge_S_D":301,"permafrost_N":302,"permafrost_N_D":303,"permafrost_S":304,"permafrost_S_D":305,"plague_quiver_N":306,"plague_quiver_N_D":307,"plague_quiver_S":308,"plague_quiver_S_D":309,"poison_N":310,"poison_N_D":311,"poison_S":312,"poison_S_D":313,"portrait_Mage":314,"portrait_Mage_D":315,"portrait_Necromancer":316,"portrait_Necromancer_D":317,"portrait_Paladin":318,"portrait_Paladin_D":319,"portrait_Ranger":320,"portrait_Ranger_D":321,"portrait_Samurai":322,"portrait_Samurai_D":323,"portrait_Warrior":324,"portrait_Warrior_D":325,"projectile_N":326,"projectile_N_D":327,"projectile_S":328,"projectile_S_D":329,"radiance_N":330,"radiance_N_D":331,"radiance_S":332,"radiance_S_D":333,"radiant_ward_N":334,"radiant_ward_N_D":335,"radiant_ward_S":336,"radiant_ward_S_D":337,"rain_N":338,"rain_N_D":339,"rain_S":340,"rain_S_D":341,"reaper_N":342,"reaper_N_D":343,"reaper_S":344,"reaper_S_D":345,"regrowth_N":346,"regrowth_N_D":347,"regrowth_S":348,"regrowth_S_D":349,"resist_N":350,"resist_N_D":351,"resist_S":352,"resist_S_D":353,"shatter_N":354,"shatter_N_D":355,"shatter_S":356,"shatter_S_D":357,"siege_N":358,"siege_N_D":359,"siege_S":360,"siege_S_D":361,"sigil_N":362,"sigil_N_D":363,"sigil_S":364,"sigil_S_D":365,"slam_N":366,"slam_N_D":367,"slam_S":368,"slam_S_D":369,"souls_N":370,"souls_N_D":371,"souls_S":372,"souls_S_D":373,"speed_N":374,"speed_N_D":375,"speed_S":376,"speed_S_D":377,"spell_N":378,"spell_N_D":379,"spell_S":380,"spell_S_D":381,"spell_crit_N":382,"spell_crit_N_D":383,"spell_crit_S":384,"spell_crit_S_D":385,"spellsword_N":386,"spellsword_N_D":387,"spellsword_S":388,"spellsword_S_D":389,"starfall_N":390,"starfall_N_D":391,"starfall_S":392,"starfall_S_D":393,"stillness_N":394,"stillness_N_D":395,"stillness_S":396,"stillness_S_D":397,"swift_N":398,"swift_N_D":399,"swift_S":400,"swift_S_D":401,"tether_N":402,"tether_N_D":403,"tether_S":404,"tether_S_D":405,"trap_N":406,"trap_N_D":407,"trap_S":408,"trap_S_D":409,"two_storms_N":410,"two_storms_N_D":411,"two_storms_S":412,"two_storms_S_D":413,"vigil_N":414,"vigil_N_D":415,"vigil_S":416,"vigil_S_D":417,"voidbound_N":418,"voidbound_N_D":419,"voidbound_S":420,"voidbound_S_D":421,"vowkeeper_N":422,"vowkeeper_N_D":423,"vowkeeper_S":424,"vowkeeper_S_D":425,"warcaller_N":426,"warcaller_N_D":427,"warcaller_S":428,"warcaller_S_D":429,"warpath_N":430,"warpath_N_D":431,"warpath_S":432,"warpath_S_D":433,"waygate_S":434,"waygate_S_D":435,"wellspring_N":436,"wellspring_N_D":437,"wellspring_S":438,"wellspring_S_D":439,"wind_and_steel_N":440,"wind_and_steel_N_D":441,"wind_and_steel_S":442,"wind_and_steel_S_D":443,"windstep_N":444,"windstep_N_D":445,"windstep_S":446,"windstep_S_D":447,"zeal_N":448,"zeal_N_D":449,"zeal_S":450,"zeal_S_D":451},"dragons":"icons/dragons.webp","dragonOrder":["Fire","Lightning","Cold","Arcane","Poison","Physical"]};
 </script>
 <script>
@@ -2002,6 +2063,222 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
 
 </script>
 <script>
+// Reads an item from its tooltip: text from a screenshot (read in this browser with Tesseract) or pasted text.
+// Each line is matched against the game's own stat text (Items/stat_text.json, the same lines the sim prints),
+// with numbers taken out, so "+45 to maximum Life" and "+51 to maximum Life" are the same line. Lines that match
+// several affixes ("+# to maximum Life" is on rings, chests and idols) go to the one the base can roll whose tier
+// range holds the number.
+// Used by the Item Compare tab (app.js): BOItemRead.parse(GD, S, text, { slot, base, level }) and
+// BOItemRead.readImage(blob, onStatus) (browser only).
+(function (root) {
+  'use strict';
+  const lc = s => String(s == null ? '' : s).toLowerCase();
+  const V1 = 111111, V2 = 222222; // stand-ins for {v} and {v2} when a line's text is made
+  const baseSlot = slot => /^Ring\d$/.test(slot) ? 'Ring' : slot;
+
+  // OCR slips inside numbers: 4O -> 40, l5 -> 15.
+  const fixDigits = s => s.replace(/(\d)[oO]|[oO](?=\d)/g, (m, d) => d != null ? d + '0' : '0').replace(/(\d)[lI|]|[lI|](?=\d)/g, (m, d) => d != null ? d + '1' : '1');
+  // Letters only, each number one #: "+45% to Fire Resistance" -> "# to fire resistance".
+  const keyOf = s => lc(s).replace(/['’`]/g, '').replace(/\d+(?:[.,]\d+)?/g, ' # ').replace(/[^a-z#]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const numbers = s => (s.match(/\d+(?:[.,]\d+)?/g) || []).map(n => +(/,\d{3}$/.test(n) ? n.replace(',', '') : n.replace(',', '.')));
+  // A line's text made with the stand-ins: its key, and what each number in it is (v, v2 or a fixed number).
+  function template(text) {
+    return { text, key: keyOf(text), slots: (String(text).match(/\d+(?:\.\d+)?/g) || []).map(n => n === String(V1) ? 'v' : n === String(V2) ? 'v2' : null), pctAfterV: new RegExp(V1 + '%').test(text) };
+  }
+  function lev(a, b) {
+    if (a === b) return 0;
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+  const likeness = (a, b) => 1 - lev(a, b) / Math.max(a.length, b.length, 1);
+  const MATCH = 0.8; // how alike a line must be to a stat text (1 = the same letters)
+
+  function modTpl(S, GD, m) { return template(S.modText(GD, { stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: V1, v2: V2 })); }
+  function uniqueTpl(S, GD, um) { return um.Text ? template(um.Text.replace(/\{(0|v)\}/g, V1).replace(/\{1\}/g, V2)) : modTpl(S, GD, um.Mod); }
+  const affixOk = (af, base) => { const tags = new Set((base && base.Tags) || []); return (af.BaseTags || []).some(t => tags.has(t)) && !(af.ExcludeTags || []).some(t => tags.has(t)) && (af.Tiers || []).length; };
+  // The tier whose range holds the numbers, else the closest one.
+  function tierFor(af, v, v2) {
+    let best = 0, gap = Infinity;
+    af.Tiers.forEach((t, i) => {
+      const out = (x, lo, hi) => lo == null || x == null ? 0 : x < lo ? lo - x : x > hi ? x - hi : 0;
+      const g = out(v, t.Min, t.Max) + out(v2, t.Min2, t.Max2);
+      if (g < gap) { gap = g; best = i; }
+    });
+    return { tier: best, fits: gap === 0 };
+  }
+  // The numbers of an OCR line put in the line's {v} / {v2} places.
+  function values(tpl, line) {
+    let nums = numbers(line);
+    // "%" is often read as "96": "+1596 to Fire Resistance".
+    if (tpl.pctAfterV && !/%/.test(line)) nums = nums.map((n, i) => i === 0 && n >= 96 && /96$/.test(String(n)) ? +String(n).slice(0, -2) || n : n);
+    const out = { v: 0, v2: 0 };
+    if (nums.length === tpl.slots.length) tpl.slots.forEach((s, i) => { if (s) out[s] = nums[i]; });
+    else { out.v = nums[0] || 0; out.v2 = nums[1] || 0; }
+    return out;
+  }
+  // The best-matching name in a list ({ Name }), looked for in each line and in the whole text.
+  function findName(list, lines, all) {
+    let best = null, score = 0;
+    for (const x of list) {
+      const k = keyOf(x.Name); if (k.length < 3) continue;
+      let s = (' ' + all + ' ').includes(' ' + k + ' ') ? 1 + k.length / 100 : 0;
+      if (!s) for (const l of lines) { const lk = keyOf(l); if (Math.abs(lk.length - k.length) <= 4) s = Math.max(s, likeness(lk, k)); }
+      if (s >= 0.86 && s > score) { best = x; score = s; }
+    }
+    return best;
+  }
+
+  // text: the tooltip's lines. o.slot: the slot it goes in (picks bases, uniques and affixes); o.base: a base to
+  // fall back on when no base name is found; o.level: the item level when the text has none.
+  // Returns { item, lines: [{ text, kind, label }], unread: [text], baseFound, notes }.
+  function parse(GD, S, text, o) {
+    o = o || {};
+    const slot = o.slot || '';
+    const raw = String(text || '').replace(/\r/g, '').split('\n').map(l => fixDigits(l.trim())).filter(l => /[a-z]/i.test(l));
+    const all = keyOf(raw.join(' '));
+    // The off hand also holds one-handed weapons (dual wielding).
+    const fitsSlot = b => !slot || b.Slot === baseSlot(slot) || (slot === 'OffHand' && b.Slot === 'MainHand' && !b.bTwoHanded && !(b.Tags || []).includes('TwoHand'));
+    const bases = Object.values(GD.bases).filter(fitsSlot);
+    const uniques = Object.values(GD.uniques).filter(u => { const b = GD.bases[lc(u.BaseId)]; return b && fitsSlot(b); });
+    const notes = [];
+    const u = findName(uniques, raw, all);
+    let base = u ? GD.bases[lc(u.BaseId)] : findName(bases, raw, all);
+    const baseFound = !!base;
+    if (!base) base = GD.bases[lc(o.base)] || bases.sort((a, b) => (a.Level || 0) - (b.Level || 0))[0] || null;
+    const ilvlM = raw.join('\n').match(/item\s*level\s*[:.]?\s*(\d+)/i);
+
+    // What a line can be: an implicit of the base, a unique's line, or an affix this base can roll.
+    const cands = [];
+    for (const m of (base && base.Implicits) || []) cands.push({ kind: 'implicit', tpl: modTpl(S, GD, m), label: 'implicit' });
+    if (u) u.Mods.forEach((um, i) => { if (um.Mod) cands.push({ kind: 'unique', i, um, tpl: uniqueTpl(S, GD, um), label: u.Name }); });
+    else for (const af of Object.values(GD.affixes)) if (affixOk(af, base)) cands.push({ kind: 'affix', af, tpl: modTpl(S, GD, af.Mod), label: af.Type });
+
+    const used = new Set(), groups = new Set(), lines = [], unread = [];
+    const affixes = [], uniqueVals = {};
+    const best = (k, line) => {
+      let top = null, score = 0;
+      for (const c of cands) {
+        if (used.has(c)) continue;
+        let s = likeness(k, c.tpl.key);
+        if (c.kind === 'affix' && groups.has(c.af.Group)) s -= 0.3; // one affix per group
+        if (s > score) { top = c; score = s; }
+      }
+      return { c: top, score };
+    };
+    for (let i = 0; i < raw.length; i++) {
+      const line = raw[i], k = keyOf(line);
+      if (/^(item\s*level|requires?|level\s*\d)/i.test(line)) { lines.push({ text: line, kind: 'info' }); continue; }
+      if ((u && likeness(k, keyOf(u.Name)) > 0.86) || (base && likeness(k, keyOf(base.Name)) > 0.86)) { lines.push({ text: line, kind: 'name' }); continue; }
+      let m = best(k, line), text = line;
+      // A long line the tooltip wrapped onto two.
+      if (i + 1 < raw.length) {
+        const j = best(keyOf(line + ' ' + raw[i + 1]), line + ' ' + raw[i + 1]);
+        if (j.c && j.score >= MATCH && j.score > m.score + 0.05) { m = j; text = line + ' ' + raw[i + 1]; i++; }
+      }
+      if (!m.c || m.score < MATCH) {
+        // A stat line has a number; the rest is the item's name, its type or flavour text.
+        const stat = /\d/.test(line) && keyOf(line).replace(/#/g, '').trim().length >= 6;
+        lines.push({ text: line, kind: stat ? 'unread' : 'name' });
+        if (stat) unread.push(line);
+        continue;
+      }
+      // The same text on several affixes (or an implicit): take the one the numbers fit.
+      let c = m.c;
+      const val = values(c.tpl, text);
+      if (c.kind === 'affix') {
+        const same = cands.filter(x => x.kind === 'affix' && !used.has(x) && !groups.has(x.af.Group) && x.tpl.key === c.tpl.key);
+        const fit = same.find(x => tierFor(x.af, val.v, x.af.Tiers[0].Min2 != null ? val.v2 : null).fits);
+        if (fit) c = fit;
+      }
+      used.add(c);
+      if (c.kind === 'implicit') { lines.push({ text, kind: 'implicit', label: 'implicit (comes with the base)' }); continue; }
+      if (c.kind === 'unique') {
+        // Fixed lines keep their number; a line that only rolls below zero ("-20 to -15% to Fire Resistance") is negative.
+        const um = c.um, fixed = (lo, hi, x) => lo != null && lo === hi ? lo : hi != null && hi < 0 ? -Math.abs(x) : x;
+        uniqueVals[c.i] = { v: fixed(um.Min, um.Max, val.v), v2: fixed(um.Min2, um.Max2, val.v2) };
+        lines.push({ text, kind: 'unique', label: 'unique line' }); continue;
+      }
+      groups.add(c.af.Group);
+      if (c.af.Tiers.every(t => t.Max < 0)) { val.v = -Math.abs(val.v); val.v2 = -Math.abs(val.v2); }
+      const two = c.af.Tiers[0].Min2 != null, t = tierFor(c.af, val.v, two ? val.v2 : null);
+      affixes.push({ id: c.af.Id, tier: t.tier, v: val.v, v2: two ? val.v2 : 0 });
+      lines.push({ text, kind: 'affix', label: c.af.Type + ' T' + (t.tier + 1) + (t.fits ? '' : ' (number outside its tiers: check it)') });
+    }
+
+    let item;
+    const level = ilvlM ? Math.max(1, Math.min(100, +ilvlM[1])) : null;
+    if (u) {
+      const mid = (lo, hi) => lo == null ? 0 : Math.round((lo + hi) / 2 * 100) / 100;
+      const aff = u.Mods.map((um, i) => um.Mod ? { id: 'unique:' + i, tier: 0, v: uniqueVals[i] ? uniqueVals[i].v : mid(um.Min, um.Max), v2: uniqueVals[i] ? uniqueVals[i].v2 : mid(um.Min2, um.Max2) } : null).filter(Boolean);
+      const missing = u.Mods.filter((um, i) => um.Mod && !uniqueVals[i] && um.Min != null && um.Min !== um.Max).length;
+      if (missing) notes.push(missing + ' of ' + u.Name + '\'s lines were not read: they are set to the middle of their range.');
+      item = { slot, base: u.BaseId, rarity: 'Unique', unique: u.Id, name: u.Name, level: level || o.level || 1, affixes: aff, runes: [] };
+    } else {
+      const count = t => affixes.filter(a => GD.affixes[lc(a.id)].Type === t).length;
+      const rarity = /\brare\b/i.test(raw.join(' ')) ? 'Rare' : /\bmagic\b/i.test(raw.join(' ')) ? 'Magic' : !affixes.length ? 'Normal' : count('Prefix') > 1 || count('Suffix') > 1 ? 'Rare' : 'Magic';
+      // No item level on the screenshot: the character's, raised to what the rolled tiers need.
+      const need = Math.max(1, ...affixes.map(a => (GD.affixes[lc(a.id)].Tiers[a.tier] || {}).ILvl || 1));
+      item = { slot, base: base ? base.Id : '', rarity, unique: 'None', name: '', level: level || Math.max(o.level || 1, need), affixes, runes: [] };
+    }
+    if (!baseFound && base) notes.push('No base name found: ' + base.Name + ' is used. Pick the right base below.');
+    return { item: base ? item : null, lines, unread, baseFound, notes };
+  }
+
+  // ---------- screenshot reading (browser) ----------
+  // Tesseract.js runs in this tab (WebAssembly); its script and English data come from jsDelivr the first time.
+  const TESS = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+  let workerP = null;
+  function loadScript(src) {
+    return new Promise((ok, fail) => {
+      if (root.Tesseract) return ok();
+      const s = document.createElement('script'); s.src = src; s.async = true; s.crossOrigin = 'anonymous';
+      s.onload = () => ok(); s.onerror = () => fail(new Error('Could not load the text reader (no internet?).'));
+      document.head.appendChild(s);
+    });
+  }
+  // Game tooltips are light, coloured text on a dark panel: take each pixel's brightest channel (blue text stays
+  // bright), turn it dark-on-light, stretch the contrast, and enlarge small crops.
+  async function prepare(blob) {
+    const bmp = await createImageBitmap(blob);
+    const scale = Math.min(3, Math.max(1, 1400 / Math.max(bmp.width, 1)));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+    const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(bmp, 0, 0, c.width, c.height);
+    const d = x.getImageData(0, 0, c.width, c.height), p = d.data;
+    let sum = 0, lo = 255, hi = 0;
+    const v = new Uint8Array(p.length / 4);
+    for (let i = 0, j = 0; i < p.length; i += 4, j++) { v[j] = Math.max(p[i], p[i + 1], p[i + 2]); sum += v[j]; }
+    const dark = sum / v.length < 128;
+    for (let j = 0; j < v.length; j++) { if (dark) v[j] = 255 - v[j]; if (v[j] < lo) lo = v[j]; if (v[j] > hi) hi = v[j]; }
+    const k = 255 / Math.max(1, hi - lo);
+    for (let i = 0, j = 0; i < p.length; i += 4, j++) { const g = (v[j] - lo) * k; p[i] = p[i + 1] = p[i + 2] = g; p[i + 3] = 255; }
+    x.putImageData(d, 0, 0);
+    return c;
+  }
+  async function readImage(blob, onStatus) {
+    const say = t => { if (onStatus) onStatus(t); };
+    say('Loading the text reader…');
+    await loadScript(TESS);
+    if (!workerP) workerP = root.Tesseract.createWorker('eng', 1, { logger: m => { if (m.status === 'recognizing text') say('Reading the screenshot… ' + Math.round((m.progress || 0) * 100) + '%'); } })
+      .catch(e => { workerP = null; throw e; });
+    const worker = await workerP;
+    say('Reading the screenshot…');
+    const img = await prepare(blob);
+    const { data } = await worker.recognize(img);
+    return data.text || '';
+  }
+
+  const api = { parse, readImage, keyOf, likeness };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.BOItemRead = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
 // Build planner (the Build tab): start a plan from scratch or copy a loaded character into one, then
 // change its level, skills, supports, gear and (on the Skill tree tab) passives, and see the damage.
 // Plans stay in this browser with the loaded characters and travel as a plan code (BOP1.).
@@ -2042,9 +2319,10 @@ window.BOPlanner = function (ctx) {
   };
   // "Oathbreaker (Two-Handed Sword)": weapons and off hands show their type; other slots their base ("Ashen Crown (Silver Circlet)").
   const uniqueLabel = u => { const b = GD.bases[lc(u.BaseId)] || {}; return u.Name + ' (' + (b.TypeName || b.Name || u.BaseId) + ')'; };
-  const uniqueMode = new Set(); // item boxes with "Unique" ticked before a unique is picked
-  const oathwordMode = new Set();
-  const oathwordSelection = new Map();
+  // Item editor state: boxes with "Unique" / "Oathword" ticked before a pick, the Oathword picked, and which boxes
+  // are open. The Build tab has one (K); the Item Compare tab makes its own with newKit(true) (boxes always open).
+  const newKit = open => ({ uniqueMode: new Set(), oathwordMode: new Set(), oathwordSelection: new Map(), openItems: new Set(), open: !!open });
+  const K = newKit();
   const runeList = Object.values(GD.runes).sort(byName);
   function affixesFor(base) {
     const tags = new Set((base && base.Tags) || []);
@@ -2296,13 +2574,13 @@ window.BOPlanner = function (ctx) {
     const n = it.affixes.filter(a => !a.id.startsWith('unique:')).length;
     return esc((u ? u.Name + ' · ' : word ? word.Name + ' · ' : it.rarity + ' ') + (b ? b.Name : it.base)) + (u ? '' : n ? ' · ' + n + ' affix' + (n > 1 ? 'es' : '') : '') + (it.runes.length ? ' · ' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') : '');
   }
-  function itemEditor(it, slot, idx, edit, dis) {
+  function itemEditor(it, slot, idx, edit, dis, k = K) {
     const key = it ? idx : slot; // idols are found by index, other slots by name
-    let h = '<details class="pl-item" data-item="' + esc(key) + '"' + (openItems.has(String(key)) ? ' open' : '') + '><summary><b>' + SLOT_NAME[slot] + '</b> ' + itemSummary(it) + '</summary><div class="pl-item-body">';
+    let h = '<details class="pl-item" data-item="' + esc(key) + '"' + (k.open || k.openItems.has(String(key)) ? ' open' : '') + '><summary><b>' + SLOT_NAME[slot] + '</b> ' + itemSummary(it) + '</summary><div class="pl-item-body">';
     const us = uniquesFor(slot), words = oathwordsFor(slot), currentWord = oathwordForItem(it, slot);
-    const isU = !!us.length && !currentWord && ((it && it.rarity === 'Unique') || uniqueMode.has(String(key)));
-    const isOathword = !isU && !!words.length && (oathwordMode.has(String(key)) || !!currentWord);
-    const selectedWord = oathwordSelection.get(String(key)) || (currentWord && currentWord.Id) || '';
+    const isU = !!us.length && !currentWord && ((it && it.rarity === 'Unique') || k.uniqueMode.has(String(key)));
+    const isOathword = !isU && !!words.length && (k.oathwordMode.has(String(key)) || !!currentWord);
+    const selectedWord = k.oathwordSelection.get(String(key)) || (currentWord && currentWord.Id) || '';
     h += '<div class="pl-row">';
     if (isU) {
       const u = it && GD.uniques[lc(it.unique)];
@@ -2336,8 +2614,20 @@ window.BOPlanner = function (ctx) {
     if (base) for (const m of base.Implicits || []) h += '<div class="meta">Implicit: ' + esc(modLine(m)) + '</div>';
     if (it.rarity === 'Unique') {
       const u = GD.uniques[lc(it.unique)];
-      if (u) h += '<div class="pl-row"><span class="meta">Base: ' + esc((base || {}).Name || it.base) + '</span><label class="field inline" title="Where each line sits between its lowest and highest roll"><span>' + (it.roll == null ? 'Rolls as found' : 'Rolls ' + Math.round(it.roll * 100) + '%') + '</span><input type="range" min="0" max="100" step="5" data-f="roll" value="' + Math.round((it.roll == null ? 0.5 : it.roll) * 100) + '"' + dis + '></label></div>';
-      if (u) h += '<ul class="pl-lines">' + it.affixes.map(a => { const um = u.Mods[+a.id.slice(7)]; return um ? '<li>' + esc(um.Text ? um.Text.replace(/\{(0|v)\}/g, a.v).replace(/\{1\}/g, a.v2).replace(/\+-/g, '-') : modLine(um.Mod, a.v, a.v2)) + '</li>' : ''; }).join('') + '</ul>';
+      if (u) h += '<div class="pl-row"><span class="meta">Base: ' + esc((base || {}).Name || it.base) + '</span></div>';
+      // Each line that rolls in a range gets a box per number (its range beside it); fixed lines are text only.
+      if (u) h += it.affixes.map((a, ai) => {
+        const um = u.Mods[+a.id.slice(7)]; if (!um) return '';
+        const text = esc((um.Text ? um.Text.replace(/\{(0|v)\}/g, a.v).replace(/\{1\}/g, a.v2) : modLine(um.Mod, a.v, a.v2)).replace(/\+-/g, '-'));
+        const rolls = (lo, hi) => lo != null && hi != null && lo !== hi;
+        const box = (f, x, lo, hi) => '<input class="mini" type="number" step="any" data-f="' + f + '" value="' + x + '" min="' + Math.min(lo, hi) + '" max="' + Math.max(lo, hi) + '" title="Rolls ' + lo + ' to ' + hi + '"' + dis + '>';
+        const out = (x, lo, hi) => rolls(lo, hi) && (x < Math.min(lo, hi) || x > Math.max(lo, hi));
+        const r1 = rolls(um.Min, um.Max), r2 = rolls(um.Min2, um.Max2);
+        if (!r1 && !r2) return '<div class="pl-affix"><span class="pl-type"></span><span class="pl-nobox"></span><span class="pl-text">' + text + '</span></div>';
+        const range = (r1 ? um.Min + ' to ' + um.Max : '') + (r1 && r2 ? ' / ' : '') + (r2 ? um.Min2 + ' to ' + um.Max2 : '');
+        return '<div class="pl-affix" data-ai="' + ai + '"><span class="pl-type"></span>' + (r1 ? box('v', a.v, um.Min, um.Max) : '') + (r2 ? box('v2', a.v2, um.Min2, um.Max2) : '') +
+          '<span class="pl-text">' + text + ' <span class="meta">[' + range + ']</span>' + (out(a.v, um.Min, um.Max) || out(a.v2, um.Min2, um.Max2) ? ' <span class="bad">outside its range</span>' : '') + '</span></div>';
+      }).join('');
     } else if (it.rarity !== 'Normal') {
       const all = affixesFor(base), used = new Set(it.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
       const count = t => it.affixes.filter(a => (GD.affixes[lc(a.id)] || {}).Type === t).length;
@@ -2370,7 +2660,6 @@ window.BOPlanner = function (ctx) {
     if (edit) h += '<button class="btn small ghost" type="button" data-act="rmitem">Remove item</button>';
     return h + '</div></details>';
   }
-  const openItems = new Set();
   // Hover tooltip on a closed gear slot: the item's lines, as the Damage tab counts them.
   function itemTip(it, slot) {
     const base = GD.bases[lc(it.base)], u = it.rarity === 'Unique' && GD.uniques[lc(it.unique)], word = oathwordForItem(it, slot);
@@ -2507,46 +2796,51 @@ window.BOPlanner = function (ctx) {
       case 'addsup': if (v) { const s = ensureSocket(ch, skill); if (!s.supports.some(x => lc(x) === lc(v))) s.supports.push(v); } return done({ skills: true });
       case 'conduit': ensureSocket(ch, skill).conduit = v; return done({ skills: true });
     }
-    // gear
+    return gearChange(ch, t, K, done, render);
+  }
+  // One edit in an item box. ch is anything holding items (a character, or the Item Compare tab's own item);
+  // done() after a change, render() to redraw only.
+  function gearChange(ch, t, k, done, render) {
+    const f = t.dataset.f, v = t.value;
     const { it, slot, key } = itemOf(ch, t); if (!slot) return;
-    openItems.add(String(key));
+    k.openItems.add(String(key));
     if (f === 'uniqmode') {
       if (t.checked) {
-        oathwordMode.delete(String(key)); oathwordSelection.delete(String(key));
+        k.oathwordMode.delete(String(key)); k.oathwordSelection.delete(String(key));
         if (oathwordForItem(it, slot)) it.runes = [];
-        uniqueMode.add(String(key));
+        k.uniqueMode.add(String(key));
       } else {
-        uniqueMode.delete(String(key));
+        k.uniqueMode.delete(String(key));
         if (it && it.rarity === 'Unique') Object.assign(it, { rarity: 'Rare', unique: 'None', name: '', affixes: [], roll: undefined });
       }
       return it ? done() : render();
     }
     if (f === 'oathmode') {
       if (t.checked) {
-        uniqueMode.delete(String(key)); oathwordMode.add(String(key));
+        k.uniqueMode.delete(String(key)); k.oathwordMode.add(String(key));
         if (it && it.rarity === 'Unique') Object.assign(it, { rarity: 'Rare', unique: 'None', name: '', affixes: it.affixes.filter(a => !a.id.startsWith('unique:')), roll: undefined });
       } else {
-        oathwordMode.delete(String(key)); oathwordSelection.delete(String(key));
+        k.oathwordMode.delete(String(key)); k.oathwordSelection.delete(String(key));
         if (oathwordForItem(it, slot)) it.runes = [];
       }
       return it ? done() : render();
     }
     if (f === 'oathword') {
       const word = oathwordsFor(slot).find(w => lc(w.Id) === lc(v));
-      if (!word) { oathwordSelection.delete(String(key)); return render(); }
-      oathwordSelection.set(String(key), word.Id);
+      if (!word) { k.oathwordSelection.delete(String(key)); return render(); }
+      k.oathwordSelection.set(String(key), word.Id);
       const base = it && oathwordBases(slot, word).find(b => lc(b.Id) === lc(it.base));
       if (base) { it.runes = word.Runes.slice(); it.unique = 'None'; return done(); }
       return render();
     }
     if (f === 'oathbase') {
-      const word = (GD.runewords || []).find(w => lc(w.Id) === lc(oathwordSelection.get(String(key)) || (oathwordForItem(it, slot) || {}).Id));
+      const word = (GD.runewords || []).find(w => lc(w.Id) === lc(k.oathwordSelection.get(String(key)) || (oathwordForItem(it, slot) || {}).Id));
       const base = word && oathwordBases(slot, word).find(b => lc(b.Id) === lc(v));
       if (!word || !base) return render();
       if (!it) {
         ch.items.push({ slot, base: base.Id, rarity: 'Rare', unique: 'None', name: '', level: ch.level, affixes: [], runes: word.Runes.slice() });
-        openItems.add(String(ch.items.length - 1));
-        oathwordMode.delete(String(key)); oathwordSelection.delete(String(key));
+        k.openItems.add(String(ch.items.length - 1));
+        k.oathwordMode.delete(String(key)); k.oathwordSelection.delete(String(key));
       } else {
         it.base = base.Id;
         if (it.rarity === 'Unique') Object.assign(it, { rarity: 'Rare', unique: 'None', name: '', affixes: [], roll: undefined });
@@ -2556,18 +2850,18 @@ window.BOPlanner = function (ctx) {
       return done();
     }
     if (f === 'base') {
-      if (!v) { ch.items = ch.items.filter(i => i !== it); openItems.delete(String(key)); return done(); }
+      if (!v) { ch.items = ch.items.filter(i => i !== it); k.openItems.delete(String(key)); return done(); }
       const u = it && GD.uniques[lc(it.unique)];
       if (it) { it.base = v; if (u && lc(u.BaseId) !== lc(v)) { it.rarity = 'Rare'; it.unique = 'None'; it.affixes = []; } it.affixes = it.affixes.filter(a => a.id.startsWith('unique:') || affixesFor(GD.bases[lc(v)]).some(x => lc(x.Id) === lc(a.id))); }
-      else { ch.items.push({ slot, base: v, rarity: 'Rare', unique: 'None', name: '', level: ch.level, affixes: [], runes: [] }); openItems.add(slot); }
+      else { ch.items.push({ slot, base: v, rarity: 'Rare', unique: 'None', name: '', level: ch.level, affixes: [], runes: [] }); k.openItems.add(slot); }
       return done();
     }
     // The "Unique" box: ticking lists the slot's uniques; unticking turns a unique back into a Rare of the same base.
     if (f === 'unique') {
-      if (!v) { if (it) { ch.items = ch.items.filter(i => i !== it); openItems.delete(String(key)); return done(); } return render(); }
+      if (!v) { if (it) { ch.items = ch.items.filter(i => i !== it); k.openItems.delete(String(key)); return done(); } return render(); }
       const u = GD.uniques[lc(v)]; if (!u) return render();
       let item = it;
-      if (!item) { item = { slot, base: u.BaseId, rarity: 'Unique', unique: u.Id, name: u.Name, level: ch.level, affixes: [], runes: [] }; ch.items.push(item); openItems.add(slot); }
+      if (!item) { item = { slot, base: u.BaseId, rarity: 'Unique', unique: u.Id, name: u.Name, level: ch.level, affixes: [], runes: [] }; ch.items.push(item); k.openItems.add(slot); }
       Object.assign(item, { rarity: 'Unique', unique: u.Id, base: u.BaseId, name: u.Name, runes: [] });
       rollUnique(item, item.roll == null ? 0.5 : item.roll);
       return done();
@@ -2580,15 +2874,14 @@ window.BOPlanner = function (ctx) {
         else { if (it.rarity === 'Unique') { it.affixes = []; it.unique = 'None'; it.name = ''; } it.rarity = v; if (v === 'Normal') it.affixes = []; }
         return done();
       case 'ilvl': it.level = Math.max(1, Math.min(100, +v || 1)); return done();
-      case 'roll': rollUnique(it, (+v || 0) / 100); return done();
       case 'addaffix': {
         const af = GD.affixes[lc(v)]; if (!af) return render();
         const ti = topTier(af, it.level || ch.level), tt = af.Tiers[ti];
         it.affixes.push({ id: af.Id, tier: ti, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); return done();
       }
       case 'tier': { const a = it.affixes[ai], af = GD.affixes[lc(a.id)], tt = af.Tiers[+v]; Object.assign(a, { tier: +v, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); return done(); }
-      case 'v': it.affixes[ai].v = +v || 0; return done();
-      case 'v2': it.affixes[ai].v2 = +v || 0; return done();
+      case 'v': it.affixes[ai].v = +v || 0; delete it.roll; return done(); // a hand-set unique line: no longer "rolls at N%"
+      case 'v2': it.affixes[ai].v2 = +v || 0; delete it.roll; return done();
       case 'rune': { it.runes[+t.dataset.ri] = v; it.runes = Array.from(it.runes, r => r || '').slice(0, runeSlots(GD.bases[lc(it.base)])).filter(Boolean); return done(); } // order matters for runewords: empty sockets close up
     }
   }
@@ -2622,16 +2915,19 @@ window.BOPlanner = function (ctx) {
     if (act === 'addidol') {
       const base = basesFor('Idol')[0]; if (!base) return;
       ch.items.push({ slot: 'Idol', base: base.Id, rarity: 'Magic', unique: 'None', name: '', level: ch.level, affixes: [], runes: [] });
-      openItems.add(String(ch.items.length - 1)); return done();
+      K.openItems.add(String(ch.items.length - 1)); return done();
     }
-    const { it, key } = itemOf(ch, b);
-    if (act === 'rmitem' && it) { ch.items = ch.items.filter(i => i !== it); openItems.clear(); return done(); }
-    if (act === 'rmaffix' && it) { it.affixes.splice(+b.dataset.ai, 1); openItems.add(String(key)); return done(); }
+    gearClick(ch, b, K, done);
+  }
+  function gearClick(ch, b, k, done) {
+    const act = b.dataset.act, { it, key } = itemOf(ch, b);
+    if (act === 'rmitem' && it) { ch.items = ch.items.filter(i => i !== it); k.openItems.clear(); return done(); }
+    if (act === 'rmaffix' && it) { it.affixes.splice(+b.dataset.ai, 1); k.openItems.add(String(key)); return done(); }
   }
   // Remember which item editors are open across re-renders.
   function onToggle(e) {
     const d = e.target; if (!d.matches || !d.matches('details[data-item]')) return;
-    if (d.open) openItems.add(d.dataset.item); else openItems.delete(d.dataset.item);
+    if (d.open) K.openItems.add(d.dataset.item); else K.openItems.delete(d.dataset.item);
   }
   const el = pane();
   el.addEventListener('change', onChange);
@@ -2686,7 +2982,9 @@ window.BOPlanner = function (ctx) {
     });
     return p;
   }
-  return { render, fromCode, isPlanCode, shareCode, startNewPlan, dragon, clearStatus: () => { status = ''; } };
+  // The item editor for the Item Compare tab (app.js): its own state from gear.newKit(true), edits on its own holder.
+  const gear = { newKit, editor: itemEditor, tip: itemTip, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, affixesFor };
+  return { render, fromCode, isPlanCode, shareCode, startNewPlan, dragon, gear, clearStatus: () => { status = ''; } };
 };
 
 </script>
@@ -4765,7 +5063,7 @@ window.BOStartApp = function () {
   $('#supportChips').addEventListener('mouseleave', () => { st.supMsg = ''; if (st.last) renderSupportPicker(st.last); });
 
   // ---------- right panel ----------
-  function render() { renderSupportSkillSelect(); renderMain(); renderSupportSearchResults(); treeAfterRender(); }
+  function render() { renderSupportSkillSelect(); renderMain(); renderSupportSearchResults(); treeAfterRender(); renderCompare(); }
   function renderMain() {
     // The welcome banner shows until a character or plan is loaded.
     document.body.classList.toggle('no-char', !st.ch);
@@ -5557,7 +5855,13 @@ window.BOStartApp = function () {
   $('#hpsOverride').addEventListener('input', e => { st.hps = +e.target.value || null; render(); });
   $('#cocSelect').addEventListener('change', e => { const v = e.target.value; st.coc = v === 'auto' ? undefined : v === 'none' ? false : v; st.pinned = null; stopSearch(); st.opt = null; render(); });
   $('#conduitToggle').addEventListener('change', e => { st.conduit = e.target.checked; st.pinned = null; stopSearch(); st.opt = null; resetSupports(); render(); });
-  $('#optBtn').addEventListener('click', runSearch);
+  // Results live on the Support Gem Simulator page, so the button takes you there from any other tab.
+  $('#optBtn').addEventListener('click', () => {
+    const moved = !document.body.classList.contains('support-page');
+    if (moved) showTab('supports');
+    runSearch();
+    if (moved) { const box = $('#supportSearchResults'); if (box) box.scrollIntoView({ block: 'start' }); }
+  });
   $('#penNeg').addEventListener('change', e => { st.penFloor = !e.target.checked; render(); });
   $('#ingameDps').addEventListener('input', e => { st.ingame = +e.target.value || null; render(); });
   resGrid.addEventListener('input', e => { const d = e.target.dataset.res; if (d) { st.res[d] = e.target.value; render(); } });
@@ -5767,6 +6071,7 @@ window.BOStartApp = function () {
     e.preventDefault(); document.body.classList.remove('dragging');
     const entries = Array.from(e.dataTransfer.items || []).map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
     const files = Array.from(e.dataTransfer.files);
+    if (cmpVisible() && files[0] && /^image\//.test(files[0].type)) { cmpReadImage(files[0]); return; } // Item Compare: a screenshot of an item
     if (entries.some(x => x.isDirectory)) { walkDropped(entries).then(loadFolder, err => saveTip('Could not read that folder: ' + err.message)); return; }
     const saves = files.filter(f => /\.sav$/i.test(f.name));
     if (saves.length > 1) loadFolder(saves);
@@ -6339,6 +6644,251 @@ window.BOStartApp = function () {
     if (!T.built) buildTree();
     paintTree(); scoreSoon();
   }
+  // ---------- Item Compare tab ----------
+  // Your item (from the character; edits here stay here) against a new one (filled in, or read from a screenshot
+  // or pasted text): every counted skill's DPS with each, and the two items' lines side by side. The character
+  // only changes with "Equip the new item".
+  const lc = s => String(s == null ? '' : s).toLowerCase();
+  const CMP = { key: '', src: null, a: null, b: null, ka: null, kb: null, aEdited: false, read: null, busy: '', msg: '' };
+  const cmpVisible = () => !$('#comparePane').hidden;
+  const itemName = it => { const u = it.rarity === 'Unique' && GD.uniques[lc(it.unique)], b = GD.bases[lc(it.base)]; return u ? u.Name : it.name || (b ? b.Name : it.base); };
+  // Keys: a slot name, "idol:<index in ch.items>", or "idol:new" (an extra idol).
+  function cmpSlots(ch) {
+    const g = planner.gear, out = g.SLOTS.map(s => { const it = ch.items.find(i => i.slot === s); return { key: s, slot: s, it, name: g.SLOT_NAME[s] }; });
+    let n = 0;
+    ch.items.forEach((it, i) => { if (it.slot === 'Idol') out.push({ key: 'idol:' + i, slot: 'Idol', it, name: 'Idol ' + (++n) }); });
+    out.push({ key: 'idol:new', slot: 'Idol', it: null, name: 'Extra idol' });
+    return out;
+  }
+  const cmpSlot = () => CMP.key.startsWith('idol:') ? 'Idol' : CMP.key;
+  const holder = (it, level) => ({ level, items: it ? [JSON.parse(JSON.stringify(it))] : [] });
+  // The character with this item in the compared slot (none: the slot left empty).
+  function cmpWith(ch, item) {
+    const k = CMP.key, items = ch.items.slice();
+    if (k.startsWith('idol:')) { if (k !== 'idol:new') items.splice(+k.slice(5), 1); }
+    else for (let i = items.length - 1; i >= 0; i--) if (items[i].slot === k) items.splice(i, 1);
+    if (item) items.push(Object.assign({}, item, { slot: cmpSlot() }));
+    return Object.assign({}, ch, { items });
+  }
+  // Your item follows the character (a new character, slot or gear edit) until you edit it here.
+  function cmpSync() {
+    const ch = st.ch, slots = cmpSlots(ch);
+    if (!slots.some(s => s.key === CMP.key)) {
+      const was = cmpSlot();
+      CMP.key = (slots.find(s => s.it && s.slot === was) || slots.find(s => s.key === 'MainHand' && s.it) || slots.find(s => s.it) || slots[0]).key;
+      CMP.aEdited = false; CMP.a = null;
+    }
+    if (!CMP.ka) { CMP.ka = planner.gear.newKit(true); CMP.kb = planner.gear.newKit(true); }
+    if (!CMP.a || (CMP.src !== ch && !CMP.aEdited)) { CMP.a = holder(slots.find(s => s.key === CMP.key).it, ch.level); CMP.ka = planner.gear.newKit(true); }
+    CMP.src = ch;
+    if (!CMP.b) CMP.b = holder(null, ch.level);
+    CMP.a.level = CMP.b.level = ch.level;
+  }
+  // Every item line, added up by stat: what the item gives before anything else on the character scales it.
+  function itemLines(item) {
+    const m = new Map(); if (!item) return m;
+    const lone = { items: [Object.assign({}, item, { slot: cmpSlot() })], passives: [], dragonNodes: [], dragonAspect: '', hotbar: [], gemLevels: {}, gems: [], classId: st.ch.classId };
+    for (const x of S.collectMods(GD, lone, {}).mods) {
+      const k = x.text ? 'T|' + x.text : x.stat + '|' + x.mode + '|' + x.tags.join('+') + (x.local ? '|local' : '');
+      const e = m.get(k) || Object.assign({}, x, { v: 0, v2: 0 });
+      e.v += x.v; e.v2 += x.v2; m.set(k, e);
+    }
+    return m;
+  }
+  const lineText = x => (x.text ? x.text.replace(/\{(0|v)\}/g, num(x.v)).replace(/\{1\}/g, num(x.v2)) : S.modText(GD, x)).replace(/\+-/g, '-');
+  function cmpLinesTable(ia, ib) {
+    const A = itemLines(ia), B = itemLines(ib), keys = [...new Set([...B.keys(), ...A.keys()])];
+    if (!keys.length) return '';
+    const two = x => x && x.v2 && !x.text;
+    const rows = keys.map(k => {
+      const a = A.get(k), b = B.get(k), x = a || b;
+      const d = (b ? b.v : 0) - (a ? a.v : 0), d2 = (b ? b.v2 : 0) - (a ? a.v2 : 0);
+      let ch;
+      if (a && b && !d && !d2) ch = '<span class="meta">same</span>';
+      else if (x.text && !(a && b)) ch = b ? '<span class="up">new</span>' : '<span class="down">lost</span>';
+      else ch = '<span class="' + (d + d2 >= 0 ? 'up' : 'down') + '">' + (d >= 0 ? '+' : '') + num(d) + (two(a) || two(b) ? ' / ' + (d2 >= 0 ? '+' : '') + num(d2) : '') + '</span>';
+      return '<tr><td>' + (a ? esc(lineText(a)) : '<span class="meta">–</span>') + '</td><td>' + (b ? esc(lineText(b)) : '<span class="meta">–</span>') + '</td><td>' + ch + '</td></tr>';
+    });
+    return '<h3>Item lines</h3><div class="table-wrap"><table class="tbl cmp-lines"><thead><tr><th>Your item</th><th>New item</th><th>Change</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div>' +
+      '<p class="hint">Each item\'s own lines (implicits, affixes, runes) added up by stat, before your tree and other gear scale them. Life, resistances and other defences are compared here only; the DPS above counts every line the sim models.</p>';
+  }
+  function cmpRows(ia, ib) {
+    const chA = cmpWith(st.ch, ia), chB = cmpWith(st.ch, ib);
+    // Your item counts even when its gear piece is unticked on the Damage tab.
+    const keep = s => new Set([...s].filter(k => k !== 'item:' + cmpSlot()));
+    const main = opts({ off: keep(st.off) }), other = comboOpts({}); other.off = keep(other.off);
+    const on = new Set(st.combo || []);
+    const list = [st.skill, ...(st.pickable || []).filter(s => s.id !== st.skill && (on.has(s.id) || s.where !== 'Owned gem')).map(s => s.id)];
+    const rows = list.map(id => {
+      const o = id === st.skill ? main : other;
+      const a = S.calcSkill(GD, chA, id, o), b = S.calcSkill(GD, chB, id, o);
+      const okA = !a.error && !a.unsupported && isFinite(a.totalDps), okB = !b.error && !b.unsupported && isFinite(b.totalDps);
+      return { id, name: (a.skill || b.skill || {}).Name || id, a: okA ? a.totalDps : null, b: okB ? b.totalDps : null, why: okB ? '' : b.error || b.unsupported || '' };
+    });
+    return rows;
+  }
+  function cmpResults(ia, ib, rows) {
+    const r0 = rows[0], both = r0.a != null && r0.b != null;
+    const change = (a, b) => a == null || b == null ? '<span class="meta">–</span>' : '<span class="' + (b >= a ? 'up' : 'down') + '">' + pct(a ? b / a - 1 : 0) + '</span>';
+    let h = '<div class="card cmp-result"><h2>Damage <span class="hint">vs the enemy set in Damage Analysis</span></h2>';
+    h += '<div class="headline small">' +
+      stat('With your item', r0.a == null ? '–' : num(r0.a), '', '', esc(r0.name) + ', total DPS') +
+      stat(ib ? 'With the new item' : 'With the slot empty', r0.b == null ? '–' : num(r0.b), '', ib ? 'main' : '', r0.why ? esc(r0.why) : esc(r0.name) + ', total DPS' + (ib ? '' : ': what your item is worth')) +
+      stat('Change', both ? (r0.b >= r0.a ? '+' : '') + num(r0.b - r0.a) + ' DPS' : '–', both && r0.a ? '<div class="delta ' + (r0.b >= r0.a ? 'up' : 'down') + '">' + pct(r0.b / r0.a - 1) + '</div>' : '', '', '') +
+      '</div>';
+    if (rows.length > 1) h += '<div class="table-wrap"><table class="tbl"><thead><tr><th>Skill</th><th>Your item</th><th>' + (ib ? 'New item' : 'Slot empty') + '</th><th>Change</th></tr></thead><tbody>' +
+      rows.map(x => '<tr><td>' + skillDot(x.id) + esc(x.name) + (x.id === st.skill ? ' <span class="hint">(selected)</span>' : '') + '</td><td>' + (x.a == null ? '–' : num(x.a)) + '</td><td' + (x.why ? ' title="' + esc(x.why) + '"' : '') + '>' + (x.b == null ? '–' : num(x.b)) + '</td><td>' + change(x.a, x.b) + '</td></tr>').join('') + '</tbody></table></div>' +
+      '<p class="hint">The selected skill uses the supports set on the Damage tab; the others use their own from the build.</p>';
+    h += cmpLinesTable(ia, ib);
+    return h + '</div>';
+  }
+  function cmpEquipHtml(ib) {
+    return '<div class="cmp-actions"><button class="btn" type="button" data-cmp="equip"' + (ib ? '' : ' disabled') + '>Equip the new item</button><span class="hint">Puts it on ' + esc(st.ch.name) + ' in this page; the Build and Damage tabs use it too.' + (st.ch.plan ? '' : ' Your save is never changed: <b>Reset to save</b> on the Build tab undoes it.') + '</span></div>';
+  }
+  function cmpReadHtml() {
+    let h = '<div class="cmp-drop" id="cmpDrop" tabindex="0" role="button" aria-label="Paste, drop or pick a screenshot of the item">' +
+      '<b>' + (CMP.busy ? esc(CMP.busy) : 'Paste a screenshot of the item (Ctrl+V)') + '</b>' +
+      (CMP.busy ? '' : '<span>or drop one here, or <label class="linkish">pick an image<input type="file" id="cmpFile" accept="image/*" hidden></label>. Pasted item text works too.</span>') +
+      '<small>Crop it to the item\'s tooltip for the best read. The image is read in this browser and never uploaded; the first time, the text reader (Tesseract, a few MB) downloads from jsDelivr.</small></div>';
+    const r = CMP.read;
+    if (r && r.error) h += '<p class="hint bad">' + esc(r.error) + '</p>';
+    else if (r) {
+      const cls = { affix: 'good', unique: 'good', unread: 'bad' };
+      const n = r.lines.filter(l => l.kind === 'affix' || l.kind === 'unique').length;
+      h += '<details class="cmp-readout"' + (r.unread.length || r.notes.length ? ' open' : '') + '><summary>Read ' + n + ' item line' + (n === 1 ? '' : 's') + (r.unread.length ? ', <span class="bad">' + r.unread.length + ' not recognised</span>' : '') + '. Check them against the screenshot.</summary><ul>' +
+        r.lines.map(l => '<li class="' + (cls[l.kind] || 'meta') + '">' + esc(l.text) + (l.label ? ' <span class="meta">· ' + esc(l.label) + '</span>' : l.kind === 'unread' ? ' <span class="meta">· not recognised</span>' : '') + '</li>').join('') + '</ul>' +
+        r.notes.map(t => '<p class="hint bad">' + esc(t) + '</p>').join('') +
+        (r.unread.length ? '<p class="hint">Add lines that were not recognised with <b>Add an affix</b> below.</p>' : '') + '</details>';
+    }
+    return h;
+  }
+  // Skill list: skills on the bar or socketed first, then a line, then owned gems and the rest.
+  function cmpSkillOptions() {
+    const list = st.pickable || [], mine = list.filter(s => s.where === 'Hotbar' || s.where === 'Socketed'), rest = list.filter(s => !mine.includes(s));
+    const o = s => '<option value="' + esc(s.id) + '"' + (s.id === st.skill ? ' selected' : '') + '>' + esc(s.name) + '</option>';
+    return mine.map(o).join('') + (mine.length && rest.length ? '<option disabled>──────────</option>' : '') + rest.map(o).join('');
+  }
+  function cmpSlotButtons() {
+    const btn = s => '<button type="button" class="cmp-slot' + (s.key === CMP.key ? ' on' : '') + (s.it ? '' : ' empty') + (s.it && s.it.rarity === 'Unique' ? ' unique' : '') + '" data-slot="' + esc(s.key) + '" aria-pressed="' + (s.key === CMP.key) + '">' +
+      '<span class="cmp-slot-name">' + esc(s.name) + '</span><span class="cmp-slot-item">' + esc(s.it ? itemName(s.it) : s.key === 'idol:new' ? 'add one' : 'empty') + '</span></button>';
+    const all = cmpSlots(st.ch), gear = all.filter(s => s.slot !== 'Idol'), idols = all.filter(s => s.slot === 'Idol');
+    return '<div class="cmp-slots" role="group" aria-label="Gear">' + gear.map(btn).join('') + '</div>' +
+      '<h3>Idols</h3><div class="cmp-slots" role="group" aria-label="Idols">' + idols.map(btn).join('') + '</div>';
+  }
+  function renderCompare() {
+    const el = $('#comparePane'); if (!el || el.hidden) return;
+    let h = '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Item Compare</h2><p>Pick one of your items, then fill in the item you found or paste a screenshot of it, to see what swapping does to your damage.</p></div>';
+    if (!st.ch) { el.innerHTML = h + '<div class="empty">Load a character or start a plan first.</div>'; return; }
+    cmpSync();
+    const g = planner.gear, slot = cmpSlot(), ia = CMP.a.items[0] || null, ib = CMP.b.items[0] || null;
+    h += '<div class="card cmp-pick"><div class="cmp-pick-head"><h2>Item slot</h2>' +
+      '<label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill">' + cmpSkillOptions() + '</select></label></div>' +
+      cmpSlotButtons() + (CMP.msg ? '<p class="hint pl-status">' + esc(CMP.msg) + '</p>' : '') + '</div>';
+    // The item that deals more with the selected skill is marked green, with how much more.
+    const rows = st.skill ? cmpRows(ia, ib) : null, r0 = rows && rows[0];
+    let win = '', by = 0;
+    if (ib && r0 && r0.a > 0 && r0.b > 0 && Math.abs(r0.b / r0.a - 1) >= 0.0005) { win = r0.b > r0.a ? 'b' : 'a'; by = win === 'b' ? r0.b / r0.a - 1 : r0.a / r0.b - 1; }
+    const badge = s => win === s ? '<span class="cmp-badge" title="More ' + esc(r0.name) + ' DPS than the other item; the damage comparison is further down">' + pct(by) + ' DPS</span>' : '';
+    h += '<div class="cmp-grid">';
+    h += '<div class="card cmp-side' + (win === 'a' ? ' cmp-win' : '') + '" data-side="a"><h2>Your item ' + badge('a') + (CMP.aEdited ? '<span class="hint">edited here</span> <button class="btn small ghost" type="button" data-cmp="reset-a">Back to equipped</button>' : '<span class="hint">' + (ia ? 'equipped' : 'slot empty') + '</span>') + '</h2>' +
+      (ia ? '<div class="cmp-tip pl-tip">' + g.tip(ia, slot) + '</div>' : '') +
+      '<div class="pl-gear-grid">' + g.editor(ia, slot, ia ? 0 : -1, true, '', CMP.ka) + '</div></div>';
+    h += '<div class="card cmp-side' + (win === 'b' ? ' cmp-win' : '') + '" data-side="b"><h2>New item ' + badge('b') + '<span class="cmp-side-acts">' + (ia ? '<button class="btn small ghost" type="button" data-cmp="from-a">Start from your item</button>' : '') + (ib ? '<button class="btn small ghost" type="button" data-cmp="clear-b">Clear</button>' : '') + '</span></h2>' +
+      cmpReadHtml() +
+      (ib ? '<div class="cmp-tip pl-tip">' + g.tip(ib, slot) + '</div>' : '') +
+      '<div class="pl-gear-grid">' + g.editor(ib, slot, ib ? 0 : -1, true, '', CMP.kb) + '</div>' + cmpEquipHtml(ib) + '</div>';
+    h += '</div>';
+    h += rows ? cmpResults(ia, ib, rows) : '<div class="card"><p class="hint">This plan has no damage skill yet: add one on the Build tab.</p></div>';
+    el.innerHTML = h;
+  }
+  // A screenshot or item text goes into the new item (in the slot being compared).
+  async function cmpReadImage(blob) {
+    if (!st.ch || CMP.busy) return;
+    CMP.busy = 'Loading the text reader…'; CMP.read = null; renderCompare();
+    try {
+      const text = await window.BOItemRead.readImage(blob, t => { CMP.busy = t; const b = $('#cmpDrop b'); if (b) b.textContent = t; });
+      CMP.busy = ''; cmpReadText(text, true);
+    } catch (e) { CMP.busy = ''; CMP.read = { error: 'Could not read the screenshot: ' + e.message }; renderCompare(); }
+  }
+  function cmpReadText(text, fromImage) {
+    cmpSync();
+    const ia = CMP.a.items[0];
+    const r = window.BOItemRead.parse(GD, S, text, { slot: cmpSlot(), base: ia && ia.base, level: st.ch.level });
+    if (!r.item) { CMP.read = { error: fromImage ? 'No item text found in that image. Crop it to the tooltip and try again.' : 'That text does not look like an item.' }; return renderCompare(); }
+    CMP.b = { level: st.ch.level, items: [r.item] }; CMP.kb = planner.gear.newKit(true);
+    CMP.read = r; CMP.msg = '';
+    renderCompare();
+  }
+  function cmpEquip() {
+    const ib = CMP.b.items[0]; if (!ib || !st.ch) return;
+    const ch = buildEditable(), k = CMP.key, item = Object.assign(JSON.parse(JSON.stringify(ib)), { slot: cmpSlot() });
+    if (k === 'idol:new') { ch.items.push(item); CMP.key = 'idol:' + (ch.items.length - 1); }
+    else if (k.startsWith('idol:')) ch.items[+k.slice(5)] = item;
+    else { ch.items = ch.items.filter(i => i.slot !== k); ch.items.push(item); }
+    CMP.aEdited = false; CMP.a = null; CMP.b = null; CMP.read = null;
+    CMP.msg = 'Equipped ' + itemName(item) + ' on ' + ch.name + '. It is now your item; fill in or paste the next one to compare.';
+    if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {});
+  }
+  (function bindCompare() {
+    const el = $('#comparePane');
+    const side = t => { const s = t.closest('[data-side]'); return s && s.dataset.side; };
+    el.addEventListener('change', e => {
+      const t = e.target;
+      if (t.id === 'cmpSkill') return selectSkill(t.value);
+      if (t.id === 'cmpFile') { if (t.files[0]) cmpReadImage(t.files[0]); return; }
+      const s = side(t); if (!s || !t.dataset.f) return;
+      CMP.msg = '';
+      planner.gear.change(s === 'a' ? CMP.a : CMP.b, t, s === 'a' ? CMP.ka : CMP.kb, () => { if (s === 'a') CMP.aEdited = true; renderCompare(); }, renderCompare);
+    });
+    el.addEventListener('click', e => {
+      if (e.target.closest('.pl-item > summary')) { e.preventDefault(); return; } // the editors stay open here
+      const sb = e.target.closest('[data-slot]');
+      if (sb) {
+        if (sb.dataset.slot === CMP.key) return;
+        const was = cmpSlot(); CMP.key = sb.dataset.slot; CMP.aEdited = false; CMP.a = null; CMP.msg = '';
+        if (cmpSlot() !== was) { CMP.b = null; CMP.read = null; }
+        hideSlotTip(); return renderCompare();
+      }
+      const c = e.target.closest('[data-cmp]');
+      if (c) {
+        const act = c.dataset.cmp; CMP.msg = '';
+        if (act === 'equip') return cmpEquip();
+        if (act === 'reset-a') { CMP.aEdited = false; CMP.a = null; }
+        if (act === 'from-a') { CMP.b = holder(CMP.a.items[0], st.ch.level); CMP.kb = planner.gear.newKit(true); CMP.read = null; }
+        if (act === 'clear-b') { CMP.b = null; CMP.read = null; }
+        return renderCompare();
+      }
+      const b = e.target.closest('[data-act]'), s = b && side(b); if (!s) return;
+      planner.gear.click(s === 'a' ? CMP.a : CMP.b, b, s === 'a' ? CMP.ka : CMP.kb, () => { if (s === 'a') CMP.aEdited = true; renderCompare(); });
+    });
+    // Hovering a slot shows its item, as on the Build tab's gear.
+    let tip = null;
+    const hideSlotTip = () => { if (tip) tip.hidden = true; };
+    el.addEventListener('mousemove', e => {
+      const sb = e.target.closest && e.target.closest('[data-slot]');
+      const it = sb && (cmpSlots(st.ch).find(x => x.key === sb.dataset.slot) || {}).it;
+      if (!it) return hideSlotTip();
+      if (!tip) { tip = document.createElement('div'); tip.className = 'pl-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
+      if (tip.dataset.key !== sb.dataset.slot || tip.hidden) { tip.innerHTML = planner.gear.tip(it, it.slot); tip.dataset.key = sb.dataset.slot; }
+      tip.hidden = false;
+      const r = sb.getBoundingClientRect(), w = tip.offsetWidth, hgt = tip.offsetHeight;
+      let y = r.bottom + 6; if (y + hgt > innerHeight - 8) y = Math.max(8, r.top - hgt - 6);
+      tip.style.left = Math.max(8, Math.min(e.clientX + 14, innerWidth - w - 8)) + 'px'; tip.style.top = y + 'px';
+    });
+    el.addEventListener('mouseleave', hideSlotTip);
+    window.addEventListener('scroll', hideSlotTip, { passive: true });
+    el.addEventListener('keydown', e => { if (e.target.id === 'cmpDrop' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); const f = $('#cmpFile'); if (f) f.click(); } });
+    // Ctrl+V anywhere on this tab (not while typing in a box): an image is read, item text is parsed.
+    document.addEventListener('paste', e => {
+      if (!cmpVisible() || !st.ch || (e.target.closest && e.target.closest('input, textarea, select'))) return;
+      const items = Array.from((e.clipboardData && e.clipboardData.items) || []);
+      const img = items.find(i => i.kind === 'file' && /^image\//.test(i.type));
+      if (img) { e.preventDefault(); cmpReadImage(img.getAsFile()); return; }
+      const text = e.clipboardData && e.clipboardData.getData('text/plain');
+      if (text && /\n/.test(text.trim()) && /\d/.test(text)) { e.preventDefault(); cmpReadText(text, false); }
+    });
+  })();
+
   function showTab(tab) {
     T.visible = tab === 'tree';
     document.body.classList.remove('landing-view');
@@ -6348,16 +6898,18 @@ window.BOStartApp = function () {
     document.body.classList.toggle('build-page', tab === 'build');
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
+    document.body.classList.toggle('compare-page', tab === 'compare');
     if (tab === 'supports') {
       showConfigTab('supports', false);
       buildSettings.open = true;
     }
     syncSettingsToViewport();
     document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code';
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     if (tab === 'code') setTimeout(() => $('#codeInput').focus(), 0);
+    if (tab === 'compare') renderCompare();
     store.set('tab', tab);
     if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } syncTreeTab(); renderTreeTabs(); if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
   }
@@ -6471,7 +7023,7 @@ window.BOStartApp = function () {
   const startId = store.get('char', null);
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();
-  const lastTab = store.get('tab', 'damage'); if (['tree', 'build', 'supports', 'plan', 'code'].includes(lastTab)) showTab(lastTab);
+  const lastTab = store.get('tab', 'damage'); if (['tree', 'build', 'supports', 'compare', 'plan', 'code'].includes(lastTab)) showTab(lastTab);
   // Opened from a share link: load it as a plan, then drop it from the address so a refresh doesn't add it again.
   const sharedCode = linkCode(location.hash), sharedId = linkId(location.hash);
   if (sharedCode || sharedId) { history.replaceState(null, '', location.pathname + location.search); openShared(sharedCode, sharedId); }

@@ -674,7 +674,9 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
 .tab.active { color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 12%, var(--panel)); box-shadow: inset 3px 0 0 var(--dashboard-gold); }
 .nav-divider { height: 1px; margin: -14px 10px -17px; background: linear-gradient(90deg, transparent, var(--line) 18%, var(--line) 82%, transparent); }
 .secondary-tabs .tab { color: var(--muted); }
-.secondary-tabs .tab.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); box-shadow: inset 3px 0 0 var(--accent); }
+.secondary-tabs .tab.active { color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 12%, var(--panel)); box-shadow: inset 3px 0 0 var(--dashboard-gold); }
+.nav-external { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; text-decoration: none; }
+.itemdb-credit { color: var(--muted); font-size: .68em; line-height: 1.35; }
 .code-pane { display: flex; flex-direction: column; gap: 16px; max-width: 860px; min-width: 0; margin: 0 auto; padding: 18px 0; }
 .code-pane[hidden] { display: none; }
 .code-intro .eyebrow { color: var(--dashboard-gold); font-size: 10px; font-weight: 700; letter-spacing: .16em; }
@@ -715,6 +717,8 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
   .nav > .tabs:not(.secondary-tabs) { order: 3; }
   .nav > .secondary-tabs { order: 5; border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); background: color-mix(in srgb, var(--accent) 4%, var(--panel)); }
   .nav-divider { order: 4; width: calc(100% - 24px); height: 1px; margin: -3px auto; }
+  .itemdb-divider { order: 6; }
+  .nav-external { order: 7; width: 100%; }
   .nav .tab { justify-content: center; flex: 1; width: auto; min-height: 36px; gap: 6px; padding: 6px 5px; font-size: 12px; }
   .nav .tab svg { width: 15px; height: 15px; }
   .nav .tab.active { box-shadow: inset 0 -2px 0 var(--dashboard-gold); }
@@ -894,6 +898,10 @@ body.dashboard-view .configure-heading { display: flex; }
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8 4 12l4 4M16 8l4 4-4 4M14 5l-4 14"/></svg><span>Load Code</span>
       </button>
     </nav>
+    <div class="nav-divider itemdb-divider" role="separator" aria-hidden="true"></div>
+    <a class="tab nav-external" href="https://broked-db.vercel.app/" target="_blank" rel="noopener noreferrer">
+      <span>ItemDatabase</span><span class="itemdb-credit">(credit frostyunknown on discord)</span>
+    </a>
     <div class="nav-end">
       <button class="nav-reset" id="resetLoadedCharacters" type="button" title="Remove characters loaded from saves or codes, and your build plans. Characters built into the page stay.">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 14h12l1-14M9 7V4h6v3"/></svg>

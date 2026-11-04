@@ -4036,31 +4036,82 @@ window.BOPlanner = function (ctx) {
     base.off = new Set([...(o.off || [])].filter(x => !String(x).startsWith('support:')));
     base._col = collectMods(GD, ch, base);
     const score = sup => { const r = calcSkill(GD, ch, skillId, Object.assign({}, base, { supportsOverride: sup })); return { r, v: opt.target === 'panel' ? r.panelDps : r.totalDps }; };
-    // Iterative combination generator (indices).
-    const idx = Array.from({ length: k }, (_, i) => i);
-    let more = k > 0 || pinned.length > 0, tried = 0;
-    const total = (() => { let t = 1; for (let i = 0; i < k; i++) t = t * (pool.length - i) / (i + 1); return Math.round(t); })();
+    const combos = (() => { let t = 1; for (let i = 0; i < k; i++) t = t * (pool.length - i) / (i + 1); return Math.round(t); })();
     const keep = opt.keep || 15; const results = [];
-    const job = {
-      pool, sockets: k + pinned.length, pinned, total, owned, results, done: !more,
-      get tried() { return tried; },
-      step(n) {
-        while (n-- > 0 && more) {
-          const sup = arrangeShapes([...pinned, ...idx.map(i => pool[i])]);
-          tried++;
-          if (sup) {
-            const { r, v } = score(sup);
-            if (opt.manaOk && r.mana && !r.mana.skip && !r.mana.ok) { job.manaDropped = (job.manaDropped || 0) + 1; }
-            else if (results.length < keep || v > results[results.length - 1].v) {
-              results.push({ sup, v, total: r.totalDps, panel: r.panelDps, manaPerSec: r.mana && !r.mana.skip ? r.mana.spend : null, manaGain: r.mana && !r.mana.skip ? r.mana.gain : null, mana: sup.reduce((p, id) => p * ((GD.supports[id] || {}).ManaMultiplier || 1), 1), notOwned: sup.filter(id => !owned.has(id)) });
-              results.sort((a, b) => b.v - a.v); if (results.length > keep) results.pop();
-            }
+    let tried = 0;
+    // Scores one setup (free picks + pinned), keeps it in the results; -1 when it can't be used.
+    const seen = new Map();
+    const evalSet = picks => {
+      const key = picks.slice().sort().join('|');
+      if (seen.has(key)) return seen.get(key);
+      let v = -1;
+      const sup = arrangeShapes([...pinned, ...picks]);
+      tried++;
+      if (sup) {
+        const sc = score(sup), r = sc.r;
+        if (opt.manaOk && r.mana && !r.mana.skip && !r.mana.ok) { job.manaDropped = (job.manaDropped || 0) + 1; }
+        else {
+          v = sc.v;
+          if (results.length < keep || v > results[results.length - 1].v) {
+            results.push({ sup, v, total: r.totalDps, panel: r.panelDps, manaPerSec: r.mana && !r.mana.skip ? r.mana.spend : null, manaGain: r.mana && !r.mana.skip ? r.mana.gain : null, mana: sup.reduce((p, id) => p * ((GD.supports[id] || {}).ManaMultiplier || 1), 1), notOwned: sup.filter(id => !owned.has(id)) });
+            results.sort((a, b) => b.v - a.v); if (results.length > keep) results.pop();
           }
-          // next combination
-          if (k === 0) { more = false; break; } // only the pinned setup
-          let i = k - 1; while (i >= 0 && idx[i] === pool.length - k + i) i--;
-          if (i < 0) more = false; else { idx[i]++; for (let j = i + 1; j < k; j++) idx[j] = idx[j - 1] + 1; }
         }
+      }
+      seen.set(key, v);
+      return v;
+    };
+    // Up to EXACT_MAX setups: try them all. More than that (6 sockets and 27 supports is 296,010 setups,
+    // about 3 minutes): fill the sockets one best support at a time, then swap one or two supports while that
+    // helps. Checked against trying them all on 2026-11-04: same best setup for Judgement (Shrimspins,
+    // 3,025,333 in 3,402 setups instead of 296,010) and Cyclone; the swaps of two find pairs that only help
+    // together (Stormfrost + Living Storm, 0% each on their own).
+    const EXACT_MAX = 5000;
+    const exact = combos <= EXACT_MAX;
+    function* everySetup() {
+      if (k === 0) { evalSet([]); return; } // only the pinned setup
+      const idx = Array.from({ length: k }, (_, i) => i);
+      for (;;) {
+        evalSet(idx.map(i => pool[i])); yield;
+        let i = k - 1; while (i >= 0 && idx[i] === pool.length - k + i) i--;
+        if (i < 0) return;
+        idx[i]++; for (let j = i + 1; j < k; j++) idx[j] = idx[j - 1] + 1;
+      }
+    }
+    function* climb() {
+      let cur = [];
+      for (let s = 0; s < k; s++) {
+        let best = null, bv = -Infinity;
+        for (const p of pool) if (!cur.includes(p)) { const v = evalSet([...cur, p]); yield; if (v > bv) { bv = v; best = p; } }
+        cur.push(best);
+      }
+      let v = evalSet(cur);
+      const better = nv => nv > v * 1.000001 && nv > 0;
+      for (let moved = true; moved;) {
+        moved = false;
+        for (let i = 0; i < k && !moved; i++) for (const p of pool) {
+          if (cur.includes(p)) continue;
+          const n = cur.slice(); n[i] = p; const nv = evalSet(n); yield;
+          if (better(nv)) { cur = n; v = nv; moved = true; break; }
+        }
+        if (moved) continue;
+        const out = pool.filter(p => !cur.includes(p));
+        swap2: for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) for (let a = 0; a < out.length; a++) for (let b = a + 1; b < out.length; b++) {
+          const n = cur.slice(); n[i] = out[a]; n[j] = out[b]; const nv = evalSet(n); yield;
+          if (better(nv)) { cur = n; v = nv; moved = true; break swap2; }
+        }
+      }
+    }
+    // Progress for the climb: a guess (fill + one pass of single and double swaps), raised as it runs.
+    const guess = exact ? combos : k * pool.length + k * (pool.length - k) + k * (k - 1) / 2 * (pool.length - k) * (pool.length - k - 1) / 2;
+    const gen = exact ? everySetup() : climb();
+    let more = k > 0 || pinned.length > 0;
+    const job = {
+      pool, sockets: k + pinned.length, pinned, combos, exact, owned, results, done: !more,
+      get tried() { return tried; },
+      get total() { return job.done ? tried : Math.max(Math.round(guess), Math.ceil(tried * 1.1)); },
+      step(n) {
+        while (n-- > 0 && more) if (gen.next().done) more = false;
         job.done = !more; return job;
       },
     };
@@ -5156,13 +5207,13 @@ window.BOStartApp = function () {
     if (cur.unsupported || cur.error) return;
     const job = S.supportSearch(GD, st.ch, st.skill, o, { pool, target, keep: 12, manaOk, pinned: [...st.keepSup] });
     st.optJob = job;
-    st.opt = { skill: st.skill, pool, target, manaOk, pinnedN: job.pinned.length, sig: optSig(), running: true, tried: 0, total: job.total, sockets: job.sockets, poolSize: job.pool.length, results: job.results, currentValue: target === 'panel' ? cur.panelDps : cur.totalDps, baseSup: (st.supports || []).map(s => s.toLowerCase()) };
+    st.opt = { skill: st.skill, pool, target, manaOk, pinnedN: job.pinned.length, sig: optSig(), running: true, tried: 0, total: job.total, exact: job.exact, combos: job.combos, sockets: job.sockets, poolSize: job.pool.length, results: job.results, currentValue: target === 'panel' ? cur.panelDps : cur.totalDps, baseSup: (st.supports || []).map(s => s.toLowerCase()) };
     const btn = $('#optBtn'); btn.disabled = true;
     const tick = () => {
       if (st.optJob !== job) return;
       const t = performance.now();
       while (!job.done && performance.now() - t < 40) job.step(150);
-      st.opt.tried = job.tried;
+      st.opt.tried = job.tried; st.opt.total = job.total;
       if (job.done) { st.opt.manaDropped = job.manaDropped || 0; st.opt.running = false; st.optJob = null; btn.disabled = false; btn.textContent = 'Find best supports'; render(); }
       else { btn.textContent = 'Searching… ' + Math.round(job.tried / job.total * 100) + '%'; setTimeout(tick, 0); }
     };
@@ -5185,7 +5236,7 @@ window.BOStartApp = function () {
     const inUse = (st.supports || []).map(s => s.toLowerCase());
     const same = sup => sup.length === inUse.length && sup.every(id => inUse.includes(id));
     let h = '<div class="card support-results"><h2>Best support setups <small>' + (O.target === 'panel' ? 'skill panel DPS' : 'enemy set in Damage Analysis') + ' · ' + (O.pool === 'all' ? 'every support' : 'supports you own') + (O.manaOk ? ' · mana sustained' : '') + (O.pinnedN ? ' · ' + O.pinnedN + ' pinned' : '') + ' · ' + O.sockets + ' sockets · ' + O.tried.toLocaleString('en-US') + ' setups <button class="x" id="optClose" title="Close" style="background:none;border:0;color:var(--faint);cursor:pointer;font-size:16px">×</button></small></h2>';
-    if (O.running) h += '<p class="hint">Searching… ' + Math.round(O.tried / Math.max(1, O.total) * 100) + '% (' + O.poolSize + ' supports, ' + O.total.toLocaleString('en-US') + ' combinations)</p>';
+    if (O.running) h += '<p class="hint">Searching… ' + Math.round(O.tried / Math.max(1, O.total) * 100) + '% (' + O.poolSize + ' supports, ' + (O.exact ? O.total.toLocaleString('en-US') + ' combinations)' : O.combos.toLocaleString('en-US') + ' combinations: building up the best setup instead of trying them all)') + '</p>';
     else if (O.sig !== optSig()) h += '<p class="warn">Settings changed after this search. Run it again for picks that match them.</p>';
     h += '<div class="optrow current"><span class="rank">was</span><span class="names">' + esc(cur.map(supName).join(', ') || 'no supports') + '<span class="nums">' + num(O.currentValue) + ' · your setup when you searched</span></span>' +
       (same(cur) ? '<span class="hint">in use</span>' : '<button class="btn small ghost" data-use="-1">Back</button>') + '</div>';

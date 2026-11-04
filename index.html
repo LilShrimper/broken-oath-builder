@@ -346,6 +346,20 @@ details.report pre { white-space: pre-wrap; word-break: break-word; font-size: 1
 .tab.active { color: #fff; background: linear-gradient(135deg, var(--accent-strong), var(--accent-2)); box-shadow: 0 4px 14px color-mix(in srgb, var(--accent-strong) 35%, transparent); }
 .tree-pane { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .tree-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tree-tabs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.tree-tab { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; padding: 6px 12px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.tree-tab:hover { color: var(--text); background: var(--panel-2); }
+.tree-tab.active { color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 12%, var(--panel)); box-shadow: inset 0 -2px 0 var(--dashboard-gold); }
+.tree-tab .c { color: var(--faint); font-weight: 500; font-size: 11.5px; }
+.tree-tab-name { width: 130px; padding: 4px 8px; font: inherit; font-size: 13px; }
+.tree-tab-act { flex: 0 0 auto; padding: 5px 9px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.tree-tab-act:hover { color: var(--text); border-color: var(--line); }
+.tree-tab-act.add { color: var(--dashboard-gold); }
+.tree-tab-act:disabled { opacity: .4; cursor: default; }
+.tree-tabs .sep { flex: 0 0 1px; align-self: stretch; margin: 2px 4px; background: var(--line); }
+:root[data-theme="light"] .tree-tab.active { color: #fff; background: linear-gradient(135deg, var(--accent-strong), var(--accent-2)); box-shadow: none; }
+:root[data-theme="light"] .tree-tab.active .c { color: rgba(255,255,255,.8); }
+:root[data-theme="light"] .tree-tab-act.add { color: var(--accent); }
 .tree-bar .check-row { margin: 0; }
 .tree-points { font-weight: 600; margin-right: auto; }
 .tree-search input { width: 190px; }
@@ -1218,6 +1232,7 @@ body:not(.build-page) .build-subtabs { display: none !important; }
       </form>
     </section>
     <section class="tree-pane" id="treePane" hidden>
+      <div class="tree-tabs" id="treeTabs" role="tablist" aria-label="Passive trees"></div>
       <div class="tree-bar">
         <span class="tree-points" id="treePoints"></span>
         <label class="field inline tree-search"><input type="text" id="treeSearch" placeholder="Find a node or stat" autocomplete="off"></label>
@@ -4393,6 +4408,7 @@ window.BOStartApp = function () {
     buildCopy = null;
     document.body.classList.remove('landing-view');
     st.ch = ch; st.chOrig = ch; st.pinned = null; stopSearch(); st.opt = null; treeReset();
+    TT = null;
     if (!ch) return;
     store.set('char', ch.id);
     st.curses = {};
@@ -4494,6 +4510,7 @@ window.BOStartApp = function () {
     if (!st.chOrig || st.chOrig.plan) return;
     const skill = st.skill;
     st.ch = st.chOrig; buildCopy = null; st.pinned = null; stopSearch(); st.opt = null; T.scores = new Map();
+    if (TT && TT.id === st.chOrig.id) { TT.active = 0; keepTabs(); }
     const { skills, pickable } = fillSkills(st.ch);
     selectSkill(skills.some(s => s.id === skill) ? skill : (pickable[0] || skills[0] || {}).id);
     if (planner) planner.render();
@@ -5656,6 +5673,95 @@ window.BOStartApp = function () {
     T.scores = new Map();
     render();
   }
+  // Tree tabs: several passive trees per character (leveling checkpoints, like Path of Building's tree sets).
+  // The shown tree is always st.ch.passives; each tab keeps its own list, saved in this browser per character.
+  // A loaded character always opens on its first tab (the save's tree); a plan opens on the tab it was left on.
+  let TT = null; // { id, active, sets: [{ name, passives }] }
+  function treeTabs() {
+    const ch = st.chOrig; if (!ch || !st.ch) return null;
+    if (TT && TT.id === ch.id) return TT;
+    const kept = store.get('trees:' + ch.id, null);
+    TT = { id: ch.id, active: 0, sets: [{ name: ch.plan ? 'Tree 1' : 'From save', passives: [] }] };
+    if (kept && Array.isArray(kept.sets)) {
+      const sets = kept.sets.filter(t => t && Array.isArray(t.passives)).map(t => ({ name: String(t.name || 'Tree').slice(0, 40), passives: t.passives.slice() }));
+      if (sets.length) { TT.sets = sets; TT.active = ch.plan ? Math.min(sets.length - 1, Math.max(0, kept.active | 0)) : 0; }
+    }
+    TT.sets[TT.active].passives = st.ch.passives.slice(); // the shown tree wins
+    return TT;
+  }
+  const keepTabs = () => { if (TT) store.set('trees:' + TT.id, { active: TT.active, sets: TT.sets }); };
+  // Copy the shown tree into the active tab (called on every redraw; only writes when it changed).
+  function syncTreeTab() {
+    const t = treeTabs(); if (!t) return;
+    const cur = t.sets[t.active], live = st.ch.passives;
+    if (cur.passives.length === live.length && cur.passives.every((x, i) => x === live[i])) return;
+    cur.passives = live.slice(); keepTabs();
+  }
+  const tabPoints = list => list.map(realId).filter(id => GD.nodes[id] && GD.nodes[id].Kind !== 'Start').length;
+  // Show tab i's tree. Only nodes still linked to the class start are kept (a tab from before a class change).
+  function loadTreeTab(i) {
+    const t = TT; t.active = i; keepTabs();
+    const want = new Set(t.sets[i].passives.map(realId).filter(id => GD.nodes[id] && !blocked(id) && GD.nodes[id].Kind !== 'Start'));
+    const keep = connected(want);
+    clearOpt(); T.undo = [];
+    setPassives(ordered(keep), false);
+    $('#treeStatus').textContent = 'Showing "' + t.sets[i].name + '" (' + keep.size + ' points). The Damage tab uses this tree.';
+  }
+  function switchTreeTab(i) {
+    const t = treeTabs(); if (!t || i === t.active || !t.sets[i]) return;
+    syncTreeTab(); loadTreeTab(i);
+  }
+  function addTreeTab(empty) {
+    const t = treeTabs(); if (!t) return;
+    syncTreeTab();
+    const used = new Set(t.sets.map(x => x.name)); let n = t.sets.length + 1; while (used.has('Tree ' + n)) n++;
+    t.sets.push({ name: 'Tree ' + n, passives: empty ? [] : st.ch.passives.slice() });
+    loadTreeTab(t.sets.length - 1);
+    if (!empty) $('#treeStatus').textContent = 'New tree "' + t.sets[t.active].name + '", copied from the last one: take more points here for the next checkpoint.';
+  }
+  async function deleteTreeTab() {
+    const t = treeTabs(); if (!t || t.sets.length < 2) return;
+    const gone = t.active, x = t.sets[gone];
+    if (!(await confirmInPage('Delete tree?', 'Delete "' + x.name + '" (' + tabPoints(st.ch.passives) + ' points)? The other trees stay.', 'Delete', true))) return;
+    t.sets.splice(gone, 1);
+    loadTreeTab(Math.max(0, gone - 1));
+  }
+  function moveTreeTab(d) {
+    const t = treeTabs(); if (!t) return; const j = t.active + d; if (j < 0 || j >= t.sets.length) return;
+    [t.sets[t.active], t.sets[j]] = [t.sets[j], t.sets[t.active]]; t.active = j; keepTabs(); renderTreeTabs();
+  }
+  function renameTreeTab() {
+    const t = treeTabs(); if (!t) return;
+    const btn = $('#treeTabs').querySelector('.tree-tab.active'); if (!btn) return;
+    const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'tree-tab-name'; inp.value = t.sets[t.active].name; inp.maxLength = 40;
+    inp.setAttribute('aria-label', 'Tree name');
+    let done = false;
+    const commit = ok => { if (done) return; done = true; const v = inp.value.trim(); if (ok && v) { t.sets[t.active].name = v; keepTabs(); } renderTreeTabs(); };
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(true); else if (e.key === 'Escape') commit(false); });
+    inp.addEventListener('blur', () => commit(true));
+    btn.replaceWith(inp); inp.focus(); inp.select();
+  }
+  function renderTreeTabs() {
+    const box = $('#treeTabs'), t = treeTabs();
+    if (!t) { box.innerHTML = ''; return; }
+    box.innerHTML = t.sets.map((x, i) => '<button type="button" class="tree-tab' + (i === t.active ? ' active' : '') + '" role="tab" aria-selected="' + (i === t.active) + '" data-tt="' + i + '"' +
+        (i === t.active ? ' title="Double-click to rename"' : '') + '>' + esc(x.name) + ' <span class="c">' + tabPoints(i === t.active ? st.ch.passives : x.passives) + '</span></button>').join('') +
+      '<span class="sep"></span>' +
+      '<button type="button" class="tree-tab-act add" data-tta="copy" title="New tree starting from this one (the next leveling checkpoint)">+ New tree</button>' +
+      '<button type="button" class="tree-tab-act" data-tta="empty" title="New tree with no points">+ Empty</button>' +
+      '<button type="button" class="tree-tab-act" data-tta="rename" title="Rename this tree">Rename</button>' +
+      '<button type="button" class="tree-tab-act" data-tta="left" title="Move this tree left"' + (t.active === 0 ? ' disabled' : '') + '>◀</button>' +
+      '<button type="button" class="tree-tab-act" data-tta="right" title="Move this tree right"' + (t.active === t.sets.length - 1 ? ' disabled' : '') + '>▶</button>' +
+      '<button type="button" class="tree-tab-act" data-tta="delete" title="Delete this tree"' + (t.sets.length < 2 ? ' disabled' : '') + '>Delete</button>';
+  }
+  $('#treeTabs').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || !st.ch) return;
+    if (b.dataset.tt != null) return switchTreeTab(+b.dataset.tt);
+    const a = b.dataset.tta;
+    if (a === 'copy') addTreeTab(false); else if (a === 'empty') addTreeTab(true); else if (a === 'rename') renameTreeTab();
+    else if (a === 'left') moveTreeTab(-1); else if (a === 'right') moveTreeTab(1); else if (a === 'delete') deleteTreeTab();
+  });
+  $('#treeTabs').addEventListener('dblclick', e => { if (e.target.closest('.tree-tab.active')) renameTreeTab(); });
   const dTipCache = new Map(); // Dragonling tooltip DPS values (cleared on each redraw)
   function renderDragon() {
     const btn = $('#dragonBtn'), panel = $('#dragonPanel'), badge = $('#dragonBadge');
@@ -6034,7 +6140,9 @@ window.BOStartApp = function () {
 
   function treeAfterRender() {
     if (T.opt && T.opt.key !== optKey()) clearOpt();
+    if (st.ch) syncTreeTab();
     if (!T.visible || !st.ch) return;
+    renderTreeTabs();
     renderDragon();
     if (!T.built) buildTree();
     paintTree(); scoreSoon();
@@ -6059,7 +6167,7 @@ window.BOStartApp = function () {
     if (tab === 'build' || tab === 'plan') planner.render();
     if (tab === 'code') setTimeout(() => $('#codeInput').focus(), 0);
     store.set('tab', tab);
-    if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
+    if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } syncTreeTab(); renderTreeTabs(); if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
   }
   // Only real tabs; the ItemDatabase link is also styled .tab but just opens its site.
   document.querySelectorAll('.tab[data-tab]').forEach(b => b.addEventListener('click', async () => {
@@ -6108,7 +6216,8 @@ window.BOStartApp = function () {
       // While a planned or optimized tree is shown (green / red on the tree), the code is that tree: the one to follow.
       const shown = T.opt && T.opt.list && T.opt.list.length ? T.opt : null;
       const p = [startNode(), ...(shown ? shown.list : ordered(allocSet()))];
-      const tag = shown ? (shown.addOnly ? ' (planned)' : ' (optimized)') : st.ch !== st.chOrig ? ' (edited)' : '';
+      const tt = treeTabs(), tabName = tt && tt.sets.length > 1 ? ' – ' + tt.sets[tt.active].name : '';
+      const tag = tabName + (shown ? (shown.addOnly ? ' (planned)' : ' (optimized)') : st.ch !== st.chOrig && !tabName ? ' (edited)' : '');
       const json = new TextEncoder().encode(JSON.stringify({ v: 1, t: st.ch.name.replace(/ \(code\)$/, '') + tag, c: st.ch.classId, l: st.ch.level, p }));
       const z = new Uint8Array(await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
       const all = new Uint8Array(4 + z.length); new DataView(all.buffer).setUint32(0, json.length, true); all.set(z, 4);

@@ -1252,7 +1252,7 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
     'Gameplay/animsets.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 7; // 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 8; // 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -1273,6 +1273,8 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
       if (s.Totem) o.Totem = typeof s.Totem === 'object' ? Object.assign({ on: true }, pick(s.Totem, ['Kind', 'Interval', 'Duration', 'Max', 'PerLevels', 'Effectiveness'])) : true;
       if (s.Rain) o.Rain = pick(s.Rain, ['Delay', 'Waves', 'Interval', 'Arrows']);
       if (s.Brand) o.Brand = true;
+      // Thousand Cuts: a chain of hops on a fixed timer, the last one heavier.
+      if (s.Mirage) o.Mirage = pick(s.Mirage, ['Hops', 'Interval', 'HopTime', 'FinalScale']);
       if (s.Orbit) o.Orbit = typeof s.Orbit === 'object' ? pick(s.Orbit, ['Count', 'CountPerLevels', 'Max', 'AngularSpeed', 'SweepPeriod', 'HitInterval', 'RingSplitAt', 'EmpowerSpeed']) : true;
       skills[s.Id.toLowerCase()] = Object.assign(skills[s.Id.toLowerCase()] || {}, o);
     }
@@ -2749,6 +2751,9 @@ window.BOPlanner = function (ctx) {
     const tags = new Set();
     for (const t of sk.Tags || []) tags.add(lc(t));
     if (sk.Delivery) tags.add(lc(sk.Delivery));
+    // Thousand Cuts (Mirage hops): its text says it counts as a Movement skill (movement supports, passives
+    // and items apply), though its Tags leave Movement out. So Afterimage and Afterimages skip it.
+    if (sk.Mirage && sk.Mirage.Hops > 0) tags.add('movement');
     const isAttack = has(tags, 'Attack');
     const isGem = sk.Kind === 'Gem' || ch.gems.includes(skillId);
     if (isGem) tags.add('gem');
@@ -2895,7 +2900,7 @@ window.BOPlanner = function (ctx) {
       if (hostTags && !granted && !fitsHost) { res.supports.push({ id, key, name: sd.Name, ok: false, why: 'cannot be socketed in ' + host.name + ' (needs ' + req.join(' or ') + ')', desc: sd.Description }); continue; }
       const onHost = !ok && fitsHost && !granted;
       if (onHost) { res.supports.push({ id, key, name: sd.Name + ' (on ' + host.name + ')', ok: true, hostOnly: true, why: '', desc: 'Works on ' + host.name + ' itself; for this spell it only matters through ' + host.name + '\'s ticks. ' + sd.Description }); continue; }
-      res.supports.push({ id, key, name: sd.Name + (granted ? ' (granted)' : ''), ok, why: ok ? '' : 'does not support this skill (needs ' + req.join(' or ') + ')', desc: sd.Description });
+      res.supports.push({ id, key, name: sd.Name + (granted ? ' (granted)' : ''), ok, why: ok ? '' : 'does not support this skill (' + (ex.some(t => ctx.tags.has(lc(t))) ? 'not for ' + ex.filter(t => ctx.tags.has(lc(t))).join(' or ') + ' skills' : 'needs ' + req.join(' or ')) + ')', desc: sd.Description });
       if (!ok || (o.off && o.off.has(key))) continue;
       for (const m of sd.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: m.Value || 0, v2: m.Value2 || 0, local: false, src: 'Support · ' + sd.Name, key });
     }
@@ -3152,6 +3157,16 @@ window.BOPlanner = function (ctx) {
     if (sk.Channel && sk.Channel.Tick) { usesPerSec = rateMult / sk.Channel.Tick; useTime = sk.Channel.Tick / rateMult; }
     else if (isAttack) { const aps = weapon ? weapon.aps : 1.2; usesPerSec = aps * rateMult; useTime = 1 / usesPerSec; }
     else { const ct = sk.CastTime || 0.5; usesPerSec = rateMult / ct; useTime = ct / rateMult; }
+    // Mirage (Thousand Cuts, skills.json Mirage): one quick opening cut at attack speed, then Hops hops
+    // Interval seconds apart. The hop timer is taken as fixed (attack speed only shortens the opening cut).
+    // Check report #3 (4 Nov, Samurai 40): the old "one swing at weapon speed" model gave 5.28 uses/s and
+    // ran about 2x the real Guardian DPS (median real/sheet 0.53).
+    const mirage = isAttack && sk.Mirage && sk.Mirage.Hops > 0 ? sk.Mirage : null;
+    if (mirage && !(sk.Channel && sk.Channel.Tick)) {
+      const hops = mirage.Hops * (mirage.Interval || 0.17);
+      useTime = useTime + hops; usesPerSec = 1 / useTime;
+      res.notes.push(sk.Name + ': an opening cut (' + (useTime - hops).toFixed(2) + ' s at your attack speed), then ' + mirage.Hops + ' hops ' + (mirage.Interval || 0.17) + ' s apart (' + hops.toFixed(2) + ' s, not sped up by attack speed): ' + useTime.toFixed(2) + ' s per use.');
+    }
     // Speed cap: a clip plays at most ActionRateMax (4x) its own speed, so each skill has a shortest use
     // time; past it more speed adds nothing (game tooltip "2.86 (speed cap)"). Clip lengths are not in the
     // data files, so only floors measured in the game are known (CLIP_FLOOR).
@@ -3354,8 +3369,14 @@ window.BOPlanner = function (ctx) {
     const falls = skyRep > 0 ? 2 : 1;
     let perHitFactor = projWeight / projOnTarget * (1 + skyRep) / falls; // average share of a full hit per hit
     const rainWaves = sk.Delivery === 'Rain' && sk.Rain && sk.Rain.Waves > 0 ? sk.Rain.Waves : 0;
-    const strikes = rainWaves || (typeof sk.Strikes === 'object' && sk.Strikes ? (sk.Strikes.Count || 1) : (+sk.Strikes || 1));
-    if (strikes > 1 && !rainWaves) res.notes.push(sk.Name + ' strikes ' + strikes + ' times per use; every strike is counted at the full hit (a stronger finisher is not modelled).');
+    const strikes = mirage ? mirage.Hops : rainWaves || (typeof sk.Strikes === 'object' && sk.Strikes ? (sk.Strikes.Count || 1) : (+sk.Strikes || 1));
+    // Mirage: every hop cuts; the last cut deals FinalScale (x1.8), so a use is worth Hops - 1 + FinalScale hits.
+    if (mirage) {
+      const fin = mirage.FinalScale || 1;
+      perHitFactor *= (mirage.Hops - 1 + fin) / mirage.Hops;
+      res.notes.push(sk.Name + ' cuts ' + mirage.Hops + ' times per use; the last cut deals ' + Math.round(fin * 100) + '% (' + (mirage.Hops - 1 + fin).toFixed(1) + ' full hits per use).');
+    }
+    if (strikes > 1 && !rainWaves && !mirage) res.notes.push(sk.Name + ' strikes ' + strikes + ' times per use; every strike is counted at the full hit (a stronger finisher is not modelled).');
     let hitsPerUse = o.hitsPerSecOverride > 0 ? 1 : (1 + repeats) * projOnTarget * strikes * falls;
     // Afterimages (scaling.json Meta AfterimageCap / AfterimageDamagePct; Shade of the Blow, idols, Earthbreaker):
     // a melee attack gets that many afterimages, at most the cap; each repeats the blow after the plain repeats

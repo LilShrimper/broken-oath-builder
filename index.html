@@ -19,13 +19,24 @@
   color-scheme: dark;
 }
 :root[data-theme="light"] {
-  --bg: #f4f5fb; --bg-2: #eceefa; --panel: #ffffff; --panel-2: #f1f2fa; --line: #dde0ef; --text: #1b1f33; --muted: #565d7c; --faint: #858ba6;
-  --accent: #6d28d9; --accent-strong: #6d28d9; --accent-2: #4f46e5; --accent-ink: #fff; --good: #15803d; --bad: #c2312f;
+  --bg: #f7f3ff; --bg-2: #efe8ff; --panel: #ffffff; --panel-2: #f5f0ff; --line: #d9cbf5; --text: #1f2138; --muted: #4d5678; --faint: #7581a8;
+  --accent: #6b4ce6; --accent-strong: #5a38d8; --accent-2: #7a5ef5; --accent-ink: #fff; --good: #0f7d4d; --bad: #b63d3b;
   --t-physical: #8a7356; --t-fire: #c4521f; --t-cold: #2c7fb8; --t-lightning: #a68a0a; --t-poison: #3f8a2e;
-  --shadow: 0 1px 2px rgba(20,24,60,.06), 0 6px 18px rgba(20,24,60,.06);
-  --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 8px 24px rgba(109,40,217,.12);
+  --shadow: 0 1px 2px rgba(31,33,56,.06), 0 12px 30px rgba(107,76,230,.12);
+  --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent), 0 10px 30px rgba(107,76,230,.16);
   color-scheme: light;
 }
+:root[data-theme="light"] .top-controls { background: linear-gradient(180deg, var(--panel), color-mix(in srgb, var(--panel-2) 82%, var(--panel))); }
+:root[data-theme="light"] .config-tab.active,
+:root[data-theme="light"] .tab.active { color: #fff; background: linear-gradient(135deg, var(--accent-strong), var(--accent-2)); box-shadow: 0 6px 18px rgba(90,56,216,.2); }
+:root[data-theme="light"] .stat.main .value,
+:root[data-theme="light"] .hero-tag,
+:root[data-theme="light"] .modgroup h4,
+:root[data-theme="light"] .warn { color: var(--accent); }
+:root[data-theme="light"] .hero-tag { background: none; }
+:root[data-theme="light"] .icon-btn:hover { background: var(--panel-2); }
+:root[data-theme="light"] .nav-reset { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--text); }
+:root[data-theme="light"] select, :root[data-theme="light"] input[type=number], :root[data-theme="light"] input[type=text] { background: var(--panel); border-color: var(--line); }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
 body { background: var(--bg); color: var(--text); font: 14px/1.5 Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
@@ -674,7 +685,9 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
 .tab.active { color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 12%, var(--panel)); box-shadow: inset 3px 0 0 var(--dashboard-gold); }
 .nav-divider { height: 1px; margin: -14px 10px -17px; background: linear-gradient(90deg, transparent, var(--line) 18%, var(--line) 82%, transparent); }
 .secondary-tabs .tab { color: var(--muted); }
-.secondary-tabs .tab.active { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--panel)); box-shadow: inset 3px 0 0 var(--accent); }
+.secondary-tabs .tab.active { color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 12%, var(--panel)); box-shadow: inset 3px 0 0 var(--dashboard-gold); }
+.nav-external { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; text-decoration: none; }
+.itemdb-credit { color: var(--muted); font-size: .68em; line-height: 1.35; }
 .code-pane { display: flex; flex-direction: column; gap: 16px; max-width: 860px; min-width: 0; margin: 0 auto; padding: 18px 0; }
 .code-pane[hidden] { display: none; }
 .code-intro .eyebrow { color: var(--dashboard-gold); font-size: 10px; font-weight: 700; letter-spacing: .16em; }
@@ -715,6 +728,8 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
   .nav > .tabs:not(.secondary-tabs) { order: 3; }
   .nav > .secondary-tabs { order: 5; border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); background: color-mix(in srgb, var(--accent) 4%, var(--panel)); }
   .nav-divider { order: 4; width: calc(100% - 24px); height: 1px; margin: -3px auto; }
+  .itemdb-divider { order: 6; }
+  .nav-external { order: 7; width: 100%; }
   .nav .tab { justify-content: center; flex: 1; width: auto; min-height: 36px; gap: 6px; padding: 6px 5px; font-size: 12px; }
   .nav .tab svg { width: 15px; height: 15px; }
   .nav .tab.active { box-shadow: inset 0 -2px 0 var(--dashboard-gold); }
@@ -894,6 +909,10 @@ body.dashboard-view .configure-heading { display: flex; }
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8 4 12l4 4M16 8l4 4-4 4M14 5l-4 14"/></svg><span>Load Code</span>
       </button>
     </nav>
+    <div class="nav-divider itemdb-divider" role="separator" aria-hidden="true"></div>
+    <a class="tab nav-external" href="https://broked-db.vercel.app/" target="_blank" rel="noopener noreferrer">
+      <span>ItemDatabase</span><span class="itemdb-credit">(credit frostyunknown on discord)</span>
+    </a>
     <div class="nav-end">
       <button class="nav-reset" id="resetLoadedCharacters" type="button" title="Remove characters loaded from saves or codes, and your build plans. Characters built into the page stay.">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 14h12l1-14M9 7V4h6v3"/></svg>

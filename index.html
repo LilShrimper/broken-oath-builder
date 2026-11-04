@@ -3989,13 +3989,22 @@ window.BOPlanner = function (ctx) {
     return first ? [first, ...set.filter(id => id !== first)] : set;
   }
 
+  // The tags that decide which supports fit a skill's sockets. Thousand Cuts (Mirage hops) counts as a Movement
+  // skill though its Tags leave it out: the game's Swift Step tooltip lists it under "Fits" and socketing it took
+  // the panel from 35,774 to 42,929 DPS (screenshots, 2026-11-04). Same rule as makeCtx.
+  function socketTags(sk) {
+    const tags = new Set([...(sk.Tags || []), sk.Delivery].filter(Boolean).map(lc));
+    if (sk.Mirage && sk.Mirage.Hops > 0) tags.add('movement');
+    return tags;
+  }
+
   // Every support that can go in this skill's sockets (or, for a Conduit spell, the channel's), for the page's picker.
   // packOnly: adds nothing against one enemy; shape: only one shape gem counts (Orbit, Skyfall, Rain, Trap, Totem).
   function supportChoices(GD, ch, skillId, o) {
     const sk = GD.skills[lc(skillId)]; if (!sk) return [];
     const host = conduitHost(GD, ch, skillId, collectMods(GD, ch, o || {}).mods, (o || {}).conduit);
     const base = host ? GD.skills[lc(host.skill)] || sk : sk;
-    const tags = new Set([...(base.Tags || []), base.Delivery].map(lc));
+    const tags = socketTags(base);
     const fits = sp => (!(sp.RequiresAnyTag || []).length || sp.RequiresAnyTag.some(t => tags.has(lc(t)))) && !(sp.ExcludeTags || []).some(t => tags.has(lc(t)));
     return Object.values(GD.supports).filter(fits).map(sp => ({ id: lc(sp.Id), name: sp.Name, desc: sp.Description || '', packOnly: sk.Minion ? !minionCounts(sp) : NO_SINGLE_TARGET.has(lc(sp.Id)) && !['cast_on_crit', 'channel_conduit', 'tithe', 'siphon'].includes(lc(sp.Id)), shape: SHAPES.includes(lc(sp.Id)) }))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -4008,8 +4017,8 @@ window.BOPlanner = function (ctx) {
     opt = opt || {};
     const sk = GD.skills[lc(skillId)];
     const host = conduitHost(GD, ch, skillId, collectMods(GD, ch, o).mods, o.conduit);
-    const tagSets = [new Set([...(sk.Tags || []), sk.Delivery].map(lc))];
-    if (host) { const hs = GD.skills[lc(host.skill)]; tagSets.push(new Set([...(hs.Tags || []), hs.Delivery].map(lc))); }
+    const tagSets = [socketTags(sk)];
+    if (host) tagSets.push(socketTags(GD.skills[lc(host.skill)]));
     const fitsTags = (s, tags) => (!(s.RequiresAnyTag || []).length || s.RequiresAnyTag.some(t => tags.has(lc(t)))) && !(s.ExcludeTags || []).some(t => tags.has(lc(t)));
     const owned = ownedSupports(ch);
     // A Conduit spell's supports sit in the channel's sockets, so they must fit the channel.

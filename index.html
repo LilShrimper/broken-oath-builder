@@ -244,7 +244,29 @@ select:focus, input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 
 .upgrade-card .weight .fill { background: color-mix(in srgb, var(--dashboard-gold) 24%, transparent); border-color: var(--dashboard-gold); }
 .upgrade-card .weight .pct { color: var(--dashboard-green); font-size: 12px; }
 .upgrade-card details { grid-column: 1 / -1; }
+.top-optimizer-card { grid-column: 1 / -1; }
+.optimizer-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.optimizer-heading h2 { margin-bottom: 3px; }
+.optimizer-heading p { margin: 0; }
+.optimizer-status { margin: 8px 0 0; }
+.optimizer-list { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
+.optimizer-row { display: grid; grid-template-columns: 25px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--panel-2) 45%, transparent); }
+.optimizer-rank { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 50%; background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 700; }
+.optimizer-copy { display: grid; gap: 3px; min-width: 0; }
+.optimizer-copy b { font-size: 12px; }
+.optimizer-copy small { color: var(--muted); font-size: 10px; line-height: 1.35; }
+.optimizer-tree-link { justify-self: start; padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-size: 12px; font-weight: 650; text-align: left; text-decoration: underline dotted color-mix(in srgb, var(--dashboard-gold) 65%, transparent); text-underline-offset: 3px; cursor: pointer; }
+.optimizer-tree-link:hover { color: var(--dashboard-gold); }
+.optimizer-tree-link:focus-visible { outline: 2px solid var(--dashboard-gold); outline-offset: 3px; border-radius: 2px; }
+.optimizer-tree-link:disabled { color: var(--muted); cursor: default; }
+.optimizer-gain { color: var(--dashboard-green); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.optimizer-kind { color: var(--muted); font-size: 10px; white-space: nowrap; }
 .support-results { border-color: color-mix(in srgb, var(--dashboard-gold) 30%, var(--line)); }
+@media (max-width: 700px) {
+  .optimizer-row { grid-template-columns: 24px minmax(0, 1fr) auto; gap: 8px; }
+  .optimizer-gain { grid-column: 2; grid-row: 2; justify-self: start; }
+  .optimizer-row > .btn, .optimizer-kind { grid-column: 3; grid-row: 1 / span 2; }
+}
 @media (min-width: 701px) and (max-width: 1000px) {
   .overview-grid.has-comparison { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .overview-grid.has-comparison .comparison-card { grid-column: 1 / -1; }
@@ -559,17 +581,17 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
 @media (max-width: 520px) { .hero-tiles { grid-template-columns: 1fr; } .hero-cta .btn { flex: 1 1 auto; } .hero-title br { display: none; } .hero-alternatives { flex-direction: column; align-items: flex-start; gap: 4px; } }
 /* Top bar on small screens: tabs get their own row */
 .results { gap: 16px; }
-.results .analysis-details > .card > h2, .results .analysis-details > .grid2 > .card > h2 {
+.results .analysis-details > .card > h2, .results .analysis-details .advanced-statistics > .damage-breakdown-card > h2, .results .analysis-details .advanced-statistics > .grid2 > .card > h2 {
   margin: 0 0 14px;
   padding: 0 0 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
   font: 600 17px/1.25 Georgia, "Times New Roman", serif;
   letter-spacing: -.01em;
 }
-.results .analysis-details > .card > h2 small, .results .analysis-details > .grid2 > .card > h2 small { font: 400 11px/1.4 Inter, "Segoe UI", sans-serif; }
-.results .analysis-details > .card, .results .analysis-details > .grid2 > .card { padding: 18px; }
-.results .analysis-details > .card .kv, .results .analysis-details > .grid2 > .card .kv { row-gap: 7px; }
-.results .analysis-details > .grid2 h3 {
+.results .analysis-details > .card > h2 small, .results .analysis-details .advanced-statistics > .damage-breakdown-card > h2 small, .results .analysis-details .advanced-statistics > .grid2 > .card > h2 small { font: 400 11px/1.4 Inter, "Segoe UI", sans-serif; }
+.results .analysis-details > .card, .results .analysis-details .advanced-statistics > .damage-breakdown-card, .results .analysis-details .advanced-statistics > .grid2 > .card { padding: 18px; }
+.results .analysis-details > .card .kv, .results .analysis-details .advanced-statistics > .grid2 > .card .kv { row-gap: 7px; }
+.results .analysis-details .advanced-statistics > .grid2 h3 {
   margin: 16px 0 7px;
   padding-top: 11px;
   border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
@@ -577,7 +599,12 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
   font-size: 10px;
   letter-spacing: .13em;
 }
-.results .analysis-details > .grid2 .hint { line-height: 1.55; }
+.results .analysis-details .advanced-statistics > .grid2 .hint { line-height: 1.55; }
+.results .analysis-details > .advanced-statistics { margin: 0; padding: 12px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 92%, transparent), color-mix(in srgb, var(--panel) 76%, var(--bg))); box-shadow: var(--shadow); }
+.results .analysis-details > .advanced-statistics:not([open]) > :not(summary) { display: none; }
+.results .analysis-details > .advanced-statistics > summary { padding: 2px 0; font-size: 13px; font-weight: 650; }
+.results .analysis-details > .advanced-statistics > .damage-breakdown-card { margin-top: 14px; }
+.results .analysis-details > .advanced-statistics[open] > .grid2 { margin-top: 14px; }
 .results .table-wrap {
   border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
   border-radius: 10px;
@@ -815,6 +842,7 @@ body.dashboard-view .configure-heading { display: flex; }
   body.dashboard-view .pinbar,
   body.dashboard-view .headline,
   body.dashboard-view .build-overview-grid,
+  body.dashboard-view .top-optimizer-card,
   body.dashboard-view .analysis-details,
   body.dashboard-view .support-results { grid-column: 1 / -1; }
   body.dashboard-view .results-heading { grid-row: 1; }
@@ -826,8 +854,9 @@ body.dashboard-view .configure-heading { display: flex; }
   body.dashboard-view .overview-grid.has-comparison .comparison-card { grid-column: auto; }
   body.dashboard-view .controls { grid-column: 2; grid-row: 4; order: 0; }
   body.dashboard-view .build-overview-grid { grid-row: 5; }
-  body.dashboard-view .support-results { grid-row: 6; }
-  body.dashboard-view .analysis-details { grid-row: 7; }
+  body.dashboard-view .top-optimizer-card { grid-row: 6; }
+  body.dashboard-view .support-results { grid-row: 7; }
+  body.dashboard-view .analysis-details { grid-row: 8; }
 }
 
 </style>
@@ -4061,6 +4090,7 @@ window.BOStartApp = function () {
     penFloor: false, opt: null, optJob: null, last: null,
     keepSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
   };
+  let upgradeOptimizer = { status: 'idle', results: [], key: '', run: 0 };
 
   let planner = null; // the Build tab (planner.js), made at the start
 
@@ -4399,10 +4429,10 @@ window.BOStartApp = function () {
       (pin && pin.total != null ? comparisonCard(r.totalDps, pin.total) : '') +
       '</div><div class="build-overview-grid">' +
       snapshotCard(r, 'Total DPS', r.totalDps) + upgradeCard(w) + '</div>';
-    if (!document.body.classList.contains('support-page')) html += optCard(r);
+    if (!document.body.classList.contains('support-page')) html += optimizerCard() + optCard(r);
     html += '</div><div class="analysis-details">';
     // Hit table
-    html += '<div class="card"><h2>Damage Breakdown <small>' + esc(r.skill.Name) + ' · gem ' + r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus : '') + ' · ' + (r.base.kind === 'attack' ? 'attack with ' + esc(r.base.weapon.name) : 'spell') + '</small></h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Base</th><th>Increased</th><th>More</th><th>Hit range</th><th>Enemy res</th><th>Taken</th><th>DPS</th></tr></thead><tbody>' +
+    html += '<details class="advanced-statistics"><summary>Advanced Statistics</summary><div class="card damage-breakdown-card"><h2>Damage Breakdown <small>' + esc(r.skill.Name) + ' · gem ' + r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus : '') + ' · ' + (r.base.kind === 'attack' ? 'attack with ' + esc(r.base.weapon.name) : 'spell') + '</small></h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Base</th><th>Increased</th><th>More</th><th>Hit range</th><th>Enemy res</th><th>Taken</th><th>DPS</th></tr></thead><tbody>' +
       hitTypes.map(d => {
         const b = r.convertedParts[d], si = r.scaleInfo[d], h = r.hit[d], m = r.mitig[d];
         return '<tr><td><span class="type" style="--c:' + typeColor(d) + '">' + d + '</span></td><td>' + num(b[0]) + '–' + num(b[1]) + '</td><td>+' + num(si.inc, 0) + '%</td><td>×' + num(si.more, 2) + '</td><td>' + num(h.min) + '–' + num(h.max) + '</td><td title="' + esc('Resistance ' + num(r.enemy.resist[d], 1) + '% minus ' + num(r.enemy.pen[d], 0) + '% penetration' + (d === 'Physical' && r.mitig.armourReduction ? '; armour stops ' + num(r.mitig.armourReduction, 1) + '%' : '')) + '">' + num(m.effRes, 1) + '%' + (d === 'Physical' && r.mitig.armourReduction ? ' <small>(arm. −' + num(r.mitig.armourReduction, 1) + '%)</small>' : '') + '</td><td>×' + num(m.taken, 2) + '</td><td><b>' + num(r.hitDpsByType[d]) + '</b></td></tr>';
@@ -4432,7 +4462,7 @@ window.BOStartApp = function () {
         kv('Shocks on the enemy', num(sh.avg, 2) + ' of ' + sh.stacks + ' (' + num(sh.rate, 2) + '/s for ' + num(sh.duration, 1) + ' s)') + kv('More damage taken', '+' + num(sh.pct, 1) + '%', true) + '</dl>')(r.ailments.shock) : '') +
       (bl ? '<h3>Bleeding</h3><dl class="kv">' + kv('Bleed chance', num(bl.chance, 0) + '%') + kv('Bleeding while it holds', num(bl.dps1) + '/s for ' + num(bl.duration, 1) + ' s') + kv('Uptime', num(bl.uptime * 100, 0) + '%') + kv('Bleeding DPS vs enemy', num(bl.dps), true) + '</dl>' : '') +
       '<h3>Your attributes</h3><dl class="kv">' + kv('Strength / Dexterity / Intelligence', r.attr.Str + ' / ' + r.attr.Dex + ' / ' + r.attr.Int) + '</dl>' +
-      '</div></div>';
+      '</div></div></details>';
 
     // Modifiers
     const used = r.mods.filter(m => r.used.has(m));
@@ -4584,10 +4614,259 @@ window.BOStartApp = function () {
   function upgradeCard(weights) {
     const maxGain = Math.max(0.0001, ...weights.map(x => x.gain));
     const row = x => '<div class="weight"><div class="bar"><div class="fill" style="width:' + Math.max(0, x.gain / maxGain * 100).toFixed(1) + '%"></div><div class="lbl">' + esc(x.label) + '</div></div><div class="pct">' + pct(x.gain) + '</div></div>';
-    return '<section class="card upgrade-card"><h2>Top Optimization Suggestions <small>Estimated DPS gain · stat estimates</small></h2><div class="weights">' +
+    return '<section class="card upgrade-card"><h2>DPS Scaling <small>Estimated impact of small stat upgrades</small></h2><div class="weights">' +
       weights.slice(0, 5).map(row).join('') +
       (weights.length > 5 ? '<details><summary>More upgrade estimates (' + (weights.length - 5) + ')</summary><div class="weights">' + weights.slice(5).map(row).join('') + '</div></details>' : '') +
       '</div></section>';
+  }
+
+  function optimizerKey() {
+    return JSON.stringify([optKey(), st.ch.items, st.ch.gems, st.ch.hotbar, st.supports, st.skill, st.gemLevel],
+      (key, value) => value instanceof Set ? [...value].sort() : value);
+  }
+  function gearUpgradeCandidates(ch) {
+    const limits = { Magic: 1, Rare: 3 }, candidates = [], affixes = Object.values(GD.affixes);
+    ch.items.forEach((item, itemIndex) => {
+      const limit = limits[item.rarity], base = GD.bases[String(item.base || '').toLowerCase()];
+      if (!limit || !base || !Array.isArray(item.affixes)) return;
+      const tags = new Set(base.Tags || []);
+      const usedGroups = new Set(item.affixes.map(a => {
+        const affix = GD.affixes[String(a.id || '').toLowerCase()];
+        return affix && (affix.Group || affix.Id);
+      }).filter(Boolean));
+      const usedSlots = { Prefix: 0, Suffix: 0 };
+      item.affixes.forEach(a => {
+        const affix = GD.affixes[String(a.id || '').toLowerCase()];
+        if (affix && usedSlots[affix.Type] != null) usedSlots[affix.Type]++;
+      });
+      for (const affix of affixes) {
+        if (!['Prefix', 'Suffix'].includes(affix.Type) || usedSlots[affix.Type] >= limit) continue;
+        if (!(affix.BaseTags || []).some(tag => tags.has(tag)) || (affix.ExcludeTags || []).some(tag => tags.has(tag))) continue;
+        if (usedGroups.has(affix.Group || affix.Id)) continue;
+        const stat = affix.Mod && affix.Mod.Stat;
+        if (!(S.damageStat(stat) || ['SkillLevel', 'Str', 'Dex', 'Int', 'Attributes'].includes(stat))) continue;
+        const tierIndex = (affix.Tiers || []).findIndex(tier => tier.ILvl <= (item.level || ch.level));
+        if (tierIndex < 0) continue;
+        const tier = affix.Tiers[tierIndex];
+        candidates.push({
+          itemIndex, affixId: affix.Id, tierIndex,
+          affixData: affix, tier,
+          roll: { id: affix.Id, tier: tierIndex, v: tier.Max, v2: tier.Max2 == null ? 0 : tier.Max2 },
+          slot: item.slot, itemBase: base.Name || item.base,
+          tierName: tier.Name || 'Tier ' + (tierIndex + 1)
+        });
+      }
+    });
+    return candidates;
+  }
+  function optimizerTitleHtml(result, index, disabled) {
+    if (result.kind !== 'tree' || !result.proposal) return '<b>' + esc(result.title) + '</b>';
+    return '<button type="button" class="optimizer-tree-link" data-tree-preview="' + index + '"' + (disabled ? ' disabled' : '') + '>' + esc(result.title) + '</button>';
+  }
+  function optimizerCard() {
+    const O = upgradeOptimizer, stale = O.key && O.key !== optimizerKey();
+    const rows = O.results.slice(0, 4).map((x, i) => {
+      const action = x.kind === 'support'
+        ? '<button class="btn small" data-optimizer-action="' + i + '"' + (stale || O.status === 'running' ? ' disabled' : '') + '>Use</button>'
+        : x.kind === 'tree'
+          ? '<button class="btn small" data-optimizer-action="' + i + '"' + (stale || O.status === 'running' ? ' disabled' : '') + '>Apply</button>'
+          : x.kind === 'gear'
+            ? '<button class="btn small" data-optimizer-action="' + i + '"' + (stale || O.status === 'running' ? ' disabled' : '') + '>Add</button>'
+            : '<span class="optimizer-kind">Estimate</span>';
+      return '<li class="optimizer-row"><span class="optimizer-rank">' + (i + 1) + '</span><span class="optimizer-copy">' + optimizerTitleHtml(x, i, O.status !== 'done' || stale) + '<small>' + esc(x.detail) + '</small></span><strong class="optimizer-gain">' + pct(x.gain) + '</strong>' + action + '</li>';
+    }).join('');
+    let status = '';
+    if (stale) status = '<p class="warn optimizer-status">Your build or settings changed. Run the optimizer again before applying these results.</p>';
+    else if (O.status === 'running') status = '<p class="hint optimizer-status" role="status">' + esc(O.progress || 'Preparing simulations…') + '</p>';
+    else if (O.status === 'done') status = '<p class="hint optimizer-status" role="status">' + (rows ? 'Gear picks are eligible affixes for open slots on equipped items, simulated at the best tier allowed by item level. Tree and support picks are simulated against the same build.' : 'No positive upgrades found among open gear affixes, support setups, and passive-tree options.') + '</p>';
+    else if (O.status === 'error') status = '<p class="warn optimizer-status" role="status">' + esc(O.error || 'The optimizer could not complete.') + '</p>';
+    else status = '<p class="hint optimizer-status">Check open prefixes and suffixes on equipped items, re-route passive points, and compare mana-sustainable support setups. The optimizer may take a few seconds to finish.</p>';
+    return '<section class="card top-optimizer-card"><div class="optimizer-heading"><div><h2>Top Optimization Suggestions</h2><p class="hint">Full-build opportunities: gear, passive tree, and supports.</p></div><button class="btn small" id="runUpgradeOptimizer"' + (O.status === 'running' ? ' disabled' : '') + '>' + (O.status === 'running' ? 'Optimizing…' : 'Run Optimizer') + '</button></div>' +
+      status + '<div class="optimizer-results">' + (rows ? '<ol class="optimizer-list">' + rows + '</ol>' : '') + '</div></section>';
+  }
+  function runUpgradeOptimizer(r) {
+    const run = upgradeOptimizer.run + 1, key = optimizerKey(), base = r.totalDps;
+    if (!(base > 0) || !isFinite(base)) {
+      upgradeOptimizer = { status: 'error', results: [], key, run, error: 'A positive simulated DPS value is needed to compare upgrades.' };
+      render();
+      return;
+    }
+    const free = S.freePoints(GD, st.chOrig || st.ch) || 0;
+    let gearCandidates, supportJob, treeJob;
+    try {
+      gearCandidates = gearUpgradeCandidates(st.ch);
+      supportJob = S.supportSearch(GD, st.ch, st.skill, opts(), { pool: 'all', target: 'enemy', keep: 40, manaOk: true, pinned: [...st.keepSup] });
+      treeJob = BOTreeOpt.optimize(GD, S, st.ch, st.skill, opts(), {
+        keepDefence: $('#optKeepDef').checked,
+        allowKeystones: $('#optKeys').checked,
+        conduitMargin: 0.01,
+        extraPoints: free
+      });
+    }
+    catch (error) {
+      upgradeOptimizer = { status: 'error', results: [], key, run, error: 'Could not start build optimization: ' + String(error && error.message || error) };
+      render();
+      return;
+    }
+    const currentSupports = [...(st.supports || [])].map(id => id.toLowerCase()).sort();
+    upgradeOptimizer = {
+      status: 'running', results: [], key, run, progress: 'Scoring stat, support, and passive-tree upgrades…',
+      gearCandidates, gearIndex: 0, gearResults: [], supportJob, treeJob, treeDone: false,
+      treeProgress: 'Starting passive-tree optimization', treeResult: null, base,
+      currentSupports, minion: !!r.minion
+    };
+    render();
+    const tick = () => {
+      const O = upgradeOptimizer;
+      if (O.run !== run || O.status !== 'running') return;
+      if (optimizerKey() !== key) { O.status = 'stale'; O.progress = ''; render(); return; }
+      try {
+      const start = performance.now();
+      while (performance.now() - start < 25 && (!O.supportJob.done || !O.treeDone || O.gearIndex < O.gearCandidates.length)) {
+        if (!O.supportJob.done) O.supportJob.step(1);
+        if (O.gearIndex < O.gearCandidates.length) {
+          const candidate = O.gearCandidates[O.gearIndex++], items = st.ch.items.map(item => Object.assign({}, item, { affixes: item.affixes.slice() }));
+          items[candidate.itemIndex].affixes.push(candidate.roll);
+          const result = S.calcSkill(GD, Object.assign({}, st.ch, { items }), st.skill, opts());
+          const gain = result.totalDps / base - 1;
+          if (isFinite(gain) && gain > 0.0005) {
+            const label = modLine(Object.assign({}, candidate.affixData.Mod, { Value: candidate.tier.Max, Value2: candidate.tier.Max2 || 0 }));
+            O.gearResults.push({
+              kind: 'gear',
+              title: candidate.slot + ': ' + label,
+              detail: 'Open ' + candidate.affixData.Type.toLowerCase() + ' · ' + candidate.tierName +
+                ' (item level ' + (candidate.tier.ILvl || 1) + '+) on ' + candidate.itemBase + '. Simulated at the tier’s maximum roll.',
+              gain, itemIndex: candidate.itemIndex, roll: candidate.roll
+            });
+          }
+        }
+        if (!O.treeDone) {
+          const step = O.treeJob.next();
+          if (step.done) {
+            O.treeDone = true;
+            const result = step.value;
+            if (!result.error && result.gain > 0.001) {
+              const added = result.add.filter(x => ['Notable', 'Keystone', 'Choice', 'Socket'].includes((GD.nodes[x.id] || {}).Kind)).slice(0, 3).map(x => GD.nodes[x.id].Name);
+              const removed = result.remove.filter(x => ['Notable', 'Keystone', 'Choice', 'Socket'].includes((GD.nodes[x.id] || {}).Kind)).slice(0, 3).map(x => GD.nodes[x.id].Name);
+              O.treeResult = {
+                kind: 'tree',
+                title: 'Re-optimize passive tree',
+                detail: result.add.length + ' node' + (result.add.length === 1 ? '' : 's') + ' added, ' + result.remove.length + ' refunded.' +
+                  (added.length ? ' Adds: ' + added.join(', ') + '.' : '') +
+                  (removed.length ? ' Removes: ' + removed.join(', ') + '.' : ''),
+                gain: result.gain,
+                passives: result.list,
+                proposal: result
+              };
+            }
+          } else if (step.value && step.value.phase) {
+            O.treeProgress = step.value.phase + (step.value.p != null ? ' ' + Math.round(step.value.p * 100) + '%' : '');
+          }
+        }
+      }
+      const supports = O.supportJob.results
+        .filter(x => x.sup.map(id => id.toLowerCase()).sort().join('|') !== O.currentSupports.join('|') && x.v > base)
+        .map(x => {
+          const added = x.sup.filter(id => !O.currentSupports.includes(id.toLowerCase()));
+          const removed = O.currentSupports.filter(id => !x.sup.some(s => s.toLowerCase() === id));
+          const title = added.length === 1 && removed.length === 1
+            ? 'Swap ' + supName(removed[0]) + ' for ' + supName(added[0])
+            : 'Use ' + (x.sup.map(supName).join(', ') || 'no supports');
+          return {
+            kind: 'support', title, detail: (x.notOwned.length ? 'Includes not-owned support: ' + x.notOwned.map(supName).join(', ') + '. ' : '') +
+              (x.manaPerSec != null ? 'Mana ' + num(x.manaPerSec, 1) + '/s of ' + num(x.manaGain, 1) + '/s.' : 'Mana cost is not modeled for this setup.'),
+            gain: x.v / base - 1, supports: x.sup
+          };
+        });
+      const candidates = [...O.gearResults, ...(O.treeResult ? [O.treeResult] : []), ...supports]
+        .filter(x => x.gain > 0 && isFinite(x.gain))
+        .sort((a, b) => b.gain - a.gain);
+      const selected = [];
+      ['tree', 'gear', 'support'].forEach(kind => {
+        const best = candidates.find(x => x.kind === kind);
+        if (best) selected.push(best);
+      });
+      for (const candidate of candidates) {
+        if (selected.length >= 4) break;
+        if (candidate.kind === 'support' && selected.some(x => x.kind === 'support')) continue;
+        if (!selected.includes(candidate)) selected.push(candidate);
+      }
+      O.results = selected.sort((a, b) => b.gain - a.gain);
+      if (O.supportJob.done && O.treeDone && O.gearIndex >= O.gearCandidates.length) {
+        O.status = 'done';
+        O.progress = '';
+        render();
+        return;
+      }
+      const supportProgress = O.supportJob.total ? Math.round(O.supportJob.tried / O.supportJob.total * 100) : 100;
+      O.progress = 'Running full build optimization (may take a few seconds): supports ' + supportProgress +
+        '% · passive tree ' + O.treeProgress + ' · gear affixes ' + O.gearIndex + '/' + O.gearCandidates.length + '.';
+      const list = document.querySelector('.top-optimizer-card .optimizer-status');
+      if (list) list.textContent = O.progress;
+      const results = document.querySelector('.top-optimizer-card .optimizer-results');
+      if (results) results.innerHTML = O.results.length ? '<ol class="optimizer-list">' + O.results.map((x, i) => {
+        const action = x.kind === 'support' ? '<button class="btn small" data-optimizer-action="' + i + '" disabled>Use</button>' :
+          x.kind === 'tree' ? '<button class="btn small" data-optimizer-action="' + i + '" disabled>Apply</button>' :
+            x.kind === 'gear' ? '<button class="btn small" data-optimizer-action="' + i + '" disabled>Add</button>' : '<span class="optimizer-kind">Estimate</span>';
+        return '<li class="optimizer-row"><span class="optimizer-rank">' + (i + 1) + '</span><span class="optimizer-copy">' + optimizerTitleHtml(x, i, true) + '<small>' + esc(x.detail) + '</small></span><strong class="optimizer-gain">' + pct(x.gain) + '</strong>' + action + '</li>';
+      }).join('') + '</ol>' : '';
+      setTimeout(tick, 0);
+      } catch (error) {
+        O.status = 'error';
+        O.error = 'Optimization failed: ' + String(error && error.message || error);
+        render();
+      }
+    };
+    setTimeout(tick, 0);
+  }
+  function applyOptimizerResult(index) {
+    const O = upgradeOptimizer, result = O.results[index];
+    if (!result || O.status !== 'done' || O.key !== optimizerKey()) { render(); return; }
+    if (result.kind === 'support') applySupportSetup(result.supports);
+    else if (result.kind === 'tree') setPassives(result.passives);
+    else if (result.kind === 'gear') applyGearAffix(result);
+  }
+  function openPassiveProposal(index) {
+    const O = upgradeOptimizer, result = O.results[index];
+    if (!result || result.kind !== 'tree' || !result.proposal || O.status !== 'done' || O.key !== optimizerKey()) { render(); return; }
+    const proposal = result.proposal;
+    T.opt = Object.assign({}, proposal, {
+      key: optKey(),
+      skill: st.skill,
+      skillName: (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill,
+      base0: proposal.points,
+      addSet: new Set(proposal.add.map(x => x.id)),
+      remSet: new Set(proposal.remove.map(x => x.id))
+    });
+    showTab('tree');
+    const ids = [...T.opt.addSet, ...T.opt.remSet].map(id => GD.nodes[id]).filter(n => n && isFinite(n.X) && isFinite(n.Y));
+    if (ids.length) {
+      let x0 = Math.min(...ids.map(n => n.X)) - 900, x1 = Math.max(...ids.map(n => n.X)) + 900;
+      let y0 = Math.min(...ids.map(n => n.Y)) - 900, y1 = Math.max(...ids.map(n => n.Y)) + 900;
+      const box = $('#treeView').getBoundingClientRect(), aspect = box.width / Math.max(1, box.height);
+      let w = x1 - x0, h = y1 - y0;
+      if (w / h < aspect) { const nw = h * aspect; x0 -= (nw - w) / 2; w = nw; }
+      else { const nh = w / aspect; y0 -= (nh - h) / 2; h = nh; }
+      setVB([x0, y0, w, h]);
+    }
+    showOpt();
+    paintTree();
+  }
+  function applyGearAffix(result) {
+    if (!result || !st.ch.items[result.itemIndex]) return;
+    if (!st.pinned && st.last) st.pinned = { total: st.last.totalDps, hit: st.last.hitDps, poison: st.last.poisonDps, sheet: st.last.panelDps };
+    const items = st.ch.items.map(item => Object.assign({}, item, { affixes: item.affixes.slice() }));
+    items[result.itemIndex].affixes.push(Object.assign({}, result.roll));
+    if (st.chOrig && st.chOrig.plan) {
+      st.chOrig.items = items;
+      st.chOrig.savedAt = new Date().toISOString();
+      st.ch = st.chOrig;
+      keepChars();
+      if (planner) planner.render();
+    } else st.ch = Object.assign({}, st.ch, { items });
+    stopSearch();
+    st.opt = null;
+    render();
   }
 
   // A summon gem: the minions' own sheet (the game's skill panel numbers).
@@ -4604,7 +4883,7 @@ window.BOStartApp = function () {
     const weights = S.statWeights(GD, st.ch, st.skill, opts(), r);
     h += '<div class="overview-grid minion-overview">' + damageMixCard(r) + '</div>' +
       '<div class="build-overview-grid">' + snapshotCard(r, 'Skill panel DPS', r.panelDps) + upgradeCard(weights) + '</div>';
-    if (!document.body.classList.contains('support-page')) h += optCard();
+    if (!document.body.classList.contains('support-page')) h += optimizerCard() + optCard();
     h += '</div><div class="analysis-details">';
     h += '<div class="card"><h2>The minion hit <small>' + esc(r.skill.Name) + ' · gem ' + r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus : '') + '</small></h2><div class="table-wrap"><table class="hit"><thead><tr><th>Type</th><th>Hit</th></tr></thead><tbody>' +
       Object.keys(r.hit).map(d => '<tr><td><span class="type" style="--c:' + typeColor(d) + '">' + d + '</span></td><td>' + num(r.hit[d].min) + '–' + num(r.hit[d].max) + '</td></tr>').join('') + '</tbody></table></div>' +
@@ -4627,6 +4906,14 @@ window.BOStartApp = function () {
   function bindResults(r, out) {
     $('#pinBtn').onclick = () => { st.pinned = { total: r.totalDps, hit: r.hitDps, poison: r.poisonDps, sheet: r.panelDps }; render(); };
     const up = $('#unpinBtn'); if (up) up.onclick = () => { st.pinned = null; render(); };
+    const optimizerButton = out.querySelector('#runUpgradeOptimizer');
+    if (optimizerButton) optimizerButton.onclick = () => runUpgradeOptimizer(r);
+    out.querySelectorAll('[data-optimizer-action]').forEach(button => {
+      button.onclick = () => applyOptimizerResult(+button.dataset.optimizerAction);
+    });
+    out.querySelectorAll('[data-tree-preview]').forEach(button => {
+      button.onclick = () => openPassiveProposal(+button.dataset.treePreview);
+    });
     const pie = out.querySelector('.source-pie'), tooltip = out.querySelector('.source-tooltip');
     if (pie && tooltip) {
       let activeSlice = null;
@@ -4835,8 +5122,11 @@ window.BOStartApp = function () {
   function stopSearch() { st.optJob = null; const b = $('#optBtn'); if (b) { b.disabled = false; b.textContent = 'Find best supports'; } }
   function useSetup(i) {
     const x = !st.opt ? null : i === -1 ? { sup: st.opt.baseSup } : st.opt.results[i]; if (!x) return;
+    applySupportSetup(x.sup);
+  }
+  function applySupportSetup(supports) {
     if (!st.pinned && st.last) st.pinned = { total: st.last.totalDps, hit: st.last.hitDps, poison: st.last.poisonDps, sheet: st.last.panelDps };
-    st.supports = x.sup.slice();
+    st.supports = supports.slice();
     for (const k of [...st.off]) if (k.startsWith('support:')) st.off.delete(k);
     planSync(); render();
   }

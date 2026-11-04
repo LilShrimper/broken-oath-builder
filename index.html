@@ -5909,7 +5909,7 @@ window.BOStartApp = function () {
       buildSettings.open = true;
     }
     syncSettingsToViewport();
-    document.querySelectorAll('.tab').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
     $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
@@ -5917,7 +5917,8 @@ window.BOStartApp = function () {
     store.set('tab', tab);
     if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
   }
-  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', async () => {
+  // Only real tabs; the ItemDatabase link is also styled .tab but just opens its site.
+  document.querySelectorAll('.tab[data-tab]').forEach(b => b.addEventListener('click', async () => {
     if (b.dataset.tab === 'plan') { if (await planner.startNewPlan()) showTab('plan'); }
     else showTab(b.dataset.tab);
   }));

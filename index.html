@@ -2751,8 +2751,9 @@ window.BOPlanner = function (ctx) {
     const tags = new Set();
     for (const t of sk.Tags || []) tags.add(lc(t));
     if (sk.Delivery) tags.add(lc(sk.Delivery));
-    // Thousand Cuts (Mirage hops): its text says it counts as a Movement skill (movement supports, passives
-    // and items apply), though its Tags leave Movement out. So Afterimage and Afterimages skip it.
+    // Thousand Cuts (Mirage hops) counts as a Movement skill though its Tags leave Movement out, so Afterimage
+    // and Afterimages skip it. Game log 4 Nov: "MoveCount79: ON - thousand_cuts count as Movement skills for
+    // modifiers and supports (not for input)".
     if (sk.Mirage && sk.Mirage.Hops > 0) tags.add('movement');
     const isAttack = has(tags, 'Attack');
     const isGem = sk.Kind === 'Gem' || ch.gems.includes(skillId);
@@ -3157,15 +3158,20 @@ window.BOPlanner = function (ctx) {
     if (sk.Channel && sk.Channel.Tick) { usesPerSec = rateMult / sk.Channel.Tick; useTime = sk.Channel.Tick / rateMult; }
     else if (isAttack) { const aps = weapon ? weapon.aps : 1.2; usesPerSec = aps * rateMult; useTime = 1 / usesPerSec; }
     else { const ct = sk.CastTime || 0.5; usesPerSec = rateMult / ct; useTime = ct / rateMult; }
-    // Mirage (Thousand Cuts, skills.json Mirage): one quick opening cut at attack speed, then Hops hops
-    // Interval seconds apart. The hop timer is taken as fixed (attack speed only shortens the opening cut).
-    // Check report #3 (4 Nov, Samurai 40): the old "one swing at weapon speed" model gave 5.28 uses/s and
-    // ran about 2x the real Guardian DPS (median real/sheet 0.53).
+    // Mirage (Thousand Cuts, skills.json Mirage): a use is one weapon swing at your attack speed (without the
+    // skill's own ActionSpeed) plus Hops - 1 gaps of HopTime between the hops; the hop gap is not sped up.
+    // Game log 4 Nov (Shrimptests, Samurai 18, Faster Attacks, ashen_wyrm ML16, 54 uses): "MirageHop" lines
+    // 0.083 s apart (0.086 at lower speed), last hop to next use 0.375 s = 1 / (1.56 aps x 1.37 inc x 1.25
+    // more), use to use 0.702 s; boss 18018 life in 36.5 s = 494 DPS vs this model's ~497.
+    // Check report #3 (4 Nov, Samurai 40): the old "one swing at weapon speed x ActionSpeed" model gave
+    // 5.28 uses/s and ran about 2x the real Guardian DPS (median real/sheet 0.53).
     const mirage = isAttack && sk.Mirage && sk.Mirage.Hops > 0 ? sk.Mirage : null;
     if (mirage && !(sk.Channel && sk.Channel.Tick)) {
-      const hops = mirage.Hops * (mirage.Interval || 0.17);
-      useTime = useTime + hops; usesPerSec = 1 / useTime;
-      res.notes.push(sk.Name + ': an opening cut (' + (useTime - hops).toFixed(2) + ' s at your attack speed), then ' + mirage.Hops + ' hops ' + (mirage.Interval || 0.17) + ' s apart (' + hops.toFixed(2) + ' s, not sped up by attack speed): ' + useTime.toFixed(2) + ' s per use.');
+      const aps = weapon ? weapon.aps : 1.2;
+      const swing = 1 / (aps * rateMult / (sk.ActionSpeed || 1));
+      const gap = mirage.HopTime || 0.09, hops = (mirage.Hops - 1) * gap;
+      useTime = swing + hops; usesPerSec = 1 / useTime;
+      res.notes.push(sk.Name + ': one swing at your attack speed (' + swing.toFixed(2) + ' s) plus ' + (mirage.Hops - 1) + ' gaps of ' + gap + ' s between its ' + mirage.Hops + ' hops (' + hops.toFixed(2) + ' s, not sped up by attack speed): ' + useTime.toFixed(2) + ' s per use.');
     }
     // Speed cap: a clip plays at most ActionRateMax (4x) its own speed, so each skill has a shortest use
     // time; past it more speed adds nothing (game tooltip "2.86 (speed cap)"). Clip lengths are not in the

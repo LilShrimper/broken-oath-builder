@@ -953,7 +953,11 @@ body.dashboard-view .configure-heading { display: flex; }
   .view-bar .tab.active { box-shadow: inset 0 -2px 0 var(--dashboard-gold); }
 }
 /* Build tab: Gear / Skills sub-tabs (top bar), skills and gear in columns */
-body:not(.build-page) .build-subtabs { display: none !important; }
+body:not(.build-page):not(.tree-page) .build-subtabs { display: none !important; }
+/* Current Build Setup: total DPS, tooltip DPS and average hit on top */
+.build-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.build-stats[hidden] { display: none; }
+@media (max-width: 520px) { .build-stats { grid-template-columns: 1fr; } }
 .view-bar .build-subtabs { width: fit-content; max-width: 100%; margin-top: 8px; }
 .view-bar .build-subtabs .tab { min-width: 140px; justify-content: center; }
 .pl-skills { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 8px; align-items: start; }
@@ -962,7 +966,7 @@ body:not(.build-page) .build-subtabs { display: none !important; }
 .pl-gear-grid .pl-item[open] { padding-bottom: 8px; }
 .pl-skills .pl-skill > .pl-row > select { flex: 1 1 150px; }
 .pl-skills .pl-skill > .pl-row > .field.inline { flex: 0 1 90px; }
-@media (max-width: 760px) { .view-bar .build-subtabs { width: auto; } }
+@media (max-width: 760px) { .view-bar .build-subtabs { width: auto; } .view-bar .build-subtabs .tab { min-width: 0; } }
 /* Gear slot hover tooltip (Build tab) */
 .pl-tip { position: fixed; z-index: 1000; max-width: min(360px, calc(100vw - 16px)); padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--dashboard-gold) 40%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--panel) 96%, var(--bg)); box-shadow: var(--shadow), 0 5px 18px #0006; color: var(--text); font-size: 12px; line-height: 1.4; pointer-events: none; }
 .pl-tip b { display: block; color: var(--dashboard-gold); font-weight: 650; }
@@ -1279,9 +1283,6 @@ body.creator-page .view-bar { display: none; }
       <button class="tab active" type="button" role="tab" data-tab="damage" aria-selected="true" aria-label="Damage Analysis">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h17M8 16v-5M13 16V7M18 16V3"/></svg><span>Damage Analysis</span>
       </button>
-      <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false" aria-label="Skill Tree">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M12 7v4M12 11 6 16M12 11l6 5"/></svg><span>Skill Tree</span>
-      </button>
       <button class="tab" type="button" role="tab" data-tab="supports" aria-selected="false" aria-label="Support Gem Simulator">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 9l-8 12L4 9zM4 9h16M9 9l3 12 3-12"/></svg><span>Support Gem Simulator</span>
       </button>
@@ -1292,6 +1293,7 @@ body.creator-page .view-bar { display: none; }
     <nav class="tabs build-subtabs" id="buildSubtabs" role="tablist" aria-label="Build setup" hidden>
       <button class="tab" type="button" role="tab" data-sub="gear" aria-selected="false"><span>Gear</span></button>
       <button class="tab" type="button" role="tab" data-sub="skills" aria-selected="false"><span>Skills</span></button>
+      <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false"><span>Skill tree</span></button>
     </nav>
 </div>
 <section class="hero" id="hero">
@@ -1504,6 +1506,7 @@ body.creator-page .view-bar { display: none; }
     <section class="results" id="results">
       <div class="empty" id="emptyState">Pick a character to start. Use <b>Load saves folder</b> and pick your SaveGames folder to load every character at once.</div>
     </section>
+    <section class="headline build-stats" id="buildStats" aria-live="polite" hidden></section>
     <section class="build-pane" id="buildPane" hidden></section>
     <section class="build-pane compare-pane" id="comparePane" hidden></section>
     <section class="build-pane compare-pane creator-pane" id="creatorPane" hidden></section>
@@ -1615,7 +1618,7 @@ Fan-made tool, not affiliated with the developers of Broken Oath. Game data come
 <script>
 window.GD = null;
 window.CHARS = [];
-window.SITE_VERSION = {"v":116,"at":"2026-11-06T23:08:34.321Z"};
+window.SITE_VERSION = {"v":117,"at":"2026-11-06T23:27:37.391Z"};
 window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"aegis_N":0,"aegis_N_D":1,"aegis_S":2,"aegis_S_D":3,"affliction_N":4,"affliction_N_D":5,"affliction_S":6,"affliction_S_D":7,"anvil_oath_N":8,"anvil_oath_N_D":9,"anvil_oath_S":10,"anvil_oath_S_D":11,"area_N":12,"area_N_D":13,"area_S":14,"area_S_D":15,"armour_N":16,"armour_N_D":17,"armour_S":18,"armour_S_D":19,"artillery_N":20,"artillery_N_D":21,"artillery_S":22,"artillery_S_D":23,"attack_N":24,"attack_N_D":25,"attack_S":26,"attack_S_D":27,"blightword_N":28,"blightword_N_D":29,"bone_N":30,"bone_N_D":31,"bone_S":32,"bone_S_D":33,"bone_choir_N":34,"bone_choir_N_D":35,"bone_choir_S":36,"bone_choir_S_D":37,"bow_N":38,"bow_N_D":39,"bow_S":40,"bow_S_D":41,"bulwark_N":42,"bulwark_N_D":43,"bulwark_S":44,"bulwark_S_D":45,"carrion_hunt_N":46,"carrion_hunt_N_D":47,"carrion_hunt_S":48,"carrion_hunt_S_D":49,"chain_N":50,"chain_N_D":51,"chain_S":52,"chain_S_D":53,"channel_N":54,"channel_N_D":55,"channel_S":56,"channel_S_D":57,"cleave_N":58,"cleave_N_D":59,"cleave_S":60,"cleave_S_D":61,"cold_N":62,"cold_N_D":63,"cold_S":64,"cold_S_D":65,"conduit_N":66,"conduit_N_D":67,"conduit_S":68,"conduit_S_D":69,"crest_Mage":70,"crest_Mage_D":71,"crest_Necromancer":72,"crest_Necromancer_D":73,"crest_Paladin":74,"crest_Paladin_D":75,"crest_Ranger":76,"crest_Ranger_D":77,"crest_Samurai":78,"crest_Samurai_D":79,"crest_Warrior":80,"crest_Warrior_D":81,"crit_N":82,"crit_N_D":83,"crit_S":84,"crit_S_D":85,"crusade_N":86,"crusade_N_D":87,"crusade_S":88,"crusade_S_D":89,"dawn_N":90,"dawn_N_D":91,"dawn_S":92,"dawn_S_D":93,"dawnstorm_N":94,"dawnstorm_N_D":95,"dawnstorm_S":96,"dawnstorm_S_D":97,"dawnsworn_N":98,"dawnsworn_N_D":99,"deadeye_N":100,"deadeye_N_D":101,"deadeye_S":102,"deadeye_S_D":103,"deathknell_N":104,"deathknell_N_D":105,"deathknell_S":106,"deathknell_S_D":107,"edge_N":108,"edge_N_D":109,"edge_S":110,"edge_S_D":111,"elemental_N":112,"elemental_N_D":113,"elemental_S":114,"elemental_S_D":115,"energy_shield_N":116,"energy_shield_N_D":117,"energy_shield_S":118,"energy_shield_S_D":119,"evasion_N":120,"evasion_N_D":121,"evasion_S":122,"evasion_S_D":123,"faith_N":124,"faith_N_D":125,"faith_S":126,"faith_S_D":127,"falling_leaf_N":128,"falling_leaf_N_D":129,"falling_leaf_S":130,"falling_leaf_S_D":131,"fire_N":132,"fire_N_D":133,"fire_S":134,"fire_S_D":135,"fury_N":136,"fury_N_D":137,"fury_S":138,"fury_S_D":139,"grave_N":140,"grave_N_D":141,"grave_S":142,"grave_S_D":143,"holy_N":144,"holy_N_D":145,"holy_S":146,"holy_S_D":147,"iron_tempest_N":148,"iron_tempest_N_D":149,"iron_tempest_S":150,"iron_tempest_S_D":151,"ki_N":152,"ki_N_D":153,"ki_S":154,"ki_S_D":155,"ks_aegis_rebuke":156,"ks_aegis_rebuke_D":157,"ks_ancestral_host":158,"ks_ancestral_host_D":159,"ks_blood_magic":160,"ks_blood_magic_D":161,"ks_cascade_of_ruin":162,"ks_cascade_of_ruin_D":163,"ks_chain_reaction":164,"ks_chain_reaction_D":165,"ks_choir_of_bones":166,"ks_choir_of_bones_D":167,"ks_comet_step":168,"ks_comet_step_D":169,"ks_dawnstorm_covenant":170,"ks_dawnstorm_covenant_D":171,"ks_eagle_eye":172,"ks_eagle_eye_D":173,"ks_earthbreaker_stride":174,"ks_earthbreaker_stride_D":175,"ks_elemental_overload":176,"ks_elemental_overload_D":177,"ks_forked_sky":178,"ks_forked_sky_D":179,"ks_glass_cannon":180,"ks_glass_cannon_D":181,"ks_hammer_of_judgement":182,"ks_hammer_of_judgement_D":183,"ks_hollow_covenant":184,"ks_hollow_covenant_D":185,"ks_iron_resolve":186,"ks_iron_resolve_D":187,"ks_lord_of_the_dead":188,"ks_lord_of_the_dead_D":189,"ks_oath_of_a_thousand_cuts":190,"ks_oath_of_a_thousand_cuts_D":191,"ks_oath_of_many_fires":192,"ks_oath_of_many_fires_D":193,"ks_oath_of_slow_ruin":194,"ks_oath_of_slow_ruin_D":195,"ks_oath_of_the_living_storm":196,"ks_oath_of_the_living_storm_D":197,"ks_oath_of_the_long_night":198,"ks_oath_of_the_long_night_D":199,"ks_oath_of_the_pyre":200,"ks_oath_of_the_pyre_D":201,"ks_oath_of_the_red_harvest":202,"ks_oath_of_the_red_harvest_D":203,"ks_oath_of_the_snare":204,"ks_oath_of_the_snare_D":205,"ks_oath_of_the_white_silence":206,"ks_oath_of_the_white_silence_D":207,"ks_one_breath":208,"ks_one_breath_D":209,"ks_pyre_covenant":210,"ks_pyre_covenant_D":211,"ks_r59_hold_k3":212,"ks_r59_hold_k3_D":213,"ks_r59_mountain_k3":214,"ks_r59_mountain_k3_D":215,"ks_r59_sure_strike_k3":216,"ks_r59_sure_strike_k3_D":217,"ks_r74_bone_sovereign":218,"ks_r74_bone_sovereign_D":219,"ks_radiant_crusade":220,"ks_radiant_crusade_D":221,"ks_rotting_gospel":222,"ks_rotting_gospel_D":223,"ks_sanctified":224,"ks_sanctified_D":225,"ks_siege_pact":226,"ks_siege_pact_D":227,"ks_spellblade":228,"ks_spellblade_D":229,"ks_tempest_vow":230,"ks_tempest_vow_D":231,"ks_the_hunting_dead":232,"ks_the_hunting_dead_D":233,"ks_thousand_hands":234,"ks_thousand_hands_D":235,"ks_twice_fallen_sky":236,"ks_twice_fallen_sky_D":237,"ks_unbroken_wall":238,"ks_unbroken_wall_D":239,"ks_wake_of_spells":240,"ks_wake_of_spells_D":241,"ks_way_of_the_blade":242,"ks_way_of_the_blade_D":243,"ks_wind_and_steel_oath":244,"ks_wind_and_steel_oath_D":245,"leech_N":246,"leech_N_D":247,"leech_S":248,"leech_S_D":249,"lichfire_N":250,"lichfire_N_D":251,"lichfire_S":252,"lichfire_S_D":253,"life_N":254,"life_N_D":255,"life_S":256,"life_S_D":257,"life_big_N":258,"life_big_N_D":259,"life_big_S":260,"life_big_S_D":261,"lightning_N":262,"lightning_N_D":263,"lightning_S":264,"lightning_S_D":265,"lingering_N":266,"lingering_N_D":267,"lingering_S":268,"lingering_S_D":269,"malediction_N":270,"malediction_N_D":271,"malediction_S":272,"malediction_S_D":273,"mana_N":274,"mana_N_D":275,"mana_S":276,"mana_S_D":277,"manasteal_N":278,"manasteal_N_D":279,"manasteal_S":280,"manasteal_S_D":281,"melee_N":282,"melee_N_D":283,"melee_S":284,"melee_S_D":285,"mirrorblade_N":286,"mirrorblade_N_D":287,"mirrorblade_S":288,"mirrorblade_S_D":289,"orbit_N":290,"orbit_N_D":291,"orbit_S":292,"orbit_S_D":293,"ossuary_N":294,"ossuary_N_D":295,"ossuary_S":296,"ossuary_S_D":297,"overcharge_N":298,"overcharge_N_D":299,"overcharge_S":300,"overcharge_S_D":301,"permafrost_N":302,"permafrost_N_D":303,"permafrost_S":304,"permafrost_S_D":305,"plague_quiver_N":306,"plague_quiver_N_D":307,"plague_quiver_S":308,"plague_quiver_S_D":309,"poison_N":310,"poison_N_D":311,"poison_S":312,"poison_S_D":313,"portrait_Mage":314,"portrait_Mage_D":315,"portrait_Necromancer":316,"portrait_Necromancer_D":317,"portrait_Paladin":318,"portrait_Paladin_D":319,"portrait_Ranger":320,"portrait_Ranger_D":321,"portrait_Samurai":322,"portrait_Samurai_D":323,"portrait_Warrior":324,"portrait_Warrior_D":325,"projectile_N":326,"projectile_N_D":327,"projectile_S":328,"projectile_S_D":329,"radiance_N":330,"radiance_N_D":331,"radiance_S":332,"radiance_S_D":333,"radiant_ward_N":334,"radiant_ward_N_D":335,"radiant_ward_S":336,"radiant_ward_S_D":337,"rain_N":338,"rain_N_D":339,"rain_S":340,"rain_S_D":341,"reaper_N":342,"reaper_N_D":343,"reaper_S":344,"reaper_S_D":345,"regrowth_N":346,"regrowth_N_D":347,"regrowth_S":348,"regrowth_S_D":349,"resist_N":350,"resist_N_D":351,"resist_S":352,"resist_S_D":353,"shatter_N":354,"shatter_N_D":355,"shatter_S":356,"shatter_S_D":357,"siege_N":358,"siege_N_D":359,"siege_S":360,"siege_S_D":361,"sigil_N":362,"sigil_N_D":363,"sigil_S":364,"sigil_S_D":365,"slam_N":366,"slam_N_D":367,"slam_S":368,"slam_S_D":369,"souls_N":370,"souls_N_D":371,"souls_S":372,"souls_S_D":373,"speed_N":374,"speed_N_D":375,"speed_S":376,"speed_S_D":377,"spell_N":378,"spell_N_D":379,"spell_S":380,"spell_S_D":381,"spell_crit_N":382,"spell_crit_N_D":383,"spell_crit_S":384,"spell_crit_S_D":385,"spellsword_N":386,"spellsword_N_D":387,"spellsword_S":388,"spellsword_S_D":389,"starfall_N":390,"starfall_N_D":391,"starfall_S":392,"starfall_S_D":393,"stillness_N":394,"stillness_N_D":395,"stillness_S":396,"stillness_S_D":397,"swift_N":398,"swift_N_D":399,"swift_S":400,"swift_S_D":401,"tether_N":402,"tether_N_D":403,"tether_S":404,"tether_S_D":405,"trap_N":406,"trap_N_D":407,"trap_S":408,"trap_S_D":409,"two_storms_N":410,"two_storms_N_D":411,"two_storms_S":412,"two_storms_S_D":413,"vigil_N":414,"vigil_N_D":415,"vigil_S":416,"vigil_S_D":417,"voidbound_N":418,"voidbound_N_D":419,"voidbound_S":420,"voidbound_S_D":421,"vowkeeper_N":422,"vowkeeper_N_D":423,"vowkeeper_S":424,"vowkeeper_S_D":425,"warcaller_N":426,"warcaller_N_D":427,"warcaller_S":428,"warcaller_S_D":429,"warpath_N":430,"warpath_N_D":431,"warpath_S":432,"warpath_S_D":433,"waygate_S":434,"waygate_S_D":435,"wellspring_N":436,"wellspring_N_D":437,"wellspring_S":438,"wellspring_S_D":439,"wind_and_steel_N":440,"wind_and_steel_N_D":441,"wind_and_steel_S":442,"wind_and_steel_S_D":443,"windstep_N":444,"windstep_N_D":445,"windstep_S":446,"windstep_S_D":447,"zeal_N":448,"zeal_N_D":449,"zeal_S":450,"zeal_S_D":451},"dragons":"icons/dragons.webp","dragonOrder":["Fire","Lightning","Cold","Arcane","Poison","Physical"]};
 </script>
 <script>
@@ -7318,7 +7321,21 @@ window.BOStartApp = function () {
   $('#supportChips').addEventListener('mouseleave', () => { st.supMsg = ''; if (st.last) renderSupportPicker(st.last); });
 
   // ---------- right panel ----------
-  function render() { renderSupportSkillSelect(); renderMain(); renderSupportSearchResults(); treeAfterRender(); renderCompare(); }
+  function render() { renderSupportSkillSelect(); renderMain(); renderSupportSearchResults(); treeAfterRender(); renderCompare(); renderBuildStats(); }
+  // Current Build Setup (Gear, Skills, Skill tree): the selected skill's total DPS, tooltip DPS and average hit on top.
+  function renderBuildStats() {
+    const el = $('#buildStats'); if (!el) return;
+    const on = document.body.classList.contains('build-page') || document.body.classList.contains('tree-page');
+    let r = null;
+    if (on && st.ch && st.skill) { try { r = S.calcSkill(GD, st.ch, st.skill, opts()); } catch (e) { r = null; } }
+    if (!r || r.error || r.unsupported) { el.hidden = true; el.innerHTML = ''; return; }
+    const name = esc(r.skill ? r.skill.Name : st.skill);
+    el.innerHTML =
+      stat('Total DPS', num(r.totalDps), '', 'main', name + (r.minion ? ': all its minions, before the enemy' : ' vs the enemy set on the Damage tab')) +
+      stat('Tooltip DPS', num(r.panelDps), '', '', 'The number the game\'s skill panel shows') +
+      stat('Average hit', num(r.hitAvg), '', '', 'With crits ' + num(r.hitAvgCrit));
+    el.hidden = false;
+  }
   function renderMain() {
     // The welcome banner shows until a character or plan is loaded.
     document.body.classList.toggle('no-char', !st.ch);
@@ -9378,10 +9395,13 @@ window.BOStartApp = function () {
       buildSettings.open = true;
     }
     syncSettingsToViewport();
-    document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    // Skill tree is a sub-tab of Current Build Setup: keep that main tab lit.
+    document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (tab === 'tree' && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    if (tab === 'tree') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
     $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
+    renderBuildStats();
     if (tab === 'code') setTimeout(() => $('#codeInput').focus(), 0);
     if (tab === 'compare') renderCompare();
     if (tab === 'creator') creator.render();
@@ -9396,6 +9416,9 @@ window.BOStartApp = function () {
     if (b.dataset.tab === 'plan') { if (await planner.startNewPlan()) showTab('plan'); }
     else showTab(b.dataset.tab);
   }));
+
+  // Gear / Skills from the Skill tree sub-tab go back to the build pane (planner.js picks which one).
+  $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && document.body.classList.contains('tree-page')) showTab('build'); });
 
   // Pan, zoom, hover, click.
   const view = $('#treeView'), tip = $('#treeTip');

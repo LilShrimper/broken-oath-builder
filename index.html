@@ -1060,6 +1060,17 @@ body.compare-page #controls { display: none; }
 .cr-steps { margin: 12px 0 0; padding-left: 20px; }
 .cr-steps li { margin: 2px 0; }
 @media (max-width: 520px) { .cr-where { flex-basis: 100%; } .cr-stats .field, .cr-stats .field input, .cr-stats .field input#crName { width: 100%; } }
+/* Save Creator: Rupture map values, one per row with what each does */
+.cr-mfs { display: grid; gap: 10px; margin: 10px 0; }
+.cr-mf { padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.cr-mf-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.cr-mf-name { font-weight: 650; font-size: 13.5px; }
+.cr-mf-head input { width: 110px; }
+.cr-mf-what { margin: 5px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.cr-mf-key { color: var(--faint); font-size: 10.5px; font-family: ui-monospace, Consolas, monospace; white-space: nowrap; }
+.cr-mf .cr-lords { margin-top: 6px; }
+.cr-more > .hint { margin: 0; }
+@media (max-width: 520px) { .cr-mf-head input { width: 100%; } }
 
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
@@ -1443,7 +1454,7 @@ body.compare-page #controls { display: none; }
 <script>
 window.GD = null;
 window.CHARS = [];
-window.SITE_VERSION = {"v":93,"at":"2026-11-06T14:45:16.416Z"};
+window.SITE_VERSION = {"v":94,"at":"2026-11-06T15:05:33.672Z"};
 window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"aegis_N":0,"aegis_N_D":1,"aegis_S":2,"aegis_S_D":3,"affliction_N":4,"affliction_N_D":5,"affliction_S":6,"affliction_S_D":7,"anvil_oath_N":8,"anvil_oath_N_D":9,"anvil_oath_S":10,"anvil_oath_S_D":11,"area_N":12,"area_N_D":13,"area_S":14,"area_S_D":15,"armour_N":16,"armour_N_D":17,"armour_S":18,"armour_S_D":19,"artillery_N":20,"artillery_N_D":21,"artillery_S":22,"artillery_S_D":23,"attack_N":24,"attack_N_D":25,"attack_S":26,"attack_S_D":27,"blightword_N":28,"blightword_N_D":29,"bone_N":30,"bone_N_D":31,"bone_S":32,"bone_S_D":33,"bone_choir_N":34,"bone_choir_N_D":35,"bone_choir_S":36,"bone_choir_S_D":37,"bow_N":38,"bow_N_D":39,"bow_S":40,"bow_S_D":41,"bulwark_N":42,"bulwark_N_D":43,"bulwark_S":44,"bulwark_S_D":45,"carrion_hunt_N":46,"carrion_hunt_N_D":47,"carrion_hunt_S":48,"carrion_hunt_S_D":49,"chain_N":50,"chain_N_D":51,"chain_S":52,"chain_S_D":53,"channel_N":54,"channel_N_D":55,"channel_S":56,"channel_S_D":57,"cleave_N":58,"cleave_N_D":59,"cleave_S":60,"cleave_S_D":61,"cold_N":62,"cold_N_D":63,"cold_S":64,"cold_S_D":65,"conduit_N":66,"conduit_N_D":67,"conduit_S":68,"conduit_S_D":69,"crest_Mage":70,"crest_Mage_D":71,"crest_Necromancer":72,"crest_Necromancer_D":73,"crest_Paladin":74,"crest_Paladin_D":75,"crest_Ranger":76,"crest_Ranger_D":77,"crest_Samurai":78,"crest_Samurai_D":79,"crest_Warrior":80,"crest_Warrior_D":81,"crit_N":82,"crit_N_D":83,"crit_S":84,"crit_S_D":85,"crusade_N":86,"crusade_N_D":87,"crusade_S":88,"crusade_S_D":89,"dawn_N":90,"dawn_N_D":91,"dawn_S":92,"dawn_S_D":93,"dawnstorm_N":94,"dawnstorm_N_D":95,"dawnstorm_S":96,"dawnstorm_S_D":97,"dawnsworn_N":98,"dawnsworn_N_D":99,"deadeye_N":100,"deadeye_N_D":101,"deadeye_S":102,"deadeye_S_D":103,"deathknell_N":104,"deathknell_N_D":105,"deathknell_S":106,"deathknell_S_D":107,"edge_N":108,"edge_N_D":109,"edge_S":110,"edge_S_D":111,"elemental_N":112,"elemental_N_D":113,"elemental_S":114,"elemental_S_D":115,"energy_shield_N":116,"energy_shield_N_D":117,"energy_shield_S":118,"energy_shield_S_D":119,"evasion_N":120,"evasion_N_D":121,"evasion_S":122,"evasion_S_D":123,"faith_N":124,"faith_N_D":125,"faith_S":126,"faith_S_D":127,"falling_leaf_N":128,"falling_leaf_N_D":129,"falling_leaf_S":130,"falling_leaf_S_D":131,"fire_N":132,"fire_N_D":133,"fire_S":134,"fire_S_D":135,"fury_N":136,"fury_N_D":137,"fury_S":138,"fury_S_D":139,"grave_N":140,"grave_N_D":141,"grave_S":142,"grave_S_D":143,"holy_N":144,"holy_N_D":145,"holy_S":146,"holy_S_D":147,"iron_tempest_N":148,"iron_tempest_N_D":149,"iron_tempest_S":150,"iron_tempest_S_D":151,"ki_N":152,"ki_N_D":153,"ki_S":154,"ki_S_D":155,"ks_aegis_rebuke":156,"ks_aegis_rebuke_D":157,"ks_ancestral_host":158,"ks_ancestral_host_D":159,"ks_blood_magic":160,"ks_blood_magic_D":161,"ks_cascade_of_ruin":162,"ks_cascade_of_ruin_D":163,"ks_chain_reaction":164,"ks_chain_reaction_D":165,"ks_choir_of_bones":166,"ks_choir_of_bones_D":167,"ks_comet_step":168,"ks_comet_step_D":169,"ks_dawnstorm_covenant":170,"ks_dawnstorm_covenant_D":171,"ks_eagle_eye":172,"ks_eagle_eye_D":173,"ks_earthbreaker_stride":174,"ks_earthbreaker_stride_D":175,"ks_elemental_overload":176,"ks_elemental_overload_D":177,"ks_forked_sky":178,"ks_forked_sky_D":179,"ks_glass_cannon":180,"ks_glass_cannon_D":181,"ks_hammer_of_judgement":182,"ks_hammer_of_judgement_D":183,"ks_hollow_covenant":184,"ks_hollow_covenant_D":185,"ks_iron_resolve":186,"ks_iron_resolve_D":187,"ks_lord_of_the_dead":188,"ks_lord_of_the_dead_D":189,"ks_oath_of_a_thousand_cuts":190,"ks_oath_of_a_thousand_cuts_D":191,"ks_oath_of_many_fires":192,"ks_oath_of_many_fires_D":193,"ks_oath_of_slow_ruin":194,"ks_oath_of_slow_ruin_D":195,"ks_oath_of_the_living_storm":196,"ks_oath_of_the_living_storm_D":197,"ks_oath_of_the_long_night":198,"ks_oath_of_the_long_night_D":199,"ks_oath_of_the_pyre":200,"ks_oath_of_the_pyre_D":201,"ks_oath_of_the_red_harvest":202,"ks_oath_of_the_red_harvest_D":203,"ks_oath_of_the_snare":204,"ks_oath_of_the_snare_D":205,"ks_oath_of_the_white_silence":206,"ks_oath_of_the_white_silence_D":207,"ks_one_breath":208,"ks_one_breath_D":209,"ks_pyre_covenant":210,"ks_pyre_covenant_D":211,"ks_r59_hold_k3":212,"ks_r59_hold_k3_D":213,"ks_r59_mountain_k3":214,"ks_r59_mountain_k3_D":215,"ks_r59_sure_strike_k3":216,"ks_r59_sure_strike_k3_D":217,"ks_r74_bone_sovereign":218,"ks_r74_bone_sovereign_D":219,"ks_radiant_crusade":220,"ks_radiant_crusade_D":221,"ks_rotting_gospel":222,"ks_rotting_gospel_D":223,"ks_sanctified":224,"ks_sanctified_D":225,"ks_siege_pact":226,"ks_siege_pact_D":227,"ks_spellblade":228,"ks_spellblade_D":229,"ks_tempest_vow":230,"ks_tempest_vow_D":231,"ks_the_hunting_dead":232,"ks_the_hunting_dead_D":233,"ks_thousand_hands":234,"ks_thousand_hands_D":235,"ks_twice_fallen_sky":236,"ks_twice_fallen_sky_D":237,"ks_unbroken_wall":238,"ks_unbroken_wall_D":239,"ks_wake_of_spells":240,"ks_wake_of_spells_D":241,"ks_way_of_the_blade":242,"ks_way_of_the_blade_D":243,"ks_wind_and_steel_oath":244,"ks_wind_and_steel_oath_D":245,"leech_N":246,"leech_N_D":247,"leech_S":248,"leech_S_D":249,"lichfire_N":250,"lichfire_N_D":251,"lichfire_S":252,"lichfire_S_D":253,"life_N":254,"life_N_D":255,"life_S":256,"life_S_D":257,"life_big_N":258,"life_big_N_D":259,"life_big_S":260,"life_big_S_D":261,"lightning_N":262,"lightning_N_D":263,"lightning_S":264,"lightning_S_D":265,"lingering_N":266,"lingering_N_D":267,"lingering_S":268,"lingering_S_D":269,"malediction_N":270,"malediction_N_D":271,"malediction_S":272,"malediction_S_D":273,"mana_N":274,"mana_N_D":275,"mana_S":276,"mana_S_D":277,"manasteal_N":278,"manasteal_N_D":279,"manasteal_S":280,"manasteal_S_D":281,"melee_N":282,"melee_N_D":283,"melee_S":284,"melee_S_D":285,"mirrorblade_N":286,"mirrorblade_N_D":287,"mirrorblade_S":288,"mirrorblade_S_D":289,"orbit_N":290,"orbit_N_D":291,"orbit_S":292,"orbit_S_D":293,"ossuary_N":294,"ossuary_N_D":295,"ossuary_S":296,"ossuary_S_D":297,"overcharge_N":298,"overcharge_N_D":299,"overcharge_S":300,"overcharge_S_D":301,"permafrost_N":302,"permafrost_N_D":303,"permafrost_S":304,"permafrost_S_D":305,"plague_quiver_N":306,"plague_quiver_N_D":307,"plague_quiver_S":308,"plague_quiver_S_D":309,"poison_N":310,"poison_N_D":311,"poison_S":312,"poison_S_D":313,"portrait_Mage":314,"portrait_Mage_D":315,"portrait_Necromancer":316,"portrait_Necromancer_D":317,"portrait_Paladin":318,"portrait_Paladin_D":319,"portrait_Ranger":320,"portrait_Ranger_D":321,"portrait_Samurai":322,"portrait_Samurai_D":323,"portrait_Warrior":324,"portrait_Warrior_D":325,"projectile_N":326,"projectile_N_D":327,"projectile_S":328,"projectile_S_D":329,"radiance_N":330,"radiance_N_D":331,"radiance_S":332,"radiance_S_D":333,"radiant_ward_N":334,"radiant_ward_N_D":335,"radiant_ward_S":336,"radiant_ward_S_D":337,"rain_N":338,"rain_N_D":339,"rain_S":340,"rain_S_D":341,"reaper_N":342,"reaper_N_D":343,"reaper_S":344,"reaper_S_D":345,"regrowth_N":346,"regrowth_N_D":347,"regrowth_S":348,"regrowth_S_D":349,"resist_N":350,"resist_N_D":351,"resist_S":352,"resist_S_D":353,"shatter_N":354,"shatter_N_D":355,"shatter_S":356,"shatter_S_D":357,"siege_N":358,"siege_N_D":359,"siege_S":360,"siege_S_D":361,"sigil_N":362,"sigil_N_D":363,"sigil_S":364,"sigil_S_D":365,"slam_N":366,"slam_N_D":367,"slam_S":368,"slam_S_D":369,"souls_N":370,"souls_N_D":371,"souls_S":372,"souls_S_D":373,"speed_N":374,"speed_N_D":375,"speed_S":376,"speed_S_D":377,"spell_N":378,"spell_N_D":379,"spell_S":380,"spell_S_D":381,"spell_crit_N":382,"spell_crit_N_D":383,"spell_crit_S":384,"spell_crit_S_D":385,"spellsword_N":386,"spellsword_N_D":387,"spellsword_S":388,"spellsword_S_D":389,"starfall_N":390,"starfall_N_D":391,"starfall_S":392,"starfall_S_D":393,"stillness_N":394,"stillness_N_D":395,"stillness_S":396,"stillness_S_D":397,"swift_N":398,"swift_N_D":399,"swift_S":400,"swift_S_D":401,"tether_N":402,"tether_N_D":403,"tether_S":404,"tether_S_D":405,"trap_N":406,"trap_N_D":407,"trap_S":408,"trap_S_D":409,"two_storms_N":410,"two_storms_N_D":411,"two_storms_S":412,"two_storms_S_D":413,"vigil_N":414,"vigil_N_D":415,"vigil_S":416,"vigil_S_D":417,"voidbound_N":418,"voidbound_N_D":419,"voidbound_S":420,"voidbound_S_D":421,"vowkeeper_N":422,"vowkeeper_N_D":423,"vowkeeper_S":424,"vowkeeper_S_D":425,"warcaller_N":426,"warcaller_N_D":427,"warcaller_S":428,"warcaller_S_D":429,"warpath_N":430,"warpath_N_D":431,"warpath_S":432,"warpath_S_D":433,"waygate_S":434,"waygate_S_D":435,"wellspring_N":436,"wellspring_N_D":437,"wellspring_S":438,"wellspring_S_D":439,"wind_and_steel_N":440,"wind_and_steel_N_D":441,"wind_and_steel_S":442,"wind_and_steel_S_D":443,"windstep_N":444,"windstep_N_D":445,"windstep_S":446,"windstep_S_D":447,"zeal_N":448,"zeal_N_D":449,"zeal_S":450,"zeal_S_D":451},"dragons":"icons/dragons.webp","dragonOrder":["Fire","Lightning","Cold","Arcane","Poison","Physical"]};
 </script>
 <script>
@@ -3464,7 +3475,7 @@ window.BOCreator = function (ctx) {
     Gems: ['ArrayProperty', ['StrProperty']], GemLevels: ['MapProperty', ['StrProperty', 'IntProperty']], GemXp: ['MapProperty', ['StrProperty', 'FloatProperty']],
     Sockets: ['ArrayProperty', [SCRIPT('BOSkillSockets')]], Hotbar: ['ArrayProperty', ['StrProperty']],
     DragonlingNodes: ['ArrayProperty', ['NameProperty']], DragonlingAspect: 'NameProperty', MainSkillPin: 'StrProperty', ZoneFlags: ['ArrayProperty', ['StrProperty']],
-    Level: 'IntProperty', TreeVersion: 'IntProperty', DragonlingTreeVersion: 'IntProperty',
+    Level: 'IntProperty', TreeVersion: 'IntProperty', DragonlingTreeVersion: 'IntProperty', QuartzVersion: 'IntProperty',
   };
   const ITEM = [['ID', ['StructProperty', [['Guid', ['/Script/CoreUObject']]]], 8], ['BaseID', 'NameProperty'], ['ItemLevel', 'IntProperty'], ['Rarity', 'NameProperty'],
     ['Seed', 'IntProperty'], ['EquippedSlot', 'NameProperty'], ['Name', 'StrProperty'], ['UniqueID', 'NameProperty'], ['Affixes', ['ArrayProperty', [SCRIPT('BORolledAffix')]]],
@@ -3639,6 +3650,7 @@ window.BOCreator = function (ctx) {
       // made in game minutes before had no TreeVersion field yet; with 104 copied passives the log read "passive tree v14 -
       // 104 allocations returned (free respec)". passive_tree.json Version is the current one (14).
       if (GD.treeVersion) setV(rec, 'TreeVersion', Math.max(GD.treeVersion, val(rec, 'TreeVersion', 0)));
+      syncQuartz(); // the build's bonus points already hold its quartz: mark what this map has earned as paid out
       done.push(nodes.length + ' passives' + (lost ? ' (' + lost + ' not in this patch left out)' : ''));
     }
     if (parts.gear) {
@@ -3771,11 +3783,32 @@ window.BOCreator = function (ctx) {
     mset('RivenTitles', { items: [...want, ...keep] });
   }
   function addFlag(f) { const fl = need(R(), 'ZoneFlags').v.items; if (!fl.includes(f)) fl.push(f); }
+  // Inscribed Quartz (+1 passive point each). Record.QuartzClaimed holds what was paid out: Gate g as g (1-7), a Guardian
+  // milestone as 100 + its Rupture Level. Not in the data files; from the game log and saves (6 Nov 2026): "Guardian ...
+  // dropped 6 Guardian Quartz (RL 42,45,48,52,55,58; 0 claimed so far)" on a save whose map was edited with an empty list,
+  // and the three online saves played to the top hold [1..7, 142,145,148,152,155,158] with 13 bonus points.
+  // Every save has BonusPassivePoints >= the number claimed (19 vs 7, 13 vs 13, 1 vs 1).
+  const QUARTZ_RL = [42, 45, 48, 52, 55, 58];
+  const QUARTZ_T = ['ArrayProperty', ['IntProperty']];
+  function quartzWant() {
+    const best = Math.max(mval('BestML', 0) || 0, mval('DeepBest', 0) || 0, mval('RivenOpen', 0) || 0);
+    return [...marr('GatesKilled').filter(g => g >= 1 && g <= 7), ...QUARTZ_RL.filter(l => l <= best).map(l => 100 + l)];
+  }
+  // Marks the quartz the map's progress has already earned as claimed, so the next Guardian does not drop them all again.
+  function syncQuartz() {
+    const rec = R(); if (!mapProps()) return 0;
+    let p = getP(rec, 'QuartzClaimed'); if (!p) { p = field('QuartzClaimed', QUARTZ_T); rec.push(p); }
+    const have = p.v.items, add = quartzWant().filter(q => !have.includes(q));
+    have.push(...add);
+    if (val(rec, 'QuartzVersion', null) == null) setV(rec, 'QuartzVersion', 1);
+    if (val(rec, 'BonusPassivePoints', 0) < have.length) setV(rec, 'BonusPassivePoints', have.length);
+    return add.length;
+  }
   function setOpen(n) {
     n = Math.max(RU.riven.first, Math.round(+n) || RU.riven.first);
     mset('RivenOpen', n); mset('DeepBest', n - (RU.riven.raise || 1));
     if (mval('RivenTierFrom', null) == null) mset('RivenTierFrom', RU.riven.first);
-    addFlag('unlk_riven_atlas'); syncTitles();
+    addFlag('unlk_riven_atlas'); syncTitles(); syncQuartz();
     return n;
   }
   // Copy another character's map (read only), as tools/offline-rupture.js does: its own sigils, forge and dust stay.
@@ -3799,6 +3832,7 @@ window.BOCreator = function (ctx) {
     const flags = need(R(), 'ZoneFlags').v.items;
     for (const f of (W.get(sr.v.props, 'ZoneFlags') || { v: { items: [] } }).v.items) if (/^unlk_/.test(f) && !flags.includes(f) && !(noRiven && f === 'unlk_riven_atlas')) flags.push(f);
     if (noRiven) { const i = flags.indexOf('unlk_riven_atlas'); if (i >= 0) flags.splice(i, 1); }
+    syncQuartz();
     return 'Copied the Rupture map from ' + sName + (noRiven ? ' without the Riven Atlas' : '') + ' (sigils, forge and dust kept).';
   }
   function mapHtml() {
@@ -3808,20 +3842,37 @@ window.BOCreator = function (ctx) {
       '<label class="check-row"><input type="checkbox" id="crNoRiven"' + (C.noRiven ? ' checked' : '') + '><span>Leave out the Riven Atlas</span></label></div>' +
       '<p class="hint">Any of your saves, online ones too: it is only read. Its map, gates, best levels and Riven Atlas come over; this character keeps its own sigils, forge and dwarven dust.</p>';
     if (!m) return h + '<p class="hint bad">This save has no Rupture map yet. Copy one from another save first.</p></div>';
-    const num = (k, label, hint, min, max) => '<label class="field inline"><span>' + label + ' <span class="meta">' + k + '</span></span><input type="number" data-map="' + k + '"' + (min != null ? ' min="' + min + '"' : '') + (max != null ? ' max="' + max + '"' : '') + ' value="' + esc(mval(k, '')) + '">' + (hint ? '<small class="meta">' + hint + '</small>' : '') + '</label>';
-    const best = mval('BestML', 0), open = mval('RivenOpen', null), gates = marr('GatesKilled').length, nodes = marr('Nodes').length;
-    h += '<p class="hint">Best map level ' + best + ', ' + gates + ' of ' + RU.gates + ' Gates, ' + nodes + ' map nodes cleared. Riven Atlas: ' + (open != null ? 'open to Rupture Level ' + open : best >= RU.riven.opensAt ? 'open from level ' + RU.riven.first + ', nothing past it yet' : 'not open (it opens at best map level ' + RU.riven.opensAt + ')') + '.</p>';
-    h += '<div class="pl-row cr-stats">' +
-      '<label class="field inline"><span>Highest Rupture Level open <span class="meta">RivenOpen</span></span><input type="number" id="crOpen" min="' + RU.riven.first + '" value="' + (open != null ? open : '') + '" placeholder="' + RU.riven.first + '"><small class="meta">Also sets the deepest clear to one below</small></label>' +
-      num('DeepBest', 'Deepest Rupture cleared', 'Titles follow it', 0) + num('BestML', 'Best map level', 'Riven Atlas opens at ' + RU.riven.opensAt, 0, 80) +
-      '<label class="field inline"><span>Gates killed <span class="meta">GatesKilled</span></span><input type="number" id="crGates" min="0" max="' + RU.gates + '" value="' + gates + '"></label></div>';
-    if (best < RU.riven.opensAt) h += '<p class="hint bad">The Riven Atlas only opens once the best map level reaches ' + RU.riven.opensAt + '. Copy a finished map from another save, or raise the best map level (untried: the map nodes may also need clearing in game).</p>';
-    if (RU.lands.length) { const lords = marr('RivenLords'); h += '<h3>Riven Lords slain <span class="meta">RivenLords</span></h3><div class="cr-lords">' + RU.lands.map(l => '<label class="check-row"><input type="checkbox" data-lord="' + esc(l) + '"' + (lords.includes(l) ? ' checked' : '') + '><span>' + esc(l[0].toUpperCase() + l.slice(1)) + '</span></label>').join('') + '</div>'; }
-    h += '<details class="cr-more"><summary>More map values</summary><div class="pl-row cr-stats">' +
-      num('RivenTierFrom', 'Riven tier from', '', 0) + num('RivenTierDone', 'Riven tier done', '', 0) + num('RivenLordTier', 'Riven Lord tier', '', 0) +
-      num('GenVersion', 'Map version', 'This patch builds version ' + RU.gen, 0) + num('AtlasRules', 'Atlas rules', '', 0) + '</div>' +
-      '<p class="hint">Raw values from the save. In your saves at Riven tier 130 these were 80 / 130 / 130, map version 1, atlas rules 2. Titles: ' + esc(marr('RivenTitles').join(', ') || 'none') + '.</p></details>';
-    return h + '<p class="hint">Only copying the map has been tried in the game; the values above are written as you set them.</p></div>';
+    // One row per value: a plain name and box, then what it is and what changing it does; the save's own name last, small.
+    const row = (label, input, what, key) => '<div class="cr-mf"><label class="cr-mf-head"><span class="cr-mf-name">' + label + '</span>' + input + '</label>' +
+      '<p class="cr-mf-what">' + what + (key ? ' <span class="cr-mf-key">' + key + '</span>' : '') + '</p></div>';
+    const box = (k, min, max, attrs) => '<input type="number" ' + (attrs || 'data-map="' + k + '"') + (min != null ? ' min="' + min + '"' : '') + (max != null ? ' max="' + max + '"' : '') + ' value="' + esc(mval(k, '')) + '">';
+    const best = mval('BestML', 0), open = mval('RivenOpen', null), deep = mval('DeepBest', null), gates = marr('GatesKilled').length, nodes = marr('Nodes').length;
+    const qp = getP(R(), 'QuartzClaimed'), qc = qp ? qp.v.items.length : 0, qw = quartzWant().length;
+    h += '<p class="hint">Now: best map level ' + best + ', ' + gates + ' of ' + RU.gates + ' Gates beaten, ' + nodes + ' map nodes cleared. Riven Atlas ' + (open != null ? 'open up to Rupture Level ' + open : best >= RU.riven.opensAt ? 'open from level ' + RU.riven.first + ', nothing past it yet' : 'not open yet') + '. Inscribed Quartz paid out: ' + qc + ' of the ' + qw + ' this map has earned.</p>';
+    h += '<div class="cr-mfs">' +
+      row('Highest Rupture Level you can pick', '<input type="number" id="crOpen" min="' + RU.riven.first + '" value="' + (open != null ? open : '') + '" placeholder="' + RU.riven.first + '">',
+        'The top level offered when you pick a Riven Atlas map (they start at ' + RU.riven.first + '). Changing it also sets the deepest cleared level to one below, gives the Riven titles up to that level, and marks the Inscribed Quartz the map has earned as paid out. The game read a hand-set 150 as real progress (6 Nov 2026).', 'RivenOpen') +
+      row('Deepest Rupture Level cleared', box('DeepBest', 0),
+        'The highest level you have finished. In play the game opens the level above it, and the Riven titles (Riven-Touched at 80, the Hundredfold at 100 …) follow it. The box above keeps the two in step; change this one alone only to test.', 'DeepBest') +
+      row('Best map level reached', box('BestML', 0, 160),
+        'The highest level reached on the Rupture map itself (78 at the top in normal play). The Riven Atlas only opens at ' + RU.riven.opensAt + ' or more. Raising it marks the Guardian quartz up to that level as paid out.', 'BestML') +
+      row('Gates beaten (0 to ' + RU.gates + ')', '<input type="number" id="crGates" min="0" max="' + RU.gates + '" value="' + gates + '">',
+        'Each Gate opens the next band of the map and pays one Inscribed Quartz (+1 passive point). Raising it marks those quartz as paid out; the map\'s nodes are not cleared by this.', 'GatesKilled') +
+      '</div>';
+    if (best < RU.riven.opensAt) h += '<p class="hint bad">The Riven Atlas stays shut until the best map level reaches ' + RU.riven.opensAt + '. Copying a finished map from another save is the sure way; raising the number alone has not been tried (the map nodes may also need clearing in game).</p>';
+    if (RU.lands.length) {
+      const lords = marr('RivenLords');
+      h += '<div class="cr-mf"><div class="cr-mf-head"><span class="cr-mf-name">Riven Lords beaten</span></div><div class="cr-lords">' + RU.lands.map(l => '<label class="check-row"><input type="checkbox" data-lord="' + esc(l) + '"' + (lords.includes(l) ? ' checked' : '') + '><span>' + esc(l[0].toUpperCase() + l.slice(1)) + '</span></label>').join('') + '</div>' +
+        '<p class="cr-mf-what">One Lord waits on the top map of each land in the Riven Atlas. Ticking all five gives the "Breaker of Five Oaths" title. <span class="cr-mf-key">RivenLords</span></p></div>';
+    }
+    h += '<details class="cr-more"' + (C.moreOpen ? ' open' : '') + '><summary>More map values (leave these unless you are testing)</summary><div class="cr-mfs">' +
+      row('Riven tier started from', box('RivenTierFrom', 0), 'Where your Riven Atlas climb began; the Atlas starts at ' + RU.riven.first + '. What the game does with it is not known. Your saves hold 80.', 'RivenTierFrom') +
+      row('Riven tier finished', box('RivenTierDone', 0), 'A Riven tier the game marks as done. Not known exactly. Your saves at Rupture Level 145 hold 130.', 'RivenTierDone') +
+      row('Riven Lord tier', box('RivenLordTier', 0), 'The Riven tier where the Lords were fought (Lords come at level 80 and every 50 after). Not known exactly. Your saves hold 130.', 'RivenLordTier') +
+      row('Map layout version', box('GenVersion', 0), 'Which version of the map layout this save was built with. This patch builds version ' + RU.gen + '. A different number may make the game rebuild the map.', 'GenVersion') +
+      row('Atlas rule set', box('AtlasRules', 0), 'Which set of map rules the save follows. Every save of yours holds 2. Not known what other numbers do.', 'AtlasRules') +
+      '</div><p class="hint">Riven titles held: ' + esc(marr('RivenTitles').join(', ') || 'none') + '.</p></details>';
+    return h + '</div>';
   }
 
   function render() {
@@ -3883,6 +3934,8 @@ window.BOCreator = function (ctx) {
   }
   (function bind() {
     const el = $('#creatorPane');
+    // Every edit redraws the card: remember whether "More map values" is open (toggle does not bubble, so capture it).
+    el.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('cr-more')) C.moreOpen = e.target.open; }, true);
     el.addEventListener('keydown', e => { if (e.target.id === 'crCode' && e.key === 'Enter') { e.preventDefault(); doImport(); } });
     el.addEventListener('change', e => {
       const t = e.target; C.err = '';
@@ -3904,8 +3957,8 @@ window.BOCreator = function (ctx) {
       if (mapProps()) {
         const n = Math.max(0, Math.round(+t.value) || 0);
         if (t.id === 'crOpen') { const v = setOpen(t.value); changed('Riven Atlas open to Rupture Level ' + v + ' (deepest clear ' + mval('DeepBest') + ').'); return render(); }
-        if (t.id === 'crGates') { const g2 = Math.min(RU.gates, n); mset('GatesKilled', { items: Array.from({ length: g2 }, (_, i) => i + 1) }); changed(g2 + ' Gates killed.'); return render(); }
-        if (t.dataset.map) { mset(t.dataset.map, n); if (t.dataset.map === 'DeepBest') syncTitles(); changed(t.dataset.map + ' ' + n + '.'); return render(); }
+        if (t.id === 'crGates') { const g2 = Math.min(RU.gates, n); mset('GatesKilled', { items: Array.from({ length: g2 }, (_, i) => i + 1) }); syncQuartz(); changed(g2 + ' Gates killed.'); return render(); }
+        if (t.dataset.map) { mset(t.dataset.map, n); if (t.dataset.map === 'DeepBest') syncTitles(); if (/^(DeepBest|BestML)$/.test(t.dataset.map)) syncQuartz(); changed(t.dataset.map + ' ' + n + '.'); return render(); }
         if (t.dataset.lord) {
           const lords = marr('RivenLords').filter(l => l !== t.dataset.lord); if (t.checked) lords.push(t.dataset.lord);
           mset('RivenLords', { items: RU.lands.filter(l => lords.includes(l)).concat(lords.filter(l => !RU.lands.includes(l))) }); syncTitles();

@@ -1021,6 +1021,34 @@ body.compare-page #controls { display: none; }
 .pl-read { margin-bottom: 10px; padding: 8px 10px; border: 1.5px dashed color-mix(in srgb, var(--dashboard-gold) 45%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--dashboard-gold) 4%, transparent); font-size: 12.5px; cursor: pointer; }
 .pl-read span { color: var(--muted); }
 .pl-read:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Save Creator tab */
+.creator-pane .card { margin-bottom: 14px; }
+.creator-pane .cmp-grid { margin-bottom: 14px; }
+.creator-pane .cmp-grid > .card { margin-bottom: 0; }
+.cr-load { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.cr-load .hint { flex: 1 1 300px; margin: 0; }
+.cr-load p.hint { flex-basis: 100%; }
+.cr-stats { flex-wrap: wrap; gap: 8px 12px; }
+.cr-stats .field input { width: 120px; }
+.cr-stats .field input#crName { width: 200px; }
+.cr-gems { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 6px 12px; }
+.cr-gems .field { justify-content: space-between; margin: 0; }
+.cr-gems input { width: 64px; }
+.cr-parts { display: grid; gap: 6px; margin: 8px 0; }
+.cr-item { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); margin-bottom: 5px; }
+.cr-item.on { border-color: var(--dashboard-gold); box-shadow: inset 3px 0 0 var(--dashboard-gold); }
+.cr-where { flex: 0 0 92px; color: var(--faint); font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.cr-name { flex: 1 1 160px; min-width: 0; font-size: 13px; }
+.cr-name.r-unique { color: var(--dashboard-gold); }
+.cr-name.r-rare { color: #e8d36a; }
+.cr-name.r-magic { color: #7fa8ff; }
+:root[data-theme="light"] .cr-name.r-rare { color: #8a6d00; }
+:root[data-theme="light"] .cr-name.r-magic { color: #2a5bd0; }
+.creator-pane h3 { margin: 12px 0 6px; }
+.cr-log { margin: 0 0 6px; padding-left: 18px; font-size: 13px; }
+.cr-steps { margin: 12px 0 0; padding-left: 20px; }
+.cr-steps li { margin: 2px 0; }
+@media (max-width: 520px) { .cr-where { flex-basis: 100%; } .cr-stats .field, .cr-stats .field input, .cr-stats .field input#crName { width: 100%; } }
 
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
@@ -1059,6 +1087,9 @@ body.compare-page #controls { display: none; }
       </button>
       <button class="tab" type="button" role="tab" data-tab="code" aria-selected="false" aria-label="Load Code">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8 4 12l4 4M16 8l4 4-4 4M14 5l-4 14"/></svg><span>Load Code</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="creator" aria-selected="false" aria-label="Save Creator">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v15H5zM8 3v5h7V3M8 21v-7h8v7"/></svg><span>Save Creator</span>
       </button>
     </nav>
     <div class="nav-divider itemdb-divider" role="separator" aria-hidden="true"></div>
@@ -1314,6 +1345,7 @@ body.compare-page #controls { display: none; }
     </section>
     <section class="build-pane" id="buildPane" hidden></section>
     <section class="build-pane compare-pane" id="comparePane" hidden></section>
+    <section class="build-pane compare-pane creator-pane" id="creatorPane" hidden></section>
     <section class="code-pane" id="codePane" hidden>
       <div class="code-intro">
         <div class="eyebrow">IMPORT A LOADOUT</div>
@@ -1400,7 +1432,7 @@ body.compare-page #controls { display: none; }
 <script>
 window.GD = null;
 window.CHARS = [];
-window.SITE_VERSION = {"v":86,"at":"2026-11-05T22:08:31.102Z"};
+window.SITE_VERSION = {"v":87,"at":"2026-11-06T00:07:44.480Z"};
 window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"aegis_N":0,"aegis_N_D":1,"aegis_S":2,"aegis_S_D":3,"affliction_N":4,"affliction_N_D":5,"affliction_S":6,"affliction_S_D":7,"anvil_oath_N":8,"anvil_oath_N_D":9,"anvil_oath_S":10,"anvil_oath_S_D":11,"area_N":12,"area_N_D":13,"area_S":14,"area_S_D":15,"armour_N":16,"armour_N_D":17,"armour_S":18,"armour_S_D":19,"artillery_N":20,"artillery_N_D":21,"artillery_S":22,"artillery_S_D":23,"attack_N":24,"attack_N_D":25,"attack_S":26,"attack_S_D":27,"blightword_N":28,"blightword_N_D":29,"bone_N":30,"bone_N_D":31,"bone_S":32,"bone_S_D":33,"bone_choir_N":34,"bone_choir_N_D":35,"bone_choir_S":36,"bone_choir_S_D":37,"bow_N":38,"bow_N_D":39,"bow_S":40,"bow_S_D":41,"bulwark_N":42,"bulwark_N_D":43,"bulwark_S":44,"bulwark_S_D":45,"carrion_hunt_N":46,"carrion_hunt_N_D":47,"carrion_hunt_S":48,"carrion_hunt_S_D":49,"chain_N":50,"chain_N_D":51,"chain_S":52,"chain_S_D":53,"channel_N":54,"channel_N_D":55,"channel_S":56,"channel_S_D":57,"cleave_N":58,"cleave_N_D":59,"cleave_S":60,"cleave_S_D":61,"cold_N":62,"cold_N_D":63,"cold_S":64,"cold_S_D":65,"conduit_N":66,"conduit_N_D":67,"conduit_S":68,"conduit_S_D":69,"crest_Mage":70,"crest_Mage_D":71,"crest_Necromancer":72,"crest_Necromancer_D":73,"crest_Paladin":74,"crest_Paladin_D":75,"crest_Ranger":76,"crest_Ranger_D":77,"crest_Samurai":78,"crest_Samurai_D":79,"crest_Warrior":80,"crest_Warrior_D":81,"crit_N":82,"crit_N_D":83,"crit_S":84,"crit_S_D":85,"crusade_N":86,"crusade_N_D":87,"crusade_S":88,"crusade_S_D":89,"dawn_N":90,"dawn_N_D":91,"dawn_S":92,"dawn_S_D":93,"dawnstorm_N":94,"dawnstorm_N_D":95,"dawnstorm_S":96,"dawnstorm_S_D":97,"dawnsworn_N":98,"dawnsworn_N_D":99,"deadeye_N":100,"deadeye_N_D":101,"deadeye_S":102,"deadeye_S_D":103,"deathknell_N":104,"deathknell_N_D":105,"deathknell_S":106,"deathknell_S_D":107,"edge_N":108,"edge_N_D":109,"edge_S":110,"edge_S_D":111,"elemental_N":112,"elemental_N_D":113,"elemental_S":114,"elemental_S_D":115,"energy_shield_N":116,"energy_shield_N_D":117,"energy_shield_S":118,"energy_shield_S_D":119,"evasion_N":120,"evasion_N_D":121,"evasion_S":122,"evasion_S_D":123,"faith_N":124,"faith_N_D":125,"faith_S":126,"faith_S_D":127,"falling_leaf_N":128,"falling_leaf_N_D":129,"falling_leaf_S":130,"falling_leaf_S_D":131,"fire_N":132,"fire_N_D":133,"fire_S":134,"fire_S_D":135,"fury_N":136,"fury_N_D":137,"fury_S":138,"fury_S_D":139,"grave_N":140,"grave_N_D":141,"grave_S":142,"grave_S_D":143,"holy_N":144,"holy_N_D":145,"holy_S":146,"holy_S_D":147,"iron_tempest_N":148,"iron_tempest_N_D":149,"iron_tempest_S":150,"iron_tempest_S_D":151,"ki_N":152,"ki_N_D":153,"ki_S":154,"ki_S_D":155,"ks_aegis_rebuke":156,"ks_aegis_rebuke_D":157,"ks_ancestral_host":158,"ks_ancestral_host_D":159,"ks_blood_magic":160,"ks_blood_magic_D":161,"ks_cascade_of_ruin":162,"ks_cascade_of_ruin_D":163,"ks_chain_reaction":164,"ks_chain_reaction_D":165,"ks_choir_of_bones":166,"ks_choir_of_bones_D":167,"ks_comet_step":168,"ks_comet_step_D":169,"ks_dawnstorm_covenant":170,"ks_dawnstorm_covenant_D":171,"ks_eagle_eye":172,"ks_eagle_eye_D":173,"ks_earthbreaker_stride":174,"ks_earthbreaker_stride_D":175,"ks_elemental_overload":176,"ks_elemental_overload_D":177,"ks_forked_sky":178,"ks_forked_sky_D":179,"ks_glass_cannon":180,"ks_glass_cannon_D":181,"ks_hammer_of_judgement":182,"ks_hammer_of_judgement_D":183,"ks_hollow_covenant":184,"ks_hollow_covenant_D":185,"ks_iron_resolve":186,"ks_iron_resolve_D":187,"ks_lord_of_the_dead":188,"ks_lord_of_the_dead_D":189,"ks_oath_of_a_thousand_cuts":190,"ks_oath_of_a_thousand_cuts_D":191,"ks_oath_of_many_fires":192,"ks_oath_of_many_fires_D":193,"ks_oath_of_slow_ruin":194,"ks_oath_of_slow_ruin_D":195,"ks_oath_of_the_living_storm":196,"ks_oath_of_the_living_storm_D":197,"ks_oath_of_the_long_night":198,"ks_oath_of_the_long_night_D":199,"ks_oath_of_the_pyre":200,"ks_oath_of_the_pyre_D":201,"ks_oath_of_the_red_harvest":202,"ks_oath_of_the_red_harvest_D":203,"ks_oath_of_the_snare":204,"ks_oath_of_the_snare_D":205,"ks_oath_of_the_white_silence":206,"ks_oath_of_the_white_silence_D":207,"ks_one_breath":208,"ks_one_breath_D":209,"ks_pyre_covenant":210,"ks_pyre_covenant_D":211,"ks_r59_hold_k3":212,"ks_r59_hold_k3_D":213,"ks_r59_mountain_k3":214,"ks_r59_mountain_k3_D":215,"ks_r59_sure_strike_k3":216,"ks_r59_sure_strike_k3_D":217,"ks_r74_bone_sovereign":218,"ks_r74_bone_sovereign_D":219,"ks_radiant_crusade":220,"ks_radiant_crusade_D":221,"ks_rotting_gospel":222,"ks_rotting_gospel_D":223,"ks_sanctified":224,"ks_sanctified_D":225,"ks_siege_pact":226,"ks_siege_pact_D":227,"ks_spellblade":228,"ks_spellblade_D":229,"ks_tempest_vow":230,"ks_tempest_vow_D":231,"ks_the_hunting_dead":232,"ks_the_hunting_dead_D":233,"ks_thousand_hands":234,"ks_thousand_hands_D":235,"ks_twice_fallen_sky":236,"ks_twice_fallen_sky_D":237,"ks_unbroken_wall":238,"ks_unbroken_wall_D":239,"ks_wake_of_spells":240,"ks_wake_of_spells_D":241,"ks_way_of_the_blade":242,"ks_way_of_the_blade_D":243,"ks_wind_and_steel_oath":244,"ks_wind_and_steel_oath_D":245,"leech_N":246,"leech_N_D":247,"leech_S":248,"leech_S_D":249,"lichfire_N":250,"lichfire_N_D":251,"lichfire_S":252,"lichfire_S_D":253,"life_N":254,"life_N_D":255,"life_S":256,"life_S_D":257,"life_big_N":258,"life_big_N_D":259,"life_big_S":260,"life_big_S_D":261,"lightning_N":262,"lightning_N_D":263,"lightning_S":264,"lightning_S_D":265,"lingering_N":266,"lingering_N_D":267,"lingering_S":268,"lingering_S_D":269,"malediction_N":270,"malediction_N_D":271,"malediction_S":272,"malediction_S_D":273,"mana_N":274,"mana_N_D":275,"mana_S":276,"mana_S_D":277,"manasteal_N":278,"manasteal_N_D":279,"manasteal_S":280,"manasteal_S_D":281,"melee_N":282,"melee_N_D":283,"melee_S":284,"melee_S_D":285,"mirrorblade_N":286,"mirrorblade_N_D":287,"mirrorblade_S":288,"mirrorblade_S_D":289,"orbit_N":290,"orbit_N_D":291,"orbit_S":292,"orbit_S_D":293,"ossuary_N":294,"ossuary_N_D":295,"ossuary_S":296,"ossuary_S_D":297,"overcharge_N":298,"overcharge_N_D":299,"overcharge_S":300,"overcharge_S_D":301,"permafrost_N":302,"permafrost_N_D":303,"permafrost_S":304,"permafrost_S_D":305,"plague_quiver_N":306,"plague_quiver_N_D":307,"plague_quiver_S":308,"plague_quiver_S_D":309,"poison_N":310,"poison_N_D":311,"poison_S":312,"poison_S_D":313,"portrait_Mage":314,"portrait_Mage_D":315,"portrait_Necromancer":316,"portrait_Necromancer_D":317,"portrait_Paladin":318,"portrait_Paladin_D":319,"portrait_Ranger":320,"portrait_Ranger_D":321,"portrait_Samurai":322,"portrait_Samurai_D":323,"portrait_Warrior":324,"portrait_Warrior_D":325,"projectile_N":326,"projectile_N_D":327,"projectile_S":328,"projectile_S_D":329,"radiance_N":330,"radiance_N_D":331,"radiance_S":332,"radiance_S_D":333,"radiant_ward_N":334,"radiant_ward_N_D":335,"radiant_ward_S":336,"radiant_ward_S_D":337,"rain_N":338,"rain_N_D":339,"rain_S":340,"rain_S_D":341,"reaper_N":342,"reaper_N_D":343,"reaper_S":344,"reaper_S_D":345,"regrowth_N":346,"regrowth_N_D":347,"regrowth_S":348,"regrowth_S_D":349,"resist_N":350,"resist_N_D":351,"resist_S":352,"resist_S_D":353,"shatter_N":354,"shatter_N_D":355,"shatter_S":356,"shatter_S_D":357,"siege_N":358,"siege_N_D":359,"siege_S":360,"siege_S_D":361,"sigil_N":362,"sigil_N_D":363,"sigil_S":364,"sigil_S_D":365,"slam_N":366,"slam_N_D":367,"slam_S":368,"slam_S_D":369,"souls_N":370,"souls_N_D":371,"souls_S":372,"souls_S_D":373,"speed_N":374,"speed_N_D":375,"speed_S":376,"speed_S_D":377,"spell_N":378,"spell_N_D":379,"spell_S":380,"spell_S_D":381,"spell_crit_N":382,"spell_crit_N_D":383,"spell_crit_S":384,"spell_crit_S_D":385,"spellsword_N":386,"spellsword_N_D":387,"spellsword_S":388,"spellsword_S_D":389,"starfall_N":390,"starfall_N_D":391,"starfall_S":392,"starfall_S_D":393,"stillness_N":394,"stillness_N_D":395,"stillness_S":396,"stillness_S_D":397,"swift_N":398,"swift_N_D":399,"swift_S":400,"swift_S_D":401,"tether_N":402,"tether_N_D":403,"tether_S":404,"tether_S_D":405,"trap_N":406,"trap_N_D":407,"trap_S":408,"trap_S_D":409,"two_storms_N":410,"two_storms_N_D":411,"two_storms_S":412,"two_storms_S_D":413,"vigil_N":414,"vigil_N_D":415,"vigil_S":416,"vigil_S_D":417,"voidbound_N":418,"voidbound_N_D":419,"voidbound_S":420,"voidbound_S_D":421,"vowkeeper_N":422,"vowkeeper_N_D":423,"vowkeeper_S":424,"vowkeeper_S_D":425,"warcaller_N":426,"warcaller_N_D":427,"warcaller_S":428,"warcaller_S_D":429,"warpath_N":430,"warpath_N_D":431,"warpath_S":432,"warpath_S_D":433,"waygate_S":434,"waygate_S_D":435,"wellspring_N":436,"wellspring_N_D":437,"wellspring_S":438,"wellspring_S_D":439,"wind_and_steel_N":440,"wind_and_steel_N_D":441,"wind_and_steel_S":442,"wind_and_steel_S_D":443,"windstep_N":444,"windstep_N_D":445,"windstep_S":446,"windstep_S_D":447,"zeal_N":448,"zeal_N_D":449,"zeal_S":450,"zeal_S_D":451},"dragons":"icons/dragons.webp","dragonOrder":["Fire","Lightning","Cold","Arcane","Poison","Physical"]};
 </script>
 <script>
@@ -1413,10 +1445,10 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
   const NEEDED = ['Gameplay/skills.json', 'Gameplay/classes.json', 'Gameplay/supports.json', 'Gameplay/passive_tree.json',
     'Items/affixes.json', 'Items/uniques.json', 'Items/item_bases.json', 'Items/runes.json', 'Items/runewords.json',
     'Gameplay/dragonling.json', 'Gameplay/curses.json', 'Gameplay/blessings.json', 'Gameplay/scaling.json', 'Items/stat_text.json', 'Rifts/bosses.json',
-    'Gameplay/animsets.json'];
+    'Gameplay/animsets.json', 'Gameplay/progression.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 8; // 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 9; // 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -1477,7 +1509,7 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
 
     const tree = J('Gameplay/passive_tree.json');
     const nodes = {};
-    for (const n of tree.nodes) nodes[n.Id] = pick(n, ['Id', 'Name', 'Kind', 'Mods', 'Text', 'Region', 'X', 'Y', 'Links', 'ClassStart', 'Price', 'Choice', 'Group']);
+    for (const n of tree.nodes) nodes[n.Id] = pick(n, ['Id', 'Name', 'Kind', 'Mods', 'Text', 'Region', 'X', 'Y', 'Links', 'ClassStart', 'Price', 'Choice', 'Group', 'Fp']); // Fp: the save's PassiveFp per node (the Creator tab writes it, as tools/offline-clone.js does)
 
     const affixes = {};
     for (const a of J('Items/affixes.json').affixes) affixes[a.Id.toLowerCase()] = Object.assign(pick(a, ['Id', 'Type', 'Group', 'Mod', 'BaseTags', 'ExcludeTags']), { Tiers: (a.Tiers || []).map(t => pick(t, ['ILvl', 'Min', 'Max', 'Min2', 'Max2', 'Name'])) });
@@ -1486,7 +1518,7 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
     for (const u of J('Items/uniques.json').uniques) uniques[u.Id.toLowerCase()] = { Id: u.Id, Name: u.Name, BaseId: u.BaseId, Mods: u.Mods.map(m => pick(m, ['Mod', 'Text', 'Min', 'Max', 'Min2', 'Max2'])) };
 
     const bases = {};
-    for (const b of J('Items/item_bases.json').bases) bases[b.Id.toLowerCase()] = pick(b, ['Id', 'Name', 'Slot', 'Class', 'TypeName', 'Tags', 'Implicits', 'DamageMin', 'DamageMax', 'AttacksPerSecond', 'Crit', 'bTwoHanded', 'Weapon', 'Level', 'Armour', 'Evasion', 'EnergyShield', 'Block']); // defences: shown on items and compared, not used for damage (item_bases.json)
+    for (const b of J('Items/item_bases.json').bases) bases[b.Id.toLowerCase()] = pick(b, ['Id', 'Name', 'Slot', 'Class', 'TypeName', 'Tags', 'Implicits', 'DamageMin', 'DamageMax', 'AttacksPerSecond', 'Crit', 'bTwoHanded', 'Weapon', 'Level', 'Armour', 'Evasion', 'EnergyShield', 'Block', 'Width', 'Height']); // defences: shown on items and compared, not used for damage (item_bases.json)
 
     const runesFile = J('Items/runes.json');
     const runes = {};
@@ -1530,11 +1562,14 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
     for (const gd of B.guardians || []) guardians[gd.Id] = { name: gd.Name, variants: (gd.Variants || []).map(v => ({ id: v.Id, name: v.Name, element: v.Element, resist: (v.Resist || {})[v.Element] || 0 })) };
     const ward = (B.Tiers || []).filter(t => t.Id === 'ward').map(t => ({ fromRL: t.FromRL, gateFromRL: t.GateFromRL, resist: t.Resist })).sort((a, b) => a.fromRL - b.fromRL);
 
+    // XP needed to reach level 2..100 (progression.json Levels): the Creator tab sets Experience to match a new level.
+    const xpLevels = J('Gameplay/progression.json').progression[0].Levels;
+
     const statText = {};
     for (const t of J('Items/stat_text.json').texts) statText[t.Key] = t.Text;
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
-      { skills, classes, supports, nodes, moved: tree.Moved || {}, affixes, uniques, bases, runes, runeSockets, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, animRate });
+      { skills, classes, supports, nodes, moved: tree.Moved || {}, affixes, uniques, bases, runes, runeSockets, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, animRate, xpLevels });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, SCHEMA };
@@ -1683,6 +1718,202 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
 
   root.parseGvas = parseGvas;
   if (typeof module !== 'undefined') module.exports = { parseGvas };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+// Lossless reader/writer for Broken Oath's GVAS saves, for the browser (the Creator tab). Same layout and output as
+// tools/gvas-rw.js (Node), on Uint8Array instead of Buffer: test-savewrite.js checks both give the same bytes on every
+// save in SaveGames. Only offline characters are ever written (the Creator refuses a League or an Online realm).
+(function (root) {
+  'use strict';
+  const NATIVE_SIZE = { Guid: 16, DateTime: 8, Timespan: 8, Vector: 24, Rotator: 24, Vector2D: 16, IntPoint: 8, LinearColor: 16, Color: 4, Quat: 32 };
+  const toHex = b => { let s = ''; for (let i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16); return s; };
+  const fromHex = h => { const b = new Uint8Array(h.length / 2); for (let i = 0; i < b.length; i++) b[i] = parseInt(h.substr(i * 2, 2), 16); return b; };
+  const latin1 = (b, a, z) => { let s = ''; for (let i = a; i < z; i++) s += String.fromCharCode(b[i]); return s; };
+  const utf16 = (b, a, z) => { let s = ''; for (let i = a; i + 1 < z; i += 2) s += String.fromCharCode(b[i] | (b[i + 1] << 8)); return s; };
+
+  class Reader {
+    constructor(u8) { this.b = u8; this.d = new DataView(u8.buffer, u8.byteOffset, u8.byteLength); this.o = 0; }
+    u8() { return this.b[this.o++]; }
+    i32() { const x = this.d.getInt32(this.o, true); this.o += 4; return x; }
+    bytes(n) { const x = this.b.slice(this.o, this.o + n); this.o += n; return x; }
+    str() {
+      const n = this.i32();
+      if (n === 0) return '';
+      if (n > 0) { const s = latin1(this.b, this.o, this.o + n - 1); this.o += n; return s; }
+      const s = utf16(this.b, this.o, this.o + (-n - 1) * 2); this.o += -n * 2; return s;
+    }
+  }
+  class Writer {
+    constructor() { this.parts = []; this.len = 0; }
+    buf(b) { const u = b instanceof Uint8Array ? b : Uint8Array.from(b); this.parts.push(u); this.len += u.length; }
+    u8(x) { this.buf([x & 255]); }
+    num(fn, n, v) { const b = new Uint8Array(n); new DataView(b.buffer)[fn](0, v, true); this.buf(b); }
+    i32(x) { this.num('setInt32', 4, x); }
+    str(s) {
+      if (s === '') return this.i32(0);
+      if (/^[\x00-\xff]*$/.test(s)) { this.i32(s.length + 1); const b = new Uint8Array(s.length + 1); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); this.buf(b); }
+      else { this.i32(-(s.length + 1)); const b = new Uint8Array((s.length + 1) * 2); for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); b[i * 2] = c & 255; b[i * 2 + 1] = c >> 8; } this.buf(b); }
+    }
+    done() { const o = new Uint8Array(this.len); let at = 0; for (const p of this.parts) { o.set(p, at); at += p.length; } return o; }
+  }
+
+  function readTypeName(r) { const name = r.str(), n = r.i32(), params = []; for (let i = 0; i < n; i++) params.push(readTypeName(r)); return { name, params }; }
+  function writeTypeName(w, t) { w.str(t.name); w.i32(t.params.length); for (const p of t.params) writeTypeName(w, p); }
+  const isEnumByte = t => t.params.length && t.params[0].name !== 'None';
+
+  function readTagged(r) {
+    const props = [];
+    for (;;) {
+      const name = r.str();
+      if (name === 'None') break;
+      if (name === '') throw new Error('empty property name @' + r.o);
+      const type = readTypeName(r), size = r.i32(), flags = r.u8(), p = { name, type, flags };
+      if (flags & 0x01) p.idx = r.i32();
+      if (flags & 0x02) p.guid = toHex(r.bytes(16));
+      if (flags & 0x04) { const ext = r.u8(); p.ext = [ext]; if (ext & 0x02) p.ext.push(r.u8(), r.u8()); }
+      const start = r.o;
+      p.v = type.name === 'BoolProperty' ? !!(flags & 0x10) : readValue(r, type, size);
+      if (r.o !== start + size) throw new Error('size mismatch in ' + name + ' (' + type.name + ')');
+      props.push(p);
+    }
+    return props;
+  }
+  function writeTagged(w, props) {
+    for (const p of props) {
+      w.str(p.name); writeTypeName(w, p.type);
+      let body = new Uint8Array(0), flags = p.flags & ~0x10;
+      if (p.type.name === 'BoolProperty') { if (p.v) flags |= 0x10; }
+      else { const vw = new Writer(); writeValue(vw, p.type, p.v); body = vw.done(); }
+      w.i32(body.length); w.u8(flags);
+      if (flags & 0x01) w.i32(p.idx);
+      if (flags & 0x02) w.buf(fromHex(p.guid));
+      if (flags & 0x04) w.buf(p.ext);
+      w.buf(body);
+    }
+    w.str('None');
+  }
+  function readValue(r, t, size) {
+    const d = r.d, at = r.o;
+    switch (t.name) {
+      case 'IntProperty': return r.i32();
+      case 'UInt32Property': r.o += 4; return d.getUint32(at, true);
+      case 'Int64Property': r.o += 8; return d.getBigInt64(at, true);
+      case 'UInt64Property': r.o += 8; return d.getBigUint64(at, true);
+      case 'Int16Property': r.o += 2; return d.getInt16(at, true);
+      case 'UInt16Property': r.o += 2; return d.getUint16(at, true);
+      case 'Int8Property': r.o += 1; return d.getInt8(at);
+      case 'FloatProperty': r.o += 4; return d.getFloat32(at, true);
+      case 'DoubleProperty': r.o += 8; return d.getFloat64(at, true);
+      case 'BoolProperty': return r.u8();
+      case 'StrProperty': case 'NameProperty': case 'EnumProperty':
+      case 'ObjectProperty': case 'ClassProperty': case 'SoftObjectProperty': case 'SoftClassProperty': return r.str();
+      case 'ByteProperty': return isEnumByte(t) ? r.str() : r.u8();
+      case 'StructProperty': {
+        const sn = t.params[0] ? t.params[0].name : '';
+        if (NATIVE_SIZE[sn]) return { hex: toHex(r.bytes(NATIVE_SIZE[sn])) };
+        return { props: readTagged(r) };
+      }
+      case 'ArrayProperty': {
+        const n = r.i32(), inner = t.params[0];
+        if (inner.name === 'ByteProperty' && !isEnumByte(inner)) return { raw: toHex(r.bytes(n)) };
+        const items = []; for (let i = 0; i < n; i++) items.push(readValue(r, inner, -1));
+        return { items };
+      }
+      case 'SetProperty': {
+        const rem = []; let n = r.i32(); for (let i = 0; i < n; i++) rem.push(readValue(r, t.params[0], -1));
+        const items = []; n = r.i32(); for (let i = 0; i < n; i++) items.push(readValue(r, t.params[0], -1));
+        return { rem, items };
+      }
+      case 'MapProperty': {
+        const rem = []; let n = r.i32(); for (let i = 0; i < n; i++) rem.push(readValue(r, t.params[0], -1));
+        const pairs = []; n = r.i32();
+        for (let i = 0; i < n; i++) { const k = readValue(r, t.params[0], -1); pairs.push([k, readValue(r, t.params[1], -1)]); }
+        return { rem, pairs };
+      }
+      default:
+        if (size < 0) throw new Error('cannot read ' + t.name + ' inside a container');
+        return { raw: toHex(r.bytes(size)) };
+    }
+  }
+  function writeValue(w, t, v) {
+    switch (t.name) {
+      case 'IntProperty': return w.i32(v);
+      case 'UInt32Property': return w.num('setUint32', 4, v);
+      case 'Int64Property': return w.num('setBigInt64', 8, BigInt(v));
+      case 'UInt64Property': return w.num('setBigUint64', 8, BigInt(v));
+      case 'Int16Property': return w.num('setInt16', 2, v);
+      case 'UInt16Property': return w.num('setUint16', 2, v);
+      case 'Int8Property': return w.num('setInt8', 1, v);
+      case 'FloatProperty': return w.num('setFloat32', 4, v);
+      case 'DoubleProperty': return w.num('setFloat64', 8, v);
+      case 'BoolProperty': return w.u8(v ? 1 : 0);
+      case 'StrProperty': case 'NameProperty': case 'EnumProperty':
+      case 'ObjectProperty': case 'ClassProperty': case 'SoftObjectProperty': case 'SoftClassProperty': return w.str(v);
+      case 'ByteProperty': return isEnumByte(t) ? w.str(v) : w.u8(v);
+      case 'StructProperty': if (v.hex != null) return w.buf(fromHex(v.hex)); return writeTagged(w, v.props);
+      case 'ArrayProperty':
+        if (v.raw != null) { const b = fromHex(v.raw); w.i32(b.length); return w.buf(b); }
+        w.i32(v.items.length); for (const x of v.items) writeValue(w, t.params[0], x); return;
+      case 'SetProperty':
+        w.i32(v.rem.length); for (const x of v.rem) writeValue(w, t.params[0], x);
+        w.i32(v.items.length); for (const x of v.items) writeValue(w, t.params[0], x); return;
+      case 'MapProperty':
+        w.i32(v.rem.length); for (const x of v.rem) writeValue(w, t.params[0], x);
+        w.i32(v.pairs.length); for (const [k, x] of v.pairs) { writeValue(w, t.params[0], k); writeValue(w, t.params[1], x); } return;
+      default: return w.buf(fromHex(v.raw));
+    }
+  }
+
+  function parse(u8) {
+    if (!(u8 instanceof Uint8Array)) u8 = new Uint8Array(u8);
+    if (latin1(u8, 0, 4) !== 'GVAS') throw new Error('Not a GVAS save file');
+    const r = new Reader(u8); r.o = 4;
+    const saveVer = r.i32(); r.i32(); const ue5 = saveVer >= 3 ? r.i32() : 0;
+    r.o += 2 + 2 + 2 + 4; r.str();
+    r.i32(); const cv = r.i32(); r.o += cv * 20;
+    r.str();
+    const peek = r.d.getInt32(r.o, true);
+    if (peek <= 0 || peek > 256) r.o += 1;
+    if (ue5 < 1012) throw new Error('pre-5.4 property layout, not supported');
+    const header = u8.slice(0, r.o), props = readTagged(r), tail = u8.slice(r.o);
+    return { header, props, tail };
+  }
+  // Footer: "BOCK", u32 length of everything before it, u32 CRC32 of those bytes (see tools/gvas-rw.js).
+  let CRC_T = null;
+  function crc32(b) {
+    if (!CRC_T) { CRC_T = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; CRC_T[n] = c >>> 0; } }
+    let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 255] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function serialize(save) {
+    const w = new Writer(); w.buf(save.header); writeTagged(w, save.props);
+    const t = save.tail, n = t.length;
+    if (n >= 12 && latin1(t, n - 12, n - 8) === 'BOCK') {
+      w.buf(t.slice(0, n - 12));
+      const body = w.done(), out = new Uint8Array(body.length + 12);
+      out.set(body); out.set([66, 79, 67, 75], body.length);
+      const dv = new DataView(out.buffer); dv.setUint32(body.length + 4, body.length, true); dv.setUint32(body.length + 8, crc32(body), true);
+      return out;
+    }
+    w.buf(t); return w.done();
+  }
+  const same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+
+  const get = (props, name) => props.find(p => p.name === name);
+  function plain(t, v) {
+    if (t.name === 'StructProperty') return v.hex != null ? v.hex : toPlain(v.props);
+    if (t.name === 'ArrayProperty') return v.raw != null ? v.raw : v.items.map(x => plain(t.params[0], x));
+    if (t.name === 'SetProperty') return v.items.map(x => plain(t.params[0], x));
+    if (t.name === 'MapProperty') return Object.fromEntries(v.pairs.map(([k, x]) => [plain(t.params[0], k), plain(t.params[1], x)]));
+    return v;
+  }
+  function toPlain(props) { const o = {}; for (const p of props) o[p.name + (p.idx ? '[' + p.idx + ']' : '')] = plain(p.type, p.v); return o; }
+
+  const api = { parse, serialize, get, toPlain, same, crc32, toHex };
+  root.BOSaveRW = api;
+  if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -1939,11 +2170,19 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
     // (no evasion, more damage taken ...) and what they do to how the skill plays are not in the DPS number.
     const changesPlay = n => n.Kind === 'Keystone' || (n.Mods || []).some(m => m.Mode === 'Trigger' || m.Mode === 'Flag');
     const useful = Object.keys(nodes).filter(id => walkable(id) && (nodes[id].Mods || []).some(dmgish) && (cfg.allowKeystones || !changesPlay(nodes[id]) || have.has(id)));
+    // Clusters (node Group in a Region; roads, hubs, waygates and keystones are not clusters) and their damage nodes.
+    // Search and order only, not the damage model: picking one node at a time missed nodes that pay off together
+    // (a notable and the smalls around it). Before/after on the five local characters, 5 Nov 2026: see bundles below.
+    const NOT_CLUSTER = new Set(['path', 'hub', 'waygate', 'start', 'keystone']);
+    const clusterOf = id => { const n = nodes[id]; return n && n.Group && !NOT_CLUSTER.has(n.Group) ? n.Group + '|' + n.Region : null; };
+    const clusters = new Map();
+    for (const id of useful) { const c = clusterOf(id); if (c && !altarOf(id)) (clusters.get(c) || clusters.set(c, []).get(c)).push(id); }
     // steps (optional): records each pick in order, for "plan my next points".
     function* spend(start, points, steps) {
       const tree = new Set(start); let cur = V(tree);
       while (points > 0) {
-        const b = bfs(tree, v => { const o = otherAtAltar(tree, v); return !!o; });
+        const avoidAltar = set => v => !!otherAtAltar(set, v);
+        const b = bfs(tree, avoidAltar(tree));
         let best = null;
         for (const id of useful) {
           if (tree.has(id)) continue;
@@ -1965,6 +2204,26 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
           const per = g / Math.max(cost, 0.5);
           if (!best || per > best.per) best = { list, per, cost, g, path, swapped: other || null };
           if (++tries % 40 === 0) yield null;
+        }
+        // Bundles: two or more damage nodes of one cluster, nearest first, each with its path; scored like a
+        // single pick (gain per point). The single-node loop above already covers "path to one notable".
+        if (cfg.clusters !== false) for (const ids of clusters.values()) {
+          const rem = new Set(ids.filter(id => !tree.has(id)));
+          if (rem.size < 2 || ![...rem].some(id => { const d = b.dist.get(id); return d !== undefined && d <= points; })) continue;
+          const set = new Set(tree), seq = []; let bb = b, n = 0;
+          while (rem.size) {
+            let pick = null, pd = Infinity;
+            for (const t of rem) { const d = bb.dist.get(t); if (d !== undefined && d < pd) { pick = t; pd = d; } }
+            if (!pick || seq.length + pd > points) break;
+            for (const x of pathOf(bb, set, pick)) { set.add(x); seq.push(x); }
+            for (const t of [...rem]) if (set.has(t)) { rem.delete(t); n++; }
+            if (n >= 2) {
+              const g = V(set) / cur - 1, per = g / seq.length;
+              if (g > 1e-6 && (!best || per > best.per)) best = { list: new Set(set), per, cost: seq.length, g, path: seq.slice(), swapped: null };
+            }
+            if (rem.size) bb = bfs(set, avoidAltar(set));
+            if (++tries % 10 === 0) yield null;
+          }
         }
         if (!best) break;
         for (const x of [...tree]) if (!best.list.has(x)) tree.delete(x);
@@ -3158,6 +3417,409 @@ window.BOPlanner = function (ctx) {
   // The item editor for the Item Compare tab (app.js): its own state from gear.newKit(true), edits on its own holder.
   const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, affixesFor };
   return { render, fromCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
+};
+
+</script>
+<script>
+// Save Creator tab: load an OFFLINE character save, change its level, gold, gem levels and items, copy a build from
+// the page onto it (tree, gear, skills, Dragonling), and download the new save. Everything happens in this browser tab;
+// the page never writes into the save folder, the player copies the file in.
+//
+// Owner's rule (5 Nov 2026): only offline characters (no League, no Realm "Online"). Online characters are refused.
+// The edits follow tools/offline-clone.js and tools/offline-additems.js, which were checked in game on 5 Nov 2026;
+// the browser writer (savewrite.js) gives the same bytes as theirs (test-savewrite.js).
+// app.js calls BOCreator(ctx) and gets back { render }.
+window.BOCreator = function (ctx) {
+  'use strict';
+  const { GD, $, esc, planner } = ctx;
+  const W = window.BOSaveRW;
+  const lc = s => String(s == null ? '' : s).toLowerCase();
+  const g = planner.gear;
+
+  // Field types, as every save holds them (checked on all saves in SaveGames, 5 Nov 2026). Used to add a field a
+  // young save leaves out, and to build new items and skill sockets.
+  const tn = x => typeof x === 'string' ? { name: x, params: [] } : { name: x[0], params: x[1].map(tn) };
+  const SCRIPT = n => ['StructProperty', [[n, ['/Script/BrokenOath']]]];
+  const REC = {
+    Experience: 'Int64Property', gold: 'Int64Property', BonusPassivePoints: 'IntProperty', WeaponId: 'StrProperty',
+    PassiveNodeIds: ['ArrayProperty', ['NameProperty']], PassiveFp: ['MapProperty', ['NameProperty', 'StrProperty']],
+    Gems: ['ArrayProperty', ['StrProperty']], GemLevels: ['MapProperty', ['StrProperty', 'IntProperty']], GemXp: ['MapProperty', ['StrProperty', 'FloatProperty']],
+    Sockets: ['ArrayProperty', [SCRIPT('BOSkillSockets')]], Hotbar: ['ArrayProperty', ['StrProperty']],
+    DragonlingNodes: ['ArrayProperty', ['NameProperty']], DragonlingAspect: 'NameProperty', MainSkillPin: 'StrProperty', ZoneFlags: ['ArrayProperty', ['StrProperty']],
+    Level: 'IntProperty',
+  };
+  const ITEM = [['ID', ['StructProperty', [['Guid', ['/Script/CoreUObject']]]], 8], ['BaseID', 'NameProperty'], ['ItemLevel', 'IntProperty'], ['Rarity', 'NameProperty'],
+    ['Seed', 'IntProperty'], ['EquippedSlot', 'NameProperty'], ['Name', 'StrProperty'], ['UniqueID', 'NameProperty'], ['Affixes', ['ArrayProperty', [SCRIPT('BORolledAffix')]]],
+    ['GridX', 'IntProperty'], ['GridY', 'IntProperty'], ['Look', 'NameProperty'], ['Sockets', 'IntProperty'], ['Runes', ['ArrayProperty', ['NameProperty']]],
+    ['Count', 'IntProperty'], ['ForgeSpent', 'IntProperty'], ['bLocked', 'BoolProperty'], ['Quality', 'IntProperty'], ['Forged79', 'IntProperty']];
+  const AFFIX = [['AffixId', 'NameProperty'], ['Tier', 'IntProperty'], ['Value', 'FloatProperty'], ['Value2', 'FloatProperty'], ['bCrafted', 'BoolProperty'], ['bOath83', 'BoolProperty']];
+  const SOCKET = [['SkillId', 'StrProperty'], ['Supports', ['ArrayProperty', ['StrProperty']]], ['ConduitLink', 'StrProperty']];
+  const empty = t => {
+    switch (t.name) {
+      case 'IntProperty': case 'FloatProperty': return 0;
+      case 'Int64Property': return 0n;
+      case 'BoolProperty': return false;
+      case 'ArrayProperty': return { items: [] };
+      case 'MapProperty': return { rem: [], pairs: [] };
+      case 'StructProperty': return t.params[0].name === 'Guid' ? { hex: '0'.repeat(32) } : { props: [] };
+      default: return '';
+    }
+  };
+  const field = (name, type, flags) => { const t = tn(type); return { name, type: t, flags: flags || 0, v: empty(t) }; };
+  const struct = list => ({ props: list.map(([n, t, f]) => field(n, t, f)) });
+
+  const rand = n => crypto.getRandomValues(new Uint8Array(n));
+  const newGuid = () => W.toHex(rand(16));
+  const newSeed = () => new DataView(rand(4).buffer).getInt32(0, true) & 0x7fffffff;
+
+  // ---------- state ----------
+  const C = { file: '', orig: null, save: null, msg: '', err: '', log: [], edit: null, kit: null, editIdx: -1, newSlot: 'MainHand', buildId: '', parts: { tree: true, gear: true, skills: true, dragon: true, level: true } };
+  const R = () => W.get(C.save.props, 'Record').v.props;
+  const sumP = () => W.get(R(), 'Summary').v.props;
+  const summary = () => W.toPlain(sumP());
+  const getP = (props, name) => W.get(props, name);
+  function need(props, name) { let p = getP(props, name); if (!p) { p = field(name, REC[name]); props.push(p); } return p; }
+  function setV(props, name, v) {
+    const p = need(props, name);
+    p.v = p.type.name === 'Int64Property' ? BigInt(v) : v;
+  }
+  const val = (props, name, def) => { const p = getP(props, name); return p ? (p.type.name === 'Int64Property' ? Number(p.v) : p.v) : def; };
+  const arr = (props, name) => { const p = getP(props, name); return p ? p.v.items : []; };
+  const map = (props, name) => { const p = getP(props, name); return p ? Object.fromEntries(p.v.pairs) : {}; };
+  const setArr = (props, name, list) => { need(props, name).v = { items: list.slice() }; };
+  const setMap = (props, name, obj) => { const p = need(props, name), vt = p.type.params[1].name; p.v = { rem: [], pairs: Object.entries(obj).map(([k, x]) => [k, vt === 'Int64Property' ? BigInt(x) : x]) }; };
+  const items = () => need(R(), 'Items').v.items;
+  const iget = (s, n) => (getP(s.props, n) || {}).v;
+  const iset = (s, n, v) => { let p = getP(s.props, n); if (!p) { const d = ITEM.find(x => x[0] === n); p = field(n, d[1], d[2]); s.props.push(p); } p.v = v; };
+  const changed = msg => { C.log.push(msg); C.msg = msg; };
+
+  // ---------- items: save struct <-> the page's item shape ----------
+  const isBag = s => /None$/.test(String(iget(s, 'EquippedSlot') || 'None'));
+  const baseOf = id => GD.bases[lc(id)];
+  // The slot the item editor lists bases for: the equipped slot, or for a bag item the slot its base goes in.
+  const slotFor = s => {
+    if (!isBag(s)) return iget(s, 'EquippedSlot');
+    const b = baseOf(iget(s, 'BaseID')); const sl = b ? b.Slot : 'MainHand';
+    return sl === 'Ring' ? 'Ring1' : sl;
+  };
+  function toItem(s) {
+    return { slot: slotFor(s), base: iget(s, 'BaseID'), rarity: iget(s, 'Rarity') || 'Normal', unique: iget(s, 'UniqueID') || 'None', name: iget(s, 'Name') || '',
+      level: iget(s, 'ItemLevel') || 1, quality: iget(s, 'Quality') || 0, runes: (iget(s, 'Runes') || { items: [] }).items.slice(),
+      affixes: (iget(s, 'Affixes') || { items: [] }).items.map(a => { const o = W.toPlain(a.props); return { id: o.AffixId, tier: o.Tier || 0, v: o.Value || 0, v2: o.Value2 || 0, crafted: !!o.bCrafted, oath: !!o.bOath83 }; }) };
+  }
+  function makeAffix(a) {
+    const s = struct(AFFIX);
+    iset(s, 'AffixId', a.id); iset(s, 'Tier', a.tier || 0); iset(s, 'Value', +a.v || 0); iset(s, 'Value2', +a.v2 || 0);
+    iset(s, 'bCrafted', !!a.crafted); iset(s, 'bOath83', !!a.oath);
+    return s;
+  }
+  // Writes the page item into a save struct (a new one gets a fresh ID and seed; an edited one keeps its own).
+  function fillItem(s, it, where) {
+    const u = it.rarity === 'Unique' && GD.uniques[lc(it.unique)];
+    iset(s, 'BaseID', it.base); iset(s, 'ItemLevel', Math.max(1, Math.min(100, it.level || 1))); iset(s, 'Rarity', it.rarity || 'Normal');
+    iset(s, 'UniqueID', u ? u.Id : 'None'); iset(s, 'Name', u ? u.Name : it.name || '');
+    iset(s, 'Runes', { items: (it.runes || []).filter(Boolean) }); iset(s, 'Sockets', (it.runes || []).filter(Boolean).length);
+    iset(s, 'Quality', it.quality || 0);
+    iset(s, 'Affixes', { items: (it.rarity === 'Normal' ? [] : it.affixes || []).map(makeAffix) });
+    if (where) { iset(s, 'EquippedSlot', where.slot); iset(s, 'GridX', where.x); iset(s, 'GridY', where.y); }
+    return s;
+  }
+  function newItem(it, where) {
+    const s = struct(ITEM);
+    iset(s, 'ID', { hex: newGuid() }); iset(s, 'Seed', newSeed()); iset(s, 'Look', 'None');
+    return fillItem(s, it, where);
+  }
+
+  // Bag: 9 cells wide; rows 0-4 (the bottom row is left alone, as tools/offline-additems.js does).
+  const BAG_W = 9, BAG_ROWS = 5;
+  function bagUsed(skip) {
+    const used = new Set();
+    for (const s of items()) {
+      if (!isBag(s) || s === skip) continue;
+      const b = baseOf(iget(s, 'BaseID')) || {};
+      for (let dx = 0; dx < (b.Width || 1); dx++) for (let dy = 0; dy < (b.Height || 1); dy++) used.add((iget(s, 'GridX') + dx) + ',' + (iget(s, 'GridY') + dy));
+    }
+    return used;
+  }
+  function bagSpot(base, used) {
+    const w = (base && base.Width) || 1, h = (base && base.Height) || 1;
+    for (let y = 0; y + h <= BAG_ROWS; y++) for (let x = 0; x + w <= BAG_W; x++) {
+      const cells = []; for (let dx = 0; dx < w; dx++) for (let dy = 0; dy < h; dy++) cells.push((x + dx) + ',' + (y + dy));
+      if (cells.every(c => !used.has(c))) { cells.forEach(c => used.add(c)); return [x, y]; }
+    }
+    return null;
+  }
+
+  // Idol grid: 5x5 without its corners (tools/offline-clone.js, every idol in every save sits there).
+  const GRID = []; for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++) if (!((x === 0 || x === 4) && (y === 0 || y === 4))) GRID.push(x + ',' + y);
+  function placeIdols(list) {
+    const free = new Set(GRID), at = new Array(list.length);
+    const order = list.map((it, i) => { const b = baseOf(it.base) || {}; return { i, w: b.Width || 1, h: b.Height || 1 }; }).sort((a, b) => b.w * b.h - a.w * a.h);
+    const go = k => {
+      if (k === order.length) return true;
+      const { i, w, h } = order[k];
+      for (const c of GRID) {
+        const [x, y] = c.split(',').map(Number), cells = [];
+        for (let dx = 0; dx < w; dx++) for (let dy = 0; dy < h; dy++) cells.push((x + dx) + ',' + (y + dy));
+        if (!cells.every(q => free.has(q))) continue;
+        cells.forEach(q => free.delete(q)); at[i] = [x, y];
+        if (go(k + 1)) return true;
+        cells.forEach(q => free.add(q));
+      }
+      return false;
+    };
+    return go(0) ? at : null;
+  }
+
+  // ---------- load ----------
+  async function load(file) {
+    C.err = ''; C.msg = '';
+    try {
+      if (/_bak\.sav$/i.test(file.name) || /^BO_Account/i.test(file.name)) throw new Error('Pick a character save (BO_Char_….sav), not ' + file.name + '.');
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const save = W.parse(bytes);
+      const rec = W.get(save.props, 'Record'), sm = rec && W.get(rec.v.props, 'Summary');
+      if (!sm) throw new Error('This is not a Broken Oath character save.');
+      const S = W.toPlain(sm.v.props);
+      if (S.Realm === 'Online' || S.League) throw new Error((S.Name || 'This character') + ' is an online character (' + (S.League || S.Realm) + '). The Save Creator only changes offline characters.');
+      if (!W.same(W.serialize(save), bytes)) throw new Error('This save has something the Save Creator cannot write back exactly, so it will not change it.');
+      Object.assign(C, { file: file.name, orig: bytes, save, log: [], edit: null, editIdx: -1, buildId: '' });
+      C.msg = 'Loaded ' + S.Name + ' (' + S.ClassId + ' ' + (S.Level || 1) + ', offline).';
+    } catch (e) { C.err = e.message; }
+    render();
+  }
+
+  // ---------- character ----------
+  function setLevel(l) {
+    l = Math.max(1, Math.min(100, Math.round(+l) || 1));
+    setV(sumP(), 'Level', l);
+    setV(R(), 'Experience', l > 1 ? GD.xpLevels[l - 2] : 0);
+    return l;
+  }
+  // Gem XP: the stored level is what counts; XP is set to a value seen at that level in real saves (offline-clone.js).
+  const XP_AT = { 1: 576, 4: 9960, 5: 17882, 6: 40947, 7: 79300, 9: 282632, 13: 1312505, 16: 2931863, 18: 7765174, 19: 9703106, 20: 13023495 };
+  const xpFor = l => { const ks = Object.keys(XP_AT).map(Number).filter(k => k <= l); return XP_AT[Math.max(1, ...ks)]; };
+  function setGemLevel(gem, l) {
+    l = Math.max(1, Math.min(20, Math.round(+l) || 1));
+    const lv = map(R(), 'GemLevels'); lv[gem] = l; setMap(R(), 'GemLevels', lv);
+    const xp = map(R(), 'GemXp'); xp[gem] = xpFor(l); setMap(R(), 'GemXp', xp);
+    return l;
+  }
+
+  // ---------- copy a build from the page ----------
+  function applyBuild(ch, parts) {
+    const rec = R(), S = summary(), done = [];
+    if (lc(ch.classId) !== lc(S.ClassId)) throw new Error(ch.name + ' is a ' + ch.classId + '; this save is a ' + S.ClassId + '.');
+    if (parts.level && ch.level) { setLevel(ch.level); done.push('level ' + ch.level); }
+    if (parts.tree) {
+      const nodes = (ch.passives || []).filter(n => GD.nodes[n]);
+      const lost = (ch.passives || []).length - nodes.length;
+      setArr(rec, 'PassiveNodeIds', nodes);
+      setMap(rec, 'PassiveFp', Object.fromEntries(nodes.map(n => [n, GD.nodes[n].Fp || ''])));
+      setV(rec, 'BonusPassivePoints', ch.bonusPoints || 0);
+      done.push(nodes.length + ' passives' + (lost ? ' (' + lost + ' not in this patch left out)' : ''));
+    }
+    if (parts.gear) {
+      const gear = (ch.items || []).filter(it => baseOf(it.base));
+      const idols = gear.filter(i => i.slot === 'Idol'), idolAt = placeIdols(idols);
+      if (!idolAt) throw new Error('The idols do not fit the 5x5 idol grid.');
+      const sockets = (parts.tree ? ch.passives || [] : arr(rec, 'PassiveNodeIds')).filter(n => /^r60_socket_\d+$/.test(n)).map(n => +n.split('_').pop());
+      const runes = gear.filter(i => i.slot === 'DwarvenRune');
+      if (runes.length > sockets.length) throw new Error(runes.length + ' dwarven runes but only ' + sockets.length + ' rune sockets on the tree.');
+      const kept = items().filter(isBag);
+      const fresh = gear.map(it => {
+        if (it.slot === 'Idol') { const [x, y] = idolAt[idols.indexOf(it)]; return newItem(it, { slot: 'Idol', x, y }); }
+        if (it.slot === 'DwarvenRune') return newItem(it, { slot: 'DwarvenRune', x: sockets[runes.indexOf(it)], y: -1 });
+        return newItem(it, { slot: it.slot, x: -1, y: -1 });
+      });
+      need(rec, 'Items').v.items = [...kept, ...fresh];
+      if (ch.weaponId) setV(rec, 'WeaponId', ch.weaponId);
+      done.push(fresh.length + ' equipped items (the bag is kept)');
+    }
+    if (parts.skills) {
+      const gl = Object.assign({}, ch.gemLevels || {});
+      for (const g of ch.gems || []) if (!gl[g]) gl[g] = 1;
+      setArr(rec, 'Gems', Object.keys(gl));
+      setMap(rec, 'GemLevels', gl);
+      setMap(rec, 'GemXp', Object.fromEntries(Object.entries(gl).map(([k, l]) => [k, xpFor(l)])));
+      need(rec, 'Sockets').v = { items: (ch.sockets || []).map(s => { const x = struct(SOCKET); iset(x, 'SkillId', s.skill); x.props[1].v = { items: (s.supports || []).slice() }; x.props[2].v = s.conduit || ''; return x; }) };
+      const hb = (ch.hotbar || []).slice(), len = arr(rec, 'Hotbar').length || hb.length; while (hb.length < len) hb.push('');
+      setArr(rec, 'Hotbar', hb);
+      const onBar = new Set(hb), br = getP(rec, 'BarRemoved'); if (br) br.v.items = br.v.items.filter(x => !onBar.has(x));
+      const ng = getP(rec, 'NewGems'); if (ng) ng.v.items = [];
+      if (ch.mainSkill) setV(rec, 'MainSkillPin', ch.mainSkill);
+      done.push(Object.keys(gl).length + ' skill gems, ' + (ch.sockets || []).length + ' socketed skills');
+    }
+    if (parts.dragon) {
+      setArr(rec, 'DragonlingNodes', ch.dragonNodes || []);
+      setV(rec, 'DragonlingAspect', ch.dragonAspect || '');
+      done.push('Dragonling (' + (ch.dragonNodes || []).length + ' nodes)');
+    }
+    // Unlock flags the copied gear relies on (idols, dwarven runes, the Dragonling). Map progress is left alone.
+    const flags = need(rec, 'ZoneFlags').v.items;
+    for (const f of ['first_Idol', 'unlk_fossil', 'unlk_Dragonling', 'unlk_Runes', 'first_rune', 'unlk_dwarven_runes', 'first_dwarven_rune']) if (!flags.includes(f)) flags.push(f);
+    return 'Copied from ' + ch.name + ': ' + done.join(', ') + '.';
+  }
+
+  // ---------- output ----------
+  function output() {
+    const out = W.serialize(C.save);
+    if (!W.same(W.serialize(W.parse(out)), out)) throw new Error('The new save does not read back the same.');
+    const ch = window.BOSim.extractCharacter(window.parseGvas(out)); // the page's own reader must read it too
+    return { out, ch };
+  }
+  function download() {
+    try {
+      const { out } = output();
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out], { type: 'application/octet-stream' }));
+      a.download = C.file; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      C.msg = 'Downloaded ' + C.file + '. Close the game, keep a copy of your old save, then put this file in its place.';
+    } catch (e) { C.err = 'Could not make the save: ' + e.message; }
+    render();
+  }
+  function preview() {
+    try { const { ch } = output(); ch.savedAt = new Date().toISOString(); ch.name += ' (edited)'; ch.id = 'creator:' + ch.id; ctx.preview(ch); }
+    catch (e) { C.err = 'Could not read the new save: ' + e.message; render(); }
+  }
+
+  // ---------- render ----------
+  const opt = (v, label, sel) => '<option value="' + esc(v) + '"' + (sel ? ' selected' : '') + '>' + esc(label) + '</option>';
+  const itemName = it => { const u = it.rarity === 'Unique' && GD.uniques[lc(it.unique)], b = baseOf(it.base), r = GD.runes[lc(it.base)]; return u ? u.Name : r ? r.Name : (it.name ? it.name + ' · ' : '') + (b ? b.Name : it.base); };
+  function itemRow(s, i) {
+    const it = toItem(s), bag = isBag(s), known = !!baseOf(it.base);
+    const where = bag ? 'Bag ' + (iget(s, 'GridX') + 1) + ',' + (iget(s, 'GridY') + 1) : (g.SLOT_NAME[it.slot] || it.slot);
+    return '<div class="cr-item' + (i === C.editIdx ? ' on' : '') + '"><span class="cr-where">' + esc(where) + '</span>' +
+      '<span class="cr-name r-' + lc(it.rarity) + '">' + esc(itemName(it)) + (it.rarity !== 'Unique' && it.affixes.length ? ' <span class="meta">' + it.affixes.length + ' affix' + (it.affixes.length > 1 ? 'es' : '') + '</span>' : '') + '</span>' +
+      (known ? '<button class="btn small ghost" type="button" data-cr="edit" data-i="' + i + '">Edit</button>' : '<span class="meta">' + (GD.runes[lc(it.base)] ? 'rune, kept as it is' : 'kept as it is') + '</span>') +
+      '<button class="btn small ghost" type="button" data-cr="rm" data-i="' + i + '">Remove</button></div>';
+  }
+  function editorHtml() {
+    if (!C.edit) return '';
+    const isNew = C.editIdx < 0, it = C.edit.items[0] || null, slot = it ? it.slot : C.newSlot;
+    let h = '<div class="card cr-editor"><h2>' + (isNew ? 'New item' : 'Edit item') + '</h2>';
+    if (isNew) h += '<label class="field inline"><span>Item type</span><select id="crSlot">' + [...g.SLOTS, 'Idol'].filter(s => s !== 'Ring2').map(s => opt(s, s === 'Ring1' ? 'Ring' : g.SLOT_NAME[s], s === slot)).join('') + '</select></label>';
+    if (it) h += '<div class="cmp-tip pl-tip">' + g.tip(it, slot) + '</div>';
+    h += '<div class="pl-gear-grid" data-cred="1">' + g.editor(it, slot, it ? 0 : -1, true, '', C.kit) + '</div>';
+    if (it) h += '<label class="field inline"><span>Quality</span><input type="number" min="0" max="30" id="crQuality" value="' + (it.quality || 0) + '"></label>';
+    h += '<div class="cmp-actions">' + (isNew ? '<button class="btn" type="button" data-cr="tobag"' + (it ? '' : ' disabled') + '>Put it in the bag</button>' : '<button class="btn" type="button" data-cr="saveitem"' + (it ? '' : ' disabled') + '>Keep the changes</button>') +
+      '<button class="btn ghost" type="button" data-cr="cancel">Cancel</button></div></div>';
+    return h;
+  }
+  function buildHtml(S) {
+    const list = ctx.chars().filter(c => lc(c.classId) === lc(S.ClassId));
+    let h = '<div class="card"><h2>Copy a build onto this character</h2><p class="hint">Any ' + esc(S.ClassId) + ' on this page: a plan, a loaded character or a build code. Pick what to copy.</p>';
+    if (!list.length) return h + '<p class="hint">No ' + esc(S.ClassId) + ' on this page yet. Start a plan, load a save or a build code first.</p></div>';
+    h += '<label class="field"><span>Build</span><select id="crBuild">' + opt('', 'Pick a build…', !C.buildId) + list.map(c => opt(c.id, c.name + ' (' + c.classId + ' ' + c.level + (c.plan ? ', plan' : '') + ')', c.id === C.buildId)).join('') + '</select></label>';
+    const P = [['level', 'Level'], ['tree', 'Passive tree and bonus points'], ['gear', 'Equipped gear, idols and dwarven runes (replaces what is worn; the bag stays)'], ['skills', 'Skill gems, gem levels, supports and skill bar'], ['dragon', 'Dragonling tree and Aspect']];
+    h += '<div class="cr-parts">' + P.map(([k, t]) => '<label class="check-row"><input type="checkbox" data-part="' + k + '"' + (C.parts[k] ? ' checked' : '') + '><span>' + esc(t) + '</span></label>').join('') + '</div>';
+    const b = list.find(c => c.id === C.buildId);
+    if (b && b.fromCode) h += '<p class="hint bad">Build codes carry no rolled stats: rare and magic items come in as bare bases.</p>';
+    return h + '<div class="cmp-actions"><button class="btn" type="button" data-cr="apply"' + (b ? '' : ' disabled') + '>Copy onto ' + esc(S.Name) + '</button></div></div>';
+  }
+  function render() {
+    const el = $('#creatorPane'); if (!el || el.hidden) return;
+    let h = '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Save Creator</h2><p>Change an offline character: level, gold, gem levels, items and passive tree. You get a new save file to put in place of the old one. Online characters are refused.</p></div>';
+    h += '<div class="card cr-load"><label class="btn"><input type="file" id="crFile" accept=".sav" hidden>' + (C.save ? 'Load another save' : 'Load an offline save') + '</label>' +
+      '<span class="hint">Pick a <code>BO_Char_….sav</code> from <code>' + esc(ctx.savePath) + '</code>. It is read in this tab and never uploaded.</span>' +
+      (C.err ? '<p class="hint bad">' + esc(C.err) + '</p>' : '') + (C.msg ? '<p class="hint pl-status">' + esc(C.msg) + '</p>' : '') + '</div>';
+    if (!C.save) { el.innerHTML = h; return; }
+    const S = summary(), rec = R(), lvl = S.Level || 1;
+    const gl = map(rec, 'GemLevels');
+    h += '<div class="cmp-grid">';
+    h += '<div class="card"><h2>' + esc(S.Name) + ' <span class="hint">' + esc(S.ClassId) + ' · offline · ' + esc(C.file) + '</span></h2><div class="pl-row cr-stats">' +
+      '<label class="field inline"><span>Name</span><input type="text" id="crName" maxlength="24" value="' + esc(S.Name) + '"></label>' +
+      '<label class="field inline"><span>Level</span><input type="number" id="crLevel" min="1" max="100" value="' + lvl + '"></label>' +
+      '<label class="field inline"><span>Gold</span><input type="number" id="crGold" min="0" step="1" value="' + val(rec, 'gold', 0) + '"></label>' +
+      '<label class="field inline"><span>Bonus passive points</span><input type="number" id="crBonus" min="0" max="200" value="' + val(rec, 'BonusPassivePoints', 0) + '"></label></div>' +
+      '<p class="hint">Level also sets the XP to the start of that level. Passives taken: ' + arr(rec, 'PassiveNodeIds').length + '.</p>';
+    const gems = Object.keys(gl).sort();
+    if (gems.length) h += '<h3>Gem levels</h3><div class="cr-gems">' + gems.map(k => '<label class="field inline"><span>' + esc((GD.skills[lc(k)] || GD.supports[lc(k)] || {}).Name || k) + '</span><input type="number" min="1" max="20" data-gem="' + esc(k) + '" value="' + gl[k] + '"></label>').join('') + '</div>';
+    h += '</div>';
+    h += buildHtml(S) + '</div>';
+    const all = items(), worn = all.map((s, i) => [s, i]).filter(([s]) => !isBag(s)), bag = all.map((s, i) => [s, i]).filter(([s]) => isBag(s));
+    const free = BAG_W * BAG_ROWS - bagUsed().size;
+    h += '<div class="cmp-grid"><div class="card"><h2>Items <span class="hint">' + worn.length + ' worn, ' + bag.length + ' in the bag, ' + Math.max(0, free) + ' bag cells free</span><span class="cmp-side-acts"><button class="btn small" type="button" data-cr="new">New item</button></span></h2>' +
+      '<h3>Worn</h3>' + (worn.map(([s, i]) => itemRow(s, i)).join('') || '<p class="hint">Nothing worn.</p>') +
+      '<h3>Bag</h3>' + (bag.map(([s, i]) => itemRow(s, i)).join('') || '<p class="hint">The bag is empty.</p>') + '</div>';
+    h += editorHtml() + '</div>';
+    h += '<div class="card cr-out"><h2>New save</h2>' + (C.log.length ? '<ul class="cr-log">' + C.log.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' : '<p class="hint">No changes yet.</p>') +
+      '<div class="cmp-actions"><button class="btn" type="button" data-cr="download"' + (C.log.length ? '' : ' disabled') + '>Download the new save</button>' +
+      '<button class="btn ghost" type="button" data-cr="preview">Open it in the Damage tab</button>' +
+      '<button class="btn ghost" type="button" data-cr="undo"' + (C.log.length ? '' : ' disabled') + '>Undo all changes</button></div>' +
+      '<ol class="hint cr-steps"><li>Close the game (it writes the save again when it quits).</li><li>Keep a copy of the old <code>' + esc(C.file) + '</code> somewhere safe.</li>' +
+      '<li>Put the downloaded file in its place, in the same folder and with the same name (your browser may have added " (1)": remove it).</li><li>Start the game and check the character.</li></ol></div>';
+    el.innerHTML = h;
+  }
+
+  // ---------- events ----------
+  function startEdit(i) {
+    C.editIdx = i; C.kit = g.newKit(true);
+    const lvl = summary().Level || 1;
+    C.edit = { level: lvl, items: i >= 0 ? [toItem(items()[i])] : [] };
+  }
+  (function bind() {
+    const el = $('#creatorPane');
+    el.addEventListener('change', e => {
+      const t = e.target; C.err = '';
+      if (t.id === 'crFile') { if (t.files[0]) load(t.files[0]); t.value = ''; return; }
+      if (!C.save) return;
+      const rec = R();
+      if (t.id === 'crName') { const n = t.value.trim().slice(0, 24); if (n) { setV(sumP(), 'Name', n); changed('Name: ' + n + '.'); } return render(); }
+      if (t.id === 'crLevel') { const l = setLevel(t.value); changed('Level ' + l + '.'); return render(); }
+      if (t.id === 'crGold') { const v = Math.max(0, Math.round(+t.value) || 0); setV(rec, 'gold', v); changed('Gold ' + v + '.'); return render(); }
+      if (t.id === 'crBonus') { const v = Math.max(0, Math.round(+t.value) || 0); setV(rec, 'BonusPassivePoints', v); changed('Bonus passive points ' + v + '.'); return render(); }
+      if (t.dataset.gem) { const l = setGemLevel(t.dataset.gem, t.value); changed(((GD.skills[lc(t.dataset.gem)] || GD.supports[lc(t.dataset.gem)] || {}).Name || t.dataset.gem) + ' gem level ' + l + '.'); return render(); }
+      if (t.id === 'crBuild') { C.buildId = t.value; return render(); }
+      if (t.dataset.part) { C.parts[t.dataset.part] = t.checked; return; }
+      if (t.id === 'crSlot') { C.newSlot = t.value; C.edit = { level: C.edit.level, items: [] }; C.kit = g.newKit(true); return render(); }
+      if (t.id === 'crQuality') { const it = C.edit && C.edit.items[0]; if (it) it.quality = Math.max(0, Math.min(30, Math.round(+t.value) || 0)); return render(); }
+      if (C.edit && t.closest('[data-cred]') && t.dataset.f) g.change(C.edit, t, C.kit, render, render);
+    });
+    el.addEventListener('click', e => {
+      if (e.target.closest('.pl-item > summary')) { e.preventDefault(); return; } // the editor stays open
+      const b = e.target.closest('[data-cr]');
+      if (!b) { const a = e.target.closest('[data-act]'); if (a && C.edit && a.closest('[data-cred]')) g.click(C.edit, a, C.kit, render); return; }
+      const act = b.dataset.cr, i = +b.dataset.i; C.err = '';
+      if (act === 'new') { startEdit(-1); return render(); }
+      if (act === 'edit') { startEdit(i); return render(); }
+      if (act === 'cancel') { C.edit = null; C.editIdx = -1; return render(); }
+      if (act === 'rm') {
+        const s = items()[i]; if (!s) return;
+        const n = itemName(toItem(s)); items().splice(i, 1);
+        if (C.editIdx === i) { C.edit = null; C.editIdx = -1; } else if (C.editIdx > i) C.editIdx--;
+        changed('Removed ' + n + '.'); return render();
+      }
+      if (act === 'saveitem') {
+        const s = items()[C.editIdx], it = C.edit.items[0]; if (!s || !it) return;
+        if (isBag(s)) { // a new size may not fit where it was
+          const b2 = baseOf(it.base) || {}, used = bagUsed(s), x0 = iget(s, 'GridX'), y0 = iget(s, 'GridY');
+          let fits = x0 + (b2.Width || 1) <= BAG_W && y0 + (b2.Height || 1) <= BAG_ROWS;
+          for (let dx = 0; fits && dx < (b2.Width || 1); dx++) for (let dy = 0; dy < (b2.Height || 1); dy++) if (used.has((x0 + dx) + ',' + (y0 + dy))) fits = false;
+          if (!fits) { const at = bagSpot(b2, used); if (!at) { C.err = 'That item no longer fits in the bag.'; return render(); } iset(s, 'GridX', at[0]); iset(s, 'GridY', at[1]); }
+        }
+        fillItem(s, it); changed('Changed ' + itemName(it) + '.'); C.edit = null; C.editIdx = -1; return render();
+      }
+      if (act === 'tobag') {
+        const it = C.edit.items[0]; if (!it) return;
+        const at = bagSpot(baseOf(it.base), bagUsed());
+        if (!at) { C.err = 'No room in the bag (9 x 5 cells) for this item. Remove something first.'; return render(); }
+        items().push(newItem(it, { slot: 'None', x: at[0], y: at[1] }));
+        changed('Added ' + itemName(it) + ' to the bag.'); C.edit = null; C.editIdx = -1; return render();
+      }
+      if (act === 'apply') {
+        const ch = ctx.chars().find(c => c.id === C.buildId); if (!ch) return;
+        try { changed(applyBuild(JSON.parse(JSON.stringify(ch)), C.parts)); C.edit = null; C.editIdx = -1; }
+        catch (err) { C.err = err.message; }
+        return render();
+      }
+      if (act === 'download') return download();
+      if (act === 'preview') return preview();
+      if (act === 'undo') { C.save = W.parse(C.orig); C.log = []; C.edit = null; C.editIdx = -1; C.msg = 'Back to the save as loaded.'; return render(); }
+    });
+  })();
+
+  return { render };
 };
 
 </script>
@@ -4951,6 +5613,7 @@ window.BOStartApp = function () {
   let upgradeOptimizer = { status: 'idle', results: [], key: '', run: 0 };
 
   let planner = null; // the Build tab (planner.js), made at the start
+  let creator = null; // the Save Creator tab (creator.js)
 
   // ---------- setup ----------
   const gdDay = new Date(GD.filesAt || GD.builtAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -7185,18 +7848,19 @@ window.BOStartApp = function () {
     document.body.classList.toggle('build-page', tab === 'build');
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator');
     if (tab === 'supports') {
       showConfigTab('supports', false);
       buildSettings.open = true;
     }
     syncSettingsToViewport();
     document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare';
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     if (tab === 'code') setTimeout(() => $('#codeInput').focus(), 0);
     if (tab === 'compare') renderCompare();
+    if (tab === 'creator') creator.render();
     store.set('tab', tab);
     if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } syncTreeTab(); renderTreeTabs(); if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
   }
@@ -7280,6 +7944,12 @@ window.BOStartApp = function () {
       if (CHARS.length) selectChar(CHARS[0].id); else { st.ch = st.chOrig = null; render(); planner.render(); }
     },
   });
+  // The Save Creator tab (creator.js): edits an offline save and hands back a new file.
+  creator = window.BOCreator({
+    GD, $, esc, planner, savePath: SAVE_PATH,
+    chars: () => CHARS,
+    preview: ch => { addChars([ch], 'file', ch.id); showTab('damage'); saveTip('Showing ' + ch.name + ' as the Save Creator would write it. Your save file is unchanged until you put the new one in place.'); },
+  });
   $('#buildPane').addEventListener('click', e => {
     if (e.target && e.target.id === 'buildResetSave') resetToSave();
     if (e.target && e.target.id === 'buildSavePlan') saveAsPlan();
@@ -7311,7 +7981,7 @@ window.BOStartApp = function () {
   const startId = store.get('char', null);
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();
-  const lastTab = store.get('tab', 'damage'); if (['tree', 'build', 'supports', 'compare', 'plan', 'code'].includes(lastTab)) showTab(lastTab);
+  const lastTab = store.get('tab', 'damage'); if (['tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator'].includes(lastTab)) showTab(lastTab);
   // Opened from a share link: load it as a plan, then drop it from the address so a refresh doesn't add it again.
   const sharedCode = linkCode(location.hash), sharedId = linkId(location.hash);
   if (sharedCode || sharedId) { history.replaceState(null, '', location.pathname + location.search); openShared(sharedCode, sharedId); }

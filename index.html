@@ -1088,6 +1088,46 @@ body.compare-page #controls { display: none; }
 .cr-runeadd .field { margin: 0 0 8px; }
 .cr-runeadd .field input { width: 100%; }
 
+/* Fossil Planner tab (fossil.js) */
+.fo-wrap { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 860px) { .fo-wrap { grid-template-columns: minmax(0, 1fr); } .fo-main { order: -1; } }
+.fo-shapes { display: grid; gap: 6px; }
+.fo-shape { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto 18px; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.fo-shape:hover:not(:disabled) { border-color: var(--dashboard-gold); }
+.fo-shape:focus-visible, .fo-cell:focus-visible, .fo-idol:focus-visible, .fo-pick:focus-visible, .fo-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fo-shape.full { opacity: .5; cursor: not-allowed; }
+.fo-sname { display: flex; flex-direction: column; font-weight: 600; min-width: 0; }
+.fo-sname small, .fo-list small { color: var(--faint); font-weight: 400; font-size: 11px; }
+.fo-room { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; color: var(--good); }
+.fo-room.move { color: var(--dashboard-gold); }
+.fo-room.none { color: var(--faint); }
+.fo-plus { color: var(--dashboard-gold); font-size: 18px; font-weight: 700; text-align: center; }
+.fo-mini { display: inline-grid; grid-template-columns: repeat(var(--w), 9px); grid-auto-rows: 9px; gap: 2px; justify-self: center; }
+.fo-mini i { background: var(--dashboard-gold); border-radius: 2px; opacity: .85; }
+.fo-charrow { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.fo-charrow .grow { flex: 1 1 160px; }
+.fo-charrow select { width: 100%; }
+.fo-grid { --gap: 6px; display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); gap: var(--gap); width: min(100%, 440px); aspect-ratio: 1; margin: 6px auto 12px; padding: 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--dashboard-gold) 35%, var(--line)); background: color-mix(in srgb, var(--bg) 70%, var(--panel)); box-sizing: border-box; }
+.fo-cell { position: relative; border: 1px solid var(--line); border-radius: 4px; background: color-mix(in srgb, var(--panel-2) 85%, var(--dashboard-gold) 6%); color: color-mix(in srgb, var(--dashboard-gold) 55%, var(--faint)); font: 400 clamp(14px, 4vw, 22px)/1 "Segoe UI Historic", "Noto Sans Runic", serif; cursor: pointer; padding: 0; min-width: 0; min-height: 0; }
+.fo-cell span { opacity: .55; }
+.fo-cell.ok { border-color: var(--good); background: color-mix(in srgb, var(--good) 22%, var(--panel-2)); }
+.fo-cell.no { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 18%, var(--panel-2)); }
+.fo-idol { --c: var(--dashboard-gold); z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; min-height: 0; overflow: hidden; padding: 4px; border: 2px solid var(--c); border-radius: 6px; background: color-mix(in srgb, var(--c) 26%, var(--panel)); color: var(--text); font: inherit; cursor: pointer; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent); }
+.fo-idol b { font-size: 12px; color: var(--c); }
+.fo-idol span { font-size: 11px; line-height: 1.15; text-align: center; overflow-wrap: anywhere; color: var(--muted); }
+.fo-idol.tiny span { display: none; }
+.fo-idol.c1 { --c: #6fb7d6; } .fo-idol.c2 { --c: #9b8cf0; } .fo-idol.c3 { --c: #e0896f; } .fo-idol.c4 { --c: #5fc79a; }
+:root[data-theme="light"] .fo-idol { --c: #9a7a2e; } :root[data-theme="light"] .fo-idol.c1 { --c: #2f7ea0; } :root[data-theme="light"] .fo-idol.c2 { --c: #5a46c9; } :root[data-theme="light"] .fo-idol.c3 { --c: #b2522f; } :root[data-theme="light"] .fo-idol.c4 { --c: #1f8a5c; }
+.fo-idol.sel { box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 55%, transparent), 0 6px 18px rgba(0,0,0,.35); z-index: 2; }
+.fo-selbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--dashboard-gold); border-radius: 8px; background: var(--panel-2); font-size: 13px; }
+.fo-selbar > span { flex: 1 1 220px; }
+.fo-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.fo-list li { display: flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.fo-list li.sel { border-color: var(--dashboard-gold); box-shadow: inset 3px 0 0 var(--dashboard-gold); }
+.fo-pick { flex: 1; display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 8px; background: none; border: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.fo-x { background: none; border: 0; color: var(--faint); cursor: pointer; padding: 6px 10px; font-size: 13px; }
+.fo-x:hover { color: var(--bad); }
+
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
@@ -1128,6 +1168,9 @@ body.compare-page #controls { display: none; }
       </button>
       <button class="tab" type="button" role="tab" data-tab="creator" aria-selected="false" aria-label="Save Creator">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v15H5zM8 3v5h7V3M8 21v-7h8v7"/></svg><span>Save Creator</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="fossil" aria-selected="false" aria-label="Fossil Planner">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8v5h5v8h-5v5H8v-5H3V8h5zM8 8h8v8H8z"/></svg><span>Fossil Planner</span>
       </button>
     </nav>
     <div class="nav-divider itemdb-divider" role="separator" aria-hidden="true"></div>
@@ -1384,6 +1427,7 @@ body.compare-page #controls { display: none; }
     <section class="build-pane" id="buildPane" hidden></section>
     <section class="build-pane compare-pane" id="comparePane" hidden></section>
     <section class="build-pane compare-pane creator-pane" id="creatorPane" hidden></section>
+    <section class="build-pane compare-pane fossil-pane" id="fossilPane" hidden></section>
     <section class="code-pane" id="codePane" hidden>
       <div class="code-intro">
         <div class="eyebrow">IMPORT A LOADOUT</div>
@@ -1474,7 +1518,7 @@ body.compare-page #controls { display: none; }
 <script>
 window.GD = null;
 window.CHARS = [];
-window.SITE_VERSION = {"v":96,"at":"2026-11-06T15:26:36.511Z"};
+window.SITE_VERSION = {"v":97,"at":"2026-11-06T15:32:09.250Z"};
 window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"aegis_N":0,"aegis_N_D":1,"aegis_S":2,"aegis_S_D":3,"affliction_N":4,"affliction_N_D":5,"affliction_S":6,"affliction_S_D":7,"anvil_oath_N":8,"anvil_oath_N_D":9,"anvil_oath_S":10,"anvil_oath_S_D":11,"area_N":12,"area_N_D":13,"area_S":14,"area_S_D":15,"armour_N":16,"armour_N_D":17,"armour_S":18,"armour_S_D":19,"artillery_N":20,"artillery_N_D":21,"artillery_S":22,"artillery_S_D":23,"attack_N":24,"attack_N_D":25,"attack_S":26,"attack_S_D":27,"blightword_N":28,"blightword_N_D":29,"bone_N":30,"bone_N_D":31,"bone_S":32,"bone_S_D":33,"bone_choir_N":34,"bone_choir_N_D":35,"bone_choir_S":36,"bone_choir_S_D":37,"bow_N":38,"bow_N_D":39,"bow_S":40,"bow_S_D":41,"bulwark_N":42,"bulwark_N_D":43,"bulwark_S":44,"bulwark_S_D":45,"carrion_hunt_N":46,"carrion_hunt_N_D":47,"carrion_hunt_S":48,"carrion_hunt_S_D":49,"chain_N":50,"chain_N_D":51,"chain_S":52,"chain_S_D":53,"channel_N":54,"channel_N_D":55,"channel_S":56,"channel_S_D":57,"cleave_N":58,"cleave_N_D":59,"cleave_S":60,"cleave_S_D":61,"cold_N":62,"cold_N_D":63,"cold_S":64,"cold_S_D":65,"conduit_N":66,"conduit_N_D":67,"conduit_S":68,"conduit_S_D":69,"crest_Mage":70,"crest_Mage_D":71,"crest_Necromancer":72,"crest_Necromancer_D":73,"crest_Paladin":74,"crest_Paladin_D":75,"crest_Ranger":76,"crest_Ranger_D":77,"crest_Samurai":78,"crest_Samurai_D":79,"crest_Warrior":80,"crest_Warrior_D":81,"crit_N":82,"crit_N_D":83,"crit_S":84,"crit_S_D":85,"crusade_N":86,"crusade_N_D":87,"crusade_S":88,"crusade_S_D":89,"dawn_N":90,"dawn_N_D":91,"dawn_S":92,"dawn_S_D":93,"dawnstorm_N":94,"dawnstorm_N_D":95,"dawnstorm_S":96,"dawnstorm_S_D":97,"dawnsworn_N":98,"dawnsworn_N_D":99,"deadeye_N":100,"deadeye_N_D":101,"deadeye_S":102,"deadeye_S_D":103,"deathknell_N":104,"deathknell_N_D":105,"deathknell_S":106,"deathknell_S_D":107,"edge_N":108,"edge_N_D":109,"edge_S":110,"edge_S_D":111,"elemental_N":112,"elemental_N_D":113,"elemental_S":114,"elemental_S_D":115,"energy_shield_N":116,"energy_shield_N_D":117,"energy_shield_S":118,"energy_shield_S_D":119,"evasion_N":120,"evasion_N_D":121,"evasion_S":122,"evasion_S_D":123,"faith_N":124,"faith_N_D":125,"faith_S":126,"faith_S_D":127,"falling_leaf_N":128,"falling_leaf_N_D":129,"falling_leaf_S":130,"falling_leaf_S_D":131,"fire_N":132,"fire_N_D":133,"fire_S":134,"fire_S_D":135,"fury_N":136,"fury_N_D":137,"fury_S":138,"fury_S_D":139,"grave_N":140,"grave_N_D":141,"grave_S":142,"grave_S_D":143,"holy_N":144,"holy_N_D":145,"holy_S":146,"holy_S_D":147,"iron_tempest_N":148,"iron_tempest_N_D":149,"iron_tempest_S":150,"iron_tempest_S_D":151,"ki_N":152,"ki_N_D":153,"ki_S":154,"ki_S_D":155,"ks_aegis_rebuke":156,"ks_aegis_rebuke_D":157,"ks_ancestral_host":158,"ks_ancestral_host_D":159,"ks_blood_magic":160,"ks_blood_magic_D":161,"ks_cascade_of_ruin":162,"ks_cascade_of_ruin_D":163,"ks_chain_reaction":164,"ks_chain_reaction_D":165,"ks_choir_of_bones":166,"ks_choir_of_bones_D":167,"ks_comet_step":168,"ks_comet_step_D":169,"ks_dawnstorm_covenant":170,"ks_dawnstorm_covenant_D":171,"ks_eagle_eye":172,"ks_eagle_eye_D":173,"ks_earthbreaker_stride":174,"ks_earthbreaker_stride_D":175,"ks_elemental_overload":176,"ks_elemental_overload_D":177,"ks_forked_sky":178,"ks_forked_sky_D":179,"ks_glass_cannon":180,"ks_glass_cannon_D":181,"ks_hammer_of_judgement":182,"ks_hammer_of_judgement_D":183,"ks_hollow_covenant":184,"ks_hollow_covenant_D":185,"ks_iron_resolve":186,"ks_iron_resolve_D":187,"ks_lord_of_the_dead":188,"ks_lord_of_the_dead_D":189,"ks_oath_of_a_thousand_cuts":190,"ks_oath_of_a_thousand_cuts_D":191,"ks_oath_of_many_fires":192,"ks_oath_of_many_fires_D":193,"ks_oath_of_slow_ruin":194,"ks_oath_of_slow_ruin_D":195,"ks_oath_of_the_living_storm":196,"ks_oath_of_the_living_storm_D":197,"ks_oath_of_the_long_night":198,"ks_oath_of_the_long_night_D":199,"ks_oath_of_the_pyre":200,"ks_oath_of_the_pyre_D":201,"ks_oath_of_the_red_harvest":202,"ks_oath_of_the_red_harvest_D":203,"ks_oath_of_the_snare":204,"ks_oath_of_the_snare_D":205,"ks_oath_of_the_white_silence":206,"ks_oath_of_the_white_silence_D":207,"ks_one_breath":208,"ks_one_breath_D":209,"ks_pyre_covenant":210,"ks_pyre_covenant_D":211,"ks_r59_hold_k3":212,"ks_r59_hold_k3_D":213,"ks_r59_mountain_k3":214,"ks_r59_mountain_k3_D":215,"ks_r59_sure_strike_k3":216,"ks_r59_sure_strike_k3_D":217,"ks_r74_bone_sovereign":218,"ks_r74_bone_sovereign_D":219,"ks_radiant_crusade":220,"ks_radiant_crusade_D":221,"ks_rotting_gospel":222,"ks_rotting_gospel_D":223,"ks_sanctified":224,"ks_sanctified_D":225,"ks_siege_pact":226,"ks_siege_pact_D":227,"ks_spellblade":228,"ks_spellblade_D":229,"ks_tempest_vow":230,"ks_tempest_vow_D":231,"ks_the_hunting_dead":232,"ks_the_hunting_dead_D":233,"ks_thousand_hands":234,"ks_thousand_hands_D":235,"ks_twice_fallen_sky":236,"ks_twice_fallen_sky_D":237,"ks_unbroken_wall":238,"ks_unbroken_wall_D":239,"ks_wake_of_spells":240,"ks_wake_of_spells_D":241,"ks_way_of_the_blade":242,"ks_way_of_the_blade_D":243,"ks_wind_and_steel_oath":244,"ks_wind_and_steel_oath_D":245,"leech_N":246,"leech_N_D":247,"leech_S":248,"leech_S_D":249,"lichfire_N":250,"lichfire_N_D":251,"lichfire_S":252,"lichfire_S_D":253,"life_N":254,"life_N_D":255,"life_S":256,"life_S_D":257,"life_big_N":258,"life_big_N_D":259,"life_big_S":260,"life_big_S_D":261,"lightning_N":262,"lightning_N_D":263,"lightning_S":264,"lightning_S_D":265,"lingering_N":266,"lingering_N_D":267,"lingering_S":268,"lingering_S_D":269,"malediction_N":270,"malediction_N_D":271,"malediction_S":272,"malediction_S_D":273,"mana_N":274,"mana_N_D":275,"mana_S":276,"mana_S_D":277,"manasteal_N":278,"manasteal_N_D":279,"manasteal_S":280,"manasteal_S_D":281,"melee_N":282,"melee_N_D":283,"melee_S":284,"melee_S_D":285,"mirrorblade_N":286,"mirrorblade_N_D":287,"mirrorblade_S":288,"mirrorblade_S_D":289,"orbit_N":290,"orbit_N_D":291,"orbit_S":292,"orbit_S_D":293,"ossuary_N":294,"ossuary_N_D":295,"ossuary_S":296,"ossuary_S_D":297,"overcharge_N":298,"overcharge_N_D":299,"overcharge_S":300,"overcharge_S_D":301,"permafrost_N":302,"permafrost_N_D":303,"permafrost_S":304,"permafrost_S_D":305,"plague_quiver_N":306,"plague_quiver_N_D":307,"plague_quiver_S":308,"plague_quiver_S_D":309,"poison_N":310,"poison_N_D":311,"poison_S":312,"poison_S_D":313,"portrait_Mage":314,"portrait_Mage_D":315,"portrait_Necromancer":316,"portrait_Necromancer_D":317,"portrait_Paladin":318,"portrait_Paladin_D":319,"portrait_Ranger":320,"portrait_Ranger_D":321,"portrait_Samurai":322,"portrait_Samurai_D":323,"portrait_Warrior":324,"portrait_Warrior_D":325,"projectile_N":326,"projectile_N_D":327,"projectile_S":328,"projectile_S_D":329,"radiance_N":330,"radiance_N_D":331,"radiance_S":332,"radiance_S_D":333,"radiant_ward_N":334,"radiant_ward_N_D":335,"radiant_ward_S":336,"radiant_ward_S_D":337,"rain_N":338,"rain_N_D":339,"rain_S":340,"rain_S_D":341,"reaper_N":342,"reaper_N_D":343,"reaper_S":344,"reaper_S_D":345,"regrowth_N":346,"regrowth_N_D":347,"regrowth_S":348,"regrowth_S_D":349,"resist_N":350,"resist_N_D":351,"resist_S":352,"resist_S_D":353,"shatter_N":354,"shatter_N_D":355,"shatter_S":356,"shatter_S_D":357,"siege_N":358,"siege_N_D":359,"siege_S":360,"siege_S_D":361,"sigil_N":362,"sigil_N_D":363,"sigil_S":364,"sigil_S_D":365,"slam_N":366,"slam_N_D":367,"slam_S":368,"slam_S_D":369,"souls_N":370,"souls_N_D":371,"souls_S":372,"souls_S_D":373,"speed_N":374,"speed_N_D":375,"speed_S":376,"speed_S_D":377,"spell_N":378,"spell_N_D":379,"spell_S":380,"spell_S_D":381,"spell_crit_N":382,"spell_crit_N_D":383,"spell_crit_S":384,"spell_crit_S_D":385,"spellsword_N":386,"spellsword_N_D":387,"spellsword_S":388,"spellsword_S_D":389,"starfall_N":390,"starfall_N_D":391,"starfall_S":392,"starfall_S_D":393,"stillness_N":394,"stillness_N_D":395,"stillness_S":396,"stillness_S_D":397,"swift_N":398,"swift_N_D":399,"swift_S":400,"swift_S_D":401,"tether_N":402,"tether_N_D":403,"tether_S":404,"tether_S_D":405,"trap_N":406,"trap_N_D":407,"trap_S":408,"trap_S_D":409,"two_storms_N":410,"two_storms_N_D":411,"two_storms_S":412,"two_storms_S_D":413,"vigil_N":414,"vigil_N_D":415,"vigil_S":416,"vigil_S_D":417,"voidbound_N":418,"voidbound_N_D":419,"voidbound_S":420,"voidbound_S_D":421,"vowkeeper_N":422,"vowkeeper_N_D":423,"vowkeeper_S":424,"vowkeeper_S_D":425,"warcaller_N":426,"warcaller_N_D":427,"warcaller_S":428,"warcaller_S_D":429,"warpath_N":430,"warpath_N_D":431,"warpath_S":432,"warpath_S_D":433,"waygate_S":434,"waygate_S_D":435,"wellspring_N":436,"wellspring_N_D":437,"wellspring_S":438,"wellspring_S_D":439,"wind_and_steel_N":440,"wind_and_steel_N_D":441,"wind_and_steel_S":442,"wind_and_steel_S_D":443,"windstep_N":444,"windstep_N_D":445,"windstep_S":446,"windstep_S_D":447,"zeal_N":448,"zeal_N_D":449,"zeal_S":450,"zeal_S_D":451},"dragons":"icons/dragons.webp","dragonOrder":["Fire","Lightning","Cold","Arcane","Poison","Physical"]};
 </script>
 <script>
@@ -4097,6 +4141,223 @@ window.BOCreator = function (ctx) {
 
 </script>
 <script>
+// Fossil Planner tab: pick idols and see how they fit the Dwarven Fossil's grid.
+// The grid is the same for every hero: 5x5 without its corners, 21 cells (every idol in every save sits there,
+// see creator.js). Idols never turn: a 1x2 and a 2x1 are different bases. Sizes come from Items/item_bases.json
+// (Width, Height). Nothing here touches the damage sim.
+// app.js calls BOFossil(ctx) and gets back { render }.
+window.BOFossil = function (ctx) {
+  'use strict';
+  const { $, esc } = ctx;
+  const lc = s => String(s == null ? '' : s).toLowerCase();
+  const N = 5;
+  const inGrid = (x, y) => x >= 0 && y >= 0 && x < N && y < N && !((x === 0 || x === N - 1) && (y === 0 || y === N - 1));
+  const CELLS = []; for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (inGrid(x, y)) CELLS.push([x, y]);
+  const key = (x, y) => x + ',' + y;
+  // The runes drawn on the in-game grid, row by row (decoration only).
+  const RUNES = ['ᚠᛉᛜ', 'ᚨᛁᛒᚠᚹ', 'ᚷᛈᛚᚨᛁ', 'ᚾᛏᛟᚷᛈ', 'ᛗᚦᚾ'];
+  const runeAt = (x, y) => { const r = RUNES[y]; return r ? [...r][y === 0 || y === N - 1 ? x - 1 : x] || '' : ''; };
+
+  const shapes = () => Object.values(ctx.gd().bases || {}).filter(b => b.Slot === 'Idol')
+    .map(b => ({ id: lc(b.Id), name: b.Name, w: b.Width || 1, h: b.Height || 1 }))
+    .sort((a, b) => b.w * b.h - a.w * a.h || b.w - a.w);
+  const shape = id => shapes().find(s => s.id === id);
+  const sizeText = s => s.w + 'x' + s.h;
+
+  // ---------- state (kept in this browser only) ----------
+  const F = { idols: [], sel: null, msg: '', alt: null, charId: '' }; // idol: { uid, base, label, x, y }
+  let nextUid = 1;
+  try {
+    const s = JSON.parse(localStorage.getItem('bods:fossil') || 'null');
+    if (s && Array.isArray(s.idols)) F.idols = s.idols.filter(i => i && i.base && Number.isInteger(i.x) && Number.isInteger(i.y)).map(i => ({ uid: nextUid++, base: i.base, label: i.label || '', x: i.x, y: i.y }));
+  } catch (e) { /* storage off or damaged */ }
+  const keep = () => { try { localStorage.setItem('bods:fossil', JSON.stringify({ idols: F.idols.map(({ base, label, x, y }) => ({ base, label, x, y })) })); } catch (e) { /* storage off */ } };
+
+  const dims = it => { const s = shape(it.base); return s ? [s.w, s.h] : [1, 1]; };
+  const cellsOf = (x, y, w, h) => { const out = []; for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) out.push([x + dx, y + dy]); return out; };
+  const usedBy = skip => { const u = new Map(); for (const it of F.idols) if (it !== skip) { const [w, h] = dims(it); for (const [cx, cy] of cellsOf(it.x, it.y, w, h)) u.set(key(cx, cy), it); } return u; };
+  const fitsAt = (used, x, y, w, h) => cellsOf(x, y, w, h).every(([cx, cy]) => inGrid(cx, cy) && !used.has(key(cx, cy)));
+  const firstSpot = (used, w, h) => CELLS.find(([x, y]) => fitsAt(used, x, y, w, h)) || null;
+
+  // Every way to lay out a list of sizes. Same-size idols are taken in cell order so swapping two equal idols is not
+  // counted as a new layout. onLayout returns false to stop early.
+  function layouts(sizes, onLayout) {
+    const order = sizes.map((s, i) => ({ i, w: s[0], h: s[1] })).sort((a, b) => b.w * b.h - a.w * a.h || b.w - a.w || b.h - a.h);
+    const need = []; let area = 0; for (let k = order.length - 1; k >= 0; k--) { area += order[k].w * order[k].h; need[k] = area; }
+    const used = new Set(), at = new Array(sizes.length); let steps = 0, stop = false;
+    const go = (k, from) => {
+      if (stop) return;
+      if (k === order.length) { if (onLayout(at.slice()) === false) stop = true; return; }
+      if (CELLS.length - used.size < need[k] || ++steps > 400000) { if (steps > 400000) stop = true; return; }
+      const { i, w, h } = order[k], same = k > 0 && order[k - 1].w === w && order[k - 1].h === h;
+      for (let c = same ? from : 0; c < CELLS.length && !stop; c++) {
+        const [x, y] = CELLS[c], cells = cellsOf(x, y, w, h);
+        if (!cells.every(([cx, cy]) => inGrid(cx, cy) && !used.has(key(cx, cy)))) continue;
+        cells.forEach(([cx, cy]) => used.add(key(cx, cy))); at[i] = [x, y];
+        go(k + 1, c + 1);
+        cells.forEach(([cx, cy]) => used.delete(key(cx, cy)));
+      }
+    };
+    go(0, 0);
+  }
+  const firstLayout = sizes => { let r = null; layouts(sizes, a => { r = a; return false; }); return r; };
+  const applyLayout = pos => F.idols.forEach((it, i) => { it.x = pos[i][0]; it.y = pos[i][1]; });
+
+  // Can one more idol of this shape go in? 'here' = in the free cells now, 'move' = only if others move, '' = no.
+  function roomFor(s) {
+    if (firstSpot(usedBy(null), s.w, s.h)) return 'here';
+    return firstLayout([...F.idols.map(dims), [s.w, s.h]]) ? 'move' : '';
+  }
+
+  function add(base, label) {
+    const s = shape(base); if (!s) return false;
+    const spot = firstSpot(usedBy(null), s.w, s.h);
+    if (spot) { F.idols.push({ uid: nextUid++, base, label: label || '', x: spot[0], y: spot[1] }); return true; }
+    const pos = firstLayout([...F.idols.map(dims), [s.w, s.h]]);
+    if (!pos) return false;
+    F.idols.push({ uid: nextUid++, base, label: label || '', x: 0, y: 0 }); applyLayout(pos);
+    F.msg = 'Moved the other idols to make room for the ' + s.name + '.';
+    return true;
+  }
+  function moveTo(it, x, y) {
+    const [w, h] = dims(it);
+    if (!fitsAt(usedBy(it), x, y, w, h)) return false;
+    it.x = x; it.y = y; F.alt = null; return true;
+  }
+
+  // ---------- view ----------
+  const colorOf = s => s.w === s.h && s.w > 1 ? 4 : Math.min(3, s.w * s.h - 1);
+  const mini = s => '<span class="fo-mini" style="--w:' + s.w + ';--h:' + s.h + '" aria-hidden="true">' + '<i></i>'.repeat(s.w * s.h) + '</span>';
+  const ROOM = { here: ['fits', 'Fits in the free cells'], move: ['fits if moved', 'Fits if the other idols move'], '': ['no room', 'No layout has room for it'] };
+
+  function gridHtml() {
+    const used = usedBy(null);
+    let h = '<div class="fo-grid" role="group" aria-label="Fossil grid, 5 by 5 without corners">';
+    for (const [x, y] of CELLS) h += '<button type="button" class="fo-cell' + (used.has(key(x, y)) ? ' taken' : '') + '" data-x="' + x + '" data-y="' + y + '" style="grid-column:' + (x + 1) + ';grid-row:' + (y + 1) + '" aria-label="Cell ' + (x + 1) + ', row ' + (y + 1) + (used.has(key(x, y)) ? ', taken' : ', empty') + '"><span aria-hidden="true">' + runeAt(x, y) + '</span></button>';
+    for (const it of F.idols) {
+      const s = shape(it.base) || { name: it.base, w: 1, h: 1 };
+      h += '<button type="button" class="fo-idol c' + colorOf(s) + (F.sel === it.uid ? ' sel' : '') + (s.w * s.h === 1 ? ' tiny' : '') + '" data-uid="' + it.uid + '" style="grid-column:' + (it.x + 1) + ' / span ' + s.w + ';grid-row:' + (it.y + 1) + ' / span ' + s.h + '" title="' + esc((it.label || s.name) + ' (' + sizeText(s) + ')') + '">' +
+        '<b>' + sizeText(s) + '</b><span>' + esc(it.label || s.name.replace(/ Idol$/, '')) + '</span></button>';
+    }
+    return h + '</div>';
+  }
+
+  function render() {
+    const el = $('#fossilPane'); if (!el || el.hidden) return;
+    const all = shapes();
+    let h = '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Fossil Planner</h2><p>Pick idols and see how they fit in the Dwarven Fossil: 21 cells, a 5 by 5 square without its corners. Idols don\'t turn, so a 1x2 and a 2x1 are different idols.</p></div>';
+    if (!all.length) { el.innerHTML = h + '<div class="card"><p class="hint">The game data has no idols. Load the game files first.</p></div>'; return; }
+    const usedCells = F.idols.reduce((n, it) => { const [w, hh] = dims(it); return n + w * hh; }, 0);
+    h += '<div class="fo-wrap"><div class="card fo-side"><h2>Add idols</h2><div class="fo-shapes">';
+    for (const s of all) {
+      const room = roomFor(s), have = F.idols.filter(i => i.base === s.id).length;
+      h += '<button type="button" class="fo-shape' + (room ? '' : ' full') + '" data-add="' + s.id + '"' + (room ? '' : ' disabled') + ' title="' + ROOM[room][1] + '">' + mini(s) +
+        '<span class="fo-sname">' + esc(s.name) + '<small>' + sizeText(s) + (have ? ' · ' + have + ' placed' : '') + '</small></span>' +
+        '<span class="fo-room ' + (room || 'none') + '">' + ROOM[room][0] + '</span><span class="fo-plus" aria-hidden="true">+</span></button>';
+    }
+    h += '</div>';
+    const chars = (ctx.chars() || []).filter(c => (c.items || []).some(i => i.slot === 'Idol'));
+    if (chars.length) {
+      if (!chars.some(c => c.id === F.charId)) F.charId = chars[0].id;
+      h += '<h3>From a character</h3><div class="fo-charrow"><label class="field inline grow"><span>Character</span><select id="foChar">' +
+        chars.map(c => '<option value="' + esc(c.id) + '"' + (c.id === F.charId ? ' selected' : '') + '>' + esc(c.name) + ' (' + c.items.filter(i => i.slot === 'Idol').length + ' idols)</option>').join('') +
+        '</select></label><button class="btn small" type="button" data-fo="char">Use their idols</button></div><p class="hint">Replaces the idols here. Saves keep which idols a character has, not where they sit, so this lays them out again.</p>';
+    }
+    h += '</div>';
+
+    // The grid.
+    const n = F.alt ? F.alt.list.length : 0;
+    h += '<div class="card fo-main"><h2>Fossil <span class="hint">' + usedCells + ' of ' + CELLS.length + ' cells used · ' + F.idols.length + ' idol' + (F.idols.length === 1 ? '' : 's') + '</span>' +
+      '<span class="cmp-side-acts"><button class="btn small ghost" type="button" data-fo="alt"' + (F.idols.length ? '' : ' disabled') + '>' + (F.alt ? 'Next layout (' + (F.alt.i + 1) + ' of ' + (F.alt.more ? n + '+' : n) + ')' : 'Another layout') + '</button>' +
+      '<button class="btn small ghost" type="button" data-fo="clear"' + (F.idols.length ? '' : ' disabled') + '>Clear</button></span></h2>';
+    h += gridHtml();
+    const sel = F.idols.find(i => i.uid === F.sel), ss = sel && shape(sel.base);
+    if (sel && ss) h += '<div class="fo-selbar"><span><b>' + esc(sel.label || ss.name) + '</b> ' + sizeText(ss) + ' selected. Click an empty cell to move its top-left corner there, or use the arrow keys.</span>' +
+      '<button class="btn small ghost" type="button" data-fo="remove">Remove</button><button class="btn small ghost" type="button" data-fo="unsel">Done</button></div>';
+    else h += '<p class="hint">' + (F.idols.length ? 'Click an idol to move or remove it.' : 'Add idols from the list; each one goes in the first place it fits.') + '</p>';
+    if (F.msg) h += '<p class="hint pl-status">' + esc(F.msg) + '</p>';
+    if (F.idols.length) {
+      h += '<h3>Placed idols</h3><ul class="fo-list">' + F.idols.map(it => {
+        const s = shape(it.base) || { name: it.base, w: 1, h: 1 };
+        return '<li class="' + (F.sel === it.uid ? 'sel' : '') + '"><button type="button" class="fo-pick" data-uid="' + it.uid + '">' + mini(s) + '<span>' + esc(it.label || s.name) + (it.label ? ' <small>' + esc(s.name) + '</small>' : '') + '</span><small>' + sizeText(s) + '</small></button>' +
+          '<button type="button" class="fo-x" data-del="' + it.uid + '" aria-label="Remove ' + esc(it.label || s.name) + '">✕</button></li>';
+      }).join('') + '</ul>';
+    }
+    h += '</div></div>';
+    el.innerHTML = h;
+  }
+
+  function done(msg) { F.msg = msg || ''; keep(); render(); }
+
+  function bind() {
+    const el = $('#fossilPane'); if (!el || el.dataset.bound) return; el.dataset.bound = '1';
+    el.addEventListener('click', e => {
+      const t = e.target.closest('button'); if (!t || !el.contains(t)) return;
+      if (t.dataset.add) {
+        F.alt = null; F.msg = '';
+        const s = shape(t.dataset.add);
+        if (!add(t.dataset.add)) return done('No room for the ' + s.name + '.');
+        return done(F.msg);
+      }
+      if (t.dataset.del) { F.idols = F.idols.filter(i => i.uid !== +t.dataset.del); if (F.sel === +t.dataset.del) F.sel = null; F.alt = null; return done(); }
+      if (t.dataset.uid) { F.sel = F.sel === +t.dataset.uid ? null : +t.dataset.uid; F.msg = ''; render(); const b = el.querySelector('.fo-idol[data-uid="' + F.sel + '"]'); if (b) b.focus(); return; }
+      if (t.classList.contains('fo-cell')) {
+        const it = F.idols.find(i => i.uid === F.sel); if (!it) return;
+        const s = shape(it.base);
+        if (!moveTo(it, +t.dataset.x, +t.dataset.y)) return done('No room there for the ' + s.name + ' (' + sizeText(s) + ').');
+        return done();
+      }
+      const act = t.dataset.fo;
+      if (act === 'clear') { F.idols = []; F.sel = null; F.alt = null; return done(); }
+      if (act === 'remove') { F.idols = F.idols.filter(i => i.uid !== F.sel); F.sel = null; F.alt = null; return done(); }
+      if (act === 'unsel') { F.sel = null; return done(); }
+      if (act === 'alt') {
+        if (!F.alt) {
+          const list = []; let more = false;
+          layouts(F.idols.map(dims), a => { if (list.length >= 500) { more = true; return false; } list.push(a); });
+          const now = JSON.stringify(F.idols.map(i => [i.x, i.y]));
+          F.alt = { list, more, i: Math.max(0, list.findIndex(a => JSON.stringify(a) === now)) };
+        }
+        if (!F.alt.list.length) return;
+        F.alt.i = (F.alt.i + 1) % F.alt.list.length; applyLayout(F.alt.list[F.alt.i]);
+        return done(F.alt.list.length === 1 ? 'This is the only layout for these idols.' : '');
+      }
+      if (act === 'char') {
+        const ch = (ctx.chars() || []).find(c => c.id === F.charId); if (!ch) return;
+        const its = ch.items.filter(i => i.slot === 'Idol' && shape(lc(i.base)));
+        F.idols = []; F.sel = null; F.alt = null;
+        const u = it => it.rarity === 'Unique' && (ctx.gd().uniques || {})[lc(it.unique)];
+        const list = its.map(i => ({ base: lc(i.base), label: (u(i) || {}).Name || i.name || '' }));
+        const pos = firstLayout(list.map(i => { const s = shape(i.base); return [s.w, s.h]; }));
+        if (!pos) return done(ch.name + '\'s idols do not fit together.');
+        F.idols = list.map((i, k) => ({ uid: nextUid++, base: i.base, label: i.label, x: pos[k][0], y: pos[k][1] }));
+        return done('Loaded ' + list.length + ' idols from ' + ch.name + '.');
+      }
+    });
+    el.addEventListener('change', e => { if (e.target.id === 'foChar') F.charId = e.target.value; });
+    // Arrow keys move the selected idol one cell.
+    el.addEventListener('keydown', e => {
+      const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+      const it = F.idols.find(i => i.uid === F.sel); if (!d || !it || !e.target.closest('.fo-grid')) return;
+      e.preventDefault();
+      if (moveTo(it, it.x + d[0], it.y + d[1])) { done(); const b = el.querySelector('.fo-idol[data-uid="' + it.uid + '"]'); if (b) b.focus(); }
+    });
+    // While an idol is selected, hovering a cell shows where it would land.
+    const clearHint = () => el.querySelectorAll('.fo-cell.ok, .fo-cell.no').forEach(c => c.classList.remove('ok', 'no'));
+    el.addEventListener('mouseover', e => {
+      clearHint();
+      const c = e.target.closest('.fo-cell'), it = F.idols.find(i => i.uid === F.sel); if (!c || !it) return;
+      const [w, h] = dims(it), x = +c.dataset.x, y = +c.dataset.y, ok = fitsAt(usedBy(it), x, y, w, h);
+      for (const [cx, cy] of cellsOf(x, y, w, h)) { const q = el.querySelector('.fo-cell[data-x="' + cx + '"][data-y="' + cy + '"]'); if (q) q.classList.add(ok ? 'ok' : 'no'); }
+    });
+    el.addEventListener('mouseleave', clearHint);
+  }
+
+  return { render: () => { bind(); render(); } };
+};
+
+</script>
+<script>
 // Broken Oath damage model. Runs in Node and in the browser.
 // Rebuilds the game's stat sheet from data files: every modifier is Stat + Mode (Flat / Inc / More) + Tags.
 // What is read from data is exact; how a few rules combine (marked ASSUMPTION) is inferred from the
@@ -5925,6 +6186,7 @@ window.BOStartApp = function () {
 
   let planner = null; // the Build tab (planner.js), made at the start
   let creator = null; // the Save Creator tab (creator.js)
+  let fossil = null; // the Fossil Planner tab (fossil.js)
 
   // ---------- setup ----------
   const gdDay = new Date(GD.filesAt || GD.builtAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -8257,19 +8519,20 @@ window.BOStartApp = function () {
     document.body.classList.toggle('build-page', tab === 'build');
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil');
     if (tab === 'supports') {
       showConfigTab('supports', false);
       buildSettings.open = true;
     }
     syncSettingsToViewport();
     document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab; b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator';
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     if (tab === 'code') setTimeout(() => $('#codeInput').focus(), 0);
     if (tab === 'compare') renderCompare();
     if (tab === 'creator') creator.render();
+    if (tab === 'fossil') fossil.render();
     store.set('tab', tab);
     if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } syncTreeTab(); renderTreeTabs(); if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
   }
@@ -8408,6 +8671,8 @@ window.BOStartApp = function () {
     chars: () => CHARS, importCode: importAnyCode,
     preview: ch => { addChars([ch], 'file', ch.id); showTab('damage'); saveTip('Showing ' + ch.name + ' as the Save Creator would write it. Your save file is unchanged until you put the new one in place.'); },
   });
+  // The Fossil Planner tab (fossil.js): idol layouts for the Fossil grid.
+  fossil = window.BOFossil({ $, esc, gd: () => GD, chars: () => CHARS });
   $('#buildPane').addEventListener('click', e => {
     if (e.target && e.target.id === 'buildResetSave') resetToSave();
     if (e.target && e.target.id === 'buildSavePlan') saveAsPlan();
@@ -8439,7 +8704,7 @@ window.BOStartApp = function () {
   const startId = store.get('char', null);
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();
-  const lastTab = store.get('tab', 'damage'); if (['tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator'].includes(lastTab)) showTab(lastTab);
+  const lastTab = store.get('tab', 'damage'); if (['tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil'].includes(lastTab)) showTab(lastTab);
   // Opened from a share link: load it as a plan, then drop it from the address so a refresh doesn't add it again.
   const bdbHash = /^#b=/.test(location.hash) && brokedCode(location.hash);
   if (bdbHash) { history.replaceState(null, '', location.pathname + location.search); openBroked(bdbHash); }

@@ -955,13 +955,13 @@ body.dashboard-view .configure-heading { display: flex; }
   .view-bar .tab.active { box-shadow: inset 0 -2px 0 var(--dashboard-gold); }
 }
 /* Build tab: Gear / Skills sub-tabs (top bar), skills and gear in columns */
-body:not(.build-page):not(.tree-page):not(.dashboard-view) .build-subtabs { display: none !important; }
+body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page) .build-subtabs { display: none !important; }
 /* Current Build Setup: total DPS, tooltip DPS and average hit on top */
 .build-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .build-stats[hidden] { display: none; }
 @media (max-width: 520px) { .build-stats { grid-template-columns: 1fr; } }
 /* Summary strip: class + spell, boss DPS, life, energy shield, resistances, share link */
-.build-summary { display: grid; grid-template-columns: minmax(150px, 1.5fr) repeat(4, minmax(90px, 1fr)) auto; gap: 1px; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--line); overflow: hidden; }
+.build-summary { display: grid; grid-template-columns: minmax(150px, 1.5fr) repeat(5, minmax(90px, 1fr)) auto; gap: 1px; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--line); overflow: hidden; }
 .build-summary[hidden] { display: none; }
 .bs-cell { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; padding: 8px 14px; background: var(--panel); }
 .bs-label { color: var(--muted); font: 600 10px/1.2 Inter, "Segoe UI", sans-serif; letter-spacing: .1em; text-transform: uppercase; }
@@ -1244,6 +1244,44 @@ body.creator-page .view-bar { display: none; }
 .sc-ext { margin-top: 6px; border-style: dashed; }
 .sc-bonus td { color: var(--muted); }
 
+/* Character tab (character.js), laid out like a pobb.in build page */
+.character-pane { display: grid; gap: 16px; align-content: start; }
+.ch-head h2 { margin: 0; font: 600 22px/1.2 Georgia, 'Times New Roman', serif; }
+.ch-head h2 small { font: 600 13px/1 system-ui, sans-serif; color: var(--dashboard-gold); margin-left: 6px; }
+.ch-title { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.ch-sigil { display: grid; place-items: center; width: 46px; height: 46px; flex: none; border-radius: 50%; border: 2px solid var(--dashboard-gold); color: var(--dashboard-gold); font: 700 20px Georgia, serif; background: color-mix(in srgb, var(--panel) 80%, var(--bg)); }
+.ch-line { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 6px 0; font-variant-numeric: tabular-nums; color: var(--muted); }
+.ch-line b { color: var(--text); font-weight: 600; }
+.ch-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.ch-col { display: grid; gap: 16px; min-width: 0; }
+.ch-gear h2, .ch-skills h2, .ch-passives h2 { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.ch-doll { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-areas: 'MainHand Helm OffHand' 'MainHand Chest OffHand' 'Ring1 Gloves Ring2' 'Amulet Boots Belt' 'DwarvenRune . .'; }
+.ch-slot-MainHand { grid-area: MainHand; } .ch-slot-Helm { grid-area: Helm; } .ch-slot-OffHand { grid-area: OffHand; }
+.ch-slot-Chest { grid-area: Chest; } .ch-slot-Ring1 { grid-area: Ring1; } .ch-slot-Gloves { grid-area: Gloves; }
+.ch-slot-Ring2 { grid-area: Ring2; } .ch-slot-Amulet { grid-area: Amulet; } .ch-slot-Boots { grid-area: Boots; }
+.ch-slot-Belt { grid-area: Belt; } .ch-slot-DwarvenRune { grid-area: DwarvenRune; }
+.ch-slot { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 76px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--panel) 85%, var(--bg)); overflow-wrap: anywhere; }
+.ch-slot.empty { opacity: .55; }
+.ch-slot[data-tip] { cursor: help; }
+.ch-slot[data-tip]:hover, .ch-slot[data-tip]:focus-visible { border-color: var(--dashboard-gold); outline: none; }
+.ch-slot-label { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.ch-item-name { font-size: 13px; }
+.ch-item-base { font-size: 11px; color: var(--muted); }
+.ch-slot.magic .ch-item-name { color: #7c9cff; } .ch-slot.rare .ch-item-name { color: #f0d060; } .ch-slot.unique .ch-item-name { color: #e8893c; }
+.ch-idols { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.ch-skill { padding: 9px 11px; margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--panel) 85%, var(--bg)); }
+.ch-skill.main { border-color: color-mix(in srgb, var(--dashboard-gold) 55%, var(--line)); }
+.ch-skill-name { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.ch-sup { margin: 3px 0 0 14px; padding-left: 8px; border-left: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.ch-skill-name[data-tip], .ch-sup[data-tip] { cursor: help; }
+.ch-node { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ch-node:last-of-type { border-bottom: 0; }
+.ch-node.keystone b, .ch-node.capstone b { color: var(--dashboard-gold); }
+.ch-node ul { margin: 3px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); }
+@media (max-width: 760px) { .ch-cols { grid-template-columns: minmax(0, 1fr); } .ch-slot { min-height: 64px; } }
+.bs-cell b#bsRes, .bs-cell b#bsAttr { white-space: normal; font-size: 16px; }
+
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
@@ -1335,17 +1373,19 @@ body.creator-page .view-bar { display: none; }
       </button>
     </nav>
     <div class="build-summary" id="buildSummary" hidden aria-label="Build summary">
-      <div class="bs-cell bs-wide"><span class="bs-label">Class</span><b id="bsClass">–</b><small id="bsSpell"></small></div>
-      <div class="bs-cell" title="Total DPS of the selected skill against the enemy set on the Damage tab"><span class="bs-label">Boss DPS</span><b id="bsDps">–</b></div>
+      <div class="bs-cell bs-wide"><span class="bs-label">Character name</span><b id="bsClass">–</b><small id="bsSpell"></small></div>
+      <div class="bs-cell" title="Total DPS of the selected skill against the enemy set on the Damage tab"><span class="bs-label">Boss DPS (est)</span><b id="bsDps">–</b></div>
       <div class="bs-cell" title="Maximum life from level, Strength and life lines on gear and tree"><span class="bs-label">Life</span><b id="bsLife">–</b></div>
       <div class="bs-cell" title="Energy shield lines on gear and tree, added up"><span class="bs-label">Energy Shield</span><b id="bsEs">–</b></div>
+      <div class="bs-cell" title="Strength, Dexterity and Intelligence"><span class="bs-label">Strength / Dex / Int</span><b id="bsAttr">–</b></div>
       <div class="bs-cell"><span class="bs-label">Resistances</span><b id="bsRes">–</b></div>
       <div class="bs-cell bs-share" id="bsShare"></div>
     </div>
     <nav class="tabs build-subtabs" id="buildSubtabs" role="tablist" aria-label="Build setup" hidden>
-      <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false"><span>Skill tree</span></button>
-      <button class="tab" type="button" role="tab" data-sub="skills" aria-selected="false"><span>Skills</span></button>
-      <button class="tab" type="button" role="tab" data-sub="gear" aria-selected="false"><span>Gear</span></button>
+      <button class="tab" type="button" role="tab" data-tab="character" aria-selected="false" aria-label="Character"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><span>Character</span></button>
+      <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false" aria-label="Passive tree"><svg viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(15 12 12)"><path d="M10.4 21a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0M10.4 14a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0M3.4 9a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0M17.4 9a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0M9.6 3.4a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0-4.8 0M12 19.4V15.6M10.7 13.07 6.3 9.93M13.3 13.07 17.7 9.93M12 12.4V5.8"/></g></svg><span>Passive tree</span></button>
+      <button class="tab" type="button" role="tab" data-sub="skills" aria-selected="false" aria-label="Skills"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span>Skills</span></button>
+      <button class="tab" type="button" role="tab" data-sub="gear" aria-selected="false" aria-label="Gear"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 6v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z"/></svg><span>Gear</span></button>
       <button class="tab active" type="button" role="tab" data-tab="damage" aria-selected="true" aria-label="Damage Analysis">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h17M8 16v-5M13 16V7M18 16V3"/></svg><span>Damage Analysis</span>
       </button>
@@ -1568,6 +1608,7 @@ body.creator-page .view-bar { display: none; }
     <section class="build-pane compare-pane fossil-pane" id="fossilPane" hidden></section>
     <section class="build-pane compare-pane brewery-pane" id="breweryPane" hidden></section>
     <section class="build-pane compare-pane scaling-pane" id="scalingPane" hidden></section>
+    <section class="build-pane compare-pane character-pane" id="characterPane" hidden></section>
     <section class="code-pane" id="codePane" hidden>
       <div class="code-intro">
         <div class="eyebrow">IMPORT A LOADOUT</div>
@@ -1674,7 +1715,7 @@ Fan-made tool, not affiliated with the developers of Broken Oath. Game data come
 <script>
 window.GD = null;
 window.CHARS = [];
-window.SITE_VERSION = {"v":127,"at":"2026-11-08T02:41:06.674Z"};
+window.SITE_VERSION = {"v":128,"at":"2026-11-08T04:34:44.270Z"};
 window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"aegis_N":0,"aegis_N_D":1,"aegis_S":2,"aegis_S_D":3,"affliction_N":4,"affliction_N_D":5,"affliction_S":6,"affliction_S_D":7,"anvil_oath_N":8,"anvil_oath_N_D":9,"anvil_oath_S":10,"anvil_oath_S_D":11,"area_N":12,"area_N_D":13,"area_S":14,"area_S_D":15,"armour_N":16,"armour_N_D":17,"armour_S":18,"armour_S_D":19,"artillery_N":20,"artillery_N_D":21,"artillery_S":22,"artillery_S_D":23,"attack_N":24,"attack_N_D":25,"attack_S":26,"attack_S_D":27,"blightword_N":28,"blightword_N_D":29,"bone_N":30,"bone_N_D":31,"bone_S":32,"bone_S_D":33,"bone_choir_N":34,"bone_choir_N_D":35,"bone_choir_S":36,"bone_choir_S_D":37,"bow_N":38,"bow_N_D":39,"bow_S":40,"bow_S_D":41,"bulwark_N":42,"bulwark_N_D":43,"bulwark_S":44,"bulwark_S_D":45,"carrion_hunt_N":46,"carrion_hunt_N_D":47,"carrion_hunt_S":48,"carrion_hunt_S_D":49,"chain_N":50,"chain_N_D":51,"chain_S":52,"chain_S_D":53,"channel_N":54,"channel_N_D":55,"channel_S":56,"channel_S_D":57,"cleave_N":58,"cleave_N_D":59,"cleave_S":60,"cleave_S_D":61,"cold_N":62,"cold_N_D":63,"cold_S":64,"cold_S_D":65,"conduit_N":66,"conduit_N_D":67,"conduit_S":68,"conduit_S_D":69,"crest_Mage":70,"crest_Mage_D":71,"crest_Necromancer":72,"crest_Necromancer_D":73,"crest_Paladin":74,"crest_Paladin_D":75,"crest_Ranger":76,"crest_Ranger_D":77,"crest_Samurai":78,"crest_Samurai_D":79,"crest_Warrior":80,"crest_Warrior_D":81,"crit_N":82,"crit_N_D":83,"crit_S":84,"crit_S_D":85,"crusade_N":86,"crusade_N_D":87,"crusade_S":88,"crusade_S_D":89,"dawn_N":90,"dawn_N_D":91,"dawn_S":92,"dawn_S_D":93,"dawnstorm_N":94,"dawnstorm_N_D":95,"dawnstorm_S":96,"dawnstorm_S_D":97,"dawnsworn_N":98,"dawnsworn_N_D":99,"deadeye_N":100,"deadeye_N_D":101,"deadeye_S":102,"deadeye_S_D":103,"deathknell_N":104,"deathknell_N_D":105,"deathknell_S":106,"deathknell_S_D":107,"edge_N":108,"edge_N_D":109,"edge_S":110,"edge_S_D":111,"elemental_N":112,"elemental_N_D":113,"elemental_S":114,"elemental_S_D":115,"energy_shield_N":116,"energy_shield_N_D":117,"energy_shield_S":118,"energy_shield_S_D":119,"evasion_N":120,"evasion_N_D":121,"evasion_S":122,"evasion_S_D":123,"faith_N":124,"faith_N_D":125,"faith_S":126,"faith_S_D":127,"falling_leaf_N":128,"falling_leaf_N_D":129,"falling_leaf_S":130,"falling_leaf_S_D":131,"fire_N":132,"fire_N_D":133,"fire_S":134,"fire_S_D":135,"fury_N":136,"fury_N_D":137,"fury_S":138,"fury_S_D":139,"grave_N":140,"grave_N_D":141,"grave_S":142,"grave_S_D":143,"holy_N":144,"holy_N_D":145,"holy_S":146,"holy_S_D":147,"iron_tempest_N":148,"iron_tempest_N_D":149,"iron_tempest_S":150,"iron_tempest_S_D":151,"ki_N":152,"ki_N_D":153,"ki_S":154,"ki_S_D":155,"ks_aegis_rebuke":156,"ks_aegis_rebuke_D":157,"ks_ancestral_host":158,"ks_ancestral_host_D":159,"ks_blood_magic":160,"ks_blood_magic_D":161,"ks_cascade_of_ruin":162,"ks_cascade_of_ruin_D":163,"ks_chain_reaction":164,"ks_chain_reaction_D":165,"ks_choir_of_bones":166,"ks_choir_of_bones_D":167,"ks_comet_step":168,"ks_comet_step_D":169,"ks_dawnstorm_covenant":170,"ks_dawnstorm_covenant_D":171,"ks_eagle_eye":172,"ks_eagle_eye_D":173,"ks_earthbreaker_stride":174,"ks_earthbreaker_stride_D":175,"ks_elemental_overload":176,"ks_elemental_overload_D":177,"ks_forked_sky":178,"ks_forked_sky_D":179,"ks_glass_cannon":180,"ks_glass_cannon_D":181,"ks_hammer_of_judgement":182,"ks_hammer_of_judgement_D":183,"ks_hollow_covenant":184,"ks_hollow_covenant_D":185,"ks_iron_resolve":186,"ks_iron_resolve_D":187,"ks_lord_of_the_dead":188,"ks_lord_of_the_dead_D":189,"ks_oath_of_a_thousand_cuts":190,"ks_oath_of_a_thousand_cuts_D":191,"ks_oath_of_many_fires":192,"ks_oath_of_many_fires_D":193,"ks_oath_of_slow_ruin":194,"ks_oath_of_slow_ruin_D":195,"ks_oath_of_the_living_storm":196,"ks_oath_of_the_living_storm_D":197,"ks_oath_of_the_long_night":198,"ks_oath_of_the_long_night_D":199,"ks_oath_of_the_pyre":200,"ks_oath_of_the_pyre_D":201,"ks_oath_of_the_red_harvest":202,"ks_oath_of_the_red_harvest_D":203,"ks_oath_of_the_snare":204,"ks_oath_of_the_snare_D":205,"ks_oath_of_the_white_silence":206,"ks_oath_of_the_white_silence_D":207,"ks_one_breath":208,"ks_one_breath_D":209,"ks_pyre_covenant":210,"ks_pyre_covenant_D":211,"ks_r59_hold_k3":212,"ks_r59_hold_k3_D":213,"ks_r59_mountain_k3":214,"ks_r59_mountain_k3_D":215,"ks_r59_sure_strike_k3":216,"ks_r59_sure_strike_k3_D":217,"ks_r74_bone_sovereign":218,"ks_r74_bone_sovereign_D":219,"ks_radiant_crusade":220,"ks_radiant_crusade_D":221,"ks_rotting_gospel":222,"ks_rotting_gospel_D":223,"ks_sanctified":224,"ks_sanctified_D":225,"ks_siege_pact":226,"ks_siege_pact_D":227,"ks_spellblade":228,"ks_spellblade_D":229,"ks_tempest_vow":230,"ks_tempest_vow_D":231,"ks_the_hunting_dead":232,"ks_the_hunting_dead_D":233,"ks_thousand_hands":234,"ks_thousand_hands_D":235,"ks_twice_fallen_sky":236,"ks_twice_fallen_sky_D":237,"ks_unbroken_wall":238,"ks_unbroken_wall_D":239,"ks_wake_of_spells":240,"ks_wake_of_spells_D":241,"ks_way_of_the_blade":242,"ks_way_of_the_blade_D":243,"ks_wind_and_steel_oath":244,"ks_wind_and_steel_oath_D":245,"leech_N":246,"leech_N_D":247,"leech_S":248,"leech_S_D":249,"lichfire_N":250,"lichfire_N_D":251,"lichfire_S":252,"lichfire_S_D":253,"life_N":254,"life_N_D":255,"life_S":256,"life_S_D":257,"life_big_N":258,"life_big_N_D":259,"life_big_S":260,"life_big_S_D":261,"lightning_N":262,"lightning_N_D":263,"lightning_S":264,"lightning_S_D":265,"lingering_N":266,"lingering_N_D":267,"lingering_S":268,"lingering_S_D":269,"malediction_N":270,"malediction_N_D":271,"malediction_S":272,"malediction_S_D":273,"mana_N":274,"mana_N_D":275,"mana_S":276,"mana_S_D":277,"manasteal_N":278,"manasteal_N_D":279,"manasteal_S":280,"manasteal_S_D":281,"melee_N":282,"melee_N_D":283,"melee_S":284,"melee_S_D":285,"mirrorblade_N":286,"mirrorblade_N_D":287,"mirrorblade_S":288,"mirrorblade_S_D":289,"orbit_N":290,"orbit_N_D":291,"orbit_S":292,"orbit_S_D":293,"ossuary_N":294,"ossuary_N_D":295,"ossuary_S":296,"ossuary_S_D":297,"overcharge_N":298,"overcharge_N_D":299,"overcharge_S":300,"overcharge_S_D":301,"permafrost_N":302,"permafrost_N_D":303,"permafrost_S":304,"permafrost_S_D":305,"plague_quiver_N":306,"plague_quiver_N_D":307,"plague_quiver_S":308,"plague_quiver_S_D":309,"poison_N":310,"poison_N_D":311,"poison_S":312,"poison_S_D":313,"portrait_Mage":314,"portrait_Mage_D":315,"portrait_Necromancer":316,"portrait_Necromancer_D":317,"portrait_Paladin":318,"portrait_Paladin_D":319,"portrait_Ranger":320,"portrait_Ranger_D":321,"portrait_Samurai":322,"portrait_Samurai_D":323,"portrait_Warrior":324,"portrait_Warrior_D":325,"projectile_N":326,"projectile_N_D":327,"projectile_S":328,"projectile_S_D":329,"radiance_N":330,"radiance_N_D":331,"radiance_S":332,"radiance_S_D":333,"radiant_ward_N":334,"radiant_ward_N_D":335,"radiant_ward_S":336,"radiant_ward_S_D":337,"rain_N":338,"rain_N_D":339,"rain_S":340,"rain_S_D":341,"reaper_N":342,"reaper_N_D":343,"reaper_S":344,"reaper_S_D":345,"regrowth_N":346,"regrowth_N_D":347,"regrowth_S":348,"regrowth_S_D":349,"resist_N":350,"resist_N_D":351,"resist_S":352,"resist_S_D":353,"shatter_N":354,"shatter_N_D":355,"shatter_S":356,"shatter_S_D":357,"siege_N":358,"siege_N_D":359,"siege_S":360,"siege_S_D":361,"sigil_N":362,"sigil_N_D":363,"sigil_S":364,"sigil_S_D":365,"slam_N":366,"slam_N_D":367,"slam_S":368,"slam_S_D":369,"souls_N":370,"souls_N_D":371,"souls_S":372,"souls_S_D":373,"speed_N":374,"speed_N_D":375,"speed_S":376,"speed_S_D":377,"spell_N":378,"spell_N_D":379,"spell_S":380,"spell_S_D":381,"spell_crit_N":382,"spell_crit_N_D":383,"spell_crit_S":384,"spell_crit_S_D":385,"spellsword_N":386,"spellsword_N_D":387,"spellsword_S":388,"spellsword_S_D":389,"starfall_N":390,"starfall_N_D":391,"starfall_S":392,"starfall_S_D":393,"stillness_N":394,"stillness_N_D":395,"stillness_S":396,"stillness_S_D":397,"swift_N":398,"swift_N_D":399,"swift_S":400,"swift_S_D":401,"tether_N":402,"tether_N_D":403,"tether_S":404,"tether_S_D":405,"trap_N":406,"trap_N_D":407,"trap_S":408,"trap_S_D":409,"two_storms_N":410,"two_storms_N_D":411,"two_storms_S":412,"two_storms_S_D":413,"vigil_N":414,"vigil_N_D":415,"vigil_S":416,"vigil_S_D":417,"voidbound_N":418,"voidbound_N_D":419,"voidbound_S":420,"voidbound_S_D":421,"vowkeeper_N":422,"vowkeeper_N_D":423,"vowkeeper_S":424,"vowkeeper_S_D":425,"warcaller_N":426,"warcaller_N_D":427,"warcaller_S":428,"warcaller_S_D":429,"warpath_N":430,"warpath_N_D":431,"warpath_S":432,"warpath_S_D":433,"waygate_S":434,"waygate_S_D":435,"wellspring_N":436,"wellspring_N_D":437,"wellspring_S":438,"wellspring_S_D":439,"wind_and_steel_N":440,"wind_and_steel_N_D":441,"wind_and_steel_S":442,"wind_and_steel_S_D":443,"windstep_N":444,"windstep_N_D":445,"windstep_S":446,"windstep_S_D":447,"zeal_N":448,"zeal_N_D":449,"zeal_S":450,"zeal_S_D":451},"dragons":"icons/dragons.webp","dragonOrder":["Fire","Lightning","Cold","Arcane","Poison","Physical"]};
 </script>
 <script>
@@ -3800,7 +3841,7 @@ window.BOPlanner = function (ctx) {
   }
   // The item editor for the Item Compare tab (app.js): its own state from gear.newKit(true), edits on its own holder.
   const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, affixesFor };
-  return { render, fromCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
+  return { itemTip, skillTip, supTip, oathwordForItem, slotName: SLOT_NAME, rows, render, fromCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
 };
 
 </script>
@@ -5165,6 +5206,107 @@ window.BOScaling = function (ctx) {
     const e = $('#scEmpty'); if (e) e.hidden = shown > 0;
   }
   return { render };
+};
+
+</script>
+<script>
+// The Character tab: a one-page summary of the loaded character, laid out like a pobb.in build page
+// (gear by slot, skills with their supports, passive highlights).
+// Read-only: every number comes from the sim and the game data. app.js calls BOCharacter(ctx) and gets { render }.
+window.BOCharacter = function (ctx) {
+  'use strict';
+  const { $, esc, planner } = ctx;
+  const lc = s => String(s == null ? '' : s).toLowerCase();
+    // Paper-doll order: the grid areas are named in style.css (.ch-slot-<slot>).
+  const SLOTS = ['MainHand', 'Helm', 'OffHand', 'Chest', 'Ring1', 'Gloves', 'Ring2', 'Amulet', 'Boots', 'Belt', 'DwarvenRune'];
+
+  function itemName(it, slot) {
+    const gd = ctx.gd(), base = gd.bases[lc(it.base)], u = it.rarity === 'Unique' && gd.uniques[lc(it.unique)];
+    const word = planner.oathwordForItem(it, slot);
+    return { name: u ? u.Name : word ? word.Name : (it.name || ((base && base.Name) || it.base)), base: (base && base.Name) || it.base, cls: u ? 'unique' : lc(it.rarity) };
+  }
+  function slotCell(ch, slot) {
+    const idx = ch.items.findIndex(i => i.slot === slot), it = ch.items[idx];
+    const label = planner.slotName[slot] || slot;
+    if (!it) return '<div class="ch-slot ch-slot-' + slot + ' empty"><span class="ch-slot-label">' + esc(label) + '</span><span class="meta">empty</span></div>';
+    const n = itemName(it, slot);
+    return '<div class="ch-slot ch-slot-' + slot + ' ' + n.cls + '" data-tip="item" data-slot="' + slot + '" data-idx="' + idx + '" tabindex="0"><span class="ch-slot-label">' + esc(label) + '</span><b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + (it.level ? ' · ilvl ' + it.level : '') + '</span>' +
+      (it.runes && it.runes.length ? '<span class="ch-item-base">' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') + '</span>' : '') + '</div>';
+  }
+
+  function gearCard(ch) {
+    const idols = ch.items.map((it, i) => ({ it, i })).filter(x => x.it.slot === 'Idol');
+    let h = '<div class="card ch-gear"><h2>Gear</h2><div class="ch-doll">' + SLOTS.map(s => slotCell(ch, s)).join('') + '</div>';
+    if (idols.length) h += '<h3>Idols <small>' + idols.length + '</small></h3><div class="ch-idols">' + idols.map(x => {
+      const n = itemName(x.it, 'Idol');
+      return '<div class="ch-slot ' + n.cls + '" data-tip="item" data-slot="Idol" data-idx="' + x.i + '" tabindex="0"><b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + '</span></div>';
+    }).join('') + '</div>';
+    return h + '</div>';
+  }
+
+  function skillsCard(ch) {
+    const gd = ctx.gd(), rs = planner.rows(ch), bar = new Set(ch.hotbar.filter(x => x && x !== 'move'));
+    let h = '<div class="card ch-skills"><h2>Skills</h2>';
+    if (!rs.length) h += '<p class="hint">No skills.</p>';
+    for (const r of rs) {
+      const sk = gd.skills[lc(r.skill)], sups = r.sock ? r.sock.supports : [];
+      h += '<div class="ch-skill' + (ch.mainSkill === r.skill ? ' main' : '') + '"><div class="ch-skill-name" data-tip="skill" data-id="' + esc(r.skill) + '" tabindex="0">' + ctx.skillDot(r.skill) + '<b>' + esc(sk ? sk.Name : r.skill) + '</b>' +
+        '<span class="meta">level ' + (ch.gemLevels[r.skill] || 1) + (bar.has(r.skill) ? '' : ' · off the bar') + '</span></div>' +
+        sups.map(id => '<div class="ch-sup" data-tip="sup" data-id="' + esc(id) + '" tabindex="0">' + ctx.gemDot(id) + esc((gd.supports[lc(id)] || { Name: id }).Name) + '</div>').join('') + '</div>';
+    }
+    return h + '</div>';
+  }
+
+  function passivesCard(ch) {
+    const nodes = ctx.passives().filter(n => n && n.Kind !== 'Start' && !/^start_/.test(n.Id || ''));
+    const big = nodes.filter(n => ['Keystone', 'Notable', 'Choice', 'Capstone'].includes(n.Kind));
+    const order = { Keystone: 0, Capstone: 0, Notable: 1, Choice: 1 };
+    big.sort((a, b) => (order[a.Kind] - order[b.Kind]) || String(a.Name).localeCompare(b.Name));
+    let h = '<div class="card ch-passives"><h2>Passive tree <small>' + nodes.length + ' points · ' + big.length + ' notable or better</small></h2>';
+    if (!big.length) h += '<p class="hint">No notables allocated yet.</p>';
+    h += big.map(n => {
+      const lines = ctx.nodeLines(n);
+      return '<div class="ch-node ' + lc(n.Kind) + '"><b>' + esc(n.Name) + '</b>' + (lines.length ? '<ul>' + lines.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>' : '') + '</div>';
+    }).join('');
+    return h + '<p class="hint">The full tree is on the Skill tree tab.</p></div>';
+  }
+
+  function render() {
+    const el = $('#characterPane'); if (!el || el.hidden) return;
+    bind(el);
+    const ch = ctx.current();
+    let h = '<div class="cmp-intro"><div class="eyebrow">BUILD OVERVIEW</div><h2>Character</h2><p>The loaded character at a glance: gear by slot, skills with their supports and the notable passives. Hover an item or gem for its details.</p></div>';
+    if (!ch) { el.innerHTML = h + '<div class="card"><p class="hint">No character loaded. Load a save, a build code or start a plan first.</p></div>'; return; }
+    el.innerHTML = h + '<div class="ch-cols"><div class="ch-col">' + gearCard(ch) + '</div><div class="ch-col">' + skillsCard(ch) + passivesCard(ch) + '</div></div>';
+  }
+
+  // Tooltips: the same item, skill and support text the Build tab shows.
+  let tip = null;
+  const hide = () => { if (tip) tip.hidden = true; };
+  function show(e) {
+    const t = e.target.closest && e.target.closest('#characterPane [data-tip]');
+    const ch = ctx.current();
+    if (!t || !ch) return hide();
+    let html = '';
+    try {
+      if (t.dataset.tip === 'item') { const it = ch.items[+t.dataset.idx]; html = it ? planner.itemTip(it, t.dataset.slot) : ''; }
+      else if (t.dataset.tip === 'skill') html = planner.skillTip(ch, t.dataset.id);
+      else if (t.dataset.tip === 'sup') html = planner.supTip(t.dataset.id);
+    } catch (err) { html = ''; }
+    if (!html) return hide();
+    if (!tip) { tip = document.createElement('div'); tip.className = 'pl-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
+    tip.innerHTML = html; tip.hidden = false;
+    const r = t.getBoundingClientRect(), w = tip.offsetWidth, hg = tip.offsetHeight;
+    let y = r.bottom + 6; if (y + hg > innerHeight - 8) y = Math.max(8, r.top - hg - 6);
+    tip.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px'; tip.style.top = y + 'px';
+  }
+  function bind(el) {
+    if (el.dataset.bound) return; el.dataset.bound = '1';
+    el.addEventListener('mouseover', show); el.addEventListener('focusin', show);
+    el.addEventListener('mouseleave', hide); el.addEventListener('focusout', hide);
+    window.addEventListener('scroll', hide, { passive: true });
+  }
+  return { render, hide };
 };
 
 </script>
@@ -7222,6 +7364,7 @@ window.BOStartApp = function () {
   let creator = null; // the Save Creator tab (creator.js)
   let fossil = null; // the Fossil Planner tab (fossil.js)
   let scaling = null; // the Skill Scaling tab (scaling.js)
+  let character = null; // the Character tab (character.js)
   let brewery = null, breweryDirty = false; // the Brewery tab (brewery.js); dirty: potions changed since the last damage render
 
   // ---------- setup ----------
@@ -7318,6 +7461,7 @@ window.BOStartApp = function () {
     TT = null;
     if (!ch) return;
     store.set('char', ch.id);
+    if (character && !$('#characterPane').hidden) character.render();
     if (brewery && !$('#breweryPane').hidden) brewery.render(); // the Brewery shows this character's potions
     st.curses = {};
     for (const c of Object.values(GD.curses)) st.curses[c.Id] = { on: ch.hotbar.includes(c.Skill), dread: 0 };
@@ -7597,19 +7741,11 @@ window.BOStartApp = function () {
   function render() { renderSupportSkillSelect(); renderMain(); renderSupportSearchResults(); treeAfterRender(); renderCompare(); renderBuildStats(); }
   // Current Build Setup (Gear, Skills, Skill tree): the selected skill's total DPS, tooltip DPS and average hit on top.
   // Summary strip under the view tabs: class, spell, boss DPS and the share link (moved here from the sidebar).
-  function renderSummaryStrip() {
-    const el = $('#buildSummary'); if (!el) return;
-    const share = $('#shareLinkBtn'), slot = $('#bsShare');
-    if (share && slot && share.parentNode !== slot) slot.appendChild(share);
-    let r = null;
-    if (st.ch && st.skill) { try { r = S.calcSkill(GD, st.ch, st.skill, opts()); } catch (e) { r = null; } }
-    const ok = r && !r.error && !r.unsupported;
-    $('#bsClass').textContent = st.ch ? st.ch.classId + ' · level ' + st.ch.level : '–';
-    $('#bsSpell').textContent = ok && r.skill ? r.skill.Name : '';
-    $('#bsDps').textContent = ok ? num(r.totalDps) : '–';
-    // Defences: read-only display of the lines on gear and tree (no defensive sim). Lines with conditions are skipped.
-    let life = '–', es = '–', res = '–', resTip = 'Not shown';
-    if (ok && st.ch) {
+  // Life, energy shield and resistances as the summary strip and the Character tab show them (r: the main skill's sheet).
+  function defenceStats(r) {
+    // Read-only display of the lines on gear and tree (no defensive sim). Lines with conditions are skipped.
+    let life = '–', es = '–', res = '–', resTip = 'Not shown', resParts = null;
+    if (r && st.ch) {
       try {
         const mods = S.collectMods(GD, st.ch, opts()).mods.filter(m => !S.splitTags(m.tags).conds.length);
         life = num(Math.floor(S.heroMaxLife(GD, st.ch, mods, r.attr || {})), 0); // the game rounds down: 467.5 shows as 467
@@ -7630,11 +7766,26 @@ window.BOStartApp = function () {
           f += ((bs.EnergyShield || 0) + o.es) * (1 + o.def / 100);
         }
         es = num((f + (H.EsPerInt79 || 0) * int) * (1 + (inc + (H.IntEsPctPer10 || 0) * int / 10) / 100), 0); // Int is not rounded: Int 65 gives +26% (not +24%), the sheet's tooltip 8 Nov
-        res = ['Fire', 'Cold', 'Lightning'].map(d => Math.round(rs[d] + all)).join(' / ') + ' / ' + Math.round(rs.Poison);
+        resParts = [['Fire', Math.round(rs.Fire + all)], ['Cold', Math.round(rs.Cold + all)], ['Lightning', Math.round(rs.Lightning + all)], ['Poison', Math.round(rs.Poison)]];
+        res = resParts.map(x => x[1]).join(' / ');
         resTip = 'Fire / Cold / Lightning / Poison resistance, added up from gear and tree lines (all-elemental counted in each). Not capped.';
       } catch (e) { /* leave the dashes */ }
     }
-    $('#bsLife').textContent = life; $('#bsEs').textContent = es; $('#bsRes').textContent = res;
+    return { life, es, res, resTip, resParts, attr: r && r.attr };
+  }
+  function renderSummaryStrip() {
+    const el = $('#buildSummary'); if (!el) return;
+    const share = $('#shareLinkBtn'), slot = $('#bsShare');
+    if (share && slot && share.parentNode !== slot) slot.appendChild(share);
+    let r = null;
+    if (st.ch && st.skill) { try { r = S.calcSkill(GD, st.ch, st.skill, opts()); } catch (e) { r = null; } }
+    const ok = r && !r.error && !r.unsupported;
+    $('#bsClass').textContent = st.ch ? st.ch.name : '–';
+    $('#bsSpell').textContent = st.ch ? st.ch.classId + ' · level ' + st.ch.level + (ok && r.skill ? ' · ' + r.skill.Name : '') : '';
+    $('#bsDps').textContent = ok ? num(r.totalDps) : '–';
+    const { life, es, res, resTip, resParts, attr } = defenceStats(ok ? r : null);
+    $('#bsLife').textContent = life; $('#bsEs').textContent = es; $('#bsRes').innerHTML = resParts ? resParts.map(x => '<span style="color:' + typeColor(x[0]) + '">' + x[1] + '</span>').join(' / ') : esc(res);
+    $('#bsAttr').textContent = attr ? attr.Str + ' / ' + attr.Dex + ' / ' + attr.Int : '–';
     $('#bsRes').parentNode.title = resTip;
     el.hidden = !st.ch;
   }
@@ -9695,6 +9846,8 @@ window.BOStartApp = function () {
     });
   })();
 
+  // The Build Plan views are Character, Passive tree, Skills and Gear (both 'build', planner.js keeps which) and Damage Analysis.
+  const lastBuildView = () => { const v = store.get('buildView', 'character'); return ['character', 'tree', 'damage', 'build'].includes(v) ? v : 'character'; };
   function showTab(tab) {
     T.visible = tab === 'tree';
     document.body.classList.remove('landing-view');
@@ -9704,17 +9857,18 @@ window.BOStartApp = function () {
     document.body.classList.toggle('build-page', tab === 'build');
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'scaling');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'scaling' || tab === 'character');
+    document.body.classList.toggle('character-page', tab === 'character');
     document.body.classList.toggle('creator-page', tab === 'creator'); // the Save Creator has no use for the build views
     if (tab === 'supports') {
       showConfigTab('supports', false);
       buildSettings.open = true;
     }
     syncSettingsToViewport();
-    // Skill tree is a sub-tab of Current Build Setup: keep that main tab lit.
-    document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (tab === 'tree' && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
-    if (tab === 'tree' || tab === 'damage') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#scalingPane').hidden = tab !== 'scaling';
+    // Character, Passive tree and Damage Analysis are sub-tabs of Build Plan: keep that main tab lit.
+    document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'damage'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    if (tab === 'tree' || tab === 'damage' || tab === 'character') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#scalingPane').hidden = tab !== 'scaling'; $('#characterPane').hidden = tab !== 'character';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     renderBuildStats();
@@ -9724,18 +9878,21 @@ window.BOStartApp = function () {
     if (tab === 'fossil') fossil.render();
     if (tab === 'brewery') brewery.render();
     if (tab === 'scaling') scaling.render();
+    if (tab === 'character') character.render();
     if (tab === 'damage' && breweryDirty && st.ch) { breweryDirty = false; render(); }
     store.set('tab', tab);
+    if (['character', 'tree', 'damage', 'build'].includes(tab)) store.set('buildView', tab);
     if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } syncTreeTab(); renderTreeTabs(); if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
   }
   // Only real tabs; the ItemDatabase link is also styled .tab but just opens its site.
   document.querySelectorAll('.tab[data-tab]').forEach(b => b.addEventListener('click', async () => {
     if (b.dataset.tab === 'plan') { if (await planner.startNewPlan()) showTab('plan'); }
+    else if (b.dataset.tab === 'build' && b.closest('.main-tabs') && st.ch) showTab(lastBuildView()); // back to the Build Plan view used last
     else showTab(b.dataset.tab);
   }));
 
   // Gear / Skills from the Skill tree sub-tab go back to the build pane (planner.js picks which one).
-  $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && (document.body.classList.contains('tree-page') || document.body.classList.contains('dashboard-view'))) showTab('build'); });
+  $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && (document.body.classList.contains('tree-page') || document.body.classList.contains('dashboard-view') || document.body.classList.contains('character-page'))) showTab('build'); });
 
   // Pan, zoom, hover, click.
   const view = $('#treeView'), tip = $('#treeTip');
@@ -9876,6 +10033,15 @@ window.BOStartApp = function () {
   // The Brewery tab (brewery.js): Brewmaw's potions; the active ones count in the damage sim.
   brewery = window.BOBrewery({ $, esc, gd: () => GD, current: () => st.ch, onChange: () => { breweryDirty = true; } });
   scaling = window.BOScaling({ $, esc, gd: () => GD });
+  character = window.BOCharacter({
+    $, esc, planner, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats,
+    sheet: () => st.ch && st.skill ? S.calcSkill(GD, st.ch, st.skill, opts()) : null,
+    passives: () => [...allocSet()].map(id => GD.nodes[id]),
+    nodeLines: n => {
+      const lines = (n.Mods || []).filter(m => !['Keystone', 'Trigger', 'Dragonling'].includes(m.Mode)).map(modLine).filter(Boolean);
+      return lines.length ? lines : n.Text ? [n.Text] : [];
+    },
+  });
   $('#buildPane').addEventListener('click', e => {
     if (e.target && e.target.id === 'buildResetSave') resetToSave();
     if (e.target && e.target.id === 'buildSavePlan') saveAsPlan();
@@ -9907,7 +10073,8 @@ window.BOStartApp = function () {
   const startId = store.get('char', null);
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();
-  const lastTab = store.get('tab', 'damage'); if (['tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'scaling'].includes(lastTab)) showTab(lastTab);
+  // Landing: Build Plan > Character for anyone with a character; a first visit with none gets the welcome page (Damage view).
+  const lastTab = store.get('tab', null) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'scaling'].includes(lastTab)) showTab(lastTab);
   // Opened from a share link: load it as a plan, then drop it from the address so a refresh doesn't add it again.
   const bdbHash = /^#b=/.test(location.hash) && brokedCode(location.hash);
   if (bdbHash) { history.replaceState(null, '', location.pathname + location.search); openBroked(bdbHash); }

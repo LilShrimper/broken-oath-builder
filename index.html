@@ -1228,6 +1228,15 @@ body.creator-page .view-bar { display: none; }
 .sc-sep::after { content: ""; flex: 1; height: 1px; background: color-mix(in srgb, var(--sc-c) 55%, var(--line)); }
 .sc-chip { padding: 6px 14px; line-height: 1.2; font: inherit; font-size: 13px; color: var(--text); cursor: pointer; white-space: nowrap; }
 .sc-chip.active { border-color: var(--dashboard-gold); color: var(--dashboard-gold); }
+/* FAQ / Game Mechanics tab (faq.js): section chips, reference tables */
+.faq-nav { margin: 0 0 4px; }
+.faq-sec[hidden] { display: none; }
+.faq-card h2 small { color: var(--faint); font-weight: 500; font-size: 12px; margin-left: 6px; }
+.faq-list { margin: 8px 0 10px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.faq-tbl td, .faq-tbl th { vertical-align: top; text-align: left; }
+.faq-tbl td:nth-child(4) { min-width: 260px; }
+.faq-note { display: block; color: var(--faint); font-size: 11.5px; margin-top: 3px; }
+.faq-off { opacity: .55; }
 :root[data-theme="light"] .sc-chip.active { color: #8a6a1e; border-color: #8a6a1e; }
 .sc-red { --sc-c: var(--gem-str); } .sc-green { --sc-c: var(--gem-dex); } .sc-blue { --sc-c: var(--gem-blue); }
 .sc-card header { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
@@ -1362,14 +1371,14 @@ body.creator-page .view-bar { display: none; }
       <button class="tab" type="button" role="tab" data-tab="supports" aria-selected="false" aria-label="Support Gem Simulator">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 9l-8 12L4 9zM4 9h16M9 9l3 12 3-12"/></svg><span>Support Gem Simulator</span>
       </button>
-      <button class="tab" type="button" role="tab" data-tab="scaling" aria-selected="false" aria-label="Skill Scaling">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 10 14l4 3 6-9M15 8h5v5"/></svg><span>Skill Scaling</span>
-      </button>
       <button class="tab" type="button" role="tab" data-tab="fossil" aria-selected="false" aria-label="Fossil Planner">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8v5h5v8h-5v5H8v-5H3V8h5zM8 8h8v8H8z"/></svg><span>Fossil Planner</span>
       </button>
       <button class="tab" type="button" role="tab" data-tab="brewery" aria-selected="false" aria-label="Brewmaw's Brewery">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h4M10.5 3v5.2L5.6 17a2.6 2.6 0 0 0 2.3 4h8.2a2.6 2.6 0 0 0 2.3-4l-4.9-8.8V3M7.6 14h8.8"/></svg><span>Brewmaw's Brewery</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="faq" aria-selected="false" aria-label="FAQ and Game Mechanics">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1 1-1.1 1.8M12 17h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18"/></svg><span>FAQ / Game Mechanics</span>
       </button>
     </nav>
     <div class="build-summary" id="buildSummary" hidden aria-label="Build summary">
@@ -1607,7 +1616,11 @@ body.creator-page .view-bar { display: none; }
     <section class="build-pane compare-pane creator-pane" id="creatorPane" hidden></section>
     <section class="build-pane compare-pane fossil-pane" id="fossilPane" hidden></section>
     <section class="build-pane compare-pane brewery-pane" id="breweryPane" hidden></section>
-    <section class="build-pane compare-pane scaling-pane" id="scalingPane" hidden></section>
+    <section class="build-pane compare-pane faq-pane" id="faqPane" hidden>
+      <nav class="sc-chips faq-nav" id="faqNav" role="group" aria-label="Game mechanics sections"></nav>
+      <div class="build-pane faq-sec" id="scalingPane" hidden></div>
+      <div class="build-pane faq-sec" id="affixPane" hidden></div>
+    </section>
     <section class="build-pane compare-pane character-pane" id="characterPane" hidden></section>
     <section class="code-pane" id="codePane" hidden>
       <div class="code-intro">
@@ -1715,7 +1728,7 @@ Fan-made tool, not affiliated with the developers of Broken Oath. Game data come
 <script>
 window.GD = null;
 window.CHARS = [];
-window.SITE_VERSION = {"v":130,"at":"2026-11-08T21:41:23.396Z"};
+window.SITE_VERSION = {"v":131,"at":"2026-11-09T03:13:18.115Z"};
 window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"aegis_N":0,"aegis_N_D":1,"aegis_S":2,"aegis_S_D":3,"affliction_N":4,"affliction_N_D":5,"affliction_S":6,"affliction_S_D":7,"anvil_oath_N":8,"anvil_oath_N_D":9,"anvil_oath_S":10,"anvil_oath_S_D":11,"area_N":12,"area_N_D":13,"area_S":14,"area_S_D":15,"armour_N":16,"armour_N_D":17,"armour_S":18,"armour_S_D":19,"artillery_N":20,"artillery_N_D":21,"artillery_S":22,"artillery_S_D":23,"attack_N":24,"attack_N_D":25,"attack_S":26,"attack_S_D":27,"blightword_N":28,"blightword_N_D":29,"bone_N":30,"bone_N_D":31,"bone_S":32,"bone_S_D":33,"bone_choir_N":34,"bone_choir_N_D":35,"bone_choir_S":36,"bone_choir_S_D":37,"bow_N":38,"bow_N_D":39,"bow_S":40,"bow_S_D":41,"bulwark_N":42,"bulwark_N_D":43,"bulwark_S":44,"bulwark_S_D":45,"carrion_hunt_N":46,"carrion_hunt_N_D":47,"carrion_hunt_S":48,"carrion_hunt_S_D":49,"chain_N":50,"chain_N_D":51,"chain_S":52,"chain_S_D":53,"channel_N":54,"channel_N_D":55,"channel_S":56,"channel_S_D":57,"cleave_N":58,"cleave_N_D":59,"cleave_S":60,"cleave_S_D":61,"cold_N":62,"cold_N_D":63,"cold_S":64,"cold_S_D":65,"conduit_N":66,"conduit_N_D":67,"conduit_S":68,"conduit_S_D":69,"crest_Mage":70,"crest_Mage_D":71,"crest_Necromancer":72,"crest_Necromancer_D":73,"crest_Paladin":74,"crest_Paladin_D":75,"crest_Ranger":76,"crest_Ranger_D":77,"crest_Samurai":78,"crest_Samurai_D":79,"crest_Warrior":80,"crest_Warrior_D":81,"crit_N":82,"crit_N_D":83,"crit_S":84,"crit_S_D":85,"crusade_N":86,"crusade_N_D":87,"crusade_S":88,"crusade_S_D":89,"dawn_N":90,"dawn_N_D":91,"dawn_S":92,"dawn_S_D":93,"dawnstorm_N":94,"dawnstorm_N_D":95,"dawnstorm_S":96,"dawnstorm_S_D":97,"dawnsworn_N":98,"dawnsworn_N_D":99,"deadeye_N":100,"deadeye_N_D":101,"deadeye_S":102,"deadeye_S_D":103,"deathknell_N":104,"deathknell_N_D":105,"deathknell_S":106,"deathknell_S_D":107,"edge_N":108,"edge_N_D":109,"edge_S":110,"edge_S_D":111,"elemental_N":112,"elemental_N_D":113,"elemental_S":114,"elemental_S_D":115,"energy_shield_N":116,"energy_shield_N_D":117,"energy_shield_S":118,"energy_shield_S_D":119,"evasion_N":120,"evasion_N_D":121,"evasion_S":122,"evasion_S_D":123,"faith_N":124,"faith_N_D":125,"faith_S":126,"faith_S_D":127,"falling_leaf_N":128,"falling_leaf_N_D":129,"falling_leaf_S":130,"falling_leaf_S_D":131,"fire_N":132,"fire_N_D":133,"fire_S":134,"fire_S_D":135,"fury_N":136,"fury_N_D":137,"fury_S":138,"fury_S_D":139,"grave_N":140,"grave_N_D":141,"grave_S":142,"grave_S_D":143,"holy_N":144,"holy_N_D":145,"holy_S":146,"holy_S_D":147,"iron_tempest_N":148,"iron_tempest_N_D":149,"iron_tempest_S":150,"iron_tempest_S_D":151,"ki_N":152,"ki_N_D":153,"ki_S":154,"ki_S_D":155,"ks_aegis_rebuke":156,"ks_aegis_rebuke_D":157,"ks_ancestral_host":158,"ks_ancestral_host_D":159,"ks_blood_magic":160,"ks_blood_magic_D":161,"ks_cascade_of_ruin":162,"ks_cascade_of_ruin_D":163,"ks_chain_reaction":164,"ks_chain_reaction_D":165,"ks_choir_of_bones":166,"ks_choir_of_bones_D":167,"ks_comet_step":168,"ks_comet_step_D":169,"ks_dawnstorm_covenant":170,"ks_dawnstorm_covenant_D":171,"ks_eagle_eye":172,"ks_eagle_eye_D":173,"ks_earthbreaker_stride":174,"ks_earthbreaker_stride_D":175,"ks_elemental_overload":176,"ks_elemental_overload_D":177,"ks_forked_sky":178,"ks_forked_sky_D":179,"ks_glass_cannon":180,"ks_glass_cannon_D":181,"ks_hammer_of_judgement":182,"ks_hammer_of_judgement_D":183,"ks_hollow_covenant":184,"ks_hollow_covenant_D":185,"ks_iron_resolve":186,"ks_iron_resolve_D":187,"ks_lord_of_the_dead":188,"ks_lord_of_the_dead_D":189,"ks_oath_of_a_thousand_cuts":190,"ks_oath_of_a_thousand_cuts_D":191,"ks_oath_of_many_fires":192,"ks_oath_of_many_fires_D":193,"ks_oath_of_slow_ruin":194,"ks_oath_of_slow_ruin_D":195,"ks_oath_of_the_living_storm":196,"ks_oath_of_the_living_storm_D":197,"ks_oath_of_the_long_night":198,"ks_oath_of_the_long_night_D":199,"ks_oath_of_the_pyre":200,"ks_oath_of_the_pyre_D":201,"ks_oath_of_the_red_harvest":202,"ks_oath_of_the_red_harvest_D":203,"ks_oath_of_the_snare":204,"ks_oath_of_the_snare_D":205,"ks_oath_of_the_white_silence":206,"ks_oath_of_the_white_silence_D":207,"ks_one_breath":208,"ks_one_breath_D":209,"ks_pyre_covenant":210,"ks_pyre_covenant_D":211,"ks_r59_hold_k3":212,"ks_r59_hold_k3_D":213,"ks_r59_mountain_k3":214,"ks_r59_mountain_k3_D":215,"ks_r59_sure_strike_k3":216,"ks_r59_sure_strike_k3_D":217,"ks_r74_bone_sovereign":218,"ks_r74_bone_sovereign_D":219,"ks_radiant_crusade":220,"ks_radiant_crusade_D":221,"ks_rotting_gospel":222,"ks_rotting_gospel_D":223,"ks_sanctified":224,"ks_sanctified_D":225,"ks_siege_pact":226,"ks_siege_pact_D":227,"ks_spellblade":228,"ks_spellblade_D":229,"ks_tempest_vow":230,"ks_tempest_vow_D":231,"ks_the_hunting_dead":232,"ks_the_hunting_dead_D":233,"ks_thousand_hands":234,"ks_thousand_hands_D":235,"ks_twice_fallen_sky":236,"ks_twice_fallen_sky_D":237,"ks_unbroken_wall":238,"ks_unbroken_wall_D":239,"ks_wake_of_spells":240,"ks_wake_of_spells_D":241,"ks_way_of_the_blade":242,"ks_way_of_the_blade_D":243,"ks_wind_and_steel_oath":244,"ks_wind_and_steel_oath_D":245,"leech_N":246,"leech_N_D":247,"leech_S":248,"leech_S_D":249,"lichfire_N":250,"lichfire_N_D":251,"lichfire_S":252,"lichfire_S_D":253,"life_N":254,"life_N_D":255,"life_S":256,"life_S_D":257,"life_big_N":258,"life_big_N_D":259,"life_big_S":260,"life_big_S_D":261,"lightning_N":262,"lightning_N_D":263,"lightning_S":264,"lightning_S_D":265,"lingering_N":266,"lingering_N_D":267,"lingering_S":268,"lingering_S_D":269,"malediction_N":270,"malediction_N_D":271,"malediction_S":272,"malediction_S_D":273,"mana_N":274,"mana_N_D":275,"mana_S":276,"mana_S_D":277,"manasteal_N":278,"manasteal_N_D":279,"manasteal_S":280,"manasteal_S_D":281,"melee_N":282,"melee_N_D":283,"melee_S":284,"melee_S_D":285,"mirrorblade_N":286,"mirrorblade_N_D":287,"mirrorblade_S":288,"mirrorblade_S_D":289,"orbit_N":290,"orbit_N_D":291,"orbit_S":292,"orbit_S_D":293,"ossuary_N":294,"ossuary_N_D":295,"ossuary_S":296,"ossuary_S_D":297,"overcharge_N":298,"overcharge_N_D":299,"overcharge_S":300,"overcharge_S_D":301,"permafrost_N":302,"permafrost_N_D":303,"permafrost_S":304,"permafrost_S_D":305,"plague_quiver_N":306,"plague_quiver_N_D":307,"plague_quiver_S":308,"plague_quiver_S_D":309,"poison_N":310,"poison_N_D":311,"poison_S":312,"poison_S_D":313,"portrait_Mage":314,"portrait_Mage_D":315,"portrait_Necromancer":316,"portrait_Necromancer_D":317,"portrait_Paladin":318,"portrait_Paladin_D":319,"portrait_Ranger":320,"portrait_Ranger_D":321,"portrait_Samurai":322,"portrait_Samurai_D":323,"portrait_Warrior":324,"portrait_Warrior_D":325,"projectile_N":326,"projectile_N_D":327,"projectile_S":328,"projectile_S_D":329,"radiance_N":330,"radiance_N_D":331,"radiance_S":332,"radiance_S_D":333,"radiant_ward_N":334,"radiant_ward_N_D":335,"radiant_ward_S":336,"radiant_ward_S_D":337,"rain_N":338,"rain_N_D":339,"rain_S":340,"rain_S_D":341,"reaper_N":342,"reaper_N_D":343,"reaper_S":344,"reaper_S_D":345,"regrowth_N":346,"regrowth_N_D":347,"regrowth_S":348,"regrowth_S_D":349,"resist_N":350,"resist_N_D":351,"resist_S":352,"resist_S_D":353,"shatter_N":354,"shatter_N_D":355,"shatter_S":356,"shatter_S_D":357,"siege_N":358,"siege_N_D":359,"siege_S":360,"siege_S_D":361,"sigil_N":362,"sigil_N_D":363,"sigil_S":364,"sigil_S_D":365,"slam_N":366,"slam_N_D":367,"slam_S":368,"slam_S_D":369,"souls_N":370,"souls_N_D":371,"souls_S":372,"souls_S_D":373,"speed_N":374,"speed_N_D":375,"speed_S":376,"speed_S_D":377,"spell_N":378,"spell_N_D":379,"spell_S":380,"spell_S_D":381,"spell_crit_N":382,"spell_crit_N_D":383,"spell_crit_S":384,"spell_crit_S_D":385,"spellsword_N":386,"spellsword_N_D":387,"spellsword_S":388,"spellsword_S_D":389,"starfall_N":390,"starfall_N_D":391,"starfall_S":392,"starfall_S_D":393,"stillness_N":394,"stillness_N_D":395,"stillness_S":396,"stillness_S_D":397,"swift_N":398,"swift_N_D":399,"swift_S":400,"swift_S_D":401,"tether_N":402,"tether_N_D":403,"tether_S":404,"tether_S_D":405,"trap_N":406,"trap_N_D":407,"trap_S":408,"trap_S_D":409,"two_storms_N":410,"two_storms_N_D":411,"two_storms_S":412,"two_storms_S_D":413,"vigil_N":414,"vigil_N_D":415,"vigil_S":416,"vigil_S_D":417,"voidbound_N":418,"voidbound_N_D":419,"voidbound_S":420,"voidbound_S_D":421,"vowkeeper_N":422,"vowkeeper_N_D":423,"vowkeeper_S":424,"vowkeeper_S_D":425,"warcaller_N":426,"warcaller_N_D":427,"warcaller_S":428,"warcaller_S_D":429,"warpath_N":430,"warpath_N_D":431,"warpath_S":432,"warpath_S_D":433,"waygate_S":434,"waygate_S_D":435,"wellspring_N":436,"wellspring_N_D":437,"wellspring_S":438,"wellspring_S_D":439,"wind_and_steel_N":440,"wind_and_steel_N_D":441,"wind_and_steel_S":442,"wind_and_steel_S_D":443,"windstep_N":444,"windstep_N_D":445,"windstep_S":446,"windstep_S_D":447,"zeal_N":448,"zeal_N_D":449,"zeal_S":450,"zeal_S_D":451},"dragons":"icons/dragons.webp","dragonOrder":["Fire","Lightning","Cold","Arcane","Poison","Physical"]};
 </script>
 <script>
@@ -1729,10 +1742,10 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
     'Items/affixes.json', 'Items/uniques.json', 'Items/item_bases.json', 'Items/runes.json', 'Items/runewords.json',
     'Gameplay/dragonling.json', 'Gameplay/curses.json', 'Gameplay/blessings.json', 'Gameplay/scaling.json', 'Items/stat_text.json', 'Rifts/bosses.json',
     'Gameplay/animsets.json', 'Gameplay/progression.json', 'Rifts/riftmap.json', 'Rifts/riven_atlas.json',
-    'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json'];
+    'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json', 'Gameplay/monster_affixes.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 17; // 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 18; // 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -1861,6 +1874,13 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
     for (const gd of B.guardians || []) guardians[gd.Id] = { name: gd.Name, variants: (gd.Variants || []).map(v => ({ id: v.Id, name: v.Name, element: v.Element, resist: (v.Resist || {})[v.Element] || 0 })) };
     const ward = (B.Tiers || []).filter(t => t.Id === 'ward').map(t => ({ fromRL: t.FromRL, gateFromRL: t.GateFromRL, resist: t.Resist })).sort((a, b) => a.fromRL - b.fromRL);
 
+
+    // Monster affixes (FAQ / Game Mechanics tab, display only, the sim does not read them): Guardian mods and rift elite affixes
+    // (Gameplay/monster_affixes.json, read 8 Nov 2026) and how many a Guardian rolls by monster level (scaling.json Rift.GuardianMods).
+    const MA = J('Gameplay/monster_affixes.json').affixes || [];
+    const monsterAffixes = MA.map(a => { const o = {}; for (const k of Object.keys(a)) if (k !== 'Tint' && k !== 'HazardSfx') o[k] = a[k]; return o; });
+    const guardianMods = J('Gameplay/scaling.json').Rift.GuardianMods || {};
+
     // XP needed to reach level 2..100 (progression.json Levels): the Creator tab sets Experience to match a new level.
     const xpLevels = J('Gameplay/progression.json').progression[0].Levels;
 
@@ -1896,7 +1916,7 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
       { skills, classes, supports, nodes, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, uniques, bases, runes, runeSockets, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds });
+        affixes, uniques, bases, runes, runeSockets, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, SCHEMA };
@@ -5210,6 +5230,105 @@ window.BOScaling = function (ctx) {
 
 </script>
 <script>
+// FAQ / Game Mechanics tab: reference pages that only explain the game, nothing here feeds the damage sim.
+// Sections: Skill Scaling (scaling.js, moved here from its own tab 8 Nov 2026) and Monster Affixes (this file).
+// Monster Affixes reads GD.monsterAffixes (Gameplay/monster_affixes.json), GD.guardianMods (scaling.json Rift.GuardianMods),
+// GD.guardians (Rifts/bosses.json colour variants) and GD.ward. Wording follows the game file's own notes; where the file
+// gives only a number the text says only that number. app.js calls BOFaq(ctx) and gets back { render }.
+window.BOFaq = function (ctx) {
+  'use strict';
+  const { $, esc } = ctx;
+  const SECTIONS = [['scaling', 'Skill Scaling'], ['affixes', 'Monster Affixes']];
+  let section = 'scaling';
+  try { const s = localStorage.getItem('bo_faq_section'); if (SECTIONS.some(x => x[0] === s)) section = s; } catch (e) { /* storage blocked */ }
+
+  const pct = x => String(Math.round(x * 1000) / 10).replace(/\.0$/, '');
+  const WHO = a => a.bGuardianOnly ? 'Guardian only' : a.bRareOnly ? 'Rare elites only' : a.bEliteOnly ? 'Elites only' : 'Guardians and elites';
+  const LIVE = a => a.bEnabled !== false && (a.MinML || 0) < 999 && (a.MinRL || 0) < 999;
+  function starts(a) {
+    if ((a.MinML || 0) >= 999 || (a.MinRL || 0) >= 999) return 'Not live yet';
+    if (a.bEnabled === false) return 'Not rolled yet';
+    if (a.MinRL) return 'Rupture ' + a.MinRL;
+    return a.MinML > 1 ? 'Level ' + a.MinML : 'Any level';
+  }
+  // One plain sentence from the fields the game file gives for this affix.
+  function effect(a) {
+    const t = [];
+    if (a.SpeedPct) t.push(a.SpeedPct + '% faster');
+    if (a.AddedElement) t.push('Adds ' + a.AddedPct + '% ' + a.AddedElement + ' damage');
+    if (a.SummonEvery) t.push('Summons ' + a.SummonCount + ' adds every ' + a.SummonEvery + ' s');
+    if (a.bVolatileAdds) t.push('Its adds are volatile');
+    if (a.SplitCount) t.push('Splits into ' + a.SplitCount);
+    if (a.LessTakenPct) t.push('Takes ' + a.LessTakenPct + '% less damage');
+    if (a.ElementalLessTakenPct) t.push('Takes ' + a.ElementalLessTakenPct + '% less elemental damage' + (a.AilmentLessPct ? ', and ailments on it are ' + a.AilmentLessPct + '% weaker' : ''));
+    if (a.RegenPctPerSec) t.push('Regenerates ' + a.RegenPctPerSec + '% of its life per second');
+    if (a.LifePct) t.push('+' + a.LifePct + '% life, and ' + (a.ExtraItemRolls || 0) + ' extra item roll' + (a.ExtraItemRolls === 1 ? '' : 's'));
+    if (a.EnrageTimerMult) t.push('Enrage timer is ' + pct(a.EnrageTimerMult) + '% as long');
+    if (a.bHazardArena) t.push('Hazards appear in the arena');
+    if (a.TwinLifeShare) t.push('A second Guardian, each at ' + pct(a.TwinLifeShare) + '% life');
+    if (a.bDeathBurst) t.push('Bursts where it dies: ' + a.HazardPct + '% ' + a.HazardElement + ' damage, ' + a.HazardRadius + ' radius, ' + a.HazardTelegraph + ' s warning');
+    else if (a.HazardPct) t.push((a.PulseEvery ? 'Every ' + a.PulseEvery + ' s: ' : '') + a.HazardPct + '% ' + a.HazardElement + ' damage, ' + a.HazardRadius + ' radius, ' + a.HazardTelegraph + ' s warning');
+    if (a.bUnbudgeted) t.push('Its other mods are not paid for with extra life or less damage');
+    return t.join('. ');
+  }
+  const budget = a => {
+    const t = [];
+    if (a.EhpFactor && a.EhpFactor !== 1) t.push('life ×' + a.EhpFactor);
+    if (a.DpsFactor && a.DpsFactor !== 1) t.push('damage ×' + a.DpsFactor);
+    return t.join(', ') || '–';
+  };
+  function affixTable(list) {
+    return '<div class="table-wrap"><table class="tbl faq-tbl"><thead><tr><th>Affix</th><th>Rolls on</th><th>From</th><th>What it does</th><th title="What the game changes on the monster to pay for the affix (its life and its damage)">Cost</th></tr></thead><tbody>' +
+      list.map(a => '<tr' + (LIVE(a) ? '' : ' class="faq-off"') + '><td><b>' + esc(a.Name) + '</b></td><td>' + WHO(a) + '</td><td>' + starts(a) + '</td><td>' + esc(effect(a)) + (a.Note ? '<small class="faq-note">' + esc(a.Note) + '</small>' : '') + '</td><td>' + budget(a) + '</td></tr>').join('') + '</tbody></table></div>';
+  }
+
+  function renderAffixes() {
+    const el = $('#affixPane'), GD = ctx.gd();
+    let h = '<div class="cmp-intro"><div class="eyebrow">REFERENCE</div><h2>Monster Affixes</h2><p>The extra mods a Guardian or an elite monster can roll, read from the game\'s data files. Numbers are the game\'s; this page does not change the damage sim.</p></div>';
+    const list = (GD && GD.monsterAffixes) || [];
+    if (!list.length) { el.innerHTML = h + '<div class="card"><p class="hint">Load the game data first (this section needs a newer copy of it).</p></div>'; return; }
+    const gu = list.filter(a => !a.bEliteOnly), elite = list.filter(a => a.bEliteOnly);
+    const M = GD.guardianMods || {};
+    h += '<div class="card faq-card"><h2>How many mods a Guardian gets</h2><ul class="faq-list">' +
+      (M.MildFromML != null ? '<li>From monster level <b>' + M.MildFromML + '</b> a Guardian can roll a <b>mild</b> mod.</li>' : '') +
+      (M.AnyFromML != null ? '<li>From level <b>' + M.AnyFromML + '</b> it can roll a <b>strong</b> mod as well.</li>' : '') +
+      (M.TwoFromML != null ? '<li>From level <b>' + M.TwoFromML + '</b> it rolls <b>two</b>.</li>' : '') +
+      (M.GateExtraFromML != null ? '<li>A Gate Guardian gets an extra mod from level <b>' + M.GateExtraFromML + '</b>' + (M.GateNoneBelowML ? ', and none below level <b>' + M.GateNoneBelowML + '</b>' : '') + '.</li>' : '') +
+      (M.Pinnacle === 0 ? '<li>Pinnacle Guardians roll <b>no</b> mods.</li>' : '') +
+      (M.DeepBase != null ? '<li>In the Deep (Rupture 81 and up) the file gives a base of <b>' + M.DeepBase + '</b> mods, <b>' + M.DeepPerRL + '</b> per Rupture level step, up to <b>' + M.DeepMax + '</b>. How that is applied is not spelled out in the file.</li>' : '') +
+      '</ul>' + (M.bBudgetNeutral ? '<p class="hint">Mods are budget neutral: the game takes the cost column from the monster\'s life or damage, so a modded Guardian is not meant to take longer to kill or hit harder overall. <b>Empowered</b> is the exception on purpose: it costs fight time for a bigger reward.</p>' : '') +
+      '<p class="hint"><b>Mild</b> mods are the small ones (speed, added element, summons). <b>Strong</b> mods change the fight (extra life, less damage taken, hazards).</p></div>';
+    h += '<div class="card faq-card"><h2>Guardian mods <small>' + gu.length + ' in the file</small></h2>' + affixTable(gu.filter(a => a.Mild).concat(gu.filter(a => !a.Mild))) + '</div>';
+    h += '<div class="card faq-card"><h2>Elite affixes <small>rare and elite monsters in Rifts</small></h2>' + affixTable(elite) +
+      '<p class="hint">Rupture level is the Rift Level; it equals the monster level from 1 to 80. Greyed rows are in the file but not rolled in the game yet.</p></div>';
+    // Guardian colour variants (the sim uses these) and the Ward tiers.
+    const gs = Object.values(GD.guardians || {});
+    if (gs.length) {
+      h += '<div class="card faq-card"><h2>Guardian colour variants <small>the sim uses these</small></h2><p class="hint">A Guardian spawns as a colour with one element and extra resistance to it' +
+        ((GD.ward || []).length ? '. On top of that, Ward adds resistance to that element: ' + GD.ward.map(w => w.resist + '% from Rupture ' + w.fromRL).join(', ') : '') + '.</p>' +
+        '<div class="table-wrap"><table class="tbl faq-tbl"><thead><tr><th>Guardian</th><th>Variants (element, resistance)</th></tr></thead><tbody>' +
+        gs.map(g => '<tr><td><b>' + esc(g.name) + '</b></td><td>' + g.variants.map(v => esc(v.name) + ' (' + esc(v.element) + ' ' + v.resist + '%)').join(' · ') + '</td></tr>').join('') + '</tbody></table></div></div>';
+    }
+    el.innerHTML = h;
+  }
+
+  function show() {
+    const nav = $('#faqNav');
+    nav.innerHTML = SECTIONS.map(s => '<button type="button" class="chip sc-chip' + (section === s[0] ? ' active' : '') + '" data-s="' + s[0] + '" aria-pressed="' + (section === s[0]) + '">' + s[1] + '</button>').join('');
+    $('#scalingPane').hidden = section !== 'scaling';
+    $('#affixPane').hidden = section !== 'affixes';
+    if (section === 'scaling') ctx.scaling.render(); else renderAffixes();
+  }
+  function render() {
+    const nav = $('#faqNav'); if (!nav) return;
+    nav.onclick = e => { const b = e.target.closest('[data-s]'); if (!b) return; section = b.dataset.s; try { localStorage.setItem('bo_faq_section', section); } catch (x) { /* storage blocked */ } show(); };
+    show();
+  }
+  return { render };
+};
+
+</script>
+<script>
 // The Character tab: a one-page summary of the loaded character, laid out like a pobb.in build page
 // (gear by slot, skills with their supports, passive highlights).
 // Read-only: every number comes from the sim and the game data. app.js calls BOCharacter(ctx) and gets { render }.
@@ -7415,7 +7534,8 @@ window.BOStartApp = function () {
   let planner = null; // the Build tab (planner.js), made at the start
   let creator = null; // the Save Creator tab (creator.js)
   let fossil = null; // the Fossil Planner tab (fossil.js)
-  let scaling = null; // the Skill Scaling tab (scaling.js)
+  let scaling = null; // Skill Scaling, now a section of the FAQ tab (scaling.js)
+  let faq = null; // the FAQ / Game Mechanics tab (faq.js)
   let character = null; // the Character tab (character.js)
   let brewery = null, breweryDirty = false; // the Brewery tab (brewery.js); dirty: potions changed since the last damage render
 
@@ -9909,7 +10029,7 @@ window.BOStartApp = function () {
     document.body.classList.toggle('build-page', tab === 'build');
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'scaling' || tab === 'character');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'faq' || tab === 'character');
     document.body.classList.toggle('character-page', tab === 'character');
     document.body.classList.toggle('creator-page', tab === 'creator'); // the Save Creator has no use for the build views
     if (tab === 'supports') {
@@ -9920,7 +10040,7 @@ window.BOStartApp = function () {
     // Character, Passive tree and Damage Analysis are sub-tabs of Build Plan: keep that main tab lit.
     document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'damage'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
     if (tab === 'tree' || tab === 'damage' || tab === 'character') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#scalingPane').hidden = tab !== 'scaling'; $('#characterPane').hidden = tab !== 'character';
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#faqPane').hidden = tab !== 'faq'; $('#characterPane').hidden = tab !== 'character';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     renderBuildStats();
@@ -9929,7 +10049,7 @@ window.BOStartApp = function () {
     if (tab === 'creator') creator.render();
     if (tab === 'fossil') fossil.render();
     if (tab === 'brewery') brewery.render();
-    if (tab === 'scaling') scaling.render();
+    if (tab === 'faq') faq.render();
     if (tab === 'character') character.render();
     if (tab === 'damage' && breweryDirty && st.ch) { breweryDirty = false; render(); }
     store.set('tab', tab);
@@ -10085,6 +10205,7 @@ window.BOStartApp = function () {
   // The Brewery tab (brewery.js): Brewmaw's potions; the active ones count in the damage sim.
   brewery = window.BOBrewery({ $, esc, gd: () => GD, current: () => st.ch, onChange: () => { breweryDirty = true; } });
   scaling = window.BOScaling({ $, esc, gd: () => GD });
+  faq = window.BOFaq({ $, esc, gd: () => GD, scaling });
   character = window.BOCharacter({
     $, esc, planner, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats,
     sheet: () => st.ch && st.skill ? S.calcSkill(GD, st.ch, st.skill, opts()) : null,
@@ -10126,7 +10247,7 @@ window.BOStartApp = function () {
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();
   // Landing: Build Plan > Character for anyone with a character; a first visit with none gets the welcome page (Damage view).
-  const lastTab = store.get('tab', null) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'scaling'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (store.get('tab', null) === 'scaling' ? 'faq' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'faq'].includes(lastTab)) showTab(lastTab);
   // Opened from a share link: load it as a plan, then drop it from the address so a refresh doesn't add it again.
   const bdbHash = /^#b=/.test(location.hash) && brokedCode(location.hash);
   if (bdbHash) { history.replaceState(null, '', location.pathname + location.search); openBroked(bdbHash); }

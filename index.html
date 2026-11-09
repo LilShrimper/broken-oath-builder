@@ -1880,9 +1880,13 @@ body.creator-page .view-bar { display: none; }
 <dialog class="confirm-dialog report-dialog" id="reportDialog" aria-labelledby="reportTitle">
   <form method="dialog" id="reportForm">
     <h2 id="reportTitle">Report a problem</h2>
-    <p id="reportIntro">Wrong numbers, something broken, a missing item or skill: describe it here. No account needed. Only what you write is sent, plus the attachments ticked below.</p>
+    <p id="reportIntro">Wrong numbers, something broken, a missing item or skill: describe it here. No account needed. Only what you write is sent, plus the attachments ticked below (the build, and log lines if you loaded your game log).</p>
     <label class="field"><span id="reportTextLabel">What happened?</span><textarea id="reportText" rows="6" maxlength="4000"></textarea></label>
     <label class="check"><input type="checkbox" id="reportBuild"><span>Attach the build on screen <span class="meta">Sent as a share link: gear, skills, tree and the character name.</span></span></label>
+    <div id="reportLogWrap" hidden>
+      <label class="check"><input type="checkbox" id="reportLog"><span>Attach log lines <span class="meta" id="reportLogCount"></span> <span class="meta">Fight lines only (hits, casts, ailments, marks). No date or time of day, no character name, no Steam ID or file paths. Look at exactly what is sent below.</span></span></label>
+      <details class="report"><summary>Log lines that would be sent</summary><pre id="reportLogLines"></pre></details>
+    </div>
     <details class="report" id="reportAttachWrap" hidden><summary>Check report attached (numbers only, no names or IDs)</summary><pre id="reportAttach"></pre></details>
     <p class="report-status" id="reportStatus" role="status"></p>
     <div class="confirm-actions">
@@ -1913,7 +1917,7 @@ Fan-made tool, not affiliated with the developers of Broken Oath. Game data come
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":142,"at":"2026-11-09T14:08:11.215Z"};
+window.SITE_VERSION = {"v":143,"at":"2026-11-09T14:46:38.460Z"};
 window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"aegis_N":0,"aegis_N_D":1,"aegis_S":2,"aegis_S_D":3,"affliction_N":4,"affliction_N_D":5,"affliction_S":6,"affliction_S_D":7,"anvil_oath_N":8,"anvil_oath_N_D":9,"anvil_oath_S":10,"anvil_oath_S_D":11,"area_N":12,"area_N_D":13,"area_S":14,"area_S_D":15,"armour_N":16,"armour_N_D":17,"armour_S":18,"armour_S_D":19,"artillery_N":20,"artillery_N_D":21,"artillery_S":22,"artillery_S_D":23,"attack_N":24,"attack_N_D":25,"attack_S":26,"attack_S_D":27,"blightword_N":28,"blightword_N_D":29,"bone_N":30,"bone_N_D":31,"bone_S":32,"bone_S_D":33,"bone_choir_N":34,"bone_choir_N_D":35,"bone_choir_S":36,"bone_choir_S_D":37,"bow_N":38,"bow_N_D":39,"bow_S":40,"bow_S_D":41,"bulwark_N":42,"bulwark_N_D":43,"bulwark_S":44,"bulwark_S_D":45,"carrion_hunt_N":46,"carrion_hunt_N_D":47,"carrion_hunt_S":48,"carrion_hunt_S_D":49,"chain_N":50,"chain_N_D":51,"chain_S":52,"chain_S_D":53,"channel_N":54,"channel_N_D":55,"channel_S":56,"channel_S_D":57,"cleave_N":58,"cleave_N_D":59,"cleave_S":60,"cleave_S_D":61,"cold_N":62,"cold_N_D":63,"cold_S":64,"cold_S_D":65,"conduit_N":66,"conduit_N_D":67,"conduit_S":68,"conduit_S_D":69,"crest_Mage":70,"crest_Mage_D":71,"crest_Necromancer":72,"crest_Necromancer_D":73,"crest_Paladin":74,"crest_Paladin_D":75,"crest_Ranger":76,"crest_Ranger_D":77,"crest_Samurai":78,"crest_Samurai_D":79,"crest_Warrior":80,"crest_Warrior_D":81,"crit_N":82,"crit_N_D":83,"crit_S":84,"crit_S_D":85,"crusade_N":86,"crusade_N_D":87,"crusade_S":88,"crusade_S_D":89,"dawn_N":90,"dawn_N_D":91,"dawn_S":92,"dawn_S_D":93,"dawnstorm_N":94,"dawnstorm_N_D":95,"dawnstorm_S":96,"dawnstorm_S_D":97,"dawnsworn_N":98,"dawnsworn_N_D":99,"deadeye_N":100,"deadeye_N_D":101,"deadeye_S":102,"deadeye_S_D":103,"deathknell_N":104,"deathknell_N_D":105,"deathknell_S":106,"deathknell_S_D":107,"edge_N":108,"edge_N_D":109,"edge_S":110,"edge_S_D":111,"elemental_N":112,"elemental_N_D":113,"elemental_S":114,"elemental_S_D":115,"energy_shield_N":116,"energy_shield_N_D":117,"energy_shield_S":118,"energy_shield_S_D":119,"evasion_N":120,"evasion_N_D":121,"evasion_S":122,"evasion_S_D":123,"faith_N":124,"faith_N_D":125,"faith_S":126,"faith_S_D":127,"falling_leaf_N":128,"falling_leaf_N_D":129,"falling_leaf_S":130,"falling_leaf_S_D":131,"fire_N":132,"fire_N_D":133,"fire_S":134,"fire_S_D":135,"fury_N":136,"fury_N_D":137,"fury_S":138,"fury_S_D":139,"grave_N":140,"grave_N_D":141,"grave_S":142,"grave_S_D":143,"holy_N":144,"holy_N_D":145,"holy_S":146,"holy_S_D":147,"iron_tempest_N":148,"iron_tempest_N_D":149,"iron_tempest_S":150,"iron_tempest_S_D":151,"ki_N":152,"ki_N_D":153,"ki_S":154,"ki_S_D":155,"ks_aegis_rebuke":156,"ks_aegis_rebuke_D":157,"ks_ancestral_host":158,"ks_ancestral_host_D":159,"ks_blood_magic":160,"ks_blood_magic_D":161,"ks_cascade_of_ruin":162,"ks_cascade_of_ruin_D":163,"ks_chain_reaction":164,"ks_chain_reaction_D":165,"ks_choir_of_bones":166,"ks_choir_of_bones_D":167,"ks_comet_step":168,"ks_comet_step_D":169,"ks_dawnstorm_covenant":170,"ks_dawnstorm_covenant_D":171,"ks_eagle_eye":172,"ks_eagle_eye_D":173,"ks_earthbreaker_stride":174,"ks_earthbreaker_stride_D":175,"ks_elemental_overload":176,"ks_elemental_overload_D":177,"ks_forked_sky":178,"ks_forked_sky_D":179,"ks_glass_cannon":180,"ks_glass_cannon_D":181,"ks_hammer_of_judgement":182,"ks_hammer_of_judgement_D":183,"ks_hollow_covenant":184,"ks_hollow_covenant_D":185,"ks_iron_resolve":186,"ks_iron_resolve_D":187,"ks_lord_of_the_dead":188,"ks_lord_of_the_dead_D":189,"ks_oath_of_a_thousand_cuts":190,"ks_oath_of_a_thousand_cuts_D":191,"ks_oath_of_many_fires":192,"ks_oath_of_many_fires_D":193,"ks_oath_of_slow_ruin":194,"ks_oath_of_slow_ruin_D":195,"ks_oath_of_the_living_storm":196,"ks_oath_of_the_living_storm_D":197,"ks_oath_of_the_long_night":198,"ks_oath_of_the_long_night_D":199,"ks_oath_of_the_pyre":200,"ks_oath_of_the_pyre_D":201,"ks_oath_of_the_red_harvest":202,"ks_oath_of_the_red_harvest_D":203,"ks_oath_of_the_snare":204,"ks_oath_of_the_snare_D":205,"ks_oath_of_the_white_silence":206,"ks_oath_of_the_white_silence_D":207,"ks_one_breath":208,"ks_one_breath_D":209,"ks_pyre_covenant":210,"ks_pyre_covenant_D":211,"ks_r59_hold_k3":212,"ks_r59_hold_k3_D":213,"ks_r59_mountain_k3":214,"ks_r59_mountain_k3_D":215,"ks_r59_sure_strike_k3":216,"ks_r59_sure_strike_k3_D":217,"ks_r74_bone_sovereign":218,"ks_r74_bone_sovereign_D":219,"ks_radiant_crusade":220,"ks_radiant_crusade_D":221,"ks_rotting_gospel":222,"ks_rotting_gospel_D":223,"ks_sanctified":224,"ks_sanctified_D":225,"ks_siege_pact":226,"ks_siege_pact_D":227,"ks_spellblade":228,"ks_spellblade_D":229,"ks_tempest_vow":230,"ks_tempest_vow_D":231,"ks_the_hunting_dead":232,"ks_the_hunting_dead_D":233,"ks_thousand_hands":234,"ks_thousand_hands_D":235,"ks_twice_fallen_sky":236,"ks_twice_fallen_sky_D":237,"ks_unbroken_wall":238,"ks_unbroken_wall_D":239,"ks_wake_of_spells":240,"ks_wake_of_spells_D":241,"ks_way_of_the_blade":242,"ks_way_of_the_blade_D":243,"ks_wind_and_steel_oath":244,"ks_wind_and_steel_oath_D":245,"leech_N":246,"leech_N_D":247,"leech_S":248,"leech_S_D":249,"lichfire_N":250,"lichfire_N_D":251,"lichfire_S":252,"lichfire_S_D":253,"life_N":254,"life_N_D":255,"life_S":256,"life_S_D":257,"life_big_N":258,"life_big_N_D":259,"life_big_S":260,"life_big_S_D":261,"lightning_N":262,"lightning_N_D":263,"lightning_S":264,"lightning_S_D":265,"lingering_N":266,"lingering_N_D":267,"lingering_S":268,"lingering_S_D":269,"malediction_N":270,"malediction_N_D":271,"malediction_S":272,"malediction_S_D":273,"mana_N":274,"mana_N_D":275,"mana_S":276,"mana_S_D":277,"manasteal_N":278,"manasteal_N_D":279,"manasteal_S":280,"manasteal_S_D":281,"melee_N":282,"melee_N_D":283,"melee_S":284,"melee_S_D":285,"mirrorblade_N":286,"mirrorblade_N_D":287,"mirrorblade_S":288,"mirrorblade_S_D":289,"orbit_N":290,"orbit_N_D":291,"orbit_S":292,"orbit_S_D":293,"ossuary_N":294,"ossuary_N_D":295,"ossuary_S":296,"ossuary_S_D":297,"overcharge_N":298,"overcharge_N_D":299,"overcharge_S":300,"overcharge_S_D":301,"permafrost_N":302,"permafrost_N_D":303,"permafrost_S":304,"permafrost_S_D":305,"plague_quiver_N":306,"plague_quiver_N_D":307,"plague_quiver_S":308,"plague_quiver_S_D":309,"poison_N":310,"poison_N_D":311,"poison_S":312,"poison_S_D":313,"portrait_Mage":314,"portrait_Mage_D":315,"portrait_Necromancer":316,"portrait_Necromancer_D":317,"portrait_Paladin":318,"portrait_Paladin_D":319,"portrait_Ranger":320,"portrait_Ranger_D":321,"portrait_Samurai":322,"portrait_Samurai_D":323,"portrait_Warrior":324,"portrait_Warrior_D":325,"projectile_N":326,"projectile_N_D":327,"projectile_S":328,"projectile_S_D":329,"radiance_N":330,"radiance_N_D":331,"radiance_S":332,"radiance_S_D":333,"radiant_ward_N":334,"radiant_ward_N_D":335,"radiant_ward_S":336,"radiant_ward_S_D":337,"rain_N":338,"rain_N_D":339,"rain_S":340,"rain_S_D":341,"reaper_N":342,"reaper_N_D":343,"reaper_S":344,"reaper_S_D":345,"regrowth_N":346,"regrowth_N_D":347,"regrowth_S":348,"regrowth_S_D":349,"resist_N":350,"resist_N_D":351,"resist_S":352,"resist_S_D":353,"shatter_N":354,"shatter_N_D":355,"shatter_S":356,"shatter_S_D":357,"siege_N":358,"siege_N_D":359,"siege_S":360,"siege_S_D":361,"sigil_N":362,"sigil_N_D":363,"sigil_S":364,"sigil_S_D":365,"slam_N":366,"slam_N_D":367,"slam_S":368,"slam_S_D":369,"souls_N":370,"souls_N_D":371,"souls_S":372,"souls_S_D":373,"speed_N":374,"speed_N_D":375,"speed_S":376,"speed_S_D":377,"spell_N":378,"spell_N_D":379,"spell_S":380,"spell_S_D":381,"spell_crit_N":382,"spell_crit_N_D":383,"spell_crit_S":384,"spell_crit_S_D":385,"spellsword_N":386,"spellsword_N_D":387,"spellsword_S":388,"spellsword_S_D":389,"starfall_N":390,"starfall_N_D":391,"starfall_S":392,"starfall_S_D":393,"stillness_N":394,"stillness_N_D":395,"stillness_S":396,"stillness_S_D":397,"swift_N":398,"swift_N_D":399,"swift_S":400,"swift_S_D":401,"tether_N":402,"tether_N_D":403,"tether_S":404,"tether_S_D":405,"trap_N":406,"trap_N_D":407,"trap_S":408,"trap_S_D":409,"two_storms_N":410,"two_storms_N_D":411,"two_storms_S":412,"two_storms_S_D":413,"vigil_N":414,"vigil_N_D":415,"vigil_S":416,"vigil_S_D":417,"voidbound_N":418,"voidbound_N_D":419,"voidbound_S":420,"voidbound_S_D":421,"vowkeeper_N":422,"vowkeeper_N_D":423,"vowkeeper_S":424,"vowkeeper_S_D":425,"warcaller_N":426,"warcaller_N_D":427,"warcaller_S":428,"warcaller_S_D":429,"warpath_N":430,"warpath_N_D":431,"warpath_S":432,"warpath_S_D":433,"waygate_S":434,"waygate_S_D":435,"wellspring_N":436,"wellspring_N_D":437,"wellspring_S":438,"wellspring_S_D":439,"wind_and_steel_N":440,"wind_and_steel_N_D":441,"wind_and_steel_S":442,"wind_and_steel_S_D":443,"windstep_N":444,"windstep_N_D":445,"windstep_S":446,"windstep_S_D":447,"zeal_N":448,"zeal_N_D":449,"zeal_S":450,"zeal_S_D":451},"dragons":"icons/dragons.webp","dragonOrder":["Fire","Lightning","Cold","Arcane","Poison","Physical"]};
 </script>
 <script>
@@ -2607,7 +2611,48 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
     return out;
   }
 
-  const api = { parseLog };
+  // Log lines a player may attach to a report (owner, 9 Nov 2026: option 2, opt-in, shown before sending).
+  // Only an allowlist of fight lines (the ones parseLog reads) inside a time window; everything else is dropped.
+  // Seen in the real log (9 Nov): Steam IDs sit in "SaveWrite79" lines and the character name in "Save:",
+  // "Wallet75", "Transmog" and "Hero" lines, none of which are on the allowlist. Scrubbing is a second guard.
+  // The timestamp is replaced by seconds from the first kept line, so the date and time of day are not sent.
+  const KEEP = /^LogBrokenOath: (?:Display: )?(?:BossPain60|Guardian: \w+ (?:engaged|model|element signature|gate mechanics|phase)|Harder59|BossMech|Conduit: |Skyfall: |ArenaPhase|GateBeat71|Trigger: |EnemyTakenTip66|Mech70Check|AilmentStats|Gem: |Skill: \w+ \w+ (?:Attack|Spell) interrupted|Cast refund)|^LogTemp: OrbitCast: release /;
+  const BULK = /BossPain60|Skyfall: |OrbitCast|Conduit: |AilmentStats|Trigger: /; // thousands of lines: thinned to fit
+  function scrub(line, names) {
+    let s = line.replace(/\b7656119\d{10}\b/g, '<id>').replace(/\b[0-9A-F]{32}\b/g, '<id>').replace(/[A-Za-z]:[\\/]+(?:Users|Documents and Settings)[\\/]+[^\\/\s]+/gi, '<path>');
+    for (const n of names || []) if (n && n.length > 1) s = s.split(n).join('<name>');
+    return s;
+  }
+  // text: the whole log. opt: { from, to } (ms, local time like parseLog), names: hero names to hide, maxChars.
+  // -> { text, lines, thinned } ("lines" = kept, "thinned" = true when bulk lines were sampled to fit)
+  function excerpt(text, opt) {
+    opt = opt || {};
+    const max = opt.maxChars || 20000, from = opt.from == null ? -Infinity : opt.from, to = opt.to == null ? Infinity : opt.to;
+    const sel = [];
+    for (const l of String(text).split(/\r?\n/)) {
+      const t = time(l); if (t == null || t < from || t > to) continue;
+      const body = l.replace(/^\[[^\]]*\]\[[^\]]*\]/, '');
+      if (!KEEP.test(body)) continue;
+      sel.push({ t, body: scrub(body, opt.names).replace(/^LogBrokenOath: (?:Display: )?/, '') });
+    }
+    if (!sel.length) return { text: '', lines: 0, thinned: false };
+    const t0 = sel[0].t, fmt = x => '+' + ((x.t - t0) / 1000).toFixed(3) + ' ' + x.body;
+    const size = a => a.reduce((n, x) => n + fmt(x).length + 1, 0);
+    let keep = sel, thinned = false;
+    if (size(sel) > max) {
+      thinned = true;
+      const bulk = sel.filter(x => BULK.test(x.body)), rest = sel.filter(x => !BULK.test(x.body));
+      const room = Math.max(0, max - size(rest)), per = bulk.length ? size(bulk) / bulk.length : 1;
+      const n = Math.min(bulk.length, Math.floor(room / per)), pick = new Set();
+      for (let i = 0; i < n; i++) pick.add(bulk[Math.floor(i * bulk.length / n)]);
+      keep = sel.filter(x => !BULK.test(x.body) || pick.has(x));
+      while (keep.length && size(keep) > max) keep.splice(Math.floor(keep.length / 2), 1); // last resort: still over
+    }
+    const out = keep.map(fmt).join('\n');
+    return { text: (thinned ? '(' + keep.length + ' of ' + sel.length + ' lines kept: repeated lines were sampled evenly to fit)\n' : '') + out, lines: keep.length, thinned };
+  }
+
+  const api = { parseLog, excerpt };
   root.BOLog = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -4170,6 +4215,9 @@ window.BOCreator = function (ctx) {
   // Writes the page item into a save struct (a new one gets a fresh ID and seed; an edited one keeps its own).
   function fillItem(s, it, where) {
     const u = it.rarity === 'Unique' && GD.uniques[lc(it.unique)];
+    // A planner link (9 Nov 2026, TotemJudge's staff) can carry a "Normal" item with six rolled affixes; the game keeps
+    // no affixes on a Normal item, so the staff came out bare. An item with affixes is written as Rare.
+    if (it.rarity === 'Normal' && (it.affixes || []).length) it = Object.assign({}, it, { rarity: 'Rare' });
     iset(s, 'BaseID', it.base); iset(s, 'ItemLevel', Math.max(1, Math.min(100, it.level || 1))); iset(s, 'Rarity', it.rarity || 'Normal');
     iset(s, 'UniqueID', u ? u.Id : 'None'); iset(s, 'Name', u ? u.Name : it.name || '');
     iset(s, 'Runes', { items: (it.runes || []).filter(Boolean) }); iset(s, 'Sockets', (it.runes || []).filter(Boolean).length);
@@ -4555,11 +4603,47 @@ window.BOCreator = function (ctx) {
       (known ? '<button class="btn small ghost" type="button" data-cr="edit" data-i="' + i + '">Edit</button>' : '<span class="meta">' + (GD.runes[lc(it.base)] ? 'rune, kept as it is' : 'kept as it is') + '</span>') +
       '<button class="btn small ghost" type="button" data-cr="rm" data-i="' + i + '">Remove</button></div>';
   }
+  // Read an item from a screenshot of its tooltip (or pasted tooltip text) with itemread.js, the same reader the
+  // Item Compare and Build tabs use. The image is read in this browser and never uploaded. The read item fills the
+  // editor below so it can be checked and corrected before it goes in the bag.
+  function readBoxHtml() {
+    let h = '<div class="pl-read" id="crRead" tabindex="0" role="button" aria-label="Paste, drop or pick a screenshot of the item"><b>' + (C.readBusy ? esc(C.readBusy) : 'Read a screenshot') + '</b>' +
+      (C.readBusy ? '' : ' <span>Click here and paste it (Ctrl+V), drop it here, or <label class="linkish">pick an image<input type="file" id="crReadImg" accept="image/*" hidden></label>. Item text works too. The image is read in this browser and never uploaded.</span>') + '</div>';
+    const r = C.read;
+    if (r && r.error) h += '<p class="hint bad">' + esc(r.error) + '</p>';
+    else if (r) {
+      const cls = { affix: 'good', unique: 'good', unread: 'bad' }, n = r.lines.filter(l => l.kind === 'affix' || l.kind === 'unique').length;
+      h += '<details class="cmp-readout"' + (r.unread.length || r.notes.length ? ' open' : '') + '><summary>Read ' + n + ' item line' + (n === 1 ? '' : 's') + (r.unread.length ? ', <span class="bad">' + r.unread.length + ' not recognised</span>' : '') + '. Check them against the screenshot.</summary><ul>' +
+        r.lines.map(l => '<li class="' + (cls[l.kind] || 'meta') + '">' + esc(l.text) + (l.label ? ' <span class="meta">· ' + esc(l.label) + '</span>' : l.kind === 'unread' ? ' <span class="meta">· not recognised</span>' : '') + '</li>').join('') + '</ul>' +
+        r.notes.map(t => '<p class="hint bad">' + esc(t) + '</p>').join('') +
+        (r.unread.length ? '<p class="hint">Add lines that were not recognised with <b>Add an affix</b> below.</p>' : '') + '</details>';
+    }
+    return h;
+  }
+  // src is an image (Blob) or item text.
+  async function readItem(src) {
+    if (!C.edit || C.readBusy || !window.BOItemRead) return;
+    C.read = null; let text = src;
+    if (typeof src !== 'string') {
+      C.readBusy = 'Loading the text reader…'; render();
+      try { text = await window.BOItemRead.readImage(src, t => { C.readBusy = t; const b = $('#crRead b'); if (b) b.textContent = t; }); }
+      catch (err) { C.readBusy = ''; C.read = { error: 'Could not read the screenshot: ' + err.message }; return render(); }
+      C.readBusy = '';
+    }
+    if (!C.edit) return render(); // cancelled while reading
+    const cur = C.edit.items[0], slot = cur ? cur.slot : C.newSlot;
+    const r = window.BOItemRead.parse(GD, ctx.sim, text, { slot, base: cur && cur.base, level: C.edit.level });
+    if (!r.item) { C.read = { error: typeof src === 'string' ? 'That text does not look like an item.' : 'No item text found in that image. Crop it to the tooltip and try again.' }; return render(); }
+    C.edit.items = [Object.assign(r.item, { slot, quality: cur ? cur.quality || 0 : 0 })];
+    C.kit = g.newKit(true); C.read = r;
+    render();
+  }
   function editorHtml() {
     if (!C.edit) return '';
     const isNew = C.editIdx < 0, it = C.edit.items[0] || null, slot = it ? it.slot : C.newSlot;
     let h = '<div class="card cr-editor"><h2>' + (isNew ? 'New item' : 'Edit item') + '</h2>';
     if (isNew) h += '<label class="field inline"><span>Item type</span><select id="crSlot">' + [...g.SLOTS, 'Idol'].filter(s => s !== 'Ring2').map(s => opt(s, s === 'Ring1' ? 'Ring' : g.SLOT_NAME[s], s === slot)).join('') + '</select></label>';
+    h += readBoxHtml();
     if (it) h += '<div class="cmp-tip pl-tip">' + g.tip(it, slot) + '</div>';
     h += '<div class="pl-gear-grid" data-cred="1">' + g.editor(it, slot, it ? 0 : -1, true, '', C.kit) + '</div>';
     if (it) h += '<label class="field inline"><span>Quality</span><input type="number" min="0" max="30" id="crQuality" value="' + (it.quality || 0) + '"></label>';
@@ -4716,7 +4800,7 @@ window.BOCreator = function (ctx) {
 
   // ---------- events ----------
   function startEdit(i) {
-    C.editIdx = i; C.kit = g.newKit(true);
+    C.read = null; C.editIdx = i; C.kit = g.newKit(true);
     const lvl = summary().Level || 1;
     C.edit = { level: lvl, items: i >= 0 ? [toItem(items()[i])] : [] };
   }
@@ -4741,10 +4825,29 @@ window.BOCreator = function (ctx) {
     const P_ = id => el.querySelector('[data-rnum="' + CSS.escape(id) + '"]');
     // Rune search: only the result list is redrawn while typing, so the box keeps its focus.
     el.addEventListener('input', e => { if (e.target.id === 'crRuneQ') { C.runeQ = e.target.value; const l = $('#crRuneList'); if (l) l.innerHTML = runeResults(); } });
-    el.addEventListener('keydown', e => { if (e.target.id === 'crCode' && e.key === 'Enter') { e.preventDefault(); doImport(); } });
+    el.addEventListener('keydown', e => {
+      if (e.target.id === 'crCode' && e.key === 'Enter') { e.preventDefault(); doImport(); }
+      if (e.target.id === 'crRead' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); const i = e.target.querySelector('input[type=file]'); if (i) i.click(); }
+    });
+    // Ctrl+V anywhere in the open item editor (outside a text box) reads the clipboard: an image, or item text.
+    document.addEventListener('paste', e => {
+      if (el.hidden || !C.edit || !C.save) return;
+      if (e.target.closest && e.target.closest('input, textarea, select')) return;
+      const list = Array.from((e.clipboardData && e.clipboardData.items) || []), img = list.find(i => i.kind === 'file' && /^image\//.test(i.type));
+      if (img) { e.preventDefault(); return readItem(img.getAsFile()); }
+      const text = e.clipboardData && e.clipboardData.getData('text/plain');
+      if (text && /\n/.test(text.trim()) && /\d/.test(text)) { e.preventDefault(); readItem(text); }
+    });
+    el.addEventListener('dragover', e => { if (C.edit && e.target.closest && e.target.closest('#crRead')) e.preventDefault(); });
+    el.addEventListener('drop', e => {
+      if (!C.edit || !(e.target.closest && e.target.closest('#crRead'))) return;
+      e.preventDefault(); e.stopPropagation(); document.body.classList.remove('dragging'); // the page's own drop handler would load it as a save
+      const f = e.dataTransfer && e.dataTransfer.files[0]; if (f && /^image\//.test(f.type)) readItem(f);
+    });
     el.addEventListener('change', e => {
       const t = e.target; C.err = '';
       if (t.id === 'crFile') { if (t.files[0]) load(t.files[0]); t.value = ''; return; }
+      if (t.id === 'crReadImg') { const f = t.files[0]; t.value = ''; if (f) readItem(f); return; }
       if (!C.save) return;
       const rec = R();
       if (t.id === 'crName') { const n = t.value.trim().slice(0, 24); if (n) { setV(sumP(), 'Name', n); changed('Name: ' + n + '.'); } return render(); }
@@ -6439,7 +6542,7 @@ window.BOFaq = function (ctx) {
     ]));
     h += card('Leaves your computer only when you choose', list([
       '<b>Share links</b>: the short link stores the build code (name, class, level, gear, tree, skills) so the link can open it. The long link carries the code itself and stores nothing.',
-      '<b>Reports</b> (Report a problem, Send a check report): your text, the check report\'s numbers if there is one, and a share link only if you tick it. No account. Check reports leave out your character name, Steam ID and file paths. Reports are kept 180 days.',
+      '<b>Reports</b> (Report a problem, Send a check report): your text, the check report\'s numbers if there is one, a share link only if you tick it, and fight log lines only if you load your game log and tick "Attach log lines" (you see the exact lines first: fight lines only, no date or time of day, no name, no Steam ID, no file paths). No account. Check reports leave out your character name, Steam ID and file paths. Reports are kept 180 days.',
       'No IP addresses or cookies are stored with links or reports. To stop spam, the report limit keeps a scrambled IP and date for one hour.',
       'The <b>Buy me a coffee</b> button is loaded from buymeacoffee.com.',
     ]));
@@ -6660,7 +6763,12 @@ window.BOCharacter = function (ctx) {
   const COC_ATTACK_GAP = 0.75, COC_ATTACK_LESS = -44;
   // The minion army (game log 6 Nov, ArmyBack81): 40 in all, past 27 each body adds 0.50 of a body.
   const ARMY_TOTAL = 40, ARMY_FULL = 27, ARMY_PAST = 0.5;
-  // Each Spell Echo repeat of a Spell Totem's cast (patch notes 4 Nov, patch 0.53).
+  // Each Spell Echo repeat of a Spell Totem's cast, at 80% (patch notes 4 Nov, patch 0.53). Log 9 Nov 2026, Heartwood
+  // Ancient fight (10 totems): 357 numbered Judgement casts in 7.46 s, 71-80/s once 10 stood against 27.8/s from the
+  // totems alone, so the echoes do fire (2 per cast). The game's panel DPS does NOT count them: the owner's tooltips that
+  // day (0.36 s totems, Repeats 2) show 82,318,064 DPS with a 100% second fall and 119,408,240 with an 80% one, which is
+  // 27.8 casts/s x hit x crit x (1 + second fall) to within 0.5%. The 80% share itself is unchecked (the fight damage ran
+  // about 2x over the sim for other reasons too), so the sheet's DPS here runs ~2.6x over the game's panel number.
   const TOTEM_ECHO = 0.8;
   // A summon (its damage is the minions'). Gravereap (patch 5 Nov) is an attack with a Minion block: its kills
   // rise as Risen Thralls, but its own sweep is the hit, so it is simmed as an attack.
@@ -7282,7 +7390,15 @@ window.BOCharacter = function (ctx) {
       const d = DT.includes(sk.DamageType) ? sk.DamageType : 'Physical';
       addPart(d, sk.SpellMin * spellGrowth * eff, sk.SpellMax * spellGrowth * eff);
       res.base = { kind: 'spell', min: sk.SpellMin, max: sk.SpellMax, growth: spellGrowth, effectiveness: eff };
-      if (mainBase && lc(mainBase.Class) === 'staff') weapon = { crit: mainBase.Crit || 0, isStaff: true };
+      if (mainBase && lc(mainBase.Class) === 'staff') {
+        // The staff's local "increased critical chance" lifts the staff's own base crit first (it was left out before).
+        // Owner's Judgement tooltip, 9 Nov 2026: crit 76.6%. Astral Staff base 7 with local +49.4% (38 x Flawless Rare 1.3),
+        // flat +3.5 (Arcane Precision 1.5, Sun-Struck Mind 1, Honed Edge 1), +450% increased elsewhere:
+        // (7 x 1.494 + 3.5) x 5.5 = 76.8%; without the local line the sheet gave 57.75%.
+        let ci = 0;
+        if (mainItem) for (const m of mods) if (m.local && m.key === 'item:' + mainItem.slot && m.stat === 'CritChance' && m.mode === 'Inc') { ci += m.v; use(m, 'local'); }
+        weapon = { crit: (mainBase.Crit || 0) * (1 + ci / 100), isStaff: true };
+      }
     }
     // Added damage. Attacks: x effectiveness. Spells: x1, or grown like the gem when GemScaled.
     // Support gems' added damage ("scaled up by the skill's gem level") grows x1.19 a level (gear levels
@@ -7523,9 +7639,14 @@ window.BOCharacter = function (ctx) {
       // default stays one. The cap of 10 Totems is from the 0.56.2 patch notes (7 Nov).
       let tcount = Math.max(1, Math.floor(o.totemCount || 1));
       if (is0562(GD)) tcount = Math.min(tcount, 10);
-      usesPerSec = tcount / every; useTime = 1 / usesPerSec;
-      res.totem = { count: tcount, every };
-      res.notes.push('Totem: ' + tcount + ' totem' + (tcount > 1 ? 's' : '') + ', each casting it every ' + every + ' s; your cast speed only places totems faster; assumes every totem casts at this enemy.');
+      // Totem speed also speeds a Spell Totem's casts (owner's Judgement tooltip, 9 Nov 2026: "10 totems, each casting it
+      // every 0.36 s" and "Casts per second 2.78" per totem, from the gem's 0.8 s; the build's +134.9% increased
+      // totem speed gives 0.8 / 2.349 = 0.341 s, close to the shown 0.36 s, so the sum may include a line that does not apply).
+      let tsInc = 0; for (const m of pickMods(mods, 'TotemSpeed', 'Inc')) if (applies(ctx, m)) { tsInc += m.v; use(m); }
+      const baseEvery = every, spellEvery = baseEvery / Math.max(0.1, 1 + tsInc / 100);
+      usesPerSec = tcount / spellEvery; useTime = 1 / usesPerSec;
+      res.totem = { count: tcount, every: spellEvery };
+      res.notes.push('Totem: ' + tcount + ' totem' + (tcount > 1 ? 's' : '') + ', each casting it every ' + spellEvery.toFixed(2) + ' s' + (tsInc ? ' (' + baseEvery + ' s with ' + Math.round(tsInc) + '% increased totem speed)' : '') + '; your cast speed only places totems faster; assumes every totem casts at this enemy.');
     } else if (shape === 'trap_support' && !totemAttack) { // a ballista keeps its totem rate (below): tooltip 5 Nov "8 totems, each firing every 0.31 s" with Trap Support
       const d = GD.supports.trap_support.Description; const n = /up to (\d+)/i.exec(d), re = /re-arms ([\d.]+) seconds/i.exec(d);
       let rearm = re ? +re[1] : 2.5; const traps = n ? +n[1] : 3;
@@ -7769,7 +7890,7 @@ window.BOCharacter = function (ctx) {
     // patch 0.53: "Spell Echo repeats a Spell Totem's casts (each echo at 80%)"; not yet seen in the log).
     if (shape === 'totem_support' && repeats > 0 && !(o.hitsPerSecOverride > 0)) {
       perHitFactor *= (1 + TOTEM_ECHO * repeats) / (1 + repeats);
-      res.notes.push('Spell Echo on a Spell Totem: the totem\'s casts are echoed, each echo at ' + Math.round(TOTEM_ECHO * 100) + '% of the cast (patch notes 4 Nov).');
+      res.notes.push('Spell Echo on a Spell Totem: the totem\'s casts are echoed, each echo at ' + Math.round(TOTEM_ECHO * 100) + '% of the cast (patch notes 4 Nov; the echoes fire in a fight, log 9 Nov). The game\'s own skill panel does not count them, so its DPS reads about ' + (1 + TOTEM_ECHO * repeats).toFixed(1) + 'x lower than this sheet.');
     }
     // Afterimages (scaling.json Meta AfterimageCap / AfterimageDamagePct; Shade of the Blow, idols, Earthbreaker):
     // a melee attack gets that many afterimages, at most the cap; each repeats the blow after the plain repeats
@@ -9878,7 +9999,14 @@ window.BOStartApp = function () {
   // "Report a problem" (header, footer) and "Send a check report" open one dialog. It posts to the share worker
   // (share-worker/, POST /r); the owner reads them with `node tools/reports.js`. Sent: the player's text, the
   // check report's numbers when there is one, and a share link only if they tick it.
-  var lastCheckReport = '', reportKind = 'problem'; // var: logCard can run before this line on first render
+  var lastCheckReport = '', reportKind = 'problem', logText = ''; // var: logCard can run before this line on first render
+  // The last two Guardian fights from the loaded log, fight lines only, names/IDs scrubbed (BOLog.excerpt).
+  function logExcerpt() {
+    const gs = st.log && st.log.guardians; if (!logText || !gs || !gs.length) return null;
+    const last = gs.slice(-2);
+    const ex = window.BOLog.excerpt(logText, { from: last[0].t0 - 3000, to: last[last.length - 1].t1 + 3000, names: (st.log.heroes || []).map(h => h.name).concat(st.ch ? [st.ch.name] : []), maxChars: 20000 });
+    return ex.lines ? ex : null;
+  }
   function openReport(kind) {
     reportKind = kind;
     const check = kind === 'check' && lastCheckReport;
@@ -9891,7 +10019,11 @@ window.BOStartApp = function () {
     $('#reportAttach').textContent = check ? lastCheckReport : '';
     $('#reportBuild').checked = false;
     $('#reportBuild').disabled = !st.ch;
-    const s = $('#reportStatus'); s.textContent = ''; s.className = 'report-status';
+    const ex = logExcerpt();
+    $('#reportLogWrap').hidden = !ex; $('#reportLog').checked = false;
+    $('#reportLogLines').textContent = ex ? ex.text : '';
+    $('#reportLogCount').textContent = ex ? ex.lines + ' lines from your last ' + Math.min(2, st.log.guardians.length) + ' Guardian fight' + (st.log.guardians.length > 1 ? 's' : '') : '';
+    const s =$('#reportStatus'); s.textContent = ''; s.className = 'report-status';
     $('#reportSend').disabled = false;
     $('#reportDialog').showModal();
     $('#reportText').focus();
@@ -9911,8 +10043,9 @@ window.BOStartApp = function () {
       const tab = (document.querySelector('.tab[aria-selected="true"]') || {}).dataset;
       const page = (tab && tab.tab || 'damage') + ' tab, game data ' + (GD.steamBuild ? 'build ' + GD.steamBuild : String(GD.filesAt || GD.builtAt).slice(0, 10)) + (/^https?:$/.test(location.protocol) && location.hostname === 'lilshrimper.github.io' ? '' : ', local copy');
       const text = check ? (note ? 'Note: ' + note + '\n\n' : '') + lastCheckReport : note;
+      const ex = $('#reportLog').checked ? logExcerpt() : null; // the same lines the player saw in the preview
       const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 10000);
-      let r; try { r = await fetch(SHARE_API + '/r', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ kind: check ? 'check' : 'problem', text, build, page }), signal: ctl.signal }); }
+      let r; try { r = await fetch(SHARE_API + '/r', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ kind: check ? 'check' : 'problem', text, build, page, log: ex ? ex.text : '' }), signal: ctl.signal }); }
       finally { clearTimeout(t); }
       if (!r.ok) throw new Error(await r.text() || 'The report service answered ' + r.status + '.');
       $('#reportText').value = '';
@@ -10136,7 +10269,7 @@ window.BOStartApp = function () {
       const text = await file.text();
       const log = window.BOLog.parseLog(text);
       if (!log.start) throw new Error('This does not look like a Broken Oath game log (BrokenOath.log).');
-      st.log = log; render();
+      st.log = log; logText = text; render(); // logText: kept in memory only, for the opt-in "attach log lines" in a report
       if (!log.guardians.length) alert('Loaded the log, but it has no Guardian kills yet. Kill a Guardian, then load it again.');
     } catch (err) { alert('Could not read ' + file.name + ':\n' + err.message); }
   }
@@ -11422,7 +11555,7 @@ window.BOStartApp = function () {
   });
   // The Save Creator tab (creator.js): edits an offline save and hands back a new file.
   creator = window.BOCreator({
-    GD, $, esc, planner, savePath: SAVE_PATH,
+    GD, $, esc, planner, savePath: SAVE_PATH, sim: S,
     chars: () => CHARS, importCode: importAnyCode, belt: id => brewery && brewery.belt(id),
     preview: ch => { addChars([ch], 'file', ch.id); showTab('damage'); saveTip('Showing ' + ch.name + ' as the Save Creator would write it. Your save file is unchanged until you put the new one in place.'); },
   });

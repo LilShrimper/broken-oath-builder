@@ -1295,6 +1295,184 @@ body.creator-page .view-bar { display: none; }
 @media (max-width: 760px) { .ch-cols { grid-template-columns: minmax(0, 1fr); } .ch-slot { min-height: 64px; } }
 .bs-cell b#bsRes, .bs-cell b#bsAttr { white-space: normal; font-size: 16px; }
 
+/* Item Search tab (itemsearch.js) */
+.is-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+.is-top { margin-bottom: 12px; }
+.is-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.is-cat { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer; }
+.is-cat small { color: var(--faint); margin-left: 2px; }
+.is-cat:hover { border-color: color-mix(in srgb, var(--dashboard-gold) 55%, var(--line)); }
+.is-cat.active { border-color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 16%, var(--panel-2)); color: var(--dashboard-gold); }
+.is-cat.active small { color: inherit; opacity: .75; }
+:root[data-theme="light"] .is-cat.active { color: #7a5a14; background: color-mix(in srgb, #c9a24a 18%, var(--panel)); }
+.is-filters { display: grid; grid-template-columns: minmax(200px, 2fr) repeat(5, minmax(120px, 1fr)); gap: 10px; align-items: end; }
+.is-filters .field { margin: 0; }
+.is-filters select, .is-filters input { width: 100%; min-width: 0; }
+.is-range { display: flex; align-items: center; gap: 4px; }
+.is-range span { color: var(--faint); }
+.is-range input { width: 0; flex: 1; }
+@media (max-width: 1100px) { .is-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } .is-filters .grow { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .is-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.is-opts { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; }
+.is-opts .check-row { margin: 0; }
+.is-count { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.is-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; align-items: start; }
+.is-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; min-width: 0; font-size: 13px; }
+.is-card header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.is-head { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.is-name { font-size: 15px; line-height: 1.25; overflow-wrap: anywhere; }
+.is-head small { color: var(--faint); font-size: 12px; }
+.is-lvl { flex: none; align-self: flex-start; font-size: 12px; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: var(--panel-2); }
+/* Icon tile: the type's line drawing tinted by category (--ic) */
+.is-ico { --ic: var(--muted); flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px; color: var(--ic);
+  border: 1px solid color-mix(in srgb, var(--ic) 40%, var(--line)); background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--ic) 16%, var(--panel-2)), var(--panel-2)); }
+.is-ico svg { width: 32px; height: 32px; overflow: visible; fill: color-mix(in srgb, currentColor 16%, transparent); stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.is-ico .glyph { fill: none; stroke-width: 1.7; }
+.is-ico.rune svg use { color: var(--muted); }
+.is-ico.jewel .is-gem { fill: color-mix(in srgb, currentColor 45%, transparent); }
+/* Rune colours are dark in the game data: lift them on navy, deepen them in light mode */
+.is-ico.rune, .is-ico.jewel { color: color-mix(in srgb, var(--ic) 55%, #fff); }
+:root[data-theme="light"] .is-ico.rune, :root[data-theme="light"] .is-ico.jewel { color: color-mix(in srgb, var(--ic) 80%, #000); }
+.is-ico.base { --ic: #b9c2dc; }
+.is-ico.unique { --ic: #e0896f; }
+.is-ico.oathword { --ic: var(--dashboard-gold); }
+.is-ico.prefix { --ic: #8fb8ff; }
+.is-ico.suffix { --ic: #b9a4ff; }
+:root[data-theme="light"] .is-ico.base { --ic: #56607e; }
+:root[data-theme="light"] .is-ico.unique { --ic: #b2522f; }
+:root[data-theme="light"] .is-ico.oathword { --ic: #8a6a1e; }
+:root[data-theme="light"] .is-ico.prefix { --ic: #2f5fb0; }
+:root[data-theme="light"] .is-ico.suffix { --ic: #6a4bc4; }
+.cat-unique .is-name { color: #e0896f; }
+.cat-oathword .is-name { color: var(--dashboard-gold); }
+:root[data-theme="light"] .cat-unique .is-name { color: #b2522f; }
+:root[data-theme="light"] .cat-oathword .is-name { color: #8a6a1e; }
+.is-lines { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 2px; }
+.is-lines.implicit { color: var(--muted); padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.is-lines.unique, .is-lines.oathword { color: #8fb8ff; }
+:root[data-theme="light"] .is-lines.unique, :root[data-theme="light"] .is-lines.oathword { color: #2f5fb0; }
+.is-lines .none { color: var(--faint); }
+.is-flavour { margin: 8px 0 0; color: var(--faint); font-style: italic; font-size: 12px; }
+.is-stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0 0 6px; }
+.is-stats dt { color: var(--muted); }
+.is-stats dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.is-into { margin: 4px 0; color: var(--muted); font-size: 12px; }
+.is-runes { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 2px 0 6px; }
+.is-runes.hidden-recipe { color: var(--faint); font-size: 12px; display: block; }
+.is-rune { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; }
+.is-rune .is-ico { width: 26px; height: 26px; border-radius: 6px; }
+.is-rune .is-ico svg { width: 20px; height: 20px; }
+.is-plus { color: var(--faint); }
+.is-power { margin-top: 6px; }
+.is-power summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.is-band { margin-top: 6px; }
+.is-band b { font-size: 12px; color: var(--muted); font-weight: 600; }
+.is-tiers { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.is-tiers th { text-align: left; color: var(--faint); font-weight: 600; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+.is-tiers td { padding: 3px 6px; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
+.is-tiers tr.on td { background: color-mix(in srgb, var(--dashboard-gold) 16%, transparent); color: var(--text); }
+.is-split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.is-split b { font-size: 12px; color: var(--muted); font-weight: 600; }
+@media (max-width: 420px) { .is-split { grid-template-columns: 1fr; } }
+.is-card footer { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.is-badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.is-badge.tier { border-color: color-mix(in srgb, var(--dashboard-gold) 45%, var(--line)); color: var(--dashboard-gold); }
+:root[data-theme="light"] .is-badge.tier { color: #7a5a14; }
+.is-badge.chase, .is-badge.crowned { background: color-mix(in srgb, #e0896f 18%, transparent); }
+.is-more { display: flex; justify-content: center; margin: 14px 0; }
+/* Item mods as rows (itemsearch.js modRow) */
+.is-filters.with-affix { grid-template-columns: minmax(200px, 2fr) repeat(6, minmax(110px, 1fr)); }
+@media (max-width: 1100px) { .is-filters.with-affix { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .is-filters.with-affix { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.is-modlist { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel); margin-bottom: 12px; }
+.is-modhead { margin: 0; padding: 8px 12px; font-size: 15px; background: var(--panel-2); border-bottom: 1px solid var(--line); border-left: 4px solid var(--aff); }
+.is-modhead small { color: var(--faint); font-weight: 400; margin-left: 4px; }
+.is-modhead.prefix, .is-mrow.prefix, .is-aff.prefix { --aff: #5b9bff; }
+.is-modhead.suffix, .is-mrow.suffix, .is-aff.suffix { --aff: #b58cff; }
+:root[data-theme="light"] .is-modhead.prefix, :root[data-theme="light"] .is-mrow.prefix, :root[data-theme="light"] .is-aff.prefix { --aff: #2459c4; }
+:root[data-theme="light"] .is-modhead.suffix, :root[data-theme="light"] .is-mrow.suffix, :root[data-theme="light"] .is-aff.suffix { --aff: #7a3fd6; }
+.is-mrow { border-bottom: 1px solid var(--line); border-left: 3px solid var(--aff); }
+.is-mrow:last-child { border-bottom: 0; }
+.is-mrow:nth-child(even) > summary { background: color-mix(in srgb, var(--panel-2) 55%, transparent); }
+.is-mrow > summary { display: flex; align-items: center; gap: 10px; padding: 6px 10px; cursor: pointer; list-style: none; font-size: 13px; }
+.is-mrow > summary::-webkit-details-marker { display: none; }
+.is-mrow > summary:hover { background: color-mix(in srgb, var(--aff) 10%, var(--panel)); }
+.is-mrow[open] > summary { background: color-mix(in srgb, var(--aff) 14%, var(--panel)); }
+.is-aff { flex: none; width: 54px; text-align: center; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 2px 0; border-radius: 4px; color: #fff; background: var(--aff); }
+.is-mtext { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.is-mline { color: var(--text); margin-right: 2px; }
+.is-tag { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--tag, #6f86b8) 30%, var(--panel-2)); color: color-mix(in srgb, var(--tag, #6f86b8) 50%, #fff); text-transform: uppercase; letter-spacing: .03em; }
+:root[data-theme="light"] .is-tag { color: color-mix(in srgb, var(--tag, #6f86b8) 75%, #000); background: color-mix(in srgb, var(--tag, #6f86b8) 16%, #fff); }
+.is-tag.phys { --tag: #9aa6bf; } .is-tag.fire { --tag: #e8603c; } .is-tag.cold { --tag: #4fa3e8; } .is-tag.light { --tag: #e6c13a; } .is-tag.chaos { --tag: #b061d9; } .is-tag.elem { --tag: #e0e4f0; }
+.is-mslots { color: var(--faint); font-size: 11px; }
+.is-nums { flex: none; display: flex; gap: 4px; }
+.is-nums .n { min-width: 26px; text-align: center; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; padding: 2px 7px; border-radius: 999px; }
+.is-nums .tiers { background: color-mix(in srgb, var(--good) 22%, var(--panel-2)); color: var(--good); }
+.is-nums .ilvl { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+.is-mbody { padding: 4px 12px 10px 68px; }
+@media (max-width: 560px) { .is-mrow > summary { flex-wrap: wrap; } .is-nums { margin-left: 64px; } .is-mbody { padding-left: 12px; } }
+.is-modlist .is-mrow { margin: 0; padding: 0; }
+.is-mrow > summary { padding: 4px 10px; }
+.is-mbody .is-tiers { max-width: 560px; }
+.is-filters.with-affix { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.is-filters.with-affix .grow { grid-column: span 2; }
+.is-tiers th, .is-tiers td { text-align: left; }
+/* Rune card: what it fuses into */
+.is-upgrade { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.is-upgrade b { color: var(--text); }
+.is-upgrade b.gold { color: var(--dashboard-gold); }
+:root[data-theme="light"] .is-upgrade b.gold { color: #7a5a14; }
+.is-upgrade.end { color: var(--faint); }
+
+/* Grail tab (grail.js) */
+.gr-top { margin-bottom: 14px; }
+.gr-empty { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; border: 1px dashed color-mix(in srgb, var(--dashboard-gold) 50%, var(--line)); color: var(--muted); }
+.gr-bar { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(200px, 3fr); gap: 10px; align-items: end; }
+.gr-bar .field { margin: 0; }
+.gr-bar select, .gr-bar input { width: 100%; }
+@media (max-width: 560px) { .gr-bar { grid-template-columns: 1fr 1fr; } .gr-bar .grow { grid-column: 1 / -1; } }
+.gr-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 12px; }
+.gr-stat { position: relative; padding: 8px 10px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); overflow: hidden; }
+.gr-stat span { display: block; font-size: 11px; color: var(--muted); }
+.gr-stat b { font-size: 20px; color: var(--dashboard-gold); font-variant-numeric: tabular-nums; }
+.gr-stat b small { font-size: 12px; color: var(--faint); font-weight: 400; }
+.gr-stat i { position: absolute; left: 0; bottom: 0; height: 3px; width: var(--p); background: var(--dashboard-gold); }
+:root[data-theme="light"] .gr-stat b { color: #7a5a14; }
+.gr-src { margin: 8px 0 0; }
+.gr-h { margin: 18px 0 8px; font: 600 20px/1.2 Georgia, "Times New Roman", serif; color: var(--dashboard-gold); }
+:root[data-theme="light"] .gr-h { color: #7a5a14; }
+.gr-sec { margin: 0 0 10px; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.gr-sec > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--line); }
+.gr-sec:not([open]) > summary { border-bottom: 0; }
+.gr-sec > summary span { font-weight: 600; text-transform: uppercase; letter-spacing: .06em; font-size: 13px; }
+.gr-sec > summary b { color: var(--dashboard-gold); font-size: 13px; }
+:root[data-theme="light"] .gr-sec > summary b { color: #7a5a14; }
+.gr-sec > summary small { color: var(--faint); font-size: 12px; }
+.gr-sec > .hint { margin: 10px 12px; }
+.gr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 6px; padding: 10px; }
+.gr-tile { position: relative; display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); min-width: 0; }
+.gr-tile .is-ico { width: 38px; height: 38px; }
+.gr-tile .is-ico svg { width: 28px; height: 28px; }
+.gr-tile:not(.have):not(.held):not(.craft) .is-ico { filter: grayscale(1); opacity: .45; }
+.gr-tile:not(.have):not(.held):not(.craft) .gr-body b { color: var(--muted); }
+.gr-tile.have, .gr-tile.held { border-color: color-mix(in srgb, #e0896f 60%, var(--line)); background: color-mix(in srgb, #e0896f 9%, var(--panel-2)); }
+.gr-tile.craft { border-color: color-mix(in srgb, var(--good) 55%, var(--line)); }
+.gr-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.gr-body b { font-size: 13px; overflow-wrap: anywhere; }
+.gr-tile.have .gr-body b { color: #e0896f; }
+.gr-tile.word.held .gr-body b { color: var(--dashboard-gold); }
+:root[data-theme="light"] .gr-tile.have .gr-body b { color: #b2522f; }
+.gr-body small { font-size: 11px; color: var(--faint); }
+.gr-body .gr-where { color: var(--muted); }
+.gr-check { flex: none; align-self: flex-start; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff; background: #d0703f; }
+.gr-craft { flex: none; align-self: flex-start; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 2px 6px; border-radius: 4px; color: var(--good); background: color-mix(in srgb, var(--good) 16%, transparent); }
+/* Item Search: owned / craftable */
+.is-badge.craft { border-color: color-mix(in srgb, var(--good) 55%, var(--line)); color: var(--good); }
+.is-badge.held { border-color: color-mix(in srgb, #e0896f 55%, var(--line)); color: #e0896f; }
+:root[data-theme="light"] .is-badge.held { color: #b2522f; }
+.is-have { font-size: 11px; font-weight: 700; padding: 0 5px; border-radius: 999px; color: var(--good); background: color-mix(in srgb, var(--good) 15%, transparent); }
+.is-have.none { color: var(--faint); background: var(--panel-2); }
+
 </style>
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
@@ -1371,6 +1549,12 @@ body.creator-page .view-bar { display: none; }
       </button>
       <button class="tab" type="button" role="tab" data-tab="compare" aria-selected="false" aria-label="Item Compare">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4"/></svg><span>Item Compare</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="items" aria-selected="false" aria-label="Item Search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13M15.2 15.2 21 21"/></svg><span>Item Search</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="grail" aria-selected="false" aria-label="Grail">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v4a5 5 0 0 1-10 0zM7 5H4v1a3 3 0 0 0 3 3M17 5h3v1a3 3 0 0 1-3 3M12 12v5M8 21h8M9.5 17h5l.5 4h-6z"/></svg><span>Grail</span>
       </button>
       <button class="tab" type="button" role="tab" data-tab="supports" aria-selected="false" aria-label="Support Gem Simulator">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 9l-8 12L4 9zM4 9h16M9 9l3 12 3-12"/></svg><span>Support Gem Simulator</span>
@@ -1621,6 +1805,8 @@ body.creator-page .view-bar { display: none; }
     <section class="build-pane compare-pane creator-pane" id="creatorPane" hidden></section>
     <section class="build-pane compare-pane fossil-pane" id="fossilPane" hidden></section>
     <section class="build-pane compare-pane brewery-pane" id="breweryPane" hidden></section>
+    <section class="build-pane compare-pane itemsearch-pane" id="itemSearchPane" hidden></section>
+    <section class="build-pane compare-pane grail-pane" id="grailPane" hidden></section>
     <section class="build-pane compare-pane faq-pane" id="faqPane" hidden>
       <nav class="faq-nav" id="faqNav" role="group" aria-label="Game mechanics sections"></nav>
       <div class="build-pane faq-sec" id="scalingPane" hidden></div>
@@ -1733,7 +1919,8 @@ Fan-made tool, not affiliated with the developers of Broken Oath. Game data come
 <script>
 window.GD = null;
 window.CHARS = [];
-window.SITE_VERSION = {"v":134,"at":"2026-11-09T11:44:56.512Z"};
+window.GRAIL_SAVES = [];
+window.SITE_VERSION = {"v":135,"at":"2026-11-09T12:47:54.668Z"};
 window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"aegis_N":0,"aegis_N_D":1,"aegis_S":2,"aegis_S_D":3,"affliction_N":4,"affliction_N_D":5,"affliction_S":6,"affliction_S_D":7,"anvil_oath_N":8,"anvil_oath_N_D":9,"anvil_oath_S":10,"anvil_oath_S_D":11,"area_N":12,"area_N_D":13,"area_S":14,"area_S_D":15,"armour_N":16,"armour_N_D":17,"armour_S":18,"armour_S_D":19,"artillery_N":20,"artillery_N_D":21,"artillery_S":22,"artillery_S_D":23,"attack_N":24,"attack_N_D":25,"attack_S":26,"attack_S_D":27,"blightword_N":28,"blightword_N_D":29,"bone_N":30,"bone_N_D":31,"bone_S":32,"bone_S_D":33,"bone_choir_N":34,"bone_choir_N_D":35,"bone_choir_S":36,"bone_choir_S_D":37,"bow_N":38,"bow_N_D":39,"bow_S":40,"bow_S_D":41,"bulwark_N":42,"bulwark_N_D":43,"bulwark_S":44,"bulwark_S_D":45,"carrion_hunt_N":46,"carrion_hunt_N_D":47,"carrion_hunt_S":48,"carrion_hunt_S_D":49,"chain_N":50,"chain_N_D":51,"chain_S":52,"chain_S_D":53,"channel_N":54,"channel_N_D":55,"channel_S":56,"channel_S_D":57,"cleave_N":58,"cleave_N_D":59,"cleave_S":60,"cleave_S_D":61,"cold_N":62,"cold_N_D":63,"cold_S":64,"cold_S_D":65,"conduit_N":66,"conduit_N_D":67,"conduit_S":68,"conduit_S_D":69,"crest_Mage":70,"crest_Mage_D":71,"crest_Necromancer":72,"crest_Necromancer_D":73,"crest_Paladin":74,"crest_Paladin_D":75,"crest_Ranger":76,"crest_Ranger_D":77,"crest_Samurai":78,"crest_Samurai_D":79,"crest_Warrior":80,"crest_Warrior_D":81,"crit_N":82,"crit_N_D":83,"crit_S":84,"crit_S_D":85,"crusade_N":86,"crusade_N_D":87,"crusade_S":88,"crusade_S_D":89,"dawn_N":90,"dawn_N_D":91,"dawn_S":92,"dawn_S_D":93,"dawnstorm_N":94,"dawnstorm_N_D":95,"dawnstorm_S":96,"dawnstorm_S_D":97,"dawnsworn_N":98,"dawnsworn_N_D":99,"deadeye_N":100,"deadeye_N_D":101,"deadeye_S":102,"deadeye_S_D":103,"deathknell_N":104,"deathknell_N_D":105,"deathknell_S":106,"deathknell_S_D":107,"edge_N":108,"edge_N_D":109,"edge_S":110,"edge_S_D":111,"elemental_N":112,"elemental_N_D":113,"elemental_S":114,"elemental_S_D":115,"energy_shield_N":116,"energy_shield_N_D":117,"energy_shield_S":118,"energy_shield_S_D":119,"evasion_N":120,"evasion_N_D":121,"evasion_S":122,"evasion_S_D":123,"faith_N":124,"faith_N_D":125,"faith_S":126,"faith_S_D":127,"falling_leaf_N":128,"falling_leaf_N_D":129,"falling_leaf_S":130,"falling_leaf_S_D":131,"fire_N":132,"fire_N_D":133,"fire_S":134,"fire_S_D":135,"fury_N":136,"fury_N_D":137,"fury_S":138,"fury_S_D":139,"grave_N":140,"grave_N_D":141,"grave_S":142,"grave_S_D":143,"holy_N":144,"holy_N_D":145,"holy_S":146,"holy_S_D":147,"iron_tempest_N":148,"iron_tempest_N_D":149,"iron_tempest_S":150,"iron_tempest_S_D":151,"ki_N":152,"ki_N_D":153,"ki_S":154,"ki_S_D":155,"ks_aegis_rebuke":156,"ks_aegis_rebuke_D":157,"ks_ancestral_host":158,"ks_ancestral_host_D":159,"ks_blood_magic":160,"ks_blood_magic_D":161,"ks_cascade_of_ruin":162,"ks_cascade_of_ruin_D":163,"ks_chain_reaction":164,"ks_chain_reaction_D":165,"ks_choir_of_bones":166,"ks_choir_of_bones_D":167,"ks_comet_step":168,"ks_comet_step_D":169,"ks_dawnstorm_covenant":170,"ks_dawnstorm_covenant_D":171,"ks_eagle_eye":172,"ks_eagle_eye_D":173,"ks_earthbreaker_stride":174,"ks_earthbreaker_stride_D":175,"ks_elemental_overload":176,"ks_elemental_overload_D":177,"ks_forked_sky":178,"ks_forked_sky_D":179,"ks_glass_cannon":180,"ks_glass_cannon_D":181,"ks_hammer_of_judgement":182,"ks_hammer_of_judgement_D":183,"ks_hollow_covenant":184,"ks_hollow_covenant_D":185,"ks_iron_resolve":186,"ks_iron_resolve_D":187,"ks_lord_of_the_dead":188,"ks_lord_of_the_dead_D":189,"ks_oath_of_a_thousand_cuts":190,"ks_oath_of_a_thousand_cuts_D":191,"ks_oath_of_many_fires":192,"ks_oath_of_many_fires_D":193,"ks_oath_of_slow_ruin":194,"ks_oath_of_slow_ruin_D":195,"ks_oath_of_the_living_storm":196,"ks_oath_of_the_living_storm_D":197,"ks_oath_of_the_long_night":198,"ks_oath_of_the_long_night_D":199,"ks_oath_of_the_pyre":200,"ks_oath_of_the_pyre_D":201,"ks_oath_of_the_red_harvest":202,"ks_oath_of_the_red_harvest_D":203,"ks_oath_of_the_snare":204,"ks_oath_of_the_snare_D":205,"ks_oath_of_the_white_silence":206,"ks_oath_of_the_white_silence_D":207,"ks_one_breath":208,"ks_one_breath_D":209,"ks_pyre_covenant":210,"ks_pyre_covenant_D":211,"ks_r59_hold_k3":212,"ks_r59_hold_k3_D":213,"ks_r59_mountain_k3":214,"ks_r59_mountain_k3_D":215,"ks_r59_sure_strike_k3":216,"ks_r59_sure_strike_k3_D":217,"ks_r74_bone_sovereign":218,"ks_r74_bone_sovereign_D":219,"ks_radiant_crusade":220,"ks_radiant_crusade_D":221,"ks_rotting_gospel":222,"ks_rotting_gospel_D":223,"ks_sanctified":224,"ks_sanctified_D":225,"ks_siege_pact":226,"ks_siege_pact_D":227,"ks_spellblade":228,"ks_spellblade_D":229,"ks_tempest_vow":230,"ks_tempest_vow_D":231,"ks_the_hunting_dead":232,"ks_the_hunting_dead_D":233,"ks_thousand_hands":234,"ks_thousand_hands_D":235,"ks_twice_fallen_sky":236,"ks_twice_fallen_sky_D":237,"ks_unbroken_wall":238,"ks_unbroken_wall_D":239,"ks_wake_of_spells":240,"ks_wake_of_spells_D":241,"ks_way_of_the_blade":242,"ks_way_of_the_blade_D":243,"ks_wind_and_steel_oath":244,"ks_wind_and_steel_oath_D":245,"leech_N":246,"leech_N_D":247,"leech_S":248,"leech_S_D":249,"lichfire_N":250,"lichfire_N_D":251,"lichfire_S":252,"lichfire_S_D":253,"life_N":254,"life_N_D":255,"life_S":256,"life_S_D":257,"life_big_N":258,"life_big_N_D":259,"life_big_S":260,"life_big_S_D":261,"lightning_N":262,"lightning_N_D":263,"lightning_S":264,"lightning_S_D":265,"lingering_N":266,"lingering_N_D":267,"lingering_S":268,"lingering_S_D":269,"malediction_N":270,"malediction_N_D":271,"malediction_S":272,"malediction_S_D":273,"mana_N":274,"mana_N_D":275,"mana_S":276,"mana_S_D":277,"manasteal_N":278,"manasteal_N_D":279,"manasteal_S":280,"manasteal_S_D":281,"melee_N":282,"melee_N_D":283,"melee_S":284,"melee_S_D":285,"mirrorblade_N":286,"mirrorblade_N_D":287,"mirrorblade_S":288,"mirrorblade_S_D":289,"orbit_N":290,"orbit_N_D":291,"orbit_S":292,"orbit_S_D":293,"ossuary_N":294,"ossuary_N_D":295,"ossuary_S":296,"ossuary_S_D":297,"overcharge_N":298,"overcharge_N_D":299,"overcharge_S":300,"overcharge_S_D":301,"permafrost_N":302,"permafrost_N_D":303,"permafrost_S":304,"permafrost_S_D":305,"plague_quiver_N":306,"plague_quiver_N_D":307,"plague_quiver_S":308,"plague_quiver_S_D":309,"poison_N":310,"poison_N_D":311,"poison_S":312,"poison_S_D":313,"portrait_Mage":314,"portrait_Mage_D":315,"portrait_Necromancer":316,"portrait_Necromancer_D":317,"portrait_Paladin":318,"portrait_Paladin_D":319,"portrait_Ranger":320,"portrait_Ranger_D":321,"portrait_Samurai":322,"portrait_Samurai_D":323,"portrait_Warrior":324,"portrait_Warrior_D":325,"projectile_N":326,"projectile_N_D":327,"projectile_S":328,"projectile_S_D":329,"radiance_N":330,"radiance_N_D":331,"radiance_S":332,"radiance_S_D":333,"radiant_ward_N":334,"radiant_ward_N_D":335,"radiant_ward_S":336,"radiant_ward_S_D":337,"rain_N":338,"rain_N_D":339,"rain_S":340,"rain_S_D":341,"reaper_N":342,"reaper_N_D":343,"reaper_S":344,"reaper_S_D":345,"regrowth_N":346,"regrowth_N_D":347,"regrowth_S":348,"regrowth_S_D":349,"resist_N":350,"resist_N_D":351,"resist_S":352,"resist_S_D":353,"shatter_N":354,"shatter_N_D":355,"shatter_S":356,"shatter_S_D":357,"siege_N":358,"siege_N_D":359,"siege_S":360,"siege_S_D":361,"sigil_N":362,"sigil_N_D":363,"sigil_S":364,"sigil_S_D":365,"slam_N":366,"slam_N_D":367,"slam_S":368,"slam_S_D":369,"souls_N":370,"souls_N_D":371,"souls_S":372,"souls_S_D":373,"speed_N":374,"speed_N_D":375,"speed_S":376,"speed_S_D":377,"spell_N":378,"spell_N_D":379,"spell_S":380,"spell_S_D":381,"spell_crit_N":382,"spell_crit_N_D":383,"spell_crit_S":384,"spell_crit_S_D":385,"spellsword_N":386,"spellsword_N_D":387,"spellsword_S":388,"spellsword_S_D":389,"starfall_N":390,"starfall_N_D":391,"starfall_S":392,"starfall_S_D":393,"stillness_N":394,"stillness_N_D":395,"stillness_S":396,"stillness_S_D":397,"swift_N":398,"swift_N_D":399,"swift_S":400,"swift_S_D":401,"tether_N":402,"tether_N_D":403,"tether_S":404,"tether_S_D":405,"trap_N":406,"trap_N_D":407,"trap_S":408,"trap_S_D":409,"two_storms_N":410,"two_storms_N_D":411,"two_storms_S":412,"two_storms_S_D":413,"vigil_N":414,"vigil_N_D":415,"vigil_S":416,"vigil_S_D":417,"voidbound_N":418,"voidbound_N_D":419,"voidbound_S":420,"voidbound_S_D":421,"vowkeeper_N":422,"vowkeeper_N_D":423,"vowkeeper_S":424,"vowkeeper_S_D":425,"warcaller_N":426,"warcaller_N_D":427,"warcaller_S":428,"warcaller_S_D":429,"warpath_N":430,"warpath_N_D":431,"warpath_S":432,"warpath_S_D":433,"waygate_S":434,"waygate_S_D":435,"wellspring_N":436,"wellspring_N_D":437,"wellspring_S":438,"wellspring_S_D":439,"wind_and_steel_N":440,"wind_and_steel_N_D":441,"wind_and_steel_S":442,"wind_and_steel_S_D":443,"windstep_N":444,"windstep_N_D":445,"windstep_S":446,"windstep_S_D":447,"zeal_N":448,"zeal_N_D":449,"zeal_S":450,"zeal_S_D":451},"dragons":"icons/dragons.webp","dragonOrder":["Fire","Lightning","Cold","Arcane","Poison","Physical"]};
 </script>
 <script>
@@ -1750,7 +1937,7 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
     'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json', 'Gameplay/monster_affixes.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 19; // 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 22; // 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -1817,16 +2004,20 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
     for (const a of J('Items/affixes.json').affixes) affixes[a.Id.toLowerCase()] = Object.assign(pick(a, ['Id', 'Type', 'Group', 'Mod', 'BaseTags', 'ExcludeTags']), { Tiers: (a.Tiers || []).map(t => pick(t, ['ILvl', 'Min', 'Max', 'Min2', 'Max2', 'Name'])) });
 
     const uniques = {};
-    for (const u of J('Items/uniques.json').uniques) uniques[u.Id.toLowerCase()] = { Id: u.Id, Name: u.Name, BaseId: u.BaseId, Mods: u.Mods.map(m => pick(m, ['Mod', 'Text', 'Min', 'Max', 'Min2', 'Max2'])) };
+    for (const u of J('Items/uniques.json').uniques) uniques[u.Id.toLowerCase()] = Object.assign({ Id: u.Id, Name: u.Name, BaseId: u.BaseId, Mods: u.Mods.map(m => pick(m, ['Mod', 'Text', 'Min', 'Max', 'Min2', 'Max2'])) },
+      pick(u, ['Level', 'Flavour', 'DropWeight', 'Chase', 'Primal', 'Signature', 'Limited', 'Core', 'DwarvenSockets'])); // Level .. DwarvenSockets: Item Search and Grail tabs only (DwarvenSockets marks the Deep-forged)
 
     const bases = {};
-    for (const b of J('Items/item_bases.json').bases) bases[b.Id.toLowerCase()] = pick(b, ['Id', 'Name', 'Slot', 'Class', 'TypeName', 'Tags', 'Implicits', 'DamageMin', 'DamageMax', 'AttacksPerSecond', 'Crit', 'bTwoHanded', 'Weapon', 'Level', 'Armour', 'Evasion', 'EnergyShield', 'Block', 'Width', 'Height']); // defences: shown on items and compared, not used for damage (item_bases.json)
+    for (const b of J('Items/item_bases.json').bases) bases[b.Id.toLowerCase()] = pick(b, ['Id', 'Name', 'Slot', 'Class', 'TypeName', 'Tags', 'Implicits', 'DamageMin', 'DamageMax', 'AttacksPerSecond', 'Crit', 'bTwoHanded', 'Weapon', 'Level', 'Armour', 'Evasion', 'EnergyShield', 'Block', 'Width', 'Height', 'ReqStr', 'ReqDex', 'ReqInt', 'DropWeight']); // defences: shown on items and compared, not used for damage (item_bases.json)
 
     const runesFile = J('Items/runes.json');
     const runes = {};
-    for (const r of [...runesFile.runes, ...runesFile.jewels]) runes[r.Id.toLowerCase()] = pick(r, ['Id', 'Name', 'Weapon', 'Armour', 'Tier', 'Level']); // Tier, Level: shown in the Creator's rune search
+    for (const r of runesFile.runes) runes[r.Id.toLowerCase()] = Object.assign(pick(r, ['Id', 'Name', 'Weapon', 'Armour', 'Tier', 'Level', 'Lore', 'Glyph', 'Color', 'Next', 'Index']), { Kind: 'rune' }); // Tier, Level: shown in the Creator's rune search
+    for (const r of runesFile.jewels) runes[r.Id.toLowerCase()] = Object.assign(pick(r, ['Id', 'Name', 'Weapon', 'Armour', 'Tier', 'Level', 'Lore', 'Glyph', 'Color', 'Next', 'Index']), { Kind: 'jewel' }); // Lore, Glyph, Color, Kind: Item Search tab
     const runeSockets = (runesFile.Rules || {}).MaxSockets || {};
-    const runewords = J('Items/runewords.json').runewords.map(r => pick(r, ['Id', 'Name', 'Runes', 'Bases', 'Mods', 'PowerMods', 'Power2H', 'PowerBandILvl', 'PowerBandCount', 'PowerBandMods', 'Level', 'Sockets', 'Class']));
+    // Fusing (runes.json Rules, Item Search tab only): FuseCount of one rune + FuseGold[tier - 1] gold make its Next.
+    const runeFuse = { count: (runesFile.Rules || {}).FuseCount || 0, gold: (runesFile.Rules || {}).FuseGold || [] };
+    const runewords = J('Items/runewords.json').runewords.map(r => pick(r, ['Id', 'Name', 'Runes', 'Bases', 'Mods', 'PowerMods', 'Power2H', 'PowerBandILvl', 'PowerBandCount', 'PowerBandMods', 'Level', 'Sockets', 'Class', 'Flavour', 'Combo', 'Secret', 'Crowned'])); // Flavour .. Crowned: Item Search tab
 
     const dragonFile = J('Gameplay/dragonling.json');
     const asc = dragonFile.Tree.Ascendancy || {};
@@ -1876,7 +2067,9 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
     // Rupture Levels the Ward tier adds more resistance to that element (bosses.json Tiers 'ward').
     const B = J('Rifts/bosses.json');
     const guardians = {};
-    for (const gd of B.guardians || []) guardians[gd.Id] = { name: gd.Name, variants: (gd.Variants || []).map(v => ({ id: v.Id, name: v.Name, element: v.Element, resist: (v.Resist || {})[v.Element] || 0 })) };
+    for (const gd of B.guardians || []) guardians[gd.Id] = { name: gd.Name, variants: (gd.Variants || []).map(v => ({ id: v.Id, name: v.Name, element: v.Element, resist: (v.Resist || {})[v.Element] || 0 })),
+      // Drop lists (Grail tab, display only): SignatureUniques, and the ChaseUnique with its ChaseChance per kill.
+      sig: gd.SignatureUniques || [], chase: gd.ChaseUnique || '', chaseChance: gd.ChaseChance || 0 };
     const ward = (B.Tiers || []).filter(t => t.Id === 'ward').map(t => ({ fromRL: t.FromRL, gateFromRL: t.GateFromRL, resist: t.Resist })).sort((a, b) => a.fromRL - b.fromRL);
 
 
@@ -1934,7 +2127,7 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
       { skills, classes, supports, nodes, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, uniques, bases, runes, runeSockets, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, fights, deep, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds });
+        affixes, uniques, bases, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, fights, deep, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, SCHEMA };
@@ -5135,6 +5328,680 @@ window.BOBrewery = function (ctx) {
 
 </script>
 <script>
+// Item Search tab: every unique, Oathword, item base, item mod (affix), rune and jewel in the game data, with
+// filters (category, slot, type, tier, level range, text) and a sort (level low to high by default).
+// Display only: nothing here feeds the sim. Icons are generic line drawings per item type (ICONS below) until the
+// game's own item art can be used; runes and jewels draw their glyph from runes.json (Glyph, Color).
+// Filters are kept in this browser (bods:itemsearch).
+// app.js calls BOItemSearch(ctx) and gets back { render }.
+window.BOItemSearch = function (ctx) {
+  'use strict';
+  const { $, esc } = ctx;
+  const S = window.BOSim;
+  const lc = s => String(s || '').toLowerCase();
+  const fmt = n => String(Math.round(n * 100) / 100);
+  const PAGE = 60;
+  // What you own in the Grail tab's league (grail.js inventory): rune counts, Oathword items, empty bases. Null without it.
+  const owned = () => ctx.owned && ctx.owned() ? ctx.owned().inventory() : null;
+
+  // ---------- icons (24 x 24, drawn with lines; weapons lie diagonally like an inventory tile) ----------
+  const diag = d => '<g transform="rotate(45 12 12)">' + d + '</g>';
+  const P = d => '<path d="' + d + '"/>';
+  const ICONS = {
+    sword: diag(P('M12 1.5 13.6 4V15.5H10.4V4Z') + P('M7.5 15.5H16.5') + P('M12 15.5V20.5') + '<circle cx="12" cy="21.6" r="1.1"/>'),
+    sword2: diag(P('M12 -1 14 2V15H10V2Z') + P('M6.5 15H17.5M6.5 15V16.5M17.5 15V16.5') + P('M12 15V22') + '<circle cx="12" cy="23.4" r="1.3"/>'),
+    dagger: diag(P('M12 4.5 13.4 7V14.5H10.6V7Z') + P('M9 14.5H15') + P('M12 14.5V19') + '<circle cx="12" cy="20.2" r="1.1"/>'),
+    dual: '<g transform="rotate(40 12 12)">' + P('M12 1.5 13.3 4V14H10.7V4Z') + P('M9.2 14H14.8M12 14V18.5') + '</g><g transform="rotate(-40 12 12)">' + P('M12 1.5 13.3 4V14H10.7V4Z') + P('M9.2 14H14.8M12 14V18.5') + '</g>',
+    axe: diag(P('M12 3V22') + P('M12 5.5 16.5 3.5C19 6 19 11 16.5 13.5L12 11.5Z')),
+    axe2: diag(P('M12 1V23') + P('M12 4 16.8 2C19.6 5 19.6 11 16.8 14L12 12Z') + P('M12 4 7.2 2C4.4 5 4.4 11 7.2 14L12 12Z')),
+    mace: diag(P('M12 9.5V22') + '<circle cx="12" cy="6.2" r="3.4"/>' + P('M12 1.4V2.8M16.8 6.2H15.4M7.2 6.2H8.6M15.4 2.8 14.4 3.8M8.6 2.8 9.6 3.8')),
+    mace2: diag(P('M12 9.5V23.5') + P('M8.4 1.5H15.6V9.5H8.4Z') + P('M10.8 1.5V9.5M13.2 1.5V9.5') + P('M10 23.5H14')),
+    maceshield: P('M2.5 8.5H12V13.5C12 17.5 9.5 20.2 7.25 21.5 5 20.2 2.5 17.5 2.5 13.5Z') + P('M7.25 8.5V21.5') + P('M13.2 21 18.6 8.6') + '<circle cx="19.6" cy="6.2" r="2.6"/>',
+    scythe: P('M8 22.5C9.3 15.5 10.6 8.5 12.6 1.8') + P('M12.6 2.2C16.8 1.6 20.8 4.4 22.2 9 19.4 6.4 16.2 5.4 12 5.6Z') + P('M8 13.6H11.8'),
+    staff: P('M12 8.5V22.5') + '<circle cx="12" cy="5" r="2.3"/>' + P('M9 9C7.8 6.4 8.4 3 12 1.6 15.6 3 16.2 6.4 15 9') + P('M10.3 22.5H13.7'),
+    wand: diag(P('M11.2 8.5H12.8L12.5 22H11.5Z') + P('M12 1.5 14 5 12 8.5 10 5Z') + P('M9.6 9.8H14.4')),
+    claw: P('M8.6 15H15.4V21.5H8.6Z') + P('M9.4 15C8.4 10.2 7.6 6 5.4 2.6M12 15V2.2M14.6 15C15.6 10.2 16.4 6 18.6 2.6'),
+    fist: P('M5.5 9H18.5V13C18.5 17.4 16 20.5 12 20.5S5.5 17.4 5.5 13Z') + P('M9 9V12.2M12 9V12.2M15 9V12.2') + P('M7.5 9 7 5.6M12 9V5M16.5 9 17 5.6'),
+    bow: P('M8 1.8C17.4 5.8 17.4 18.2 8 22.2') + P('M8 1.8V22.2') + P('M3 12H18.6M16.2 9.8 19 12 16.2 14.2M4.6 10.4 3 12 4.6 13.6'),
+    quiver: P('M7.6 7.5H15.4L14.2 21.5H8.8Z') + P('M9.6 7.5V2.6M11.5 7.5V1.8M13.4 7.5V2.6') + P('M8.6 3.6 9.6 2.6 10.6 3.6M10.5 2.8 11.5 1.8 12.5 2.8M12.4 3.6 13.4 2.6 14.4 3.6') + P('M15.2 10 19.4 5.8') + P('M8.4 12.5H14.6'),
+    shield: P('M4 3.5H20V11C20 16.4 16.4 20 12 22.2 7.6 20 4 16.4 4 11Z') + P('M12 3.5V22.2M4 10H20'),
+    tome: P('M5 4.8C5 3.8 5.8 3 6.8 3H19V19H6.8C5.8 19 5 19.8 5 20.8Z') + P('M5 20.8C5 21.8 5.8 22.5 6.8 22.5H19V19') + '<circle cx="12.4" cy="11" r="3.2"/>' + P('M12.4 6.6V7.8M12.4 14.2V15.4'),
+    helm: P('M4.8 20.5V11.2C4.8 6.4 8 3 12 3S19.2 6.4 19.2 11.2V20.5H14.4V13.6H9.6V20.5Z') + P('M12 13.6V19.2') + P('M4.8 11.2H19.2'),
+    chest: P('M8 3 4.4 5.4 2.8 11 5.4 12.2 6.6 9.2V21H17.4V9.2L18.6 12.2 21.2 11 19.6 5.4 16 3C15 5 13.6 6 12 6S9 5 8 3Z') + P('M8.6 13H15.4M8.6 16.5H15.4'),
+    gloves: P('M7.2 21.5V12.4L5.7 8.2C5.4 7.2 6.8 6.6 7.3 7.6L8.9 10.6V4.6C8.9 3.4 10.6 3.4 10.6 4.6V9.8 3.6C10.6 2.4 12.3 2.4 12.3 3.6V9.8 4.2C12.3 3 14 3 14 4.2V10.2 5.6C14 4.5 15.7 4.5 15.7 5.6V13.4C15.7 16.4 15 18.6 14.6 21.5Z') + P('M6.8 18.3H15.2'),
+    boots: P('M6.8 2.8H13V13L18.8 15.4C20.4 16.1 21.2 17.3 21.2 18.6V20.6H6.8Z') + P('M6.8 6.4H13') + P('M6.8 20.6H21.2'),
+    ring: '<circle cx="12" cy="14.2" r="6.6"/><circle cx="12" cy="14.2" r="4.2"/>' + P('M9.4 6.2 12 2.8 14.6 6.2 12 8.4Z'),
+    amulet: P('M4.6 2.6C5.8 8.6 8.8 11.8 12 12.8 15.2 11.8 18.2 8.6 19.4 2.6') + P('M12 12.8 15.6 16.9 12 22 8.4 16.9Z') + P('M8.4 16.9H15.6'),
+    belt: P('M1.8 9.2H22.2V14.8H1.8Z') + P('M9.2 7.4H14.8V16.6H9.2Z') + P('M12 12H17.2'),
+    idol: '<circle cx="12" cy="5.4" r="2.7"/>' + P('M8 20.6C8 15 9.2 10.6 12 9.4 14.8 10.6 16 15 16 20.6Z') + P('M6.2 20.6H17.8') + P('M10 14.2H14'),
+    dwarven: P('M12 2.2 20.2 6.8V17.2L12 21.8 3.8 17.2V6.8Z') + P('M9.2 7.6V16.4M9.2 12 14.8 7.8M9.2 12 14.8 16.2'),
+    mod: P('M7.4 3H17.6C18.8 3 19.6 3.9 19.6 5V6.6H17') + P('M7.4 3C6.2 3 5.2 3.9 5.2 5V19C5.2 20.2 6.2 21 7.4 21H15.2C16.3 21 17 20.2 17 19V5.6') + P('M8.2 8.2H14.2M8.2 11.6H14.2M8.2 15H12.4'),
+    oathword: P('M5 21.5V9C5 5.2 8.2 2.6 12 2.6S19 5.2 19 9V21.5Z') + P('M9 8.8V16.6M12 7.8V17.6M15 8.8V16.6') + P('M9 11.6 12 9.6M12 13.4 15 11.4') + P('M3.6 21.5H20.4'),
+    rune: P('M7 3H17C18.9 3 20 4.6 20 6.6V17.2C20 19.6 18.2 21 15.4 21H8.6C5.8 21 4 19.6 4 17.2V6.6C4 4.6 5.1 3 7 3Z'),
+    jewel: P('M7 4H17L21 9.2 12 21 3 9.2Z') + P('M3 9.2H21M7 4 9.6 9.2 12 21 14.4 9.2 17 4M9.6 9.2 12 4 14.4 9.2')
+  };
+  const ICON_NAMES = {
+    sword: 'One-Handed Sword', sword2: 'Two-Handed Sword', dagger: 'Dagger', dual: 'Dual Blades', axe: 'One-Handed Axe', axe2: 'Two-Handed Axe',
+    mace: 'One-Handed Mace', mace2: 'Two-Handed Mace', maceshield: 'Mace and Shield', scythe: 'Scythe', staff: 'Staff', wand: 'Wand', claw: 'Claw',
+    fist: 'Fist Weapon', bow: 'Bow', quiver: 'Quiver', shield: 'Shield', tome: 'Tome', helm: 'Helm', chest: 'Chest', gloves: 'Gloves', boots: 'Boots',
+    ring: 'Ring', amulet: 'Amulet', belt: 'Belt', idol: 'Idol', dwarven: 'Dwarven Rune', mod: 'Item mod', oathword: 'Oathword', rune: 'Rune', jewel: 'Jewel'
+  };
+  const sprite = () => '<svg class="is-sprite" aria-hidden="true" width="0" height="0">' + Object.entries(ICONS).map(([k, d]) => '<symbol id="is-i-' + k + '" viewBox="0 0 24 24">' + d + '</symbol>').join('') + '</svg>';
+  const icon = (key, cls, style) => '<span class="is-ico ' + (cls || '') + '"' + (style ? ' style="' + style + '"' : '') + ' title="' + esc(ICON_NAMES[key] || '') + '"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#is-i-' + key + '"/></svg></span>';
+  // A rune's glyph (runes.json Glyph: strokes "x,y,x,y..." in a unit square, split by "|") on its stone; a jewel's
+  // Glyph is its gem outline, filled with its colour.
+  const rgb = c => c && c.R != null ? 'rgb(' + [c.R, c.G, c.B].map(v => Math.round(Math.max(0, Math.min(1, v)) * 255)).join(',') + ')' : '';
+  function glyphIcon(r) {
+    const col = rgb(r.Color) || 'currentColor';
+    const strokes = String(r.Glyph || '').split('|').map(s => s.split(',').map(Number)).filter(a => a.length >= 4 && a.every(isFinite));
+    if (r.Kind === 'jewel') {
+      const pts = (strokes[0] || []).reduce((o, v, i) => (i % 2 ? o[o.length - 1].push(2 + v * 20) : o.push([2 + v * 20]), o), []);
+      if (pts.length < 3) return icon('jewel', 'jewel', '--ic:' + col);
+      return '<span class="is-ico jewel" style="--ic:' + col + '" title="Jewel"><svg viewBox="0 0 24 24" aria-hidden="true"><polygon class="is-gem" points="' + pts.map(p => p.join(',')).join(' ') + '"/>' + '</svg></span>';
+    }
+    const lines = strokes.map(a => '<polyline class="glyph" points="' + a.reduce((o, v, i) => o + (i % 2 ? ',' + (6.5 + v * 11).toFixed(2) + ' ' : (7.5 + v * 9).toFixed(2)), '').trim() + '"/>').join('');
+    return '<span class="is-ico rune" style="--ic:' + col + '" title="Rune"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#is-i-rune"/>' + lines + '</svg></span>';
+  }
+
+  // ---------- how the game data reads ----------
+  const SLOT_ORDER = ['Weapon', 'Off-hand', 'Helm', 'Chest', 'Gloves', 'Boots', 'Belt', 'Amulet', 'Ring', 'Idol', 'Dwarven Rune'];
+  const slotName = s => ({ MainHand: 'Weapon', OffHand: 'Off-hand', DwarvenRune: 'Dwarven Rune' })[s] || s;
+  const DEF = [['Armour', 'Armour'], ['Evasion', 'Evasion'], ['EnergyShield', 'Energy Shield']];
+  function baseType(b) {
+    if (b.Slot === 'MainHand' || b.Slot === 'OffHand') return b.TypeName || b.Class;
+    if (['Helm', 'Chest', 'Gloves', 'Boots'].includes(b.Slot)) return DEF.filter(([k]) => b[k]).map(([, n]) => n).join(' / ') || b.Slot;
+    if (b.Slot === 'Idol') return String(b.TypeName || 'Idol').replace(/\s+/g, ' ');
+    return slotName(b.Slot);
+  }
+  const CLASS_ICON = { Bow: 'bow', DualBlades: 'dual', MaceShield: 'maceshield', Scythe: 'scythe', Staff: 'staff', OneHandSword: 'sword', OneHandAxe: 'axe',
+    OneHandMace: 'mace', Dagger: 'dagger', Claw: 'claw', Fist: 'fist', Wand: 'wand', Quiver: 'quiver', Shield: 'shield', Tome: 'tome', Chest: 'chest', Helm: 'helm',
+    Gloves: 'gloves', Boots: 'boots', Ring: 'ring', Amulet: 'amulet', Belt: 'belt', Idol: 'idol', DwarvenRune: 'dwarven' };
+  function baseIcon(b) {
+    if (!b) return 'mod';
+    if (b.Class === 'Greatsword') return /axe/i.test(b.TypeName) ? 'axe2' : /mace/i.test(b.TypeName) ? 'mace2' : 'sword2';
+    return CLASS_ICON[b.Class] || CLASS_ICON[b.Slot] || 'mod';
+  }
+  const baseTags = b => [b.Class, b.Slot, ...(b.Tags || [])].filter(Boolean);
+  // Which bases an affix rolls on (affixes.json BaseTags / ExcludeTags against the base's tags, as the planner does).
+  const affixBases = (GD, a) => Object.values(GD.bases).filter(b => { const t = baseTags(b); return (a.BaseTags || []).some(x => t.includes(x)) && !(a.ExcludeTags || []).some(x => t.includes(x)); });
+  // Which bases an Oathword can be cut into (runewords.json Bases: a class, slot or tag).
+  const wordBases = (GD, w) => { const ok = new Set((w.Bases || []).map(lc)); return Object.values(GD.bases).filter(b => baseTags(b).some(t => ok.has(lc(t)))); };
+  const BASE_WORDS = { TwoHand: 'Two-handed weapons', OneHandSword: 'One-handed swords', OneHandAxe: 'One-handed axes', OneHandMace: 'One-handed maces', Weapon: 'Any weapon', Chest: 'Chests', Helm: 'Helms', Shield: 'Shields', Staff: 'Staves', Wand: 'Wands', Bow: 'Bows', Dagger: 'Daggers', Claw: 'Claws', Fist: 'Fist weapons', Scythe: 'Scythes' };
+  const uniqSorted = (arr, order) => [...new Set(arr)].sort((a, b) => order ? (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99) || a.localeCompare(b) : a.localeCompare(b));
+
+  // A mod line with its roll range: "(30-45)% increased ...". modText fills the template; a stand-in number marks where.
+  const MARK = 987654, MARK2 = 876543;
+  const rng = (a, b) => a == null ? '' : b == null || a === b ? fmt(a) : '(' + fmt(a) + '–' + fmt(b) + ')';
+  function rangeText(GD, m, a, b, a2, b2) {
+    const base = { stat: m.Stat, mode: m.Mode, tags: m.Tags || [] };
+    if (a == null) { a = b = m.Value || 0; }
+    if (a2 == null) { a2 = b2 = m.Value2 || 0; }
+    if (a === b && a2 === b2) return S.modText(GD, Object.assign(base, { v: a, v2: a2 })).replace(/\+-/g, '-');
+    return S.modText(GD, Object.assign(base, { v: MARK, v2: MARK2 })).split(String(MARK)).join(rng(a, b)).split(String(MARK2)).join(rng(a2, b2)).replace(/\+-/g, '-');
+  }
+  const plain = (GD, m) => rangeText(GD, m);
+  function uniqueLine(GD, um) {
+    if (um.Text) return String(um.Text).replace(/\{(0|v)\}/g, rng(um.Min, um.Max)).replace(/\{1\}/g, rng(um.Min2, um.Max2));
+    return rangeText(GD, um.Mod, um.Min, um.Max, um.Min2, um.Max2);
+  }
+
+  // ---------- the list (built once per game data) ----------
+  let cacheFor = null, ALL = [];
+  function entries() {
+    const GD = ctx.gd();
+    if (!GD || cacheFor === GD) return ALL;
+    cacheFor = GD; ALL = [];
+    const bases = Object.values(GD.bases || {});
+    // Base tier: its place among bases of the same type, by level (T1 = the first one you find). Core Touched and
+    // Gnome-made bases are their own group.
+    const special = b => (b.Tags || []).includes('CoreTouched') ? 'Core Touched' : (b.Tags || []).includes('GnomeMade') ? 'Gnome-made' : '';
+    const groups = {};
+    for (const b of bases) if (!special(b)) (groups[b.Slot + '|' + baseType(b)] = groups[b.Slot + '|' + baseType(b)] || []).push(b);
+    const baseTier = {};
+    for (const list of Object.values(groups)) list.sort((x, y) => (x.Level || 0) - (y.Level || 0) || x.Name.localeCompare(y.Name)).forEach((b, i) => { baseTier[b.Id] = i + 1; });
+
+    for (const b of bases) {
+      const sp = special(b), t = baseTier[b.Id];
+      ALL.push({ cat: 'base', id: b.Id, name: b.Name, level: b.Level || 1, slots: [slotName(b.Slot)], types: [baseType(b)],
+        tiers: [sp || 'T' + t], tierSort: sp ? 100 : t, icon: baseIcon(b), b,
+        text: [b.Name, baseType(b), slotName(b.Slot), ...(b.Implicits || []).map(m => plain(GD, m))].join(' ') });
+    }
+    for (const u of Object.values(GD.uniques || {})) {
+      const b = GD.bases[lc(u.BaseId)];
+      const tier = u.Chase ? 'Chase' : u.Primal ? 'Primal' : u.Core ? 'Core' : u.Signature ? 'Signature' : 'Standard';
+      const lines = (u.Mods || []).map(m => uniqueLine(GD, m));
+      ALL.push({ cat: 'unique', id: u.Id, name: u.Name, level: u.Level || (b && b.Level) || 1, slots: b ? [slotName(b.Slot)] : [], types: b ? [baseType(b)] : [],
+        tiers: [tier], tierSort: ['Standard', 'Signature', 'Core', 'Primal', 'Chase'].indexOf(tier), icon: baseIcon(b), u, b, lines,
+        text: [u.Name, b && b.Name, b && baseType(b), ...lines, u.Flavour].join(' ') });
+    }
+    for (const w of GD.runewords || []) {
+      const bs = wordBases(GD, w);
+      const tier = w.Crowned ? 'Crowned' : w.Secret ? 'Secret' : w.Combo ? 'Two-class' : 'Standard';
+      ALL.push({ cat: 'oathword', id: w.Id, name: w.Name, level: w.Level || 1, slots: uniqSorted(bs.map(b => slotName(b.Slot)), SLOT_ORDER), types: uniqSorted(bs.map(baseType)),
+        tiers: [tier], tierSort: ['Standard', 'Two-class', 'Secret', 'Crowned'].indexOf(tier), icon: 'oathword', w, secret: !!w.Secret,
+        text: [w.Name, w.Class, ...(w.Combo || []), ...(w.Mods || []).map(mm => plain(GD, mm.Mod)), ...(w.PowerMods || []).map(mm => plain(GD, mm.Mod)), w.Flavour].join(' '),
+        runeText: (w.Runes || []).map(r => (GD.runes[lc(r)] || {}).Name || r).join(' ') });
+    }
+    for (const a of Object.values(GD.affixes || {})) {
+      const tiers = a.Tiers || []; if (!tiers.length) continue;
+      const bs = affixBases(GD, a);
+      const lo = tiers[tiers.length - 1], hi = tiers[0];
+      const line = rangeText(GD, a.Mod, Math.min(lo.Min, hi.Min), Math.max(lo.Max, hi.Max), lo.Min2 != null ? Math.min(lo.Min2, hi.Min2) : null, hi.Max2 != null ? Math.max(lo.Max2, hi.Max2) : null);
+      ALL.push({ cat: 'mod', id: a.Id, name: line, level: Math.min(...tiers.map(t => t.ILvl || 1)), slots: uniqSorted(bs.map(b => slotName(b.Slot)), SLOT_ORDER), types: uniqSorted(bs.map(baseType)),
+        tiers: tiers.map((_, i) => 'T' + (i + 1)), tierSort: 0, icon: 'mod', a, affixType: a.Type,
+        text: [line, a.Type, a.Group, ...tiers.map(t => t.Name)].join(' ') });
+    }
+    for (const r of Object.values(GD.runes || {})) {
+      const jewel = r.Kind === 'jewel' || /^jw_/.test(r.Id);
+      const lines = [...(r.Weapon || []).map(m => plain(GD, m)), ...(r.Armour || []).map(m => plain(GD, m))];
+      ALL.push({ cat: 'rune', id: r.Id, name: r.Name, level: r.Level || 1, slots: ['Weapon', 'Off-hand', 'Helm', 'Chest'], types: [jewel ? 'Jewel' : 'Rune'],
+        tiers: ['Tier ' + (r.Tier || 1)], tierSort: r.Tier || 1, icon: jewel ? 'jewel' : 'rune', r, jewel, text: [r.Name, jewel ? 'Jewel' : 'Rune', r.Lore, ...lines].join(' ') });
+    }
+    for (const e of ALL) e.text = lc(e.text);
+    return ALL;
+  }
+
+  // ---------- filters ----------
+  const CATS = [['unique', 'Uniques'], ['oathword', 'Oathwords'], ['base', 'Item bases'], ['mod', 'Item mods'], ['rune', 'Runes & jewels'], ['all', 'All']];
+  const CAT_NAME = { unique: 'Unique', oathword: 'Oathword', base: 'Item base', mod: 'Item mod', rune: 'Rune' };
+  // affix: Prefix / Suffix (Item mods only). sortBy: the sort picked in each category; sort is the current one.
+  const BLANK = { cat: 'unique', q: '', slot: '', type: '', tier: '', affix: '', min: '', max: '', sort: 'level', sortBy: {}, secrets: false, craft: false }; // craft: Oathwords you can make or hold
+  let F = Object.assign({}, BLANK, { sortBy: {} }), shown = PAGE;
+  try { const s = JSON.parse(localStorage.getItem('bods:itemsearch') || 'null'); if (s && typeof s === 'object') for (const k of Object.keys(BLANK)) if (s[k] != null && typeof s[k] === typeof BLANK[k]) F[k] = s[k]; } catch (e) { /* storage off */ }
+  // Runes & jewels open on the upgrade path, the rest on level; a sort picked in a category stays with it.
+  const sortFor = cat => F.sortBy[cat] || (cat === 'rune' ? 'path' : 'level');
+  F.sort = sortFor(F.cat);
+  const keep = () => { try { localStorage.setItem('bods:itemsearch', JSON.stringify(F)); } catch (e) { /* storage off */ } };
+
+  // The level an entry sorts and filters by: a mod's level is the item level its lowest tier (or the picked tier) needs.
+  const levelOf = e => e.cat === 'mod' && F.tier && e.tiers.includes(F.tier) ? e.a.Tiers[+F.tier.slice(1) - 1].ILvl : e.level;
+  function pick(stage) {
+    const words = lc(F.q).split(/\s+/).filter(Boolean);
+    const min = F.min === '' ? -Infinity : +F.min, max = F.max === '' ? Infinity : +F.max;
+    return entries().filter(e => {
+      if (F.cat !== 'all' && e.cat !== F.cat) return false;
+      if (stage === 'slot') return true;
+      if (F.slot && !e.slots.includes(F.slot)) return false;
+      if (stage === 'type') return true;
+      if (F.type && !e.types.includes(F.type)) return false;
+      if (stage === 'tier') return true;
+      if (F.tier && !e.tiers.includes(F.tier)) return false;
+      if (F.cat === 'mod' && F.affix && e.affixType !== F.affix) return false;
+      if (F.cat === 'oathword' && F.craft) { const inv = owned(); if (inv && inv.loaded) { const s = ctx.owned().wordStatus(e.w, inv); if (!s.held.length && !(s.craftable && (!e.secret || F.secrets))) return false; } }
+      const lv = levelOf(e); if (lv < min || lv > max) return false;
+      if (words.length) { const t = e.text + (e.runeText && (!e.secret || F.secrets) ? ' ' + lc(e.runeText) : ''); if (!words.every(w => t.includes(w))) return false; }
+      return true;
+    });
+  }
+  function sorted(list) {
+    const path = e => (e.jewel ? 1000 : 0) + (e.r && e.r.Index != null ? e.r.Index : e.level);
+    const by = { path: (a, b) => path(a) - path(b), affix: (a, b) => (a.affixType === 'Suffix') - (b.affixType === 'Suffix') || levelOf(a) - levelOf(b), level: (a, b) => levelOf(a) - levelOf(b), leveldesc: (a, b) => levelOf(b) - levelOf(a), name: () => 0,
+      cat: (a, b) => CATS.findIndex(c => c[0] === a.cat) - CATS.findIndex(c => c[0] === b.cat) || levelOf(a) - levelOf(b) }[F.sort] || (() => 0);
+    return list.slice().sort((a, b) => by(a, b) || a.name.localeCompare(b.name));
+  }
+
+  // ---------- cards ----------
+  const badge = (t, cls) => '<span class="is-badge ' + (cls || '') + '">' + esc(t) + '</span>';
+  const li = (t, cls) => '<li' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(t) + '</li>';
+  function baseStats(GD, b) {
+    const out = [];
+    if (b.DamageMin != null) out.push(['Damage', b.DamageMin + '–' + b.DamageMax]);
+    if (b.AttacksPerSecond) out.push(['Attacks per second', fmt(b.AttacksPerSecond)]);
+    if (b.Crit != null) out.push(['Critical strike chance', fmt(b.Crit) + '%']);
+    if (b.Armour) out.push(['Armour', b.Armour]);
+    if (b.Evasion) out.push(['Evasion', b.Evasion]);
+    if (b.EnergyShield) out.push(['Energy shield', b.EnergyShield]);
+    if (b.Block) out.push(['Block', b.Block + '%']);
+    const req = [['ReqStr', 'Str'], ['ReqDex', 'Dex'], ['ReqInt', 'Int']].filter(([k]) => b[k]).map(([k, n]) => b[k] + ' ' + n);
+    if (req.length) out.push(['Requires', req.join(', ')]);
+    if (b.Width) out.push(['Size', b.Width + ' × ' + b.Height]);
+    return out.length ? '<dl class="is-stats">' + out.map(([k, v]) => '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>').join('') + '</dl>' : '';
+  }
+  // "3 Fe + 600 gold upgrades into Ur" (runes.json: Next, Rules FuseCount and FuseGold by tier). Jewels have a Next
+  // but no fuse cost in the data, so only where they lead is shown.
+  function upgradeLine(GD, r) {
+    const next = r.Next && GD.runes[lc(r.Next)], F_ = GD.runeFuse || {};
+    if (!next) {
+      const from = Object.values(GD.runes).some(x => lc(x.Next) === lc(r.Id));
+      return '<p class="is-upgrade end">' + (from ? 'End of the upgrade path' : 'Does not upgrade') + '</p>';
+    }
+    const jewel = r.Kind === 'jewel', gold = jewel ? 0 : (F_.gold || [])[(r.Tier || 1) - 1] || 0, n = jewel ? 0 : F_.count || 0;
+    return '<p class="is-upgrade">' + (n ? '<b>' + n + ' ' + esc(r.Name) + '</b>' + (gold ? ' + <b class="gold">' + gold.toLocaleString('en-US') + ' gold</b>' : '') + ' upgrades into ' : 'Upgrades into ') +
+      '<span class="is-rune">' + glyphIcon(next) + '<b>' + esc(next.Name) + '</b></span></p>';
+  }
+  const implicits = (GD, b) => b && (b.Implicits || []).length ? '<ul class="is-lines implicit">' + b.Implicits.map(m => li(plain(GD, m))).join('') + '</ul>' : '';
+  function card(e) {
+    const GD = ctx.gd();
+    let ico, sub = '', body = '', badges = [];
+    if (e.cat === 'base') {
+      const b = e.b;
+      ico = icon(e.icon, 'base');
+      sub = e.types[0] + (e.types[0] !== e.slots[0] ? ' · ' + e.slots[0] : '') + (b.bTwoHanded ? ' · Two-handed' : '');
+      body = baseStats(GD, b) + implicits(GD, b);
+      badges.push(badge(e.tiers[0], 'tier'));
+      if (b.DropWeight === 0) badges.push(badge('Does not drop', 'muted'));
+    } else if (e.cat === 'unique') {
+      const u = e.u, b = e.b;
+      ico = icon(e.icon, 'unique');
+      sub = (b ? b.Name + ' · ' + baseType(b) : u.BaseId);
+      body = implicits(GD, b) + '<ul class="is-lines unique">' + e.lines.map(t => li(t)).join('') + '</ul>' + (u.Flavour ? '<p class="is-flavour">' + esc(u.Flavour) + '</p>' : '');
+      if (e.tiers[0] !== 'Standard') badges.push(badge(e.tiers[0], 'tier ' + lc(e.tiers[0])));
+      if (u.Limited) badges.push(badge('Limited', 'muted'));
+      if (u.DropWeight === 0) badges.push(badge('Does not drop', 'muted'));
+    } else if (e.cat === 'oathword') {
+      const w = e.w, hide = e.secret && !F.secrets;
+      ico = icon('oathword', 'oathword');
+      const inv = owned(), st = inv && inv.loaded ? ctx.owned().wordStatus(w, inv) : null;
+      const cls = (w.Combo && w.Combo.length ? w.Combo : [w.Class]).filter(Boolean).join(' + ');
+      sub = (w.Sockets || (w.Runes || []).length) + ' sockets' + (cls ? ' · ' + cls : '');
+      const runes = hide ? '<p class="is-runes hidden-recipe">Secret recipe. Tick <b>Show secret recipes</b> to see its runes.</p>'
+        : '<div class="is-runes">' + (w.Runes || []).map(id => { const r = GD.runes[lc(id)], n = inv && inv.loaded ? ' <small class="is-have' + ((inv.runes[lc(id)] || 0) ? '' : ' none') + '">' + (inv.runes[lc(id)] || 0) + '</small>' : ''; return (r ? '<span class="is-rune">' + glyphIcon(r) + esc(r.Name) : '<span class="is-rune">' + esc(id)) + n + '</span>'; }).join('<span class="is-plus">+</span>') + '</div>';
+      // Held / Craftable from your saves (grail.js): the runes in an allowed base, or enough of each rune.
+      if (st && st.held.length) badges.push(badge('Held: ' + st.held.map(h => h.where).join(', '), 'held'));
+      else if (st && st.craftable && !hide) badges.push(badge('Craftable' + (st.bases.length ? ' · ' + st.bases.length + ' empty base' + (st.bases.length > 1 ? 's' : '') + ' fit' : ''), 'craft'));
+      const into = (w.Bases || []).map(x => BASE_WORDS[x] || x).join(', ');
+      body = runes + (into ? '<p class="is-into">Cut into: ' + esc(into) + '</p>' : '') + '<ul class="is-lines oathword">' + (w.Mods || []).map(mm => li(plain(GD, mm.Mod))).join('') + '</ul>';
+      const lv = w.PowerBandILvl || [], cnt = w.PowerBandCount || [];
+      if ((w.PowerMods || []).length) {
+        const rows = [['Below item level ' + (lv[0] || '?'), w.PowerMods]];
+        let from = 0; lv.forEach((l, i) => { if (w.PowerBandMods && cnt[i]) rows.push(['Item level ' + l + '+', w.PowerBandMods.slice(from, from + cnt[i])]); from += cnt[i] || 0; });
+        body += '<details class="is-power"><summary>Power lines by item level' + (w.Power2H > 1 ? ' <small>(×' + w.Power2H + ' on two-handed)</small>' : '') + '</summary>' +
+          rows.map(([k, mods]) => '<div class="is-band"><b>' + esc(k) + '</b><ul class="is-lines oathword">' + mods.map(mm => li(plain(GD, mm.Mod))).join('') + '</ul></div>').join('') + '</details>';
+      }
+      if (w.Flavour) body += '<p class="is-flavour">' + esc(w.Flavour) + '</p>';
+      if (e.tiers[0] !== 'Standard') badges.push(badge(e.tiers[0], 'tier ' + lc(e.tiers[0]).replace(/\W/g, '')));
+    } else if (e.cat === 'mod') {
+      const a = e.a, on = F.tier && e.tiers.includes(F.tier) ? +F.tier.slice(1) - 1 : -1;
+      ico = icon('mod', lc(a.Type));
+      sub = a.Type;
+      body = '<p class="is-into">Rolls on: ' + esc(e.slots.join(', ') || 'nothing') + '</p>' +
+        '<table class="is-tiers"><thead><tr><th>Tier</th><th>Name</th><th>Item level</th><th>Roll</th></tr></thead><tbody>' +
+        a.Tiers.map((t, i) => '<tr' + (i === on ? ' class="on"' : '') + '><td>T' + (i + 1) + '</td><td>' + esc(t.Name || '') + '</td><td>' + (t.ILvl || 1) + '</td><td>' + rng(t.Min, t.Max) + (t.Min2 != null ? ' / ' + rng(t.Min2, t.Max2) : '') + '</td></tr>').join('') + '</tbody></table>';
+      badges.push(badge(a.Tiers.length + ' tiers', 'muted'));
+    } else {
+      const r = e.r;
+      ico = glyphIcon(r);
+      sub = 'Tier ' + (r.Tier || 1) + (r.Lore ? ' · ' + r.Lore.charAt(0).toUpperCase() + r.Lore.slice(1) : '');
+      body = '<div class="is-split"><div><b>In a weapon</b><ul class="is-lines rune">' + ((r.Weapon || []).map(m => li(plain(GD, m))).join('') || li('No effect', 'none')) + '</ul></div>' +
+        '<div><b>In armour</b><ul class="is-lines rune">' + ((r.Armour || []).map(m => li(plain(GD, m))).join('') || li('No effect', 'none')) + '</ul></div></div>' + upgradeLine(GD, r);
+      const inv = owned(), n = inv && inv.loaded ? inv.runes[lc(r.Id)] || 0 : null;
+      if (n != null) badges.push(badge(n ? 'You have ' + n + ' (' + inv.runeWhere[lc(r.Id)].join(', ') + ')' : 'You have none', n ? 'held' : 'muted'));
+    }
+    return '<article class="is-card cat-' + e.cat + '"><header>' + ico + '<div class="is-head"><b class="is-name">' + esc(e.name) + '</b><small>' + esc((e.cat === 'rune' ? (e.jewel ? 'Jewel' : 'Rune') : CAT_NAME[e.cat]) + ' · ' + sub) + '</small></div>' +
+      '<span class="is-lvl" title="' + (e.cat === 'mod' ? 'Item level the ' + (F.tier && e.tiers.includes(F.tier) ? F.tier : 'lowest') + ' tier needs' : 'Level') + '">' + (e.cat === 'mod' ? 'iLvl ' : 'Lvl ') + levelOf(e) + '</span></header>' +
+      body + (badges.length ? '<footer>' + badges.join('') + '</footer>' : '') + '</article>';
+  }
+
+  // Item mods as one row each (click to open the tier table): Prefix / Suffix, the line with its full roll range (or the
+  // picked tier's), its tags, where it rolls; on the right the tier count and the item levels it needs.
+  const TAG_CLS = { physical: 'phys', fire: 'fire', cold: 'cold', lightning: 'light', chaos: 'chaos', elemental: 'elem' };
+  function modRow(e) {
+    const GD = ctx.gd(), a = e.a, on = F.tier && e.tiers.includes(F.tier) ? +F.tier.slice(1) - 1 : -1, t = on >= 0 ? a.Tiers[on] : null;
+    const text = t ? rangeText(GD, a.Mod, t.Min, t.Max, t.Min2, t.Max2) : e.name;
+    const ilvls = a.Tiers.map(x => x.ILvl || 1), lo = Math.min(...ilvls), hi = Math.max(...ilvls);
+    const tags = (a.Mod.Tags || []).map(x => '<span class="is-tag ' + (TAG_CLS[lc(x)] || '') + '">' + esc(x) + '</span>').join('');
+    return '<details class="is-mrow ' + lc(a.Type) + '"><summary>' +
+      '<span class="is-aff ' + lc(a.Type) + '">' + esc(a.Type) + '</span>' +
+      '<span class="is-mtext"><span class="is-mline">' + esc(text) + '</span>' + tags + '<small class="is-mslots">' + esc(e.slots.join(', ')) + '</small></span>' +
+      '<span class="is-nums"><span class="n tiers" title="' + (t ? 'Tier ' + (on + 1) + ' of ' + a.Tiers.length : a.Tiers.length + ' tiers') + '">' + (t ? 'T' + (on + 1) : a.Tiers.length) + '</span>' +
+      '<span class="n ilvl" title="Item level ' + (t ? 'tier ' + (on + 1) + ' needs' : 'the lowest and highest tiers need') + '">' + (t ? t.ILvl || 1 : lo === hi ? lo : lo + '–' + hi) + '</span></span>' +
+      '</summary><div class="is-mbody"><p class="is-into">Rolls on: ' + esc(e.slots.join(', ') || 'nothing') + (e.types.length ? ' (' + esc(e.types.join(', ')) + ')' : '') + '</p>' +
+      '<table class="is-tiers"><thead><tr><th>Tier</th><th>Name</th><th>Item level</th><th>Roll</th></tr></thead><tbody>' +
+      a.Tiers.map((x, i) => '<tr' + (i === on ? ' class="on"' : '') + '><td>T' + (i + 1) + '</td><td>' + esc(x.Name || '') + '</td><td>' + (x.ILvl || 1) + '</td><td>' + rng(x.Min, x.Max) + (x.Min2 != null ? ' / ' + rng(x.Min2, x.Max2) : '') + '</td></tr>').join('') + '</tbody></table></div></details>';
+  }
+
+  // ---------- page ----------
+  const opt = (v, t, on) => '<option value="' + esc(v) + '"' + (on ? ' selected' : '') + '>' + esc(t) + '</option>';
+  const field = (label, ctl, cls) => '<label class="field' + (cls ? ' ' + cls : '') + '"><span>' + label + '</span>' + ctl + '</label>';
+  function controls() {
+    const all = entries();
+    const counts = {}; for (const e of all) counts[e.cat] = (counts[e.cat] || 0) + 1;
+    const slots = uniqSorted(pick('slot').flatMap(e => e.slots), SLOT_ORDER);
+    if (F.slot && !slots.includes(F.slot)) F.slot = '';
+    const types = uniqSorted(pick('type').flatMap(e => e.types));
+    if (F.type && !types.includes(F.type)) F.type = '';
+    const tierList = pick('tier'), tiers = [...new Set(tierList.flatMap(e => e.tiers))];
+    const tierRank = t => { const e = tierList.find(x => x.tiers.includes(t)); return /^T\d+$/.test(t) ? +t.slice(1) : /^Tier \d+$/.test(t) ? +t.slice(5) : e ? 50 + e.tierSort : 99; };
+    tiers.sort((a, b) => tierRank(a) - tierRank(b) || a.localeCompare(b));
+    const tierOk = F.cat !== 'all';
+    if (!tierOk || (F.tier && !tiers.includes(F.tier))) F.tier = '';
+    const mods = F.cat === 'mod';
+    if (!mods) F.affix = '';
+    const sorts = (F.cat === 'rune' ? [['path', 'Upgrade path']] : []).concat([['level', 'Level, low to high'], ['leveldesc', 'Level, high to low'], ['name', 'Name, A to Z']], mods ? [['affix', 'Prefixes, then suffixes']] : F.cat === 'all' ? [['cat', 'Category']] : []);
+    if (!sorts.some(s => s[0] === F.sort)) F.sort = 'level';
+    return '<div class="is-cats" role="group" aria-label="Category">' + CATS.map(([k, t]) => '<button type="button" class="is-cat' + (F.cat === k ? ' active' : '') + '" data-cat="' + k + '" aria-pressed="' + (F.cat === k) + '">' + esc(t) + ' <small>' + (k === 'all' ? all.length : counts[k] || 0) + '</small></button>').join('') + '</div>' +
+      '<div class="is-filters' + (mods ? ' with-affix' : '') + '">' +
+      field('Search', '<input type="text" id="isQ" enterkeyhint="search" placeholder="Name or mod text, e.g. crit, fire, life" value="' + esc(F.q) + '" autocomplete="off">', 'grow') +
+      field('Slot', '<select id="isSlot">' + opt('', 'Any slot', !F.slot) + slots.map(s => opt(s, s, F.slot === s)).join('') + '</select>') +
+      field('Type', '<select id="isType">' + opt('', 'Any type', !F.type) + types.map(s => opt(s, s, F.type === s)).join('') + '</select>') +
+      field('Tier', '<select id="isTier"' + (tierOk ? '' : ' disabled title="Pick a category first: each one has its own tiers"') + '>' + opt('', tierOk ? 'Any tier' : 'Pick a category', !F.tier) + (tierOk ? tiers.map(s => opt(s, s, F.tier === s)).join('') : '') + '</select>') +
+      (mods ? field('Prefix / suffix', '<select id="isAffix">' + opt('', 'Both', !F.affix) + opt('Prefix', 'Prefixes only', F.affix === 'Prefix') + opt('Suffix', 'Suffixes only', F.affix === 'Suffix') + '</select>') : '') +
+      field('Level', '<span class="is-range"><input type="number" id="isMin" min="0" max="200" placeholder="min" value="' + esc(F.min) + '"><span>–</span><input type="number" id="isMax" min="0" max="200" placeholder="max" value="' + esc(F.max) + '"></span>') +
+      field('Sort', '<select id="isSort">' + sorts.map(([k, t]) => opt(k, t, F.sort === k)).join('') + '</select>') +
+      '</div><div class="is-opts"><label class="check-row"><input type="checkbox" id="isSecrets"' + (F.secrets ? ' checked' : '') + '><span>Show secret recipes <span class="meta">Runes of the Oathwords the game hides behind riddles</span></span></label>' +
+      (F.cat === 'oathword' ? (owned() && owned().loaded ? '<label class="check-row"><input type="checkbox" id="isCraft"' + (F.craft ? ' checked' : '') + '><span>Craftable or held only <span class="meta">Runes from your ' + esc(ctx.owned().leagueName(owned().league)) + ' stash and bags</span></span></label>'
+        : '<span class="meta">Load your saves folder to see which Oathwords you can make.</span>') : '') +
+      '<button type="button" class="btn ghost" id="isReset">Clear filters</button></div>';
+  }
+  function results() {
+    const list = sorted(pick());
+    const head = '<p class="is-count">' + list.length + ' result' + (list.length === 1 ? '' : 's') + (F.cat === 'mod' && F.tier ? ' · item level shown for ' + F.tier : '') + '</p>';
+    if (!list.length) return head + '<div class="card"><p class="hint">Nothing matches. Clear a filter or try other words.</p></div>';
+    const n = F.cat === 'mod' ? shown * 3 : shown, page = list.slice(0, n);
+    let body;
+    if (F.cat !== 'mod') body = '<div class="is-grid">' + page.map(card).join('') + '</div>';
+    else if (F.sort !== 'affix') body = '<div class="is-modlist">' + page.map(modRow).join('') + '</div>';
+    else body = ['Prefix', 'Suffix'].map(t => { const g = page.filter(e => e.affixType === t); return g.length ? '<div class="is-modlist"><h3 class="is-modhead ' + lc(t) + '">' + t + 'es <small>' + list.filter(e => e.affixType === t).length + '</small></h3>' + g.map(modRow).join('') + '</div>' : ''; }).join('');
+    return head + body + (list.length > n ? '<div class="is-more"><button type="button" class="btn ghost" id="isMore">Show more (' + (list.length - n) + ' left)</button></div>' : '');
+  }
+  function render() {
+    const el = $('#itemSearchPane'); if (!el || el.hidden) return;
+    const GD = ctx.gd();
+    let h = sprite() + '<div class="cmp-intro"><div class="eyebrow">GAME DATA</div><h2>Item Search</h2><p>Every unique, Oathword, item base, item mod, rune and jewel in the current game data. Icons are placeholders by item type.</p></div>';
+    if (!GD || !GD.bases) { el.innerHTML = h + '<div class="card"><p class="hint">Game data is still loading.</p></div>'; return; }
+    entries();
+    h += '<div class="card is-top" id="isControls">' + controls() + '</div><div id="isResults">' + results() + '</div>';
+    el.innerHTML = h;
+  }
+  // Typing keeps focus: only the results (and the dependent selects) are redrawn.
+  function refresh(keepFocus) {
+    keep();
+    const c = $('#isControls'), r = $('#isResults'); if (!c || !r) return render();
+    if (!keepFocus) c.innerHTML = controls(); else controls();
+    r.innerHTML = results();
+  }
+  let timer = 0;
+  function bind() {
+    const el = $('#itemSearchPane'); if (!el || el.dataset.bound) return; el.dataset.bound = '1';
+    el.addEventListener('click', e => {
+      const c = e.target.closest('[data-cat]');
+      if (c) { F.cat = c.dataset.cat; F.tier = ''; F.type = ''; F.affix = ''; F.sort = sortFor(F.cat); shown = PAGE; return refresh(); }
+      if (e.target.closest('#isMore')) { shown += PAGE * 2; $('#isResults').innerHTML = results(); return; }
+      if (e.target.closest('#isReset')) { F = Object.assign({}, BLANK, { sort: F.sort, sortBy: F.sortBy, secrets: F.secrets }); shown = PAGE; refresh(); }
+    });
+    el.addEventListener('input', e => {
+      const t = e.target;
+      if (t.id === 'isQ') { F.q = t.value.slice(0, 80); shown = PAGE; clearTimeout(timer); timer = setTimeout(() => refresh(true), 120); }
+      else if (t.id === 'isMin' || t.id === 'isMax') { F[t.id === 'isMin' ? 'min' : 'max'] = t.value === '' ? '' : String(Math.max(0, Math.min(999, Math.round(+t.value || 0)))); shown = PAGE; clearTimeout(timer); timer = setTimeout(() => refresh(true), 200); }
+    });
+    el.addEventListener('change', e => {
+      const t = e.target, k = { isSlot: 'slot', isType: 'type', isTier: 'tier', isAffix: 'affix', isSort: 'sort' }[t.id];
+      if (k) { F[k] = t.value; if (k === 'sort') F.sortBy[F.cat] = t.value; shown = PAGE; return refresh(); }
+      if (t.id === 'isSecrets') { F.secrets = t.checked; refresh(); }
+      if (t.id === 'isCraft') { F.craft = t.checked; shown = PAGE; refresh(); }
+    });
+  }
+
+  // For the Grail tab: the same icons.
+  const forGrail = { sprite, uniqueIcon: u => icon(baseIcon(ctx.gd().bases[lc(u.BaseId)]), 'unique'), wordIcon: () => icon('oathword', 'oathword') };
+  return Object.assign({ render: () => { bind(); render(); } }, forGrail);
+};
+
+</script>
+<script>
+// Grail tab: which uniques you have found (the game's Collection), which Oathwords you hold or could make, and where
+// each one drops. Read only from your saves (in the browser, or by build.js for the local page); nothing is written.
+//
+// What the saves hold (read 9 Nov 2026):
+//   BO_Char_*.sav   Record.UniquesFound (ids), Record.Items (bag + gear: BaseID, Count, Sockets, Runes), Summary.League
+//   BO_Stash_<league>.sav   UniquesFound (ids), Tabs[].Items (same item shape). One stash per league.
+//   Runes and jewels are items with BaseID "rune_<rune id>" and a Count. No save lists found Oathwords, so the Oathword
+//   part shows the ones you hold now (the right runes, in order, in an allowed base) and the ones you have runes for.
+// The game's Collection groups (checked against its Reds and Chase pages, 9 Nov 2026: 35 + 10 + 31 + 48 = 124 reds,
+// 14 + 2 + 8 + 13 + 12 = 49 chase): Reds = regular uniques (not Dwarven Runes, not community_) plus the Primals;
+// Chase = Primals, Deep-forged (DwarvenSockets), Guardian chase reds (Chase), Core reds (Core), red Dwarven Runes.
+//
+// compact(save, file, savedAt) turns a parsed save into a small record (also used by build.js in Node).
+// app.js calls BOGrail(ctx) and gets back { render, setSources, addSources, clear, inventory, wordStatus, league }.
+(function (root) {
+  'use strict';
+  const lc = s => String(s || '').toLowerCase();
+
+  function compact(save, file, savedAt) {
+    const P = (save && save.props) || {};
+    const inv = items => {
+      const runes = {}, held = [], bases = [];
+      for (const it of items) {
+        const id = String(it.BaseID || '');
+        if (/^rune_/i.test(id)) { const r = lc(id.slice(5)); runes[r] = (runes[r] || 0) + (it.Count || 1); continue; }
+        const rs = (it.Runes || []).filter(Boolean);
+        if (rs.length) held.push({ b: id, r: rs.map(lc), e: it.EquippedSlot && it.EquippedSlot !== 'None' ? 1 : 0 });
+        else if (it.Sockets > 0) bases.push({ b: id, s: it.Sockets, q: it.Rarity || '' });
+      }
+      return { runes, held, bases };
+    };
+    if (P.Record && P.Record.Summary) {
+      const R = P.Record, S = R.Summary;
+      // Offline characters have no League; the account file calls them Standard and they share BO_Stash_Standard.
+      return Object.assign({ kind: 'char', key: file, name: S.Name || 'Character', league: S.League || 'Standard', savedAt, found: (R.UniquesFound || []).map(lc) }, inv(R.Items || []));
+    }
+    if (Array.isArray(P.Tabs) && P.League != null) {
+      return Object.assign({ kind: 'stash', key: file, name: 'Stash', league: P.League || '', savedAt, found: (P.UniquesFound || []).map(lc) }, inv(P.Tabs.flatMap(t => t.Items || [])));
+    }
+    return null;
+  }
+
+  // League ids are "<season>-<sc|hc>-<trade|ssf>" (wb1-hc-ssf); Standard (or none, on an offline character) is Offline.
+  const MODE = { 'sc-trade': 'Softcore Trade', 'hc-trade': 'Hardcore Trade', 'sc-ssf': 'SSF', 'hc-ssf': 'HCSSF' };
+  const ORDER = ['Offline', 'Softcore Trade', 'Hardcore Trade', 'SSF', 'HCSSF'];
+  function parseLeague(id) {
+    if (!id || lc(id) === 'standard') return { season: '', name: 'Offline' };
+    const m = /^(.+?)-(sc|hc)-(ssf|trade)$/i.exec(id);
+    return m ? { season: m[1], name: MODE[lc(m[2] + '-' + m[3])] } : { season: '', name: id };
+  }
+  // With its season always: "HCSSF (wb1)", "Offline" (the build summary).
+  const leagueLabel = id => { const p = parseLeague(id); return p.name + (p.season ? ' (' + p.season + ')' : ''); };
+
+  // Which save files hold Grail data: characters and the current stash of each league (not backups, not wiped leagues).
+  const isGrailFile = name => /^BO_(Char|Stash)_.*\.sav$/i.test(name) && !/_bak\.sav$/i.test(name) && !/_wiped/i.test(name);
+
+  function BOGrail(ctx) {
+    const { $, esc } = ctx;
+    const GD = () => ctx.gd();
+    const KEY = 'bods:grail', VIEW = 'bods:grailview';
+
+    // ---------- sources (one per save file) ----------
+    let SRC = [];
+    const baked = (window.GRAIL_SAVES || []).map(s => Object.assign({ baked: true }, s));
+    try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (Array.isArray(s)) SRC = s.filter(x => x && typeof x === 'object' && Array.isArray(x.found)); } catch (e) { /* storage off */ }
+    const all = () => { const keys = new Set(SRC.map(s => s.key)); return [...SRC, ...baked.filter(b => !keys.has(b.key))]; };
+    const keep = () => { try { localStorage.setItem(KEY, JSON.stringify(SRC)); } catch (e) { /* too big or storage off: kept for this visit */ } };
+    function setSources(list) { SRC = list.filter(Boolean); keep(); changed(); }
+    function addSources(list) { const keys = new Set(list.filter(Boolean).map(s => s.key)); SRC = [...list.filter(Boolean), ...SRC.filter(s => !keys.has(s.key))]; keep(); changed(); }
+    function clear() { SRC = []; keep(); changed(); }
+    function changed() { if (ctx.onChange) ctx.onChange(); const el = $('#grailPane'); if (el && !el.hidden) render(); }
+
+    // ---------- view state ----------
+    let V = { league: '', show: 'all', q: '' };
+    try { const s = JSON.parse(localStorage.getItem(VIEW) || 'null'); if (s && typeof s === 'object') for (const k of Object.keys(V)) if (typeof s[k] === 'string') V[k] = s[k]; } catch (e) { /* storage off */ }
+    const keepView = () => { try { localStorage.setItem(VIEW, JSON.stringify(V)); } catch (e) { /* storage off */ } };
+    // A season other than the newest save's keeps its tag ("HCSSF (eat)") so two seasons don't read the same.
+    function currentSeason() {
+      const s = all().filter(x => parseLeague(x.league).season).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')))[0];
+      return s ? parseLeague(s.league).season : '';
+    }
+    function leagueName(id) { const p = parseLeague(id), cur = currentSeason(); return p.name + (p.season && p.season !== cur ? ' (' + p.season + ')' : ''); }
+    const leagues = () => {
+      const cur = currentSeason(), rank = id => { const p = parseLeague(id); return (p.season && p.season !== cur ? 100 : 0) + (ORDER.indexOf(p.name) + 1 || 50); };
+      return [...new Set(all().map(s => s.league).filter(Boolean))].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+    };
+    // The league shown: the one picked, else the league of the character on screen, else the newest save's.
+    function league() {
+      const L = leagues(); if (!L.length) return '';
+      if (V.league && L.includes(V.league)) return V.league;
+      const ch = ctx.current && ctx.current();
+      const cl = ch && !ch.plan && !ch.fromCode ? ch.league || 'Standard' : '';
+      if (cl && L.includes(cl)) return cl;
+      return all().slice().sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')))[0].league || L[0];
+    }
+
+    // Everything in one league: found uniques, rune counts, Oathword items and empty socketed bases (with where they are).
+    let invCache = null;
+    function inventory(lg) {
+      lg = lg == null ? league() : lg;
+      const src = all().filter(s => s.league === lg);
+      const sig = lg + '|' + src.map(s => s.key + s.savedAt).join(',');
+      if (invCache && invCache.sig === sig) return invCache;
+      const found = new Set(), runes = {}, runeWhere = {}, held = [], bases = [];
+      for (const s of src) {
+        const where = s.kind === 'stash' ? 'stash' : s.name + "'s bag";
+        (s.found || []).forEach(id => found.add(lc(id)));
+        for (const [r, n] of Object.entries(s.runes || {})) { runes[r] = (runes[r] || 0) + n; (runeWhere[r] = runeWhere[r] || []).push(n + ' in ' + where); }
+        for (const h of s.held || []) held.push(Object.assign({ where: s.kind === 'stash' ? 'in the stash' : (h.e ? 'worn by ' : 'in the bag of ') + s.name }, h));
+        for (const b of s.bases || []) bases.push(Object.assign({ where: s.kind === 'stash' ? 'stash' : s.name }, b));
+      }
+      invCache = { sig, league: lg, sources: src, loaded: src.length > 0, found, runes, runeWhere, held, bases };
+      return invCache;
+    }
+
+    // ---------- the game's data ----------
+    const baseTags = b => [b.Class, b.Slot, ...(b.Tags || [])].filter(Boolean);
+    const wordFits = (w, baseId) => { const b = GD().bases[lc(baseId)]; if (!b) return false; const ok = new Set((w.Bases || []).map(lc)); return baseTags(b).some(t => ok.has(lc(t))); };
+    // An Oathword's state in a league: held (an item with its runes in order, in an allowed base), craftable (enough of
+    // each rune), and empty bases that fit it with as many sockets as it has runes.
+    function wordStatus(w, inv) {
+      inv = inv || inventory();
+      const rs = (w.Runes || []).map(lc), need = {};
+      rs.forEach(r => { need[r] = (need[r] || 0) + 1; });
+      const held = inv.held.filter(h => h.r.join(',') === rs.join(',') && wordFits(w, h.b));
+      const short = Object.entries(need).filter(([r, n]) => (inv.runes[r] || 0) < n).map(([r, n]) => ({ r, n: n - (inv.runes[r] || 0) }));
+      const bases = inv.bases.filter(b => b.s === rs.length && wordFits(w, b.b));
+      return { held, craftable: inv.loaded && !short.length, short, need, bases };
+    }
+
+    const SLOT_GROUP = { MainHand: 'Weapons', OffHand: 'Shields and off-hands', Helm: 'Armour', Chest: 'Armour', Gloves: 'Armour', Boots: 'Armour' };
+    const nice = s => String(s || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    function groups() {
+      const g = GD(), U = Object.values(g.uniques || {});
+      const slot = u => (g.bases[lc(u.BaseId)] || {}).Slot || '';
+      const kind = u => u.Primal ? 'primal' : u.DwarvenSockets ? 'deep' : u.Chase ? 'chase' : u.Core ? 'core' : 'plain';
+      const reds = U.filter(u => (kind(u) === 'plain' && slot(u) !== 'DwarvenRune' && !/^community_/.test(u.Id)) || u.Primal);
+      const redGroups = ['Weapons', 'Shields and off-hands', 'Armour', 'Rings, amulets, belts and idols'].map(name => ({ name, list: reds.filter(u => (SLOT_GROUP[slot(u)] || 'Rings, amulets, belts and idols') === name) }));
+      const chase = [
+        { name: 'Primals', list: U.filter(u => kind(u) === 'primal') },
+        { name: 'Deep-forged', list: U.filter(u => kind(u) === 'deep') },
+        { name: 'Guardian chase reds', list: U.filter(u => kind(u) === 'chase') },
+        { name: 'Core reds', list: U.filter(u => kind(u) === 'core') },
+        { name: 'Red Dwarven Runes', list: U.filter(u => kind(u) === 'plain' && slot(u) === 'DwarvenRune') }];
+      const community = U.filter(u => /^community_/.test(u.Id));
+      const byLevel = (a, b) => (a.Level || 0) - (b.Level || 0) || a.Name.localeCompare(b.Name);
+      for (const x of [...redGroups, ...chase]) x.list.sort(byLevel);
+      community.sort(byLevel);
+      return { reds: redGroups, chase, community };
+    }
+    // Where a unique comes from (bosses.json Guardian lists, uniques.json Primal / DwarvenSockets / Core / DropWeight).
+    function dropText(u) {
+      const g = GD(), out = [], gs = Object.values(g.guardians || {});
+      for (const x of gs) if (lc(x.chase) === lc(u.Id)) out.push(x.name + ' (chase, ' + fmtChance(x.chaseChance) + ' a kill)');
+      const sig = gs.filter(x => (x.sig || []).map(lc).includes(lc(u.Id))).map(x => x.name);
+      if (sig.length) out.push('Signature drop: ' + sig.join(', '));
+      if (u.Primal) out.push("The Core's jackpot (Primal)");
+      else if (u.DwarvenSockets) out.push("The Core's jackpot (Deep-forged)");
+      else if (u.Core) out.push('The Core' + (typeof u.Core === 'string' ? ' (' + nice(u.Core) + ')' : ''));
+      const slot = (g.bases[lc(u.BaseId)] || {}).Slot;
+      if (!out.length && slot === 'DwarvenRune' && u.DropWeight === 0) out.push("The Core's jackpot (red Dwarven Rune)");
+      if (!out.length && /^community_/.test(u.Id)) out.push("The Core's jackpot (community red)");
+      if (!out.length && /^idol_/.test(u.Id) && u.DropWeight === 0) out.push("The Core's jackpot (unique idol)");
+      if (!out.length && u.DropWeight > 0) out.push('Drops anywhere from item level ' + (u.Level || 1));
+      if (!out.length) out.push('Source not in the game files');
+      return out;
+    }
+    const fmtChance = c => !c ? '?' : c >= 0.01 ? Math.round(c * 1000) / 10 + '%' : '1 in ' + Math.round(1 / c);
+
+    // ---------- page ----------
+    const icons = () => ctx.icons && ctx.icons();
+    function tile(u, have) {
+      const I = icons(), b = GD().bases[lc(u.BaseId)];
+      const where = dropText(u);
+      const show = V.show === 'all' || (V.show === 'found') === have;
+      if (!show || (V.q && !lc(u.Name + ' ' + (b ? b.Name : '') + ' ' + where.join(' ')).includes(lc(V.q)))) return '';
+      return '<div class="gr-tile' + (have ? ' have' : '') + '" title="' + esc(u.Name + (b ? ' · ' + b.Name : '') + '\n' + where.join('\n')) + '">' +
+        (I ? I.uniqueIcon(u) : '') + '<div class="gr-body"><b>' + esc(u.Name) + '</b><small>' + esc(b ? b.Name : '') + ' · Lvl ' + (u.Level || 1) + '</small>' +
+        '<small class="gr-where">' + esc(where.join(' · ')) + '</small></div>' + (have ? '<span class="gr-check" aria-label="Found">✓</span>' : '') + '</div>';
+    }
+    function section(name, list, inv, note) {
+      const n = list.filter(u => inv.found.has(lc(u.Id))).length;
+      const tiles = list.map(u => tile(u, inv.found.has(lc(u.Id)))).join('');
+      return '<details class="gr-sec" open><summary><span>' + esc(name) + '</span><b>' + n + ' of ' + list.length + '</b>' + (note ? '<small>' + esc(note) + '</small>' : '') + '</summary>' +
+        (tiles ? '<div class="gr-grid">' + tiles + '</div>' : '<p class="hint">Nothing to show with this filter.</p>') + '</details>';
+    }
+    function wordTile(w, inv) {
+      const I = icons(), st = wordStatus(w, inv);
+      const state = st.held.length ? 'held' : st.craftable ? 'craft' : '';
+      if (V.show === 'found' && !st.held.length) return '';
+      if (V.show === 'missing' && st.held.length) return '';
+      if (V.q && !lc(w.Name + ' ' + (w.Class || '')).includes(lc(V.q))) return '';
+      const rn = id => (GD().runes[lc(id)] || {}).Name || id;
+      const lines = [];
+      if (st.held.length) lines.push('Held: ' + st.held.map(h => h.where).join(', '));
+      else if (st.craftable) lines.push('You have the runes' + (st.bases.length ? ' and ' + st.bases.length + ' empty ' + (w.Runes || []).length + '-socket base' + (st.bases.length > 1 ? 's' : '') + ' it fits' : ''));
+      else if (w.Secret) lines.push('Secret recipe'); // its runes stay hidden, as in Item Search
+      else if (inv.loaded) lines.push('Missing: ' + st.short.map(s => s.n + ' ' + rn(s.r)).join(', '));
+      return '<div class="gr-tile word ' + state + '">' + (I ? I.wordIcon() : '') + '<div class="gr-body"><b>' + esc(w.Name) + '</b><small>' + esc((w.Runes || []).length + ' runes · Lvl ' + (w.Level || 1) + (w.Class ? ' · ' + w.Class : '')) + '</small>' +
+        (lines.length ? '<small class="gr-where">' + esc(lines.join(' · ')) + '</small>' : '') + '</div>' +
+        (state === 'held' ? '<span class="gr-check" aria-label="Held">✓</span>' : state === 'craft' ? '<span class="gr-craft">Craftable</span>' : '') + '</div>';
+    }
+
+    function render() {
+      const el = $('#grailPane'); if (!el || el.hidden) return;
+      const g = GD();
+      let h = (icons() ? icons().sprite() : '') + '<div class="cmp-intro"><div class="eyebrow">COLLECTION</div><h2>Grail</h2><p>The uniques you have found (the game\'s Collection), the Oathwords you hold or have runes for, and where each one drops. Read from your saves in this browser; nothing is uploaded.</p></div>';
+      if (!g || !g.uniques) { el.innerHTML = h + '<div class="card"><p class="hint">Game data is still loading.</p></div>'; return; }
+      const L = leagues(), lg = league(), inv = inventory(lg), G = groups();
+      const count = list => list.filter(u => inv.found.has(lc(u.Id))).length;
+      const redsAll = G.reds.flatMap(x => x.list), chaseAll = G.chase.flatMap(x => x.list);
+      const words = g.runewords || [];
+      const held = words.filter(w => wordStatus(w, inv).held.length).length, craft = words.filter(w => !wordStatus(w, inv).held.length && wordStatus(w, inv).craftable).length;
+      const allU = Object.keys(g.uniques).length;
+      h += '<div class="card gr-top">';
+      if (!L.length) h += '<p class="gr-empty">No saves loaded. Use <b>Load saves folder</b> in the sidebar and pick the SaveGames folder: characters and stashes are read from it. Until then everything shows as missing, with where it drops.</p>';
+      h += '<div class="gr-bar">' +
+        (L.length ? '<label class="field"><span>League</span><select id="grLeague">' + L.map(x => '<option value="' + esc(x) + '"' + (x === lg ? ' selected' : '') + '>' + esc(leagueName(x)) + '</option>').join('') + '</select></label>' : '') +
+        '<label class="field"><span>Show</span><select id="grShow">' + [['all', 'Everything'], ['found', 'Found / held'], ['missing', 'Missing']].map(([k, t]) => '<option value="' + k + '"' + (V.show === k ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></label>' +
+        '<label class="field grow"><span>Search</span><input type="text" id="grQ" placeholder="Name, base or where it drops" value="' + esc(V.q) + '" autocomplete="off"></label></div>' +
+        '<div class="gr-stats">' +
+        stat('Reds', count(redsAll), redsAll.length) + stat('The Chase', count(chaseAll), chaseAll.length) + stat('Community reds', count(G.community), G.community.length) +
+        stat('All uniques', inv.found.size, allU) + stat('Oathwords held', held, words.length) + (inv.loaded ? stat('Craftable now', craft, words.length - held) : '') + '</div>' +
+        (inv.loaded ? '<p class="hint gr-src">From ' + inv.sources.map(s => s.kind === 'stash' ? 'the ' + esc(leagueName(lg)) + ' stash' : esc(s.name)).join(', ') + '.</p>' : '') + '</div>';
+      h += '<div id="grBody">' + body(G, inv, words) + '</div>';
+      el.innerHTML = h;
+    }
+    const stat = (k, n, of) => '<div class="gr-stat"><span>' + esc(k) + '</span><b>' + n + '<small> / ' + of + '</small></b><i style="--p:' + (of ? Math.round(n / of * 100) : 0) + '%"></i></div>';
+    function body(G, inv, words) {
+      let h = '<h3 class="gr-h">Reds</h3>' + G.reds.map(x => section(x.name, x.list, inv)).join('');
+      h += '<h3 class="gr-h">The Chase</h3>' + G.chase.map(x => section(x.name, x.list, inv)).join('');
+      h += '<h3 class="gr-h">Community reds</h3>' + section('Community reds', G.community, inv, 'Not on the game\'s Reds page');
+      const tiles = words.slice().sort((a, b) => (a.Level || 0) - (b.Level || 0) || a.Name.localeCompare(b.Name)).map(w => wordTile(w, inv)).join('');
+      h += '<h3 class="gr-h">Oathwords</h3><details class="gr-sec" open><summary><span>Oathwords</span><b>' + words.filter(w => wordStatus(w, inv).held.length).length + ' held</b><small>The saves do not list Oathwords you made before, only the ones you hold now</small></summary>' +
+        (tiles ? '<div class="gr-grid">' + tiles + '</div>' : '<p class="hint">Nothing to show with this filter.</p>') + '</details>';
+      return h;
+    }
+
+    let timer = 0;
+    function bind() {
+      const el = $('#grailPane'); if (!el || el.dataset.bound) return; el.dataset.bound = '1';
+      el.addEventListener('change', e => {
+        if (e.target.id === 'grLeague') { V.league = e.target.value; keepView(); render(); if (ctx.onChange) ctx.onChange(); }
+        if (e.target.id === 'grShow') { V.show = e.target.value; keepView(); render(); }
+      });
+      el.addEventListener('input', e => {
+        if (e.target.id !== 'grQ') return;
+        V.q = e.target.value.slice(0, 60); keepView(); clearTimeout(timer);
+        timer = setTimeout(() => { const b = $('#grBody'); if (b) b.innerHTML = body(groups(), inventory(), GD().runewords || []); }, 150);
+      });
+    }
+
+    return { render: () => { bind(); render(); }, setSources, addSources, clear, inventory, wordStatus, league, leagueName };
+  }
+  BOGrail.compact = compact;
+  BOGrail.isGrailFile = isGrailFile;
+  BOGrail.leagueLabel = leagueLabel;
+  root.BOGrail = BOGrail;
+  if (typeof module !== 'undefined') module.exports = { compact, isGrailFile };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
 // Skill Scaling tab: one square per skill, coloured like its gem, with what the skill does at gem levels 1-20.
 // Display only: it reads the game data and repeats the sim's per-level formulas for the gem's OWN level (no gear levels):
 //   attack: % of weapon damage = effectiveness(L) x (1 + Gem.AttackEffectivenessPerLevel x (L - 1))   (sim.js, "levelFactor")
@@ -7846,6 +8713,8 @@ window.BOStartApp = function () {
   let scaling = null; // Skill Scaling, now a section of the FAQ tab (scaling.js)
   let faq = null; // the FAQ / Game Mechanics tab (faq.js)
   let character = null; // the Character tab (character.js)
+  let itemSearch = null; // the Item Search tab (itemsearch.js)
+  let grail = null; // the Grail tab (grail.js): found uniques, held / craftable Oathwords, runes owned
   let brewery = null, breweryDirty = false; // the Brewery tab (brewery.js); dirty: potions changed since the last damage render
 
   // ---------- setup ----------
@@ -8264,7 +9133,9 @@ window.BOStartApp = function () {
     if (st.ch && st.skill) { try { r = S.calcSkill(GD, st.ch, st.skill, opts()); } catch (e) { r = null; } }
     const ok = r && !r.error && !r.unsupported;
     $('#bsClass').textContent = st.ch ? st.ch.name : '–';
-    $('#bsSpell').textContent = st.ch ? st.ch.classId + ' · level ' + st.ch.level + (ok && r.skill ? ' · ' + r.skill.Name : '') : '';
+    // League with its season ("HCSSF (wb1)", "Offline") for characters read from a save; plans and codes have none.
+    const fromSave = st.ch && !st.ch.plan && (st.ch.file || st.ch.from === 'folder' || st.ch.from === 'file');
+    $('#bsSpell').textContent = st.ch ? st.ch.classId + ' · level ' + st.ch.level + (fromSave && window.BOGrail ? ' · ' + window.BOGrail.leagueLabel(st.ch.league) : '') + (ok && r.skill ? ' · ' + r.skill.Name : '') : '';
     $('#bsDps').textContent = ok ? num(r.totalDps) : '–';
     const { life, es, res, resTip, resParts, attr } = defenceStats(ok ? r : null);
     $('#bsLife').textContent = life; $('#bsEs').textContent = es; $('#bsRes').innerHTML = resParts ? resParts.map(x => '<span style="color:' + typeColor(x[0]) + '">' + x[1] + '</span>').join(' / ') : esc(res);
@@ -9172,6 +10043,7 @@ window.BOStartApp = function () {
   const saveTip = (msg, forget) => { $('#saveTipText').textContent = msg || ''; $('#saveForget').hidden = !forget; $('#saveTip').hidden = !msg; };
   // withPlans: the sidebar's Reset also removes build plans; the save tip's "Forget" keeps them.
   function forgetLoadedCharacters(withPlans) {
+    if (grail) grail.clear();
     CHARS = CHARS.filter(c => c.file || (c.plan && !withPlans));
     if (withPlans) planner.render();
     keepChars();
@@ -9202,11 +10074,22 @@ window.BOStartApp = function () {
   }
   const KEEP_FAIL = ' (This browser would not keep a copy, so you will load them again next visit.)';
   async function loadFile(file) {
+    if (window.BOGrail.isGrailFile(file.name)) { try { grail.addSources([window.BOGrail.compact(window.parseGvas(new Uint8Array(await file.arrayBuffer())), file.name, new Date(file.lastModified).toISOString())]); } catch (e) { /* read below */ } }
+    if (/^BO_Stash_/i.test(file.name)) { saveTip('Read the stash for the Grail tab.'); return; }
     try { const ch = await readSave(file); if (!addChars([ch], 'file', ch.id)) saveTip('Loaded ' + ch.name + '.' + KEEP_FAIL); }
     catch (err) { alert('Could not read ' + file.name + ':\n' + err.message); }
   }
+  // The Grail tab: found uniques, runes and Oathword items from every character and league stash in the folder.
+  async function readGrail(files) {
+    const list = [];
+    for (const f of files.filter(x => window.BOGrail.isGrailFile(x.name))) {
+      try { list.push(window.BOGrail.compact(window.parseGvas(new Uint8Array(await f.arrayBuffer())), f.name, new Date(f.lastModified).toISOString())); } catch (e) { /* not a save the Grail reads */ }
+    }
+    if (list.some(Boolean)) grail.setSources(list);
+  }
   async function loadFolder(files) {
     const saves = Array.from(files).filter(f => isCharSave(f.name));
+    readGrail(Array.from(files));
     if (!saves.length) { saveTip('No character saves (BO_Char_*.sav) in that folder. Pick the SaveGames folder: ' + SAVE_PATH + '. Copy save path copies it for the picker\'s address bar.'); return; }
     const got = [], bad = [];
     for (const f of saves) { try { got.push(await readSave(f)); } catch (e) { bad.push(f.name); } }
@@ -10341,7 +11224,7 @@ window.BOStartApp = function () {
     document.body.classList.toggle('build-page', tab === 'build');
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'faq' || tab === 'character');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'items' || tab === 'grail' || tab === 'faq' || tab === 'character');
     document.body.classList.toggle('character-page', tab === 'character');
     document.body.classList.toggle('creator-page', tab === 'creator'); // the Save Creator has no use for the build views
     if (tab === 'supports') {
@@ -10352,7 +11235,7 @@ window.BOStartApp = function () {
     // Character, Passive tree and Damage Analysis are sub-tabs of Build Plan: keep that main tab lit.
     document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'damage'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
     if (tab === 'tree' || tab === 'damage' || tab === 'character') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#faqPane').hidden = tab !== 'faq'; $('#characterPane').hidden = tab !== 'character';
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#faqPane').hidden = tab !== 'faq'; $('#characterPane').hidden = tab !== 'character';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     renderBuildStats();
@@ -10361,6 +11244,8 @@ window.BOStartApp = function () {
     if (tab === 'creator') creator.render();
     if (tab === 'fossil') fossil.render();
     if (tab === 'brewery') brewery.render();
+    if (tab === 'items') itemSearch.render();
+    if (tab === 'grail') grail.render();
     if (tab === 'faq') faq.render();
     if (tab === 'character') character.render();
     if (tab === 'damage' && breweryDirty && st.ch) { breweryDirty = false; render(); }
@@ -10517,6 +11402,10 @@ window.BOStartApp = function () {
   // The Brewery tab (brewery.js): Brewmaw's potions; the active ones count in the damage sim.
   brewery = window.BOBrewery({ $, esc, gd: () => GD, current: () => st.ch, onChange: () => { breweryDirty = true; } });
   scaling = window.BOScaling({ $, esc, gd: () => GD });
+  // The Item Search tab (itemsearch.js): uniques, Oathwords, bases, mods, runes and jewels from the game data.
+  grail = window.BOGrail({ $, esc, gd: () => GD, current: () => st.ch, icons: () => itemSearch,
+    onChange: () => { if (!$('#itemSearchPane').hidden) itemSearch.render(); } });
+  itemSearch = window.BOItemSearch({ $, esc, gd: () => GD, owned: () => grail });
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling });
   character = window.BOCharacter({
     $, esc, planner, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats,
@@ -10559,7 +11448,7 @@ window.BOStartApp = function () {
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();
   // Landing: Build Plan > Character for anyone with a character; a first visit with none gets the welcome page (Damage view).
-  const lastTab = (store.get('tab', null) === 'scaling' ? 'faq' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'faq'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (store.get('tab', null) === 'scaling' ? 'faq' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'items', 'grail', 'faq'].includes(lastTab)) showTab(lastTab);
   // Opened from a share link: load it as a plan, then drop it from the address so a refresh doesn't add it again.
   const bdbHash = /^#b=/.test(location.hash) && brokedCode(location.hash);
   if (bdbHash) { history.replaceState(null, '', location.pathname + location.search); openBroked(bdbHash); }

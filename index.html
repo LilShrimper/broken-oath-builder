@@ -939,6 +939,7 @@ body.dashboard-view .configure-heading { display: flex; }
 .nav-data { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .nav-data .hint { margin: 0; font-size: 11.5px; line-height: 1.35; }
 .nav-data:not(:has(.btn:not([hidden]))) { display: none; }
+@media (max-width: 760px) { .nav-data { display: none; } } /* a phone has no game Data folder to pick (owner, 8 Nov 2026) */
 .view-bar { margin-top: 14px; }
 .view-bar .tabs { flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .view-bar .tab { width: auto; flex: 0 1 auto; white-space: nowrap; }
@@ -1229,7 +1230,10 @@ body.creator-page .view-bar { display: none; }
 .sc-chip { padding: 6px 14px; line-height: 1.2; font: inherit; font-size: 13px; color: var(--text); cursor: pointer; white-space: nowrap; }
 .sc-chip.active { border-color: var(--dashboard-gold); color: var(--dashboard-gold); }
 /* FAQ / Game Mechanics tab (faq.js): section chips, reference tables */
-.faq-nav { margin: 0 0 4px; }
+.faq-nav { display: flex; flex-direction: column; gap: 8px; margin: 0 0 4px; }
+.faq-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.faq-group-label { flex: 0 0 120px; color: var(--faint); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+@media (max-width: 640px) { .faq-group-label { flex-basis: 100%; } }
 .faq-sec[hidden] { display: none; }
 .faq-card h2 small { color: var(--faint); font-weight: 500; font-size: 12px; margin-left: 6px; }
 .faq-list { margin: 8px 0 10px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
@@ -1617,7 +1621,7 @@ body.creator-page .view-bar { display: none; }
     <section class="build-pane compare-pane fossil-pane" id="fossilPane" hidden></section>
     <section class="build-pane compare-pane brewery-pane" id="breweryPane" hidden></section>
     <section class="build-pane compare-pane faq-pane" id="faqPane" hidden>
-      <nav class="sc-chips faq-nav" id="faqNav" role="group" aria-label="Game mechanics sections"></nav>
+      <nav class="faq-nav" id="faqNav" role="group" aria-label="Game mechanics sections"></nav>
       <div class="build-pane faq-sec" id="scalingPane" hidden></div>
       <div class="build-pane faq-sec" id="affixPane" hidden></div>
     </section>
@@ -1728,7 +1732,7 @@ Fan-made tool, not affiliated with the developers of Broken Oath. Game data come
 <script>
 window.GD = null;
 window.CHARS = [];
-window.SITE_VERSION = {"v":131,"at":"2026-11-09T03:13:18.115Z"};
+window.SITE_VERSION = {"v":132,"at":"2026-11-09T03:30:42.473Z"};
 window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"aegis_N":0,"aegis_N_D":1,"aegis_S":2,"aegis_S_D":3,"affliction_N":4,"affliction_N_D":5,"affliction_S":6,"affliction_S_D":7,"anvil_oath_N":8,"anvil_oath_N_D":9,"anvil_oath_S":10,"anvil_oath_S_D":11,"area_N":12,"area_N_D":13,"area_S":14,"area_S_D":15,"armour_N":16,"armour_N_D":17,"armour_S":18,"armour_S_D":19,"artillery_N":20,"artillery_N_D":21,"artillery_S":22,"artillery_S_D":23,"attack_N":24,"attack_N_D":25,"attack_S":26,"attack_S_D":27,"blightword_N":28,"blightword_N_D":29,"bone_N":30,"bone_N_D":31,"bone_S":32,"bone_S_D":33,"bone_choir_N":34,"bone_choir_N_D":35,"bone_choir_S":36,"bone_choir_S_D":37,"bow_N":38,"bow_N_D":39,"bow_S":40,"bow_S_D":41,"bulwark_N":42,"bulwark_N_D":43,"bulwark_S":44,"bulwark_S_D":45,"carrion_hunt_N":46,"carrion_hunt_N_D":47,"carrion_hunt_S":48,"carrion_hunt_S_D":49,"chain_N":50,"chain_N_D":51,"chain_S":52,"chain_S_D":53,"channel_N":54,"channel_N_D":55,"channel_S":56,"channel_S_D":57,"cleave_N":58,"cleave_N_D":59,"cleave_S":60,"cleave_S_D":61,"cold_N":62,"cold_N_D":63,"cold_S":64,"cold_S_D":65,"conduit_N":66,"conduit_N_D":67,"conduit_S":68,"conduit_S_D":69,"crest_Mage":70,"crest_Mage_D":71,"crest_Necromancer":72,"crest_Necromancer_D":73,"crest_Paladin":74,"crest_Paladin_D":75,"crest_Ranger":76,"crest_Ranger_D":77,"crest_Samurai":78,"crest_Samurai_D":79,"crest_Warrior":80,"crest_Warrior_D":81,"crit_N":82,"crit_N_D":83,"crit_S":84,"crit_S_D":85,"crusade_N":86,"crusade_N_D":87,"crusade_S":88,"crusade_S_D":89,"dawn_N":90,"dawn_N_D":91,"dawn_S":92,"dawn_S_D":93,"dawnstorm_N":94,"dawnstorm_N_D":95,"dawnstorm_S":96,"dawnstorm_S_D":97,"dawnsworn_N":98,"dawnsworn_N_D":99,"deadeye_N":100,"deadeye_N_D":101,"deadeye_S":102,"deadeye_S_D":103,"deathknell_N":104,"deathknell_N_D":105,"deathknell_S":106,"deathknell_S_D":107,"edge_N":108,"edge_N_D":109,"edge_S":110,"edge_S_D":111,"elemental_N":112,"elemental_N_D":113,"elemental_S":114,"elemental_S_D":115,"energy_shield_N":116,"energy_shield_N_D":117,"energy_shield_S":118,"energy_shield_S_D":119,"evasion_N":120,"evasion_N_D":121,"evasion_S":122,"evasion_S_D":123,"faith_N":124,"faith_N_D":125,"faith_S":126,"faith_S_D":127,"falling_leaf_N":128,"falling_leaf_N_D":129,"falling_leaf_S":130,"falling_leaf_S_D":131,"fire_N":132,"fire_N_D":133,"fire_S":134,"fire_S_D":135,"fury_N":136,"fury_N_D":137,"fury_S":138,"fury_S_D":139,"grave_N":140,"grave_N_D":141,"grave_S":142,"grave_S_D":143,"holy_N":144,"holy_N_D":145,"holy_S":146,"holy_S_D":147,"iron_tempest_N":148,"iron_tempest_N_D":149,"iron_tempest_S":150,"iron_tempest_S_D":151,"ki_N":152,"ki_N_D":153,"ki_S":154,"ki_S_D":155,"ks_aegis_rebuke":156,"ks_aegis_rebuke_D":157,"ks_ancestral_host":158,"ks_ancestral_host_D":159,"ks_blood_magic":160,"ks_blood_magic_D":161,"ks_cascade_of_ruin":162,"ks_cascade_of_ruin_D":163,"ks_chain_reaction":164,"ks_chain_reaction_D":165,"ks_choir_of_bones":166,"ks_choir_of_bones_D":167,"ks_comet_step":168,"ks_comet_step_D":169,"ks_dawnstorm_covenant":170,"ks_dawnstorm_covenant_D":171,"ks_eagle_eye":172,"ks_eagle_eye_D":173,"ks_earthbreaker_stride":174,"ks_earthbreaker_stride_D":175,"ks_elemental_overload":176,"ks_elemental_overload_D":177,"ks_forked_sky":178,"ks_forked_sky_D":179,"ks_glass_cannon":180,"ks_glass_cannon_D":181,"ks_hammer_of_judgement":182,"ks_hammer_of_judgement_D":183,"ks_hollow_covenant":184,"ks_hollow_covenant_D":185,"ks_iron_resolve":186,"ks_iron_resolve_D":187,"ks_lord_of_the_dead":188,"ks_lord_of_the_dead_D":189,"ks_oath_of_a_thousand_cuts":190,"ks_oath_of_a_thousand_cuts_D":191,"ks_oath_of_many_fires":192,"ks_oath_of_many_fires_D":193,"ks_oath_of_slow_ruin":194,"ks_oath_of_slow_ruin_D":195,"ks_oath_of_the_living_storm":196,"ks_oath_of_the_living_storm_D":197,"ks_oath_of_the_long_night":198,"ks_oath_of_the_long_night_D":199,"ks_oath_of_the_pyre":200,"ks_oath_of_the_pyre_D":201,"ks_oath_of_the_red_harvest":202,"ks_oath_of_the_red_harvest_D":203,"ks_oath_of_the_snare":204,"ks_oath_of_the_snare_D":205,"ks_oath_of_the_white_silence":206,"ks_oath_of_the_white_silence_D":207,"ks_one_breath":208,"ks_one_breath_D":209,"ks_pyre_covenant":210,"ks_pyre_covenant_D":211,"ks_r59_hold_k3":212,"ks_r59_hold_k3_D":213,"ks_r59_mountain_k3":214,"ks_r59_mountain_k3_D":215,"ks_r59_sure_strike_k3":216,"ks_r59_sure_strike_k3_D":217,"ks_r74_bone_sovereign":218,"ks_r74_bone_sovereign_D":219,"ks_radiant_crusade":220,"ks_radiant_crusade_D":221,"ks_rotting_gospel":222,"ks_rotting_gospel_D":223,"ks_sanctified":224,"ks_sanctified_D":225,"ks_siege_pact":226,"ks_siege_pact_D":227,"ks_spellblade":228,"ks_spellblade_D":229,"ks_tempest_vow":230,"ks_tempest_vow_D":231,"ks_the_hunting_dead":232,"ks_the_hunting_dead_D":233,"ks_thousand_hands":234,"ks_thousand_hands_D":235,"ks_twice_fallen_sky":236,"ks_twice_fallen_sky_D":237,"ks_unbroken_wall":238,"ks_unbroken_wall_D":239,"ks_wake_of_spells":240,"ks_wake_of_spells_D":241,"ks_way_of_the_blade":242,"ks_way_of_the_blade_D":243,"ks_wind_and_steel_oath":244,"ks_wind_and_steel_oath_D":245,"leech_N":246,"leech_N_D":247,"leech_S":248,"leech_S_D":249,"lichfire_N":250,"lichfire_N_D":251,"lichfire_S":252,"lichfire_S_D":253,"life_N":254,"life_N_D":255,"life_S":256,"life_S_D":257,"life_big_N":258,"life_big_N_D":259,"life_big_S":260,"life_big_S_D":261,"lightning_N":262,"lightning_N_D":263,"lightning_S":264,"lightning_S_D":265,"lingering_N":266,"lingering_N_D":267,"lingering_S":268,"lingering_S_D":269,"malediction_N":270,"malediction_N_D":271,"malediction_S":272,"malediction_S_D":273,"mana_N":274,"mana_N_D":275,"mana_S":276,"mana_S_D":277,"manasteal_N":278,"manasteal_N_D":279,"manasteal_S":280,"manasteal_S_D":281,"melee_N":282,"melee_N_D":283,"melee_S":284,"melee_S_D":285,"mirrorblade_N":286,"mirrorblade_N_D":287,"mirrorblade_S":288,"mirrorblade_S_D":289,"orbit_N":290,"orbit_N_D":291,"orbit_S":292,"orbit_S_D":293,"ossuary_N":294,"ossuary_N_D":295,"ossuary_S":296,"ossuary_S_D":297,"overcharge_N":298,"overcharge_N_D":299,"overcharge_S":300,"overcharge_S_D":301,"permafrost_N":302,"permafrost_N_D":303,"permafrost_S":304,"permafrost_S_D":305,"plague_quiver_N":306,"plague_quiver_N_D":307,"plague_quiver_S":308,"plague_quiver_S_D":309,"poison_N":310,"poison_N_D":311,"poison_S":312,"poison_S_D":313,"portrait_Mage":314,"portrait_Mage_D":315,"portrait_Necromancer":316,"portrait_Necromancer_D":317,"portrait_Paladin":318,"portrait_Paladin_D":319,"portrait_Ranger":320,"portrait_Ranger_D":321,"portrait_Samurai":322,"portrait_Samurai_D":323,"portrait_Warrior":324,"portrait_Warrior_D":325,"projectile_N":326,"projectile_N_D":327,"projectile_S":328,"projectile_S_D":329,"radiance_N":330,"radiance_N_D":331,"radiance_S":332,"radiance_S_D":333,"radiant_ward_N":334,"radiant_ward_N_D":335,"radiant_ward_S":336,"radiant_ward_S_D":337,"rain_N":338,"rain_N_D":339,"rain_S":340,"rain_S_D":341,"reaper_N":342,"reaper_N_D":343,"reaper_S":344,"reaper_S_D":345,"regrowth_N":346,"regrowth_N_D":347,"regrowth_S":348,"regrowth_S_D":349,"resist_N":350,"resist_N_D":351,"resist_S":352,"resist_S_D":353,"shatter_N":354,"shatter_N_D":355,"shatter_S":356,"shatter_S_D":357,"siege_N":358,"siege_N_D":359,"siege_S":360,"siege_S_D":361,"sigil_N":362,"sigil_N_D":363,"sigil_S":364,"sigil_S_D":365,"slam_N":366,"slam_N_D":367,"slam_S":368,"slam_S_D":369,"souls_N":370,"souls_N_D":371,"souls_S":372,"souls_S_D":373,"speed_N":374,"speed_N_D":375,"speed_S":376,"speed_S_D":377,"spell_N":378,"spell_N_D":379,"spell_S":380,"spell_S_D":381,"spell_crit_N":382,"spell_crit_N_D":383,"spell_crit_S":384,"spell_crit_S_D":385,"spellsword_N":386,"spellsword_N_D":387,"spellsword_S":388,"spellsword_S_D":389,"starfall_N":390,"starfall_N_D":391,"starfall_S":392,"starfall_S_D":393,"stillness_N":394,"stillness_N_D":395,"stillness_S":396,"stillness_S_D":397,"swift_N":398,"swift_N_D":399,"swift_S":400,"swift_S_D":401,"tether_N":402,"tether_N_D":403,"tether_S":404,"tether_S_D":405,"trap_N":406,"trap_N_D":407,"trap_S":408,"trap_S_D":409,"two_storms_N":410,"two_storms_N_D":411,"two_storms_S":412,"two_storms_S_D":413,"vigil_N":414,"vigil_N_D":415,"vigil_S":416,"vigil_S_D":417,"voidbound_N":418,"voidbound_N_D":419,"voidbound_S":420,"voidbound_S_D":421,"vowkeeper_N":422,"vowkeeper_N_D":423,"vowkeeper_S":424,"vowkeeper_S_D":425,"warcaller_N":426,"warcaller_N_D":427,"warcaller_S":428,"warcaller_S_D":429,"warpath_N":430,"warpath_N_D":431,"warpath_S":432,"warpath_S_D":433,"waygate_S":434,"waygate_S_D":435,"wellspring_N":436,"wellspring_N_D":437,"wellspring_S":438,"wellspring_S_D":439,"wind_and_steel_N":440,"wind_and_steel_N_D":441,"wind_and_steel_S":442,"wind_and_steel_S_D":443,"windstep_N":444,"windstep_N_D":445,"windstep_S":446,"windstep_S_D":447,"zeal_N":448,"zeal_N_D":449,"zeal_S":450,"zeal_S_D":451},"dragons":"icons/dragons.webp","dragonOrder":["Fire","Lightning","Cold","Arcane","Poison","Physical"]};
 </script>
 <script>
@@ -1745,7 +1749,7 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
     'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json', 'Gameplay/monster_affixes.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 18; // 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 19; // 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -1880,6 +1884,19 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
     const MA = J('Gameplay/monster_affixes.json').affixes || [];
     const monsterAffixes = MA.map(a => { const o = {}; for (const k of Object.keys(a)) if (k !== 'Tint' && k !== 'HazardSfx') o[k] = a[k]; return o; });
     const guardianMods = J('Gameplay/scaling.json').Rift.GuardianMods || {};
+    // More display-only rules for the FAQ tab (read 8 Nov 2026): Guardian fight rules (bosses.json Flow, Rewards, Tiers,
+    // ArenaPhases, Fights87 Rally / Elder; scaling.json Rift Enrage / Phases), the Deep (scaling.json Rift Ladder*) and the
+    // XP level penalty (scaling.json XpLevelPenalty).
+    const SR = J('Gameplay/scaling.json'), RF = SR.Rift || {}, AP = B.ArenaPhases || {}, F87 = B.Fights87 || {};
+    const fights = {
+      attempts: (B.Flow || {}).GuardianAttempts, ruptureDeaths: (B.Flow || {}).RuptureDeaths, rewards: B.Rewards || {},
+      enrage: RF.Enrage || {}, phases: RF.Phases || [],
+      arena: { marks: AP.Marks, marksLow: AP.MarksLow, lowBelowRL: AP.LowBelowRL, escalation: pick(AP.Escalation57 || {}, ['OneBelowRL', 'LateFromRL', 'Late2FromRL']) },
+      tiers: (B.Tiers || []).map(t => pick(t, ['Id', 'Name', 'FromRL', 'GateFromRL', 'Text'])),
+      rally: F87.Rally || null, elder: F87.Elder ? pick(F87.Elder, ['Chance', 'FromRL', 'Life', 'Damage', 'ExtraRolls']) : null,
+    };
+    const deep = pick(RF, ['MapMaxLevel', 'LadderMonsterLevels', 'LadderLifePerLevel', 'LadderDamagePerLevel', 'LadderXpPctPerLevel', 'LadderUnlock', 'LadderUnlockNeedsDeathless', 'EntryLevelBelowML']);
+    const xpPenalty = SR.XpLevelPenalty || {};
 
     // XP needed to reach level 2..100 (progression.json Levels): the Creator tab sets Experience to match a new level.
     const xpLevels = J('Gameplay/progression.json').progression[0].Levels;
@@ -1916,7 +1933,7 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
       { skills, classes, supports, nodes, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, uniques, bases, runes, runeSockets, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds });
+        affixes, uniques, bases, runes, runeSockets, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, fights, deep, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, SCHEMA };
@@ -5200,6 +5217,15 @@ window.BOScaling = function (ctx) {
     let h = '<div class="cmp-intro"><div class="eyebrow">REFERENCE</div><h2>Skill Scaling</h2><p>What each skill does as its gem levels up. The colour is the gem\'s: red Strength, green Dexterity, blue Intelligence.</p></div>';
     if (!GD || !GD.skills || !GD.scaling || !GD.scaling.Gem) { el.innerHTML = h + '<div class="card"><p class="hint">Load the game data first.</p></div>'; return; }
     const G = GD.scaling.Gem, max = G.MaxLevel || 20;
+    // How gem levels work (FAQ). Gear-level rules past +5 are the sim's (sim.js: game log 5 Nov "MetaPlan83", patch notes 5 and 6 Nov).
+    h += '<details class="card faq-card sc-howto"><summary><b>How gem levels work</b></summary><ul class="faq-list">' +
+      '<li>A gem levels up to <b>' + max + '</b>. Levels past that come from gear and the passive tree.</li>' +
+      '<li><b>Spells</b>: the hit grows <b>×' + (G.DamageGrowth || 1.19) + '</b> per gem level.</li>' +
+      '<li><b>Attacks</b>: each gem level adds <b>' + Math.round((G.AttackEffectivenessPerLevel || 0) * 100) + '%</b> to the share of weapon damage the skill deals. Some skills also ramp up early or late levels.</li>' +
+      '<li>The first <b>5</b> gear levels count like gem levels: spells ×' + (G.DamageGrowth || 1.19) + ', attacks <b>×' + (G.BonusLevelAttackMore || 1.06) + '</b> more each.</li>' +
+      '<li>Past +5: spells and minion gems grow ×1.16, ×1.13, ×1.10, then ×1.08 a level (patch notes 6 Nov); attacks only ×1.01 a level. So stacking gear levels pays off most for spells and minions.</li>' +
+      '<li>Mana cost goes up with gem level too. Each card\'s second row shows levels ' + (max + 1) + '–' + (max + 20) + '; past ' + (max + 5) + ' it is the sim\'s reading of the patch notes, not yet checked against the game.</li>' +
+      '</ul></details>';
     // Only skills with scaling data (an attack or a spell with a hit of its own), grouped by gem colour.
     const ORDER = ['Str', 'Dex', 'Int'], GROUP = { Str: ['red', 'Red · Strength'], Dex: ['green', 'Green · Dexterity'], Int: ['blue', 'Blue · Intelligence'] };
     const list = Object.values(GD.skills).filter(s => ORDER.includes(s.Attribute) && ['attack', 'spell'].includes(kindOf(s))).sort((a, b) => a.Name.localeCompare(b.Name));
@@ -5230,19 +5256,112 @@ window.BOScaling = function (ctx) {
 
 </script>
 <script>
-// FAQ / Game Mechanics tab: reference pages that only explain the game, nothing here feeds the damage sim.
-// Sections: Skill Scaling (scaling.js, moved here from its own tab 8 Nov 2026) and Monster Affixes (this file).
-// Monster Affixes reads GD.monsterAffixes (Gameplay/monster_affixes.json), GD.guardianMods (scaling.json Rift.GuardianMods),
-// GD.guardians (Rifts/bosses.json colour variants) and GD.ward. Wording follows the game file's own notes; where the file
-// gives only a number the text says only that number. app.js calls BOFaq(ctx) and gets back { render }.
+// FAQ / Game Mechanics tab: reference pages that only explain the game and the site; nothing here feeds the damage sim.
+// Numbers come from the game data (GD) where the game files have them, so they follow patches by themselves:
+//   GD.scaling.Ailments / Monster / Hero / Gem (scaling.json), GD.curses (curses.json), GD.monsterAffixes + guardianMods
+//   (monster_affixes.json, scaling.json Rift.GuardianMods), GD.guardians + ward + fights (bosses.json, scaling.json Rift),
+//   GD.deep (scaling.json Rift Ladder*), GD.xpPenalty (scaling.json XpLevelPenalty).
+// Rules that only the sim knows (from logs or patch notes) are quoted from sim.js with their source.
+// Skill Scaling (scaling.js) moved in here from its own tab on 8 Nov 2026. app.js calls BOFaq(ctx) and gets back { render }.
 window.BOFaq = function (ctx) {
   'use strict';
   const { $, esc } = ctx;
-  const SECTIONS = [['scaling', 'Skill Scaling'], ['affixes', 'Monster Affixes']];
+  const GROUPS = [
+    ['Game mechanics', [['scaling', 'Skill Scaling'], ['ailments', 'Ailments'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
+      ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP Penalty'], ['deep', 'Rupture & the Deep']]],
+    ['About this site', [['sim', 'Sim vs the Game Panel'], ['data', 'Game Data & Patches'], ['privacy', 'Privacy']]],
+  ];
+  const ALL = GROUPS.flatMap(g => g[1]);
   let section = 'scaling';
-  try { const s = localStorage.getItem('bo_faq_section'); if (SECTIONS.some(x => x[0] === s)) section = s; } catch (e) { /* storage blocked */ }
+  try { const s = localStorage.getItem('bo_faq_section'); if (ALL.some(x => x[0] === s)) section = s; } catch (e) { /* storage blocked */ }
 
   const pct = x => String(Math.round(x * 1000) / 10).replace(/\.0$/, '');
+  const r1 = x => String(Math.round(x * 10) / 10).replace(/\.0$/, '');
+  const intro = (title, text) => '<div class="cmp-intro"><div class="eyebrow">REFERENCE</div><h2>' + title + '</h2><p>' + text + '</p></div>';
+  const card = (title, body, sub) => '<div class="card faq-card"><h2>' + title + (sub ? ' <small>' + sub + '</small>' : '') + '</h2>' + body + '</div>';
+  const list = items => '<ul class="faq-list">' + items.filter(Boolean).map(x => '<li>' + x + '</li>').join('') + '</ul>';
+  const table = (head, rows) => '<div class="table-wrap"><table class="tbl faq-tbl"><thead><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.map(r => '<tr' + (r.off ? ' class="faq-off"' : '') + '>' + (r.cells || r).map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
+  const hint = t => '<p class="hint">' + t + '</p>';
+  const needData = h => h + '<div class="card"><p class="hint">Load the game data first (this section needs a newer copy of it).</p></div>';
+
+  // ---------- Ailments ----------
+  function ailments(GD) {
+    const A = (GD.scaling || {}).Ailments, H = (GD.scaling || {}).Hero || {};
+    let h = intro('Ailments', 'Ignite, shock, poison, freeze and bleed: how they work and why some do little on Guardians.');
+    if (!A) return needData(h);
+    if (A.bEnabled === false) return h + card('Ailments are off', hint('In this game build ailments are looks only.'));
+    const shockAt = f => Math.max(A.ShockMin, Math.min(A.ShockMax, A.ShockCoef * Math.pow(f, A.ShockPow)));
+    h += card('The five ailments', table(['Ailment', 'Base chance', 'What it does', 'On Guardians'], [
+      ['<b>Ignite</b>', A.IgniteChance + '% per hit with Fire', 'Deals ' + pct(A.IgniteFrac) + '% of the Fire hit over ' + A.IgniteSeconds + ' s. Only the strongest ignite counts: more ignites do not stack.', 'Same rules.'],
+      ['<b>Shock</b>', A.ShockChance + '% per hit with Lightning', 'The enemy takes more damage for ' + A.ShockSeconds + ' s. The size depends on the hit compared with the enemy\'s life: ' + A.ShockCoef + ' × (hit ÷ life)<sup>' + A.ShockPow + '</sup> %, from ' + A.ShockMin + '% to ' + A.ShockMax + '%. Shock Effect lines raise the ' + A.ShockMax + '% cap up to ' + A.ShockMaxCap + '%.' + (A.ShockStackCap ? ' Several shocks add up to at most ' + A.ShockStackCap + '%.' : ''),
+        'Guardians have a lot of life, so a hit is a small share of it: a hit of 1% of its life shocks for ' + r1(shockAt(0.01)) + '%, 5% for ' + r1(shockAt(0.05)) + '%.'],
+      ['<b>Poison</b>', A.PoisonChance + '% per hit with Poison', 'Each poison deals ' + pct(A.PoisonFracPerSec) + '% of the hit per second for ' + A.PoisonSeconds + ' s and they stack, up to ' + A.PoisonMaxStacks + '.' + (A.bPoisonTakesDamageTaken ? ' Each tick counts the enemy\'s damage taken (curses, Hunter\'s Marks, War Banner), like a hit.' : '') + ' Poison chance lines also poison Physical hits.',
+        'The Dragonling\'s Virulence lets Rares and Guardians hold more stacks (60).'],
+      ['<b>Freeze</b>', 'No chance roll', 'A Cold hit freezes for ' + A.FreezeSecPerPct + ' s per 1% of the enemy\'s life it took, at least ' + A.FreezeMinSeconds + ' s, at most ' + A.FreezeMaxSeconds + ' s. Rares freeze for ' + pct(A.FreezeRareMult) + '% as long.',
+        pct(A.FreezeBossMult) + '% as long, at most ' + A.FreezeBossMaxSeconds + ' s, then immune for ' + A.FreezeBossImmuneSeconds + ' s.'],
+      ['<b>Bleed</b>', 'From skills and lines that cause it', 'Deals ' + pct(A.BleedFracPerSec) + '% of the Physical hit per second.', 'Same rules.'],
+    ]));
+    h += card('Good to know', list([
+      'Chances are per hit that carries the element. Ignite, shock and poison chance lines add to the base chance.',
+      H.IntAilmentDurPer10 ? 'Every 10 Intelligence makes ailments last ' + H.IntAilmentDurPer10 + '% longer; ailment duration lines add more.' : '',
+      'Damage over time ticks every ' + A.TickSeconds + ' s.',
+      A.bMinionAilments ? 'Minions can ignite, shock and poison, but only with the added chance from their summon gem (supports and lines). They have no base chance and cannot freeze or chill.' : '',
+      'The game\'s skill panel uses the tooltip duration for poison. The sim\'s Damage tab shows both where they differ.',
+    ]));
+    return h;
+  }
+
+  // ---------- Enemy defences ----------
+  function defences(GD) {
+    const M = (GD.scaling || {}).Monster, H = (GD.scaling || {}).Hero || {};
+    let h = intro('Enemy Defences', 'Why your damage goes down at higher levels even when the panel number stays the same.');
+    if (!M) return needData(h);
+    const lv = [10, 20, 40, 60, 70, 80], resAt = L => Math.min(M.ResistMax, L * M.ResistPerLevel);
+    const capAt = Math.ceil(M.ResistMax / M.ResistPerLevel);
+    h += card('Resistance and armour by monster level', table(['Monster level'].concat(lv.map(String)), [
+      ['Elemental resistance'].concat(lv.map(L => r1(resAt(L)) + '%')),
+      ['Armour'].concat(lv.map(L => Math.round(L * M.ArmourPerLevel))),
+    ]) + hint('Every monster gains ' + M.ResistPerLevel + '% resistance to Fire, Cold, Lightning and Poison per level, up to ' + M.ResistMax + '% (reached at level ' + capAt + '). Physical damage has no resistance; armour works against it instead (' + M.ArmourPerLevel + ' armour per level).'));
+    h += card('How armour works', list([
+      'Armour takes away part of a Physical hit: armour ÷ (armour + ' + H.ArmourFactor + ' × the hit), at most ' + H.ArmourMaxReduction + '%.',
+      'So a bigger hit loses a smaller share. Armour matters most against fast, small hits.',
+    ]));
+    const W = GD.ward || [];
+    h += card('Guardians resist more', list([
+      'A Guardian spawns as a colour variant with one element and resists that element more (usually 30–40%, Elysia 50%). The list is in <b>Monster Affixes</b>.',
+      W.length ? 'From some Rupture levels it also has <b>Ward</b>: ' + W.map(w => '+' + w.resist + '% from Rupture ' + w.fromRL + ' (Gates from ' + w.gateFromRL + ')').join(', ') + ', to its own element only.' : '',
+      'These add to the level resistance. The sim caps the total at ' + (H.ResistHardCap || 85) + '% (an assumption: the game files give monsters no cap).',
+      'The <b>Armoured</b> and <b>Elemental Ward</b> mods make a Guardian take 23% less damage (all, or elemental only).',
+      'Best answer: use a second element, or one the Guardian does not resist.',
+    ]));
+    h += card('Lowering resistance', list([
+      '<b>Penetration</b> lines take the number off the enemy\'s resistance for your hits. The sim lets it go below 0%; whether the game does is not confirmed yet.',
+      '<b>Woes of Cinders, Rime and the Tempest</b> lower one resistance (half as much on Guardians, more with Dread) and can take it below 0%. Penetration comes after the Woe.',
+      'Damage taken (curses, Marks, shock) is a separate multiplier after resistance: see <b>Curses &amp; Marks</b>.',
+    ]));
+    return h;
+  }
+
+  // ---------- Monster level and rarity ----------
+  function monsters(GD) {
+    const M = (GD.scaling || {}).Monster;
+    let h = intro('Monster Level & Rarity', 'How monster life and damage grow with level, and what Magic and Rare monsters add.');
+    if (!M || !M.Rarity) return needData(h);
+    const R = M.Rarity, NAMES = { 0: 'Normal', 1: 'Magic', 2: 'Rare', 3: 'Guardian' };
+    h += card('Rarity', table(['Rarity', 'Life', 'Damage', 'XP', 'Item rolls', 'Item chance'], Object.keys(R).map(k => [
+      '<b>' + (NAMES[k] || k) + '</b>', '×' + R[k].Life, '×' + R[k].Damage, '×' + R[k].Xp, R[k].ItemRolls, pct(R[k].ItemChance) + '%'])) +
+      hint('Guardians get their life and rewards from their own rules (see <b>Guardian Fights</b>), so their row here is ×1.'));
+    const L = M.Life;
+    if (L && L.K) {
+      const lv = [1, 10, 20, 40, 60, 80], g = (c, x) => Math.exp(c.K * Math.pow(x, c.P)) / Math.exp(c.K);
+      h += card('Growth by level', table(['Monster level'].concat(lv.map(String)), [['Life compared with level 1'].concat(lv.map(x => '×' + r1(g(L, x))))]) +
+        hint('Monster life follows the game\'s curve Base × e<sup>K × level<sup>P</sup></sup> (K ' + L.K + ', P ' + L.P + '). Each monster type then has its own base life. Past Rupture 80 the Deep adds more: see <b>Rupture &amp; the Deep</b>.'));
+    }
+    return h;
+  }
+
+  // ---------- Monster affixes ----------
   const WHO = a => a.bGuardianOnly ? 'Guardian only' : a.bRareOnly ? 'Rare elites only' : a.bEliteOnly ? 'Elites only' : 'Guardians and elites';
   const LIVE = a => a.bEnabled !== false && (a.MinML || 0) < 999 && (a.MinRL || 0) < 999;
   function starts(a) {
@@ -5277,47 +5396,199 @@ window.BOFaq = function (ctx) {
     if (a.DpsFactor && a.DpsFactor !== 1) t.push('damage ×' + a.DpsFactor);
     return t.join(', ') || '–';
   };
-  function affixTable(list) {
-    return '<div class="table-wrap"><table class="tbl faq-tbl"><thead><tr><th>Affix</th><th>Rolls on</th><th>From</th><th>What it does</th><th title="What the game changes on the monster to pay for the affix (its life and its damage)">Cost</th></tr></thead><tbody>' +
-      list.map(a => '<tr' + (LIVE(a) ? '' : ' class="faq-off"') + '><td><b>' + esc(a.Name) + '</b></td><td>' + WHO(a) + '</td><td>' + starts(a) + '</td><td>' + esc(effect(a)) + (a.Note ? '<small class="faq-note">' + esc(a.Note) + '</small>' : '') + '</td><td>' + budget(a) + '</td></tr>').join('') + '</tbody></table></div>';
-  }
-
-  function renderAffixes() {
-    const el = $('#affixPane'), GD = ctx.gd();
-    let h = '<div class="cmp-intro"><div class="eyebrow">REFERENCE</div><h2>Monster Affixes</h2><p>The extra mods a Guardian or an elite monster can roll, read from the game\'s data files. Numbers are the game\'s; this page does not change the damage sim.</p></div>';
-    const list = (GD && GD.monsterAffixes) || [];
-    if (!list.length) { el.innerHTML = h + '<div class="card"><p class="hint">Load the game data first (this section needs a newer copy of it).</p></div>'; return; }
-    const gu = list.filter(a => !a.bEliteOnly), elite = list.filter(a => a.bEliteOnly);
+  const affixTable = rows => table(['Affix', 'Rolls on', 'From', 'What it does', '<span title="What the game changes on the monster to pay for the affix (its life and its damage)">Cost</span>'],
+    rows.map(a => ({ off: !LIVE(a), cells: ['<b>' + esc(a.Name) + '</b>', WHO(a), starts(a), esc(effect(a)) + (a.Note ? '<small class="faq-note">' + esc(a.Note) + '</small>' : ''), budget(a)] })));
+  function affixes(GD) {
+    let h = intro('Monster Affixes', 'The extra mods a Guardian or an elite monster can roll, read from the game\'s data files. Numbers are the game\'s; this page does not change the damage sim.');
+    const all = GD.monsterAffixes || [];
+    if (!all.length) return needData(h);
+    const gu = all.filter(a => !a.bEliteOnly), elite = all.filter(a => a.bEliteOnly);
     const M = GD.guardianMods || {};
-    h += '<div class="card faq-card"><h2>How many mods a Guardian gets</h2><ul class="faq-list">' +
-      (M.MildFromML != null ? '<li>From monster level <b>' + M.MildFromML + '</b> a Guardian can roll a <b>mild</b> mod.</li>' : '') +
-      (M.AnyFromML != null ? '<li>From level <b>' + M.AnyFromML + '</b> it can roll a <b>strong</b> mod as well.</li>' : '') +
-      (M.TwoFromML != null ? '<li>From level <b>' + M.TwoFromML + '</b> it rolls <b>two</b>.</li>' : '') +
-      (M.GateExtraFromML != null ? '<li>A Gate Guardian gets an extra mod from level <b>' + M.GateExtraFromML + '</b>' + (M.GateNoneBelowML ? ', and none below level <b>' + M.GateNoneBelowML + '</b>' : '') + '.</li>' : '') +
-      (M.Pinnacle === 0 ? '<li>Pinnacle Guardians roll <b>no</b> mods.</li>' : '') +
-      (M.DeepBase != null ? '<li>In the Deep (Rupture 81 and up) the file gives a base of <b>' + M.DeepBase + '</b> mods, <b>' + M.DeepPerRL + '</b> per Rupture level step, up to <b>' + M.DeepMax + '</b>. How that is applied is not spelled out in the file.</li>' : '') +
-      '</ul>' + (M.bBudgetNeutral ? '<p class="hint">Mods are budget neutral: the game takes the cost column from the monster\'s life or damage, so a modded Guardian is not meant to take longer to kill or hit harder overall. <b>Empowered</b> is the exception on purpose: it costs fight time for a bigger reward.</p>' : '') +
-      '<p class="hint"><b>Mild</b> mods are the small ones (speed, added element, summons). <b>Strong</b> mods change the fight (extra life, less damage taken, hazards).</p></div>';
-    h += '<div class="card faq-card"><h2>Guardian mods <small>' + gu.length + ' in the file</small></h2>' + affixTable(gu.filter(a => a.Mild).concat(gu.filter(a => !a.Mild))) + '</div>';
-    h += '<div class="card faq-card"><h2>Elite affixes <small>rare and elite monsters in Rifts</small></h2>' + affixTable(elite) +
-      '<p class="hint">Rupture level is the Rift Level; it equals the monster level from 1 to 80. Greyed rows are in the file but not rolled in the game yet.</p></div>';
-    // Guardian colour variants (the sim uses these) and the Ward tiers.
+    h += card('How many mods a Guardian gets', list([
+      M.MildFromML != null ? 'From monster level <b>' + M.MildFromML + '</b> a Guardian can roll a <b>mild</b> mod.' : '',
+      M.AnyFromML != null ? 'From level <b>' + M.AnyFromML + '</b> it can roll a <b>strong</b> mod as well.' : '',
+      M.TwoFromML != null ? 'From level <b>' + M.TwoFromML + '</b> it rolls <b>two</b>.' : '',
+      M.GateExtraFromML != null ? 'A Gate Guardian gets an extra mod from level <b>' + M.GateExtraFromML + '</b>' + (M.GateNoneBelowML ? ', and none below level <b>' + M.GateNoneBelowML + '</b>' : '') + '.' : '',
+      M.Pinnacle === 0 ? 'Pinnacle Guardians roll <b>no</b> mods.' : '',
+      M.DeepBase != null ? 'In the Deep (Rupture 81 and up) the file gives a base of <b>' + M.DeepBase + '</b> mods, <b>' + M.DeepPerRL + '</b> per Rupture level step, up to <b>' + M.DeepMax + '</b>. How that is applied is not spelled out in the file.' : '',
+    ]) + (M.bBudgetNeutral ? hint('Mods are budget neutral: the game takes the cost column from the monster\'s life or damage, so a modded Guardian is not meant to take longer to kill or hit harder overall. <b>Empowered</b> is the exception on purpose: it costs fight time for a bigger reward.') : '') +
+      hint('<b>Mild</b> mods are the small ones (speed, added element, summons). <b>Strong</b> mods change the fight (extra life, less damage taken, hazards).'));
+    h += card('Guardian mods', affixTable(gu.filter(a => a.Mild).concat(gu.filter(a => !a.Mild))), gu.length + ' in the file');
+    h += card('Elite affixes', affixTable(elite) + hint('Rupture level is the Rift level; it equals the monster level from 1 to 80. Greyed rows are in the file but not rolled in the game yet.'), 'rare and elite monsters in Rifts');
     const gs = Object.values(GD.guardians || {});
-    if (gs.length) {
-      h += '<div class="card faq-card"><h2>Guardian colour variants <small>the sim uses these</small></h2><p class="hint">A Guardian spawns as a colour with one element and extra resistance to it' +
-        ((GD.ward || []).length ? '. On top of that, Ward adds resistance to that element: ' + GD.ward.map(w => w.resist + '% from Rupture ' + w.fromRL).join(', ') : '') + '.</p>' +
-        '<div class="table-wrap"><table class="tbl faq-tbl"><thead><tr><th>Guardian</th><th>Variants (element, resistance)</th></tr></thead><tbody>' +
-        gs.map(g => '<tr><td><b>' + esc(g.name) + '</b></td><td>' + g.variants.map(v => esc(v.name) + ' (' + esc(v.element) + ' ' + v.resist + '%)').join(' · ') + '</td></tr>').join('') + '</tbody></table></div></div>';
-    }
-    el.innerHTML = h;
+    if (gs.length) h += card('Guardian colour variants', hint('A Guardian spawns as a colour with one element and extra resistance to it' + ((GD.ward || []).length ? '. On top of that, Ward adds resistance to that element: ' + GD.ward.map(w => w.resist + '% from Rupture ' + w.fromRL).join(', ') : '') + '.') +
+      table(['Guardian', 'Variants (element, resistance)'], gs.map(g => ['<b>' + esc(g.name) + '</b>', g.variants.map(v => esc(v.name) + ' (' + esc(v.element) + ' ' + v.resist + '%)').join(' · ')])), 'the sim uses these');
+    return h;
   }
 
+  // ---------- Guardian fights ----------
+  function guardians(GD) {
+    const F = GD.fights;
+    let h = intro('Guardian Fights', 'Phases, enrage, the harder tiers at higher Rupture levels, Gate rallies and what a kill gives you.');
+    if (!F) return needData(h);
+    const E = F.enrage || {}, A = F.arena || {}, X = A.escalation || {};
+    h += card('Phases and arena breaks', list([
+      (F.phases || []).map(p => 'Phase ' + p.Phase + ' at <b>' + pct(p.AtLife) + '%</b> life' + (p.MinML > 1 ? ' (from level ' + p.MinML + ')' : '')).join(', ') + '. Each phase adds attacks.',
+      A.marks ? 'At <b>' + A.marks.map(pct).join('%</b> and <b>') + '%</b> life' + (A.marksLow ? ' (only at ' + A.marksLow.map(pct).join('%, ') + '% below Rupture ' + A.lowBelowRL + ')' : '') + ' the Guardian leaves the fight for a while (it burrows, flies off or retreats) and the arena turns on its hazards: rockfall, sweeps, pools, walls, lines, orbs, soak circles or waves of adds.' : '',
+      X.OneBelowRL ? 'Below Rupture ' + X.OneBelowRL + ' each break has one hazard. From Rupture ' + X.LateFromRL + ' it adds another, and from Rupture ' + X.Late2FromRL + ' another.' : '',
+      'Time spent in breaks counts against your real DPS in the log check, but not on the sheet.',
+    ]));
+    if (E.FromML) h += card('Enrage', list([
+      'From monster level <b>' + E.FromML + '</b>, a Guardian enrages after <b>' + E.Rift + ' s</b> in a Rift, ' + E.Gate + ' s at a Gate and ' + E.Pinnacle + ' s at a Pinnacle.',
+      'Enraged: <b>+' + E.DamagePct + '% damage</b> and <b>+' + E.SpeedPct + '% speed</b>' + (E.bStacking === false ? ', once (it does not stack)' : '') + '.',
+      'The <b>Early Enrage</b> mod shortens the timer (see Monster Affixes).',
+    ]));
+    if ((F.tiers || []).length) h += card('Harder tiers by Rupture level', table(['Tier', 'From Rupture', 'Gates from', 'What happens'],
+      F.tiers.slice().sort((a, b) => a.FromRL - b.FromRL).map(t => ['<b>' + esc(t.Name) + '</b>', t.FromRL, t.GateFromRL != null ? t.GateFromRL : '–', esc(t.Text || '')])));
+    const R = F.rally, El = F.elder;
+    if (R || El) h += card('Gate rallies and Elder Guardians', list([
+      R ? 'At <b>' + pct(R.AtLife) + '%</b> life a Gate Guardian (Gate band ' + (R.Bands || []).join(', ') + (R.Elder ? ', and every Elder' : '') + ') calls <b>' + R.Count + '</b> rare champions around it and takes only <b>' + pct(R.Taken) + '%</b> of every hit until they fall or ' + R.MaxSeconds + ' s pass. Then it reels for ' + R.Stagger + ' s.' : '',
+      R ? 'Kill the champions first: hitting the Guardian during a rally does almost nothing.' : '',
+      El ? 'From Rupture <b>' + El.FromRL + '</b>, ' + pct(El.Chance) + '% of Riven maps have an <b>Elder</b> Guardian: ×' + El.Life + ' life, ×' + El.Damage + ' damage and ' + El.ExtraRolls + ' extra item roll. The map card names it.' : '',
+    ]));
+    const W = F.rewards || {};
+    h += card('Attempts and rewards', list([
+      F.attempts ? 'You get <b>' + F.attempts + '</b> attempts at a Guardian' + (F.ruptureDeaths ? ', and a Rupture allows <b>' + F.ruptureDeaths + '</b> deaths' : '') + '.' : '',
+      W.ItemRolls ? '<b>' + W.ItemRolls + '</b> item rolls (at least ' + W.MinRares + ' rare), item level +' + W.ItemLevelBonus + ' (up to ' + W.ItemLevelCap + ').' : '',
+      W.UniqueChance != null ? pct(W.UniqueChance) + '% unique chance, ' + pct(W.SupportGemChance) + '% support gem chance, ×' + W.GoldMult + ' gold, XP of ' + W.XpMonsterMult + ' monsters.' : '',
+      W.SigilChance != null ? pct(W.SigilChance) + '% sigil chance, +' + pct(W.SigilChancePerSlotted) + '% for each sigil slotted.' : '',
+      W.GateExtraRolls ? 'Gates: +' + W.GateExtraRolls + ' item roll' + (W.GateFirstKillUnique ? ', and a unique on the first kill' : '') + '.' : '',
+      W.PinnacleUniques ? 'Pinnacle: ' + W.PinnacleUniques + ' uniques' + (W.PinnacleFirstKillPassivePoints ? ', and ' + W.PinnacleFirstKillPassivePoints + ' passive points on the first kill' : '') + '.' : '',
+      'The <b>Empowered</b> mod adds 1 more item roll.',
+    ]));
+    return h;
+  }
+
+  // ---------- Curses and marks ----------
+  function curses(GD) {
+    const C = Object.values(GD.curses || {}).filter(c => c.Kind && c.Kind !== 'Ailment');
+    let h = intro('Curses & Marks', 'Woes, Sentences, Hunter\'s Marks and the War Banner: what stacks with what, and what a Guardian takes.');
+    if (!C.length) return needData(h);
+    const fx = c => {
+      const t = [];
+      if (c.TakenPct) t.push('+' + c.TakenPct + '% damage taken' + (c.Kind === 'Mark' ? ' per Mark' : ''));
+      for (const [d, v] of Object.entries(c.ElementTakenPct || {})) t.push('+' + v + '% ' + d + ' damage taken');
+      for (const [d, v] of Object.entries(c.ResistDown || {})) t.push('−' + v + '% ' + d + ' resistance');
+      if (c.Slow) t.push(pct(c.Slow) + '% slow');
+      return t.join(', ') || (c.Text ? esc(c.Text.replace(/\{\d+\}%\s*/g, '')) : '–');
+    };
+    const boss = c => c.Kind === 'Mark' ? 'Up to ' + (c.Dread && c.Dread.BossCap || 20) + ' Marks (normal: ' + (c.Dread && c.Dread.Cap || 10) + ')' : c.BossEffect != null ? pct(c.BossEffect) + '% effect' : 'Full effect';
+    h += card('Curses in the game', table(['Curse', 'Kind', 'Effect', 'On Guardians'], C.map(c => ['<b>' + esc(c.Name) + '</b>', c.Kind, fx(c), boss(c)])));
+    const woe = C.find(c => c.Kind === 'Woe') || {}, D = woe.Dread || {}, T = woe.Tough || {};
+    h += card('What stacks', list([
+      '<b>Woes</b>: up to <b>2</b> per enemy (lines like "You can lay +1 more Woe" add more). A new Woe replaces the oldest.',
+      '<b>Sentences</b>: one enemy at a time. It pays out when the enemy dies.',
+      'Woes and Sentences are separate, so an enemy can have both. A Guardian takes them all, but Woes at half effect.',
+      '<b>Hunter\'s Marks</b> and the <b>War Banner</b> are separate again and add on top of curses. Marks fall off 3 s after your last hit, so any skill that hits more often keeps them at the cap.',
+      'All of these multiply: two Woes, a Sentence and Marks are each their own "more damage taken".',
+    ]));
+    if (D.EffectPct) h += card('Dread', list([
+      'While you channel a Woe it builds <b>Dread</b>: each point is +' + D.EffectPct + '% curse effect, up to ' + D.Cap + ' (' + D.BossCap + ' on Guardians).',
+      T.Holds ? 'On Rares, Uniques and Guardians a Woe holds and builds Dread by itself, up to ' + T.Cap + '.' : '',
+      'Curse effect lines raise it further. Intelligence does not raise a curse\'s damage taken (game note).',
+    ]));
+    return h;
+  }
+
+  // ---------- XP penalty ----------
+  function xp(GD) {
+    const X = GD.xpPenalty;
+    let h = intro('XP Penalty', 'When monsters give you less XP, and when they give you more.');
+    if (!X || X.PerLevel == null) return needData(h);
+    h += card('The rule', list([
+      'Monsters within <b>' + X.SafeRange + '</b> levels of you give full XP. The range grows by ' + X.SafeRangePer16Levels + ' for every 16 hero levels.',
+      'Past that, monsters below your level give <b>' + pct(X.PerLevel) + '% less XP</b> per level, never less than <b>' + pct(X.Floor) + '%</b>.',
+      X.CatchUpPerLevel ? 'Monsters above your level give <b>' + pct(X.CatchUpPerLevel) + '% more XP</b> per level, up to <b>+' + pct(X.CatchUpMax) + '%</b>.' : '',
+      X.bNoneOnLadder ? 'There is <b>no</b> penalty in the Deep (Rupture 81 and up).' : '',
+    ]) + hint('In short: keep Rupture level close to your hero level, or a little above.'));
+    return h;
+  }
+
+  // ---------- Rupture and the Deep ----------
+  function deep(GD) {
+    const D = GD.deep;
+    let h = intro('Rupture & the Deep', 'What a Rupture level means, and how the Deep past Rupture 80 keeps getting harder.');
+    if (!D || !D.MapMaxLevel) return needData(h);
+    const lv = [D.MapMaxLevel + 10, D.MapMaxLevel + 20, D.MapMaxLevel + 40, D.MapMaxLevel + 70], up = L => L - D.MapMaxLevel;
+    const ml = (D.LadderMonsterLevels || []);
+    h += card('Rupture levels', list([
+      'Rupture level <b>1–' + D.MapMaxLevel + '</b> is the monster level: Rupture 50 has level 50 monsters.',
+      ml.length ? 'From Rupture ' + (D.MapMaxLevel + 1) + ' (the Deep) the monster level goes ' + ml.join(', ') + ' and stays at ' + ml[ml.length - 1] + '. After that, monsters get stronger by multipliers instead.' : '',
+    ]));
+    h += card('The Deep', table(['Rupture', String(D.MapMaxLevel)].concat(lv.map(String)), [
+      ['Monster life', '×1'].concat(lv.map(L => '×' + r1(Math.pow(D.LadderLifePerLevel, up(L))))),
+      ['Monster damage', '×1'].concat(lv.map(L => '×' + r1(Math.pow(D.LadderDamagePerLevel, up(L))))),
+      ['XP', '+0%'].concat(lv.map(L => '+' + up(L) * D.LadderXpPctPerLevel + '%')),
+    ]) + list([
+      'Each Rupture level past ' + D.MapMaxLevel + ': monster life ×' + D.LadderLifePerLevel + ', damage ×' + D.LadderDamagePerLevel + ', XP +' + D.LadderXpPctPerLevel + '%.',
+      (D.LadderUnlock || []).length ? 'A clear' + (D.LadderUnlockNeedsDeathless ? ' without dying' : '') + ' opens the next levels: +' + D.LadderUnlock[0].Step + ' if it took under ' + D.LadderUnlock[0].Seconds + ' s, otherwise +' + (D.LadderUnlock[1] || {}).Step + '.' : '',
+      'Guardians in the Deep roll more mods (see Monster Affixes), and Elder Guardians can appear (see Guardian Fights).',
+    ]));
+    return h;
+  }
+
+  // ---------- About this site ----------
+  function sim() {
+    let h = intro('Sim vs the Game Panel', 'Why the numbers on the Damage tab can differ from the in-game skill panel, and from your real kills.');
+    h += card('Three different numbers', list([
+      '<b>Sheet DPS</b> (skill panel DPS) is what the game\'s skill panel shows: your hit, crit and attacks or casts per second, against no enemy. Type the panel number on the Damage tab to see how close the sheet is.',
+      '<b>DPS against an enemy</b> (the enemy settings on the Damage tab: level, rarity, Guardian element) takes the sheet and applies the enemy: its resistance and armour for the level, the Guardian\'s colour and Ward, your penetration, curses, Marks, shock and ailment damage. The game\'s panel shows none of this, so this number is usually lower.',
+      '<b>Real DPS</b> comes from your game log: Guardian life ÷ fight time. Use <b>Load game log</b> and the Damage tab\'s <b>Check against your fights</b>.',
+    ]));
+    h += card('Why real DPS is lower than the sheet', list([
+      'Moving and dodging: every second you are not attacking counts.',
+      'Arena breaks: the Guardian leaves the fight at set life marks (see Guardian Fights).',
+      'Gate rallies: the Guardian takes only a small share of damage until its champions fall.',
+      'Mods like Armoured, Elemental Ward or Regenerating that the sheet does not count.',
+      'Within 15% is a match. A much bigger gap on one skill usually means a rule the sim does not know yet: please use <b>Report a problem</b> or <b>Send a check report</b>.',
+    ]));
+    h += card('How the sim is kept right', list([
+      'It reads the game\'s own data files for skills, supports, items, the tree and monster rules.',
+      'Rules the files do not hold come from the game log, in-game tooltips or the developer\'s patch notes, and only change with that kind of evidence.',
+      'Some values are estimates and are marked on the page, for example skill levels past gem level 25.',
+      'Minions get their own sheet: summon gems show the minion\'s hit, not yours.',
+    ]));
+    return h;
+  }
+  function data(GD) {
+    const built = GD && (GD.steamBuild ? 'Steam build ' + GD.steamBuild : '') + (GD && (GD.filesAt || GD.builtAt) ? ' (' + String(GD.filesAt || GD.builtAt).slice(0, 10) + ')' : '');
+    let h = intro('Game Data & Patches', 'Where the numbers come from and how fast the site follows a game patch.');
+    h += card('Where the numbers come from', list([
+      'Skills, supports, items, the passive tree and monster rules are read from the game\'s own Data folder (Steam).',
+      built ? 'This page uses: <b>' + esc(built) + '</b>. On a computer the same line is near the bottom of the side menu, under the light/dark and report buttons.' : '',
+    ]));
+    h += card('After a game patch', list([
+      'The site checks for a new Steam build every 15 minutes and updates its numbers by itself.',
+      'New things (a new skill, tree changes, a new mechanic) need code changes. Those come after the patch notes are read, so they can take a little longer.',
+      'If the site is behind your game, on a computer use <b>Use my own game files</b> near the bottom of the side menu, above <b>Reset loaded characters</b>, and pick your game\'s Data folder. It is read in your browser only. <b>Use the site\'s data</b> switches back.',
+    ]));
+    return h;
+  }
+  function privacy() {
+    let h = intro('Privacy', 'What stays on your computer and what leaves it.');
+    h += card('Stays on your computer', list([
+      'Your <b>save files</b> and the <b>game log</b> (BrokenOath.log) are read in this browser tab only. They are never uploaded.',
+      'The characters and plans you load are kept in this browser\'s storage so they are there next time. <b>Reset loaded characters</b> removes them.',
+      'The <b>Save Creator</b> works in your browser and hands you a file to download. It only edits offline characters.',
+    ]));
+    h += card('Leaves your computer only when you choose', list([
+      '<b>Share links</b>: the short link stores the build code (name, class, level, gear, tree, skills) so the link can open it. The long link carries the code itself and stores nothing.',
+      '<b>Reports</b> (Report a problem, Send a check report): your text, the check report\'s numbers if there is one, and a share link only if you tick it. No account. Check reports leave out your character name, Steam ID and file paths. Reports are kept 180 days.',
+      'No IP addresses or cookies are stored with links or reports. To stop spam, the report limit keeps a scrambled IP and date for one hour.',
+      'The <b>Buy me a coffee</b> button is loaded from buymeacoffee.com.',
+    ]));
+    return h;
+  }
+
+  const RENDER = { ailments, defences, monsters, affixes, guardians, curses, xp, deep, sim, data, privacy };
   function show() {
-    const nav = $('#faqNav');
-    nav.innerHTML = SECTIONS.map(s => '<button type="button" class="chip sc-chip' + (section === s[0] ? ' active' : '') + '" data-s="' + s[0] + '" aria-pressed="' + (section === s[0]) + '">' + s[1] + '</button>').join('');
+    const nav = $('#faqNav'), GD = ctx.gd() || {};
+    nav.innerHTML = GROUPS.map(g => '<div class="faq-group"><span class="faq-group-label">' + g[0] + '</span><div class="sc-chips">' +
+      g[1].map(s => '<button type="button" class="chip sc-chip' + (section === s[0] ? ' active' : '') + '" data-s="' + s[0] + '" aria-pressed="' + (section === s[0]) + '">' + s[1] + '</button>').join('') + '</div></div>').join('');
     $('#scalingPane').hidden = section !== 'scaling';
-    $('#affixPane').hidden = section !== 'affixes';
-    if (section === 'scaling') ctx.scaling.render(); else renderAffixes();
+    $('#affixPane').hidden = section === 'scaling';
+    if (section === 'scaling') ctx.scaling.render();
+    else $('#affixPane').innerHTML = RENDER[section](GD);
   }
   function render() {
     const nav = $('#faqNav'); if (!nav) return;

@@ -1331,7 +1331,17 @@ body.compare-page #controls { display: none; }
 .faq-tbl td:nth-child(4) { min-width: 260px; }
 .faq-note { display: block; color: var(--faint); font-size: 11.5px; margin-top: 3px; }
 .faq-off { opacity: .55; }
-.faq-xp-chart { width: 100%; margin: 4px 0 0; overflow: hidden; }
+.faq-xp-chart { position: relative; width: 100%; margin: 4px 0 0; overflow: hidden; }
+.faq-xp-chart:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.faq-xp-cursor { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; pointer-events: none; }
+.faq-xp-cursor[hidden], .faq-xp-tooltip[hidden] { display: none; }
+.faq-xp-tooltip ul { margin: 0; padding-left: 18px; list-style: disc; }
+.faq-xp-tooltip li + li { margin-top: 5px; }
+.faq-xp-tooltip { position: fixed; top: 0; left: 0; z-index: 1000; display: flex; flex-direction: column; gap: 5px; width: max-content; max-width: min(360px, calc(100vw - 16px)); box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 6px; background: var(--panel); color: var(--text); font-size: 12px; line-height: 1.4; font-variant-numeric: tabular-nums; box-shadow: 0 3px 12px #0003; pointer-events: none; }
+.faq-xp-summary { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); font-size: 12px; font-variant-numeric: tabular-nums; }
+.faq-xp-summary > b { flex-basis: 100%; }
+.faq-xp-summary-xp strong { color: var(--dashboard-green); }
+.faq-xp-summary-life strong { color: var(--dashboard-gold); }
 .faq-xp-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .faq-xp-chart text { fill: var(--faint); font: 11px system-ui, sans-serif; }
 .faq-xp-chart .faq-xp-axis { fill: var(--muted); font-size: 12px; }
@@ -1352,7 +1362,13 @@ body.compare-page #controls { display: none; }
 .faq-xp-life-value b { color: var(--dashboard-gold); font-variant-numeric: tabular-nums; }
 .faq-xp-slider { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 .faq-xp-slider output { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
-.faq-xp-range { display: block; width: 100%; margin: 0 0 8px; accent-color: var(--dashboard-green); cursor: pointer; }
+.faq-xp-range { display: block; appearance: none; -webkit-appearance: none; width: 100%; height: 32px; margin: 0 0 8px; padding: 0; background: transparent; cursor: grab; }
+.faq-xp-range::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--line); }
+.faq-xp-range::-moz-range-track { height: 6px; border-radius: 3px; background: var(--line); }
+/* A horizontal handle represents the whole 20-level comparison window. */
+.faq-xp-range::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 64px; height: 12px; margin-top: -3px; border: 1px solid var(--panel); border-radius: 3px; background: var(--dashboard-green); box-shadow: 0 0 0 1px var(--dashboard-green); }
+.faq-xp-range::-moz-range-thumb { width: 64px; height: 12px; box-sizing: border-box; border: 1px solid var(--panel); border-radius: 3px; background: var(--dashboard-green); box-shadow: 0 0 0 1px var(--dashboard-green); }
+.faq-xp-range:active { cursor: grabbing; }
 .faq-xp-range:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .faq-card .faq-xp-chart + .faq-xp-slider + .faq-xp-range + .table-wrap { margin-top: 6px; }
 @media (max-width: 640px) { .faq-xp-chart text { font-size: 15px; } .faq-xp-chart .faq-xp-axis { font-size: 17px; } }

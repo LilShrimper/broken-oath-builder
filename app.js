@@ -7771,7 +7771,7 @@ window.BOCharacter = function (ctx) {
 
   // Tries every combination. Returns a job: call job.step(n) until job.done; job.results is sorted best first.
   // opt: { pool: 'owned' | 'all', target: 'enemy' | 'panel', sockets, keep: 15, manaOk: only setups whose mana is sustained,
-  //        pinned: support ids that stay in every setup }
+  //        pinned: support ids that stay in every setup, blocked: support ids the search never picks (the page's "block" button) }
   function supportSearch(GD, ch, skillId, o, opt) {
     opt = opt || {};
     const sk = GD.skills[lc(skillId)];
@@ -7783,10 +7783,11 @@ window.BOCharacter = function (ctx) {
     // A Conduit spell's supports sit in the channel's sockets, so they must fit the channel.
     const fits = Object.values(GD.supports).filter(s => host ? fitsTags(s, tagSets[1]) : fitsTags(s, tagSets[0]));
     // Pinned supports sit in every setup; the search fills the other sockets.
-    let pinned = (opt.pinned || []).map(lc).filter(id => fits.some(s => lc(s.Id) === id));
+    const blocked = new Set((opt.blocked || []).map(lc));
+    let pinned = (opt.pinned || []).map(lc).filter(id => !blocked.has(id) && fits.some(s => lc(s.Id) === id));
     const pinnedShapes = pinned.filter(id => SHAPES.includes(id) && id !== 'skyfall');
     if (pinnedShapes.length > 1) pinned = pinned.filter(id => !pinnedShapes.slice(1).includes(id));
-    const pool = fits.filter(s => !isSummon(sk) || minionCounts(s, sk)).map(s => lc(s.Id)).filter(id => !pinned.includes(id) && (isSummon(sk) || !NO_SINGLE_TARGET.has(id) || (opt.manaOk && MANA_ONLY.has(id))) && (opt.pool === 'all' || owned.has(id)));
+    const pool = fits.filter(s => !isSummon(sk) || minionCounts(s, sk)).map(s => lc(s.Id)).filter(id => !pinned.includes(id) && !blocked.has(id) && (isSummon(sk) || !NO_SINGLE_TARGET.has(id) || (opt.manaOk && MANA_ONLY.has(id))) && (opt.pool === 'all' || owned.has(id)));
     // A Conduit spell rides in the channel's sockets (the granted Conduit takes none).
     const sockets = opt.sockets || (host ? socketsFor(GD, ch, host.skill) : socketsFor(GD, ch, skillId, o.gemLevel));
     if (pinned.length > sockets) pinned = pinned.slice(0, sockets);
@@ -7955,7 +7956,7 @@ window.BOStartApp = function () {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0 },
     enemyLevel: null, rarity: 'rare', gElem: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: false, enemyLife: null, graveCall: false, flashfire: false, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
     penFloor: false, opt: null, optJob: null, last: null,
-    keepSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
+    keepSup: new Set(), blockSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
   };
   let upgradeOptimizer = { status: 'idle', results: [], key: '', run: 0 };
 
@@ -8307,7 +8308,8 @@ window.BOStartApp = function () {
   // Every support that fits this skill as a tag: click to socket or take out, pin to keep it in every setup
   // "Find best supports" tries. Ones that only help against packs sit in their own group.
   const PIN = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M9.8 1.2l5 5-1.6.4-2.6 2.6.4 3.5-1.4 1.4-2.9-2.9L3.2 15l-1.1-.3-.1-1.1 3.8-3.8L2.9 6.9l1.4-1.4 3.5.4 2.6-2.6z"/></svg>';
-  const SUP_HINT = 'Click a support to socket it or take it out. Pin one to keep it in every setup the search tries.';
+  const BLOCK = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.8 12.2l8.4-8.4" stroke="currentColor" stroke-width="1.8"/></svg>';
+  const SUP_HINT = 'Click a support to socket it or take it out. Pin one to keep it in every setup the search tries, or block one so the search never picks it.';
   function supSockets() { const h = conduitHostNow(st.conduit); return h ? S.socketsFor(GD, st.ch, h.skill) : S.socketsFor(GD, st.ch, st.skill, st.gemLevel || undefined); }
   function renderSupportSkillSelect() {
     const skillSelect = $('#supportSkillSelect');
@@ -8326,11 +8328,12 @@ window.BOStartApp = function () {
     const known = new Set(choices.map(c => c.id));
     const n = supSockets(), used = [...inSet].length;
     for (const id of [...st.keepSup]) if (!inSet.has(id)) st.keepSup.delete(id);
-    $('#supportCount').textContent = used + ' / ' + n + ' sockets' + (st.keepSup.size ? ' · ' + st.keepSup.size + ' pinned' : '');
+    $('#supportCount').textContent = used + ' / ' + n + ' sockets' + (st.keepSup.size ? ' · ' + st.keepSup.size + ' pinned' : '') + (st.blockSup.size ? ' · ' + st.blockSup.size + ' blocked' : '');
     const tag = c => {
-      const on = inSet.has(c.id), s = status[c.id], bad = on && s && !s.ok, kept = st.keepSup.has(c.id);
-      return '<span class="sup' + (on ? ' on' : '') + (bad ? ' bad' : '') + '"><button type="button" class="sup-name" data-sup="' + esc(c.id) + '" aria-pressed="' + on + '">' + gemDot(c.id) + esc(c.name) + '</button>' +
-        (on && !bad ? '<button type="button" class="sup-pin' + (kept ? ' kept' : '') + '" data-pin="' + esc(c.id) + '" aria-pressed="' + kept + '" aria-label="' + (kept ? 'Unpin ' : 'Pin ') + esc(c.name) + '" title="' + (kept ? 'Pinned: every setup the search tries keeps it' : 'Pin: keep it in every setup the search tries') + '">' + PIN + '</button>' : '') + '</span>';
+      const on = inSet.has(c.id), s = status[c.id], bad = on && s && !s.ok, kept = st.keepSup.has(c.id), blk = st.blockSup.has(c.id);
+      return '<span class="sup' + (on ? ' on' : '') + (bad ? ' bad' : '') + (blk ? ' blocked' : '') + '"><button type="button" class="sup-name" data-sup="' + esc(c.id) + '" aria-pressed="' + on + '">' + gemDot(c.id) + esc(c.name) + '</button>' +
+        (on && !bad ? '<button type="button" class="sup-pin' + (kept ? ' kept' : '') + '" data-pin="' + esc(c.id) + '" aria-pressed="' + kept + '" aria-label="' + (kept ? 'Unpin ' : 'Pin ') + esc(c.name) + '" title="' + (kept ? 'Pinned: every setup the search tries keeps it' : 'Pin: keep it in every setup the search tries') + '">' + PIN + '</button>' : '') +
+        (!on ? '<button type="button" class="sup-block' + (blk ? ' kept' : '') + '" data-block="' + esc(c.id) + '" aria-pressed="' + blk + '" aria-label="' + (blk ? 'Unblock ' : 'Block ') + esc(c.name) + '" title="' + (blk ? 'Blocked: the search never picks it. Click to allow it again' : 'Block: the search never picks it') + '">' + BLOCK + '</button>' : '') + '</span>';
     };
     // Socketed supports that do not fit (from a save or another skill) still show, marked.
     const strays = [...inSet].filter(id => !known.has(id)).map(id => ({ id, name: (GD.supports[id] || { Name: id }).Name, desc: (GD.supports[id] || {}).Description || '' }));
@@ -8346,7 +8349,7 @@ window.BOStartApp = function () {
   function toggleSupport(id) {
     const inSet = (st.supports || []).map(s => s.toLowerCase());
     const sd = GD.supports[id] || {};
-    st.supMsg = '';
+    st.supMsg = ''; st.blockSup.delete(id); // socketing a blocked support by hand allows it again
     if (inSet.includes(id)) {
       st.supports = st.supports.filter(s => s.toLowerCase() !== id); st.keepSup.delete(id); st.off.delete('support:' + id);
     } else {
@@ -8362,6 +8365,7 @@ window.BOStartApp = function () {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.sup) toggleSupport(b.dataset.sup);
     else if (b.dataset.pin) { const id = b.dataset.pin; if (st.keepSup.has(id)) st.keepSup.delete(id); else st.keepSup.add(id); renderSupportPicker(st.last); }
+    else if (b.dataset.block) { const id = b.dataset.block; if (st.blockSup.has(id)) st.blockSup.delete(id); else { st.blockSup.add(id); st.keepSup.delete(id); } if (st.opt) { stopSearch(); st.opt = null; render(); } else renderSupportPicker(st.last); }
     else if (b.dataset.granted) { const k = b.dataset.granted; if (st.off.has(k)) st.off.delete(k); else st.off.add(k); render(); }
   });
   $('#supportChips').addEventListener('toggle', e => { if (e.target.matches && e.target.matches('details.sup-more')) st.supMore = e.target.open; }, true);
@@ -8751,7 +8755,7 @@ window.BOStartApp = function () {
     let gearCandidates, supportJob, treeJob;
     try {
       gearCandidates = gearUpgradeCandidates(st.ch);
-      supportJob = S.supportSearch(GD, st.ch, st.skill, opts(), { pool: 'all', target: 'enemy', keep: 40, manaOk: true, pinned: [...st.keepSup] });
+      supportJob = S.supportSearch(GD, st.ch, st.skill, opts(), { pool: 'all', target: 'enemy', keep: 40, manaOk: true, pinned: [...st.keepSup], blocked: [...st.blockSup] });
       treeJob = BOTreeOpt.optimize(GD, S, st.ch, st.skill, opts(), {
         keepDefence: $('#optKeepDef').checked,
         allowKeystones: $('#optKeys').checked,
@@ -9219,7 +9223,7 @@ window.BOStartApp = function () {
     const o = opts(), pool = $('#optPool').checked ? 'owned' : 'all', target = $('#optTarget').value, manaOk = $('#optMana').checked;
     const cur = S.calcSkill(GD, st.ch, st.skill, o);
     if (cur.unsupported || cur.error) return;
-    const job = S.supportSearch(GD, st.ch, st.skill, o, { pool, target, keep: 12, manaOk, pinned: [...st.keepSup] });
+    const job = S.supportSearch(GD, st.ch, st.skill, o, { pool, target, keep: 12, manaOk, pinned: [...st.keepSup], blocked: [...st.blockSup] });
     st.optJob = job;
     st.optHide = false;
     st.opt = { skill: st.skill, pool, target, manaOk, pinnedN: job.pinned.length, sig: optSig(), running: true, tried: 0, total: job.total, exact: job.exact, combos: job.combos, sockets: job.sockets, poolSize: job.pool.length, results: job.results, currentValue: target === 'panel' ? cur.panelDps : cur.totalDps, baseSup: (st.supports || []).map(s => s.toLowerCase()) };
@@ -10698,7 +10702,7 @@ window.BOStartApp = function () {
     skillscaling: 'skills', minions: 'skills/minions', creator: 'creator', plan: 'plan', code: 'code' };
   const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', 'build:skills': 'Skills', 'build:gear': 'Gear', damage: 'Damage Analysis',
     compare: 'Item Simulator', items: 'Item Search', grail: 'Grail', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery",
-    faq: 'FAQ / Game Mechanics', skillscaling: 'Skills', minions: 'Minion Scaling', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code' };
+    faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code' };
   // The Skills tab holds two views: Skill Scaling (scaling.js) and Minion Scaling (faq.js's minions section).
   let skillsView = 'scaling';
   function renderSkillsTab() {

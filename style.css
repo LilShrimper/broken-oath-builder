@@ -507,6 +507,13 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 .sup-pin { border: 0; border-left: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); background: none; color: var(--faint); padding: 0 7px; cursor: pointer; display: flex; align-items: center; }
 .sup-pin:hover { color: var(--accent); }
 .sup-pin.kept { color: var(--accent-ink); background: var(--accent); }
+.sup-block { border: 0; border-left: 1px solid var(--line); background: none; color: var(--faint); padding: 0 7px; cursor: pointer; display: none; align-items: center; border-radius: 0 999px 999px 0; }
+.sup:hover .sup-block, .sup-block:focus-visible, .sup-block.kept { display: flex; }
+@media (hover: none) { .sup-block { display: flex; } }
+.sup-block:hover { color: var(--bad); }
+.sup-block.kept { color: #fff; background: var(--bad); }
+.sup.blocked { opacity: .6; border-style: dashed; }
+.sup.blocked .sup-name { text-decoration: line-through; }
 .sup-more summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
 .sup-info { min-height: 2.8em; margin: 4px 0 0; }
 .sup-info.bad { color: var(--bad); }

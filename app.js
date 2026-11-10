@@ -2142,19 +2142,30 @@ window.BOPlanner = function (ctx) {
   // Skills view: a skill gem's tooltip (its data, plus the sim's numbers for this character).
   const fmt = (v, d = 0) => (+v || 0).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: 0 });
   const tagList = t => (t || []).join(', ');
-  function skillTip(ch, id) {
+  // own: true when the skill is already on the character (adds the sim's numbers); false for the picker (game data only).
+  const ATTR_NAME = { Str: 'Strength (red)', Dex: 'Dexterity (green)', Int: 'Intelligence (blue)' };
+  function skillTip(ch, id, own = true) {
     const sk = GD.skills[lc(id)]; if (!sk) return '';
     const li = t => '<li>' + esc(t) + '</li>';
-    const r = ctx.sheet ? ctx.sheet(id) : null, ok = r && !r.error && !r.unsupported;
-    const lvl = (ok && r.gem) ? r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus + ' from gear' : '') : (ch.gemLevels[id] || 1);
-    let h = '<b>' + esc(sk.Name) + '</b><span class="pl-tip-sub">' + esc((sk.Kind === 'Gem' ? 'Skill gem' : 'Skill') + ' · level ' + lvl + (sk.Attribute ? ' · ' + sk.Attribute : '')) + '</span>';
+    const r = own && ctx.sheet ? ctx.sheet(id) : null, ok = r && !r.error && !r.unsupported;
+    const lvl = (ok && r.gem) ? r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus + ' from gear' : '') : ((ch && ch.gemLevels[id]) || 1);
+    let h = '<b>' + esc(sk.Name) + '</b><span class="pl-tip-sub">' + esc((sk.Kind === 'Gem' ? 'Skill gem' : sk.Kind === 'Weapon' ? 'Weapon skill' : sk.Kind === 'Basic' ? 'Basic attack' : 'Skill') + (own ? ' · level ' + lvl : '') + (sk.Attribute ? ' · ' + (own ? sk.Attribute : ATTR_NAME[sk.Attribute] || sk.Attribute) : '')) + '</span>';
     if (sk.Tags && sk.Tags.length) h += '<span class="pl-tip-sub">' + esc(tagList(sk.Tags)) + '</span>';
     if (sk.Description) h += '<span class="pl-tip-desc">' + esc(sk.Description) + '</span>';
+    const lv = ctx.levels ? ctx.levels(id) : { rows: [] };
+    if (lv.rows.length) h += '<div class="pl-tip-lv">' + lv.rows.map(x => '<span><small>LV ' + x[0] + '</small>' + esc(x[1]) + '</span>').join('') + '</div>' + (lv.unit ? '<span class="pl-tip-sub">' + esc(lv.unit + '; LV 30 and 40 count gear levels') + '</span>' : '');
     const lines = [];
     if (sk.DamageType) lines.push('Damage type: ' + sk.DamageType);
     if (ok && r.mana && r.mana.cost != null) lines.push('Mana cost: ' + fmt(r.mana.cost, 1));
-    else if (sk.ManaCost != null) lines.push('Mana cost: ' + sk.ManaCost);
+    else if (sk.ManaCost != null) lines.push('Mana cost: ' + sk.ManaCost + ' at gem level 1');
     if (ok && r.speed && r.speed.cooldown) lines.push('Cooldown: ' + fmt(r.speed.cooldown, 2) + ' s');
+    else if (sk.Cooldown) lines.push('Cooldown: ' + sk.Cooldown + ' s');
+    if (sk.CastTime) lines.push('Cast time: ' + sk.CastTime + ' s');
+    if (sk.ActionSpeed && !sk.CastTime) lines.push('Attack speed: ' + sk.ActionSpeed + ' per second');
+    if (sk.Projectiles) lines.push('Projectiles: ' + sk.Projectiles);
+    if (sk.Chains) lines.push('Chains: ' + sk.Chains);
+    if (sk.Strikes) lines.push('Strikes: ' + sk.Strikes);
+    if (sk.WeaponKinds && sk.WeaponKinds.length) lines.push('Weapons: ' + sk.WeaponKinds.join(', '));
     if (ok && r.speed && r.speed.usesPerSec) lines.push('Uses per second: ' + fmt(r.speed.usesPerSec, 2));
     if (lines.length) h += '<ul class="pl-tip-base">' + lines.map(li).join('') + '</ul>';
     if (ok) {
@@ -2211,6 +2222,68 @@ window.BOPlanner = function (ctx) {
     tipEl.style.left = Math.max(8, x) + 'px'; tipEl.style.top = y + 'px';
   }
   function hideItemTip() { if (tipEl) { tipEl.hidden = true; tipEl.dataset.key = ''; } }
+
+  // Skill pickers (the skill row's dropdown, "Add a skill", the linked-spell list). A native <select> popup gives the page no hover
+  // events, so a click opens this list instead; hovering a skill shows its tooltip beside the list. Choosing one sets the real
+  // <select> and fires its change event, so the edit goes through onChange as before.
+  const PICKER = 'select[data-f="skill"], select[data-f="addskill"], select[data-f="conduit"]';
+  let pick = null;
+  function closePicker() {
+    if (!pick) return;
+    document.removeEventListener('mousedown', pick.out, true); document.removeEventListener('keydown', pick.key, true); window.removeEventListener('scroll', pick.out, true);
+    pick.box.remove(); const sel = pick.sel; pick = null; hideItemTip(); if (sel.isConnected) sel.focus({ preventScroll: true });
+  }
+  function pickerTip(box, item) {
+    const id = item.dataset.v, sk = GD.skills[lc(id)];
+    if (!sk) return hideItemTip();
+    if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'pl-tip'; tipEl.setAttribute('role', 'tooltip'); document.body.appendChild(tipEl); }
+    if (tipEl.dataset.key !== 'pick:' + id) { tipEl.innerHTML = skillTip(ctx.current(), id, false); tipEl.dataset.key = 'pick:' + id; }
+    tipEl.hidden = false;
+    const b = box.getBoundingClientRect(), r = item.getBoundingClientRect(), w = tipEl.offsetWidth, hgt = tipEl.offsetHeight;
+    let x = b.right + 8; if (x + w > innerWidth - 8) x = Math.max(8, b.left - w - 8);
+    tipEl.style.left = x + 'px'; tipEl.style.top = Math.max(8, Math.min(r.top, innerHeight - hgt - 8)) + 'px';
+  }
+  function openPicker(sel) {
+    closePicker();
+    const cur = sel.value, box = document.createElement('div');
+    box.className = 'pl-pick'; box.setAttribute('role', 'listbox');
+    const item = o => '<div class="pl-pick-item' + (o.value === cur ? ' on' : '') + '" role="option" data-v="' + esc(o.value) + '" data-t="' + esc(o.textContent.toLowerCase()) + '">' + esc(o.textContent) + '</div>';
+    let h = '<input type="search" placeholder="Search skills" aria-label="Search skills">';
+    for (const c of sel.children) {
+      if (c.tagName === 'OPTGROUP') h += '<div class="pl-pick-group">' + esc(c.label) + '</div>' + [...c.children].map(item).join('');
+      else if (c.value) h += item(c);
+      else if (sel.dataset.f === 'conduit') h += item(c);
+    }
+    box.innerHTML = h; document.body.appendChild(box);
+    const s = sel.getBoundingClientRect(), bh = Math.min(box.offsetHeight, innerHeight * 0.6);
+    box.style.width = Math.min(Math.max(s.width, 240), 340) + 'px'; // narrow, so the tooltip fits beside it
+    box.style.left = Math.max(8, Math.min(s.left, innerWidth - box.offsetWidth - 8)) + 'px';
+    const below = innerHeight - s.bottom - 8, up = s.top - 8, flip = below < Math.min(bh, 260) && up > below;
+    box.style.maxHeight = Math.max(160, Math.min(innerHeight * 0.6, flip ? up : below)) + 'px';
+    box.style.top = flip ? Math.max(8, s.top - box.offsetHeight - 4) + 'px' : s.bottom + 4 + 'px';
+    const on = box.querySelector('.on'); if (on) box.scrollTop = on.offsetTop - 60;
+    const search = box.querySelector('input');
+    search.oninput = () => {
+      const q = search.value.trim().toLowerCase();
+      box.querySelectorAll('.pl-pick-item').forEach(i => { i.hidden = !!q && !i.dataset.t.includes(q); });
+      box.querySelectorAll('.pl-pick-group').forEach(g => { let n = g.nextElementSibling, any = false; while (n && n.classList.contains('pl-pick-item')) { if (!n.hidden) any = true; n = n.nextElementSibling; } g.hidden = !any; });
+      hideItemTip();
+    };
+    box.addEventListener('mouseover', e => { const i = e.target.closest('.pl-pick-item'); if (i) pickerTip(box, i); else hideItemTip(); });
+    box.addEventListener('mouseleave', hideItemTip);
+    box.addEventListener('click', e => {
+      const i = e.target.closest('.pl-pick-item'); if (!i) return;
+      const v = i.dataset.v; closePicker();
+      if (v !== sel.value) { sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+    });
+    pick = {
+      sel, box,
+      out: e => { if (!box.contains(e.target) && !(e.type === 'mousedown' && e.target === sel)) closePicker(); }, // a click on the select itself toggles (see the mousedown handler)
+      key: e => { if (e.key === 'Escape') { e.preventDefault(); closePicker(); } },
+    };
+    document.addEventListener('mousedown', pick.out, true); document.addEventListener('keydown', pick.key, true); window.addEventListener('scroll', pick.out, true);
+    search.focus({ preventScroll: true });
+  }
   function gearCard(ch, edit, dis) {
     let h = '<div class="card"><h2>Gear</h2><p class="hint">Pick a base, then affixes and their tier. Untick pieces on the Damage tab to see what each is worth.</p>';
     h += '<div class="pl-gear-grid">';
@@ -2499,6 +2572,8 @@ window.BOPlanner = function (ctx) {
   el.addEventListener('change', onChange);
   el.addEventListener('click', onClick);
   el.addEventListener('toggle', onToggle, true);
+  el.addEventListener('mousedown', e => { const sel = e.target.closest && e.target.closest(PICKER); if (sel && !sel.disabled && e.button === 0) { e.preventDefault(); if (pick && pick.sel === sel) closePicker(); else openPicker(sel); } });
+  el.addEventListener('keydown', e => { const sel = e.target.closest && e.target.closest(PICKER); if (sel && !sel.disabled && (e.key === 'Enter' || e.key === ' ' || (e.altKey && e.key === 'ArrowDown'))) { e.preventDefault(); openPicker(sel); } });
   el.addEventListener('mousemove', showItemTip);
   el.addEventListener('mouseleave', hideItemTip);
   el.addEventListener('keydown', e => { const r = e.target.closest && e.target.closest('.pl-read'); if (r && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); const i = r.querySelector('input[type=file]'); if (i) i.click(); } });
@@ -4659,7 +4734,16 @@ window.BOScaling = function (ctx) {
     document.querySelectorAll('#scGrid .sc-group').forEach(g => { g.hidden = !g.querySelector('.sc-card:not([hidden])'); });
     const e = $('#scEmpty'); if (e) e.hidden = shown > 0;
   }
-  return { render };
+  // Levels for a hover tooltip (planner.js): LV 1, 10, 20, then 30 and 40 with gear levels. [] when the skill has no hit numbers.
+  function levels(id) {
+    const GD = ctx.gd(); if (!GD || !GD.scaling || !GD.scaling.Gem) return { unit: '', rows: [] };
+    const sk = GD.skills[String(id).toLowerCase()], G = GD.scaling.Gem; if (!sk) return { unit: '', rows: [] };
+    const k = kindOf(sk), max = G.MaxLevel || 20;
+    if (k !== 'attack' && k !== 'spell') return { unit: '', rows: [] };
+    const rows = [1, 10, 20].map(L => [L, at(sk, G, L)]).concat([10, 20].map(b => [max + b, atBonus(sk, G, b)]));
+    return { unit: unitOf(k), rows };
+  }
+  return { render, levels };
 };
 
 ;
@@ -10800,6 +10884,7 @@ window.BOStartApp = function () {
       return Object.assign({}, ch, { trees: { active: t.active, sets: t.sets.map(s => ({ name: s.name, passives: s.passives.slice() })) } });
     },
     current: () => st.ch, workingCopy: () => st.ch,
+    levels: id => scaling ? scaling.levels(id) : { unit: '', rows: [] }, // skill hit by gem level, for the hover tooltips
     sheet: id => { try { return st.ch ? S.calcSkill(GD, st.ch, id, opts()) : null; } catch (e) { return null; } }, // the Skills view's gem tooltips
 
     editable: buildEditable,

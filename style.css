@@ -1021,6 +1021,16 @@ body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page) 
 .pl-tip ul { margin: 5px 0 0; padding: 5px 0 0 16px; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
 .pl-tip-imp, .pl-tip-runes { color: var(--muted); }
 .pl-tip-desc { display: block; margin-top: 2px; }
+.pl-tip-lv { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0 2px; padding: 6px 8px; border-radius: 6px; background: color-mix(in srgb, var(--bg) 60%, transparent); }
+.pl-tip-lv span { display: flex; flex-direction: column; color: var(--dashboard-gold); font-weight: 650; font-variant-numeric: tabular-nums; }
+.pl-tip-lv small { color: var(--faint); font-size: 10px; font-weight: 500; letter-spacing: .04em; }
+.pl-pick { position: fixed; z-index: 999; display: flex; flex-direction: column; overflow-y: auto; padding: 6px; border: 1px solid color-mix(in srgb, var(--dashboard-gold) 40%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--panel) 98%, var(--bg)); box-shadow: var(--shadow), 0 5px 18px #0006; font-size: 13px; }
+.pl-pick input { position: sticky; top: 0; margin-bottom: 4px; width: 100%; box-sizing: border-box; }
+.pl-pick-group { padding: 6px 8px 2px; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.pl-pick-item { padding: 4px 8px; border-radius: 5px; cursor: pointer; }
+.pl-pick-item:hover { background: color-mix(in srgb, var(--dashboard-gold) 18%, transparent); }
+.pl-pick-item.on { color: var(--dashboard-gold); font-weight: 650; }
+.pl-pick [hidden] { display: none; }
 .pl-tip .bad { color: var(--bad); }
 .pl-tip .pl-tier { display: inline-block; min-width: 22px; color: var(--dashboard-gold); font-weight: 650; font-variant-numeric: tabular-nums; }
 .pl-tip .pl-range { color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }

@@ -5174,7 +5174,8 @@ window.BOFaq = function (ctx) {
     const nav = $('#faqNav'), GD = ctx.gd() || {};
     nav.innerHTML = GROUPS.map(g => '<div class="faq-group"><span class="faq-group-label">' + g[0] + '</span><div class="sc-chips">' +
       g[1].map(s => '<button type="button" class="chip sc-chip' + (section === s[0] ? ' active' : '') + '" data-s="' + s[0] + '" aria-pressed="' + (section === s[0]) + '">' + s[1] + '</button>').join('') + '</div></div>').join('');
-    fill($('#affixPane'), RENDER[section](GD));
+    const pane = $('#affixPane'); pane.hidden = false; // the template ships it hidden; nothing else unhides it
+    fill(pane, RENDER[section](GD));
   }
   // Puts a section's html in a pane and wires its skill filter box (the Minions tab has one).
   function fill(pane, html) {
@@ -6176,7 +6177,17 @@ window.BOCharacter = function (ctx) {
       spellGrowth = spellLevelGrowth(G.DamageGrowth || (1 + (sk.SpellGrowth || 0)), own, bonus, spellFade(GD));
       const eff = effAt(1);
       const d = DT.includes(sk.DamageType) ? sk.DamageType : 'Physical';
-      addPart(d, sk.SpellMin * spellGrowth * eff, sk.SpellMax * spellGrowth * eff);
+      // Pyre of Faith (LifeAsBase 0.75): "damage that grows with your maximum life". Owner's tooltip, 10 Nov 2026
+      // (gem 5, 3429 max life): Fire 12,315 to 13,921. 0.75% of 3429 = 25.72 added to the base 5.412-9.471:
+      // (5.412+25.72) x 395.6 = 12,315 and (9.471+25.72) x 395.6 = 13,921, the same multiplier at both ends.
+      // Assumed: the life share is levelled like the flat base (the min/max ratio cannot tell).
+      let spellLife = 0;
+      if (sk.LifeAsBase) {
+        res.heroLife = heroMaxLife(GD, ch, mods, attr);
+        spellLife = res.heroLife * sk.LifeAsBase / 100;
+        res.notes.push(sk.Name + ': ' + sk.LifeAsBase + '% of your ~' + Math.round(res.heroLife) + ' maximum life (+' + spellLife.toFixed(1) + ') joins the spell\'s base damage (checked against the in-game tooltip, 10 Nov 2026).');
+      }
+      addPart(d, (sk.SpellMin + spellLife) * spellGrowth * eff, (sk.SpellMax + spellLife) * spellGrowth * eff);
       res.base = { kind: 'spell', min: sk.SpellMin, max: sk.SpellMax, growth: spellGrowth, effectiveness: eff };
       if (mainBase && lc(mainBase.Class) === 'staff') {
         // The staff's local "increased critical chance" lifts the staff's own base crit first (it was left out before).

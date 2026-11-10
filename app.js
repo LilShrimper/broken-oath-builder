@@ -10579,7 +10579,9 @@ window.BOStartApp = function () {
     faq: 'FAQ / Game Mechanics', creator: 'Save Creator', plan: 'Plan a New Build', code: 'Load Code' };
   const ROUTING = typeof window.SITE_BASE === 'string';
   let routingReady = false, noPush = false;
-  const siteRoot = () => new URL(window.SITE_BASE || '', location.href).pathname;
+  // Worked out once, before any pushState: SITE_BASE is relative to the address the page was loaded at, not the current one.
+  const SITE_ROOT = ROUTING ? new URL(window.SITE_BASE || '', location.href).pathname.replace(/[^/]*$/, '') : '/';
+  const siteRoot = () => SITE_ROOT;
   function routeFromPath() {
     if (!ROUTING) return null;
     let p = location.pathname; try { p = decodeURIComponent(p); } catch (e) { /* keep as is */ }

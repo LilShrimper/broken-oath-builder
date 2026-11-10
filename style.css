@@ -1337,12 +1337,25 @@ body.compare-page #controls { display: none; }
 .faq-xp-chart .faq-xp-axis { fill: var(--muted); font-size: 12px; }
 .faq-xp-grid { stroke: var(--line); stroke-width: 1; }
 .faq-xp-line { fill: none; stroke: var(--dashboard-green); stroke-width: 3; }
+.faq-xp-line-life { stroke: var(--dashboard-gold); }
 .faq-xp-point { fill: var(--dashboard-green); stroke: var(--panel); stroke-width: 2; }
+.faq-xp-point-life { fill: var(--dashboard-gold); }
+.faq-xp-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 4px 0 0 52px; color: var(--muted); font-size: 12px; }
+.faq-xp-legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; background: var(--dashboard-green); }
+.faq-xp-legend .faq-xp-legend-life::before { background: var(--dashboard-gold); }
+.faq-xp-tbl { width: 100%; table-layout: fixed; font-size: 12px; }
+.faq-xp-tbl th, .faq-xp-tbl td { min-width: 0; padding: 5px 6px; white-space: normal; overflow-wrap: anywhere; }
+.faq-xp-tbl th:nth-child(1) { width: 18%; }
+.faq-xp-tbl th:nth-child(2) { width: 30%; }
+.faq-xp-tbl th:nth-child(3) { width: 52%; }
+.faq-xp-life-value { margin: 8px 0; color: var(--muted); font-size: 12px; }
+.faq-xp-life-value b { color: var(--dashboard-gold); font-variant-numeric: tabular-nums; }
 .faq-xp-slider { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 .faq-xp-slider output { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
 .faq-xp-range { display: block; width: 100%; margin: 0 0 8px; accent-color: var(--dashboard-green); cursor: pointer; }
 .faq-xp-range:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .faq-card .faq-xp-chart + .faq-xp-slider + .faq-xp-range + .table-wrap { margin-top: 6px; }
+@media (max-width: 640px) { .faq-xp-chart text { font-size: 15px; } .faq-xp-chart .faq-xp-axis { font-size: 17px; } }
 :root[data-theme="light"] .sc-chip.active { color: #8a6a1e; border-color: #8a6a1e; }
 .sc-red { --sc-c: var(--gem-str); } .sc-green { --sc-c: var(--gem-dex); } .sc-blue { --sc-c: var(--gem-blue); }
 .sc-card header { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }

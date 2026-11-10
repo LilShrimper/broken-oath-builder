@@ -4786,7 +4786,7 @@ window.BOFaq = function (ctx) {
   const intro = (title, text) => '<div class="cmp-intro"><div class="eyebrow">REFERENCE</div><h2>' + title + '</h2><p>' + text + '</p></div>';
   const card = (title, body, sub) => '<div class="card faq-card"><h2>' + title + (sub ? ' <small>' + sub + '</small>' : '') + '</h2>' + body + '</div>';
   const list = items => '<ul class="faq-list">' + items.filter(Boolean).map(x => '<li>' + x + '</li>').join('') + '</ul>';
-  const table = (head, rows) => '<div class="table-wrap"><table class="tbl faq-tbl"><thead><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' +
+  const table = (head, rows, cls) => '<div class="table-wrap"><table class="tbl faq-tbl' + (cls ? ' ' + cls : '') + '"><thead><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' +
     rows.map(r => '<tr' + (r.off ? ' class="faq-off"' : '') + '>' + (r.cells || r).map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
   const hint = t => '<p class="hint">' + t + '</p>';
   const needData = h => h + '<div class="card"><p class="hint">Load the game data first (this section needs a newer copy of it).</p></div>';
@@ -5091,42 +5091,53 @@ window.BOFaq = function (ctx) {
       X.bNoneOnLadder ? 'There is <b>no</b> penalty in the Deep (Rupture 81 and up).' : '',
     ]) + hint('In short: keep Rupture level close to your hero level, or a little above.'));
     const Dp = GD.deep;
-    if (Dp && Dp.MapMaxLevel != null && Number.isFinite(Dp.LadderXpPctPerLevel)) {
-      const M = Dp.MapMaxLevel, rate = Dp.LadderXpPctPerLevel, maxLevel = Math.max(3000, M + 1);
+    if (Dp && Dp.MapMaxLevel != null && Number.isFinite(Dp.LadderXpPctPerLevel) && Number.isFinite(Dp.LadderLifePerLevel)) {
+      const M = Dp.MapMaxLevel, rate = Dp.LadderXpPctPerLevel, maxLevel = Math.max(400, M + 1);
       const startLevel = Math.min(maxLevel, M + 70), plotX = 52, plotY = 18, plotW = 640, plotH = 180;
-      const maxBonus = Math.max(0, (maxLevel - M) * rate), yMax = Math.max(1, Math.ceil(maxBonus / 500) * 500);
       const x = level => plotX + (level - M) / (maxLevel - M) * plotW;
-      const y = bonus => plotY + plotH - bonus / yMax * plotH;
-      const path = Array.from({ length: 41 }, (_, i) => {
+      const xpMultiplier = level => Math.max(1, 1 + (level - M) * rate / 100);
+      const lifeMultiplier = level => Math.pow(Dp.LadderLifePerLevel, level - M);
+      const maxMultiplier = Math.max(xpMultiplier(maxLevel), lifeMultiplier(maxLevel));
+      const yMax = Math.pow(10, Math.max(1, Math.ceil(Math.log10(maxMultiplier))));
+      const y = multiplier => plotY + plotH - Math.log10(Math.max(1, multiplier)) / Math.log10(yMax) * plotH;
+      const xpPath = Array.from({ length: 41 }, (_, i) => {
         const level = M + (maxLevel - M) * i / 40;
-        return (i ? 'L' : 'M') + x(level).toFixed(1) + ' ' + y((level - M) * rate).toFixed(1);
+        return (i ? 'L' : 'M') + x(level).toFixed(1) + ' ' + y(xpMultiplier(level)).toFixed(1);
+      }).join(' ');
+      const lifePath = Array.from({ length: 41 }, (_, i) => {
+        const level = M + (maxLevel - M) * i / 40;
+        return (i ? 'L' : 'M') + x(level).toFixed(1) + ' ' + y(lifeMultiplier(level)).toFixed(1);
       }).join(' ');
       const xTicks = Array.from({ length: 5 }, (_, i) => {
         const level = M + (maxLevel - M) * i / 4, px = x(level);
         return '<line class="faq-xp-grid" x1="' + px + '" y1="' + plotY + '" x2="' + px + '" y2="' + (plotY + plotH) + '"></line>' +
           '<text x="' + px + '" y="222" text-anchor="middle">' + Math.round(level).toLocaleString('en-US') + '</text>';
       }).join('');
-      const yTicks = Array.from({ length: 5 }, (_, i) => {
-        const bonus = yMax * (4 - i) / 4, py = y(bonus);
+      const yTicks = Array.from({ length: Math.round(Math.log10(yMax)) + 1 }, (_, i) => {
+        const multiplier = Math.pow(10, i), py = y(multiplier);
         return '<line class="faq-xp-grid" x1="' + plotX + '" y1="' + py + '" x2="' + (plotX + plotW) + '" y2="' + py + '"></line>' +
-          '<text x="44" y="' + (py + 4) + '" text-anchor="end">' + Math.round(bonus).toLocaleString('en-US') + '%</text>';
+          '<text x="44" y="' + (py + 4) + '" text-anchor="end">×' + multiplier.toLocaleString('en-US') + '</text>';
       }).join('');
-      const startBonus = (startLevel - M) * rate;
-      const chart = '<div class="faq-xp-chart"><svg viewBox="0 0 720 240" role="img" aria-labelledby="faqXpChartTitle faqXpChartDesc">' +
-        '<title id="faqXpChartTitle">Deep monster XP by Rupture level</title><desc id="faqXpChartDesc">Monster XP bonus rises by ' + rate + ' percent per Rupture level above ' + M + ', shown through Rupture ' + maxLevel + '.</desc>' +
-        yTicks + xTicks + '<path class="faq-xp-line" d="' + path + '"></path>' +
-        '<circle id="faqXpPoint" class="faq-xp-point" cx="' + x(startLevel).toFixed(1) + '" cy="' + y(startBonus).toFixed(1) + '" r="5"></circle>' +
+      const startBonus = (startLevel - M) * rate, startXp = xpMultiplier(startLevel), startLife = lifeMultiplier(startLevel);
+      const fmtMult = value => value >= 1000 ? Math.round(value).toLocaleString('en-US') : r1(value);
+      const chart = '<div class="faq-xp-legend"><span class="faq-xp-legend-xp">Monster XP</span><span class="faq-xp-legend-life">Monster life</span></div>' +
+        '<div class="faq-xp-chart"><svg viewBox="0 0 720 240" role="img" aria-labelledby="faqXpChartTitle faqXpChartDesc">' +
+        '<title id="faqXpChartTitle">Deep monster XP and life by Rupture level</title><desc id="faqXpChartDesc">Monster XP multiplier rises by ' + rate + ' percent per Rupture level above ' + M + '. Monster life multiplies by ' + Dp.LadderLifePerLevel + ' per level. Both curves are shown on a logarithmic multiplier axis through Rupture ' + maxLevel + '.</desc>' +
+        yTicks + xTicks + '<path class="faq-xp-line faq-xp-line-xp" d="' + xpPath + '"></path><path class="faq-xp-line faq-xp-line-life" d="' + lifePath + '"></path>' +
+        '<circle id="faqXpPoint" class="faq-xp-point faq-xp-point-xp" cx="' + x(startLevel).toFixed(1) + '" cy="' + y(startXp).toFixed(1) + '" r="5"></circle>' +
+        '<circle id="faqLifePoint" class="faq-xp-point faq-xp-point-life" cx="' + x(startLevel).toFixed(1) + '" cy="' + y(startLife).toFixed(1) + '" r="5"></circle>' +
         '<text class="faq-xp-axis" x="372" y="239" text-anchor="middle">Rupture level</text></svg></div>';
       h += card('Monster XP in the Deep', chart +
         '<label class="faq-xp-slider" for="faqXpLevel"><span>Select a Rupture level</span><output id="faqXpLevelValue" for="faqXpLevel">' + startLevel.toLocaleString('en-US') + '</output></label>' +
-        '<input class="faq-xp-range" id="faqXpLevel" type="range" min="' + M + '" max="' + maxLevel + '" step="1" value="' + startLevel + '" aria-label="Select a Rupture level for Deep XP" data-per-level="' + rate + '" data-y-max="' + yMax + '" data-plot-x="' + plotX + '" data-plot-y="' + plotY + '" data-plot-w="' + plotW + '" data-plot-h="' + plotH + '">' +
-        table(['Rupture', 'XP bonus per kill', 'Multiplier vs Rupture ' + M],
+        '<input class="faq-xp-range" id="faqXpLevel" type="range" min="' + M + '" max="' + maxLevel + '" step="1" value="' + startLevel + '" aria-label="Select a Rupture level for Deep XP" data-per-level="' + rate + '" data-life-per-level="' + Dp.LadderLifePerLevel + '" data-y-max="' + yMax + '" data-plot-x="' + plotX + '" data-plot-y="' + plotY + '" data-plot-w="' + plotW + '" data-plot-h="' + plotH + '">' +
+        table(['Rupture', 'XP bonus per kill', 'XP multiplier vs Rupture ' + M],
           [['<span id="faqXpSelectedLevel">' + startLevel.toLocaleString('en-US') + '</span>',
             '<span id="faqXpBonus">+' + r1(startBonus) + '%</span>',
-            '<span id="faqXpMultiplier">×' + r1(1 + startBonus / 100) + '</span>']]) +
+            '<span id="faqXpMultiplier">×' + r1(startXp) + '</span>']], 'faq-xp-tbl') +
+        '<p class="faq-xp-life-value">Monster HP multiplier vs Rupture ' + M + ': <b>×<span id="faqLifeMultiplier">' + fmtMult(startLife) + '</span></b></p>' +
         list([
           'Each Rupture level past ' + M + ' adds <b>+' + rate + '%</b> monster XP, added level by level (not compounded). The +2% is the number in the game data; that it adds (not compounds) is read from the data and not yet checked against a log.',
-          'Monster life grows faster (×' + Dp.LadderLifePerLevel + ' per level), so XP per kill rises slower than the fights get longer.',
+          'Monster life multiplies by ×' + Dp.LadderLifePerLevel + ' per level. The chart uses a logarithmic multiplier axis so both curves are visible together.',
         ]));
     }
     return h;
@@ -5224,17 +5235,23 @@ window.BOFaq = function (ctx) {
     const xpLevel = pane.querySelector('#faqXpLevel');
     if (xpLevel) xpLevel.oninput = () => {
       const level = Number(xpLevel.value), min = Number(xpLevel.min), bonus = (level - min) * Number(xpLevel.dataset.perLevel);
-      const multiplier = 1 + bonus / 100;
+      const multiplier = 1 + bonus / 100, lifeMultiplier = Math.pow(Number(xpLevel.dataset.lifePerLevel), level - min);
+      const fmtMult = value => value >= 1000 ? Math.round(value).toLocaleString('en-US') : r1(value);
       pane.querySelector('#faqXpLevelValue').textContent = level.toLocaleString('en-US');
       pane.querySelector('#faqXpSelectedLevel').textContent = level.toLocaleString('en-US');
       pane.querySelector('#faqXpBonus').textContent = '+' + r1(bonus) + '%';
       pane.querySelector('#faqXpMultiplier').textContent = '×' + r1(multiplier);
-      xpLevel.setAttribute('aria-valuetext', 'Rupture ' + level + ', +' + r1(bonus) + '% XP per kill, ×' + r1(multiplier) + ' vs Rupture ' + min);
+      pane.querySelector('#faqLifeMultiplier').textContent = '×' + fmtMult(lifeMultiplier);
+      xpLevel.setAttribute('aria-valuetext', 'Rupture ' + level + ', +' + r1(bonus) + '% XP per kill, ×' + r1(multiplier) + ' XP and ×' + fmtMult(lifeMultiplier) + ' monster life vs Rupture ' + min);
       const point = pane.querySelector('#faqXpPoint');
+      const lifePoint = pane.querySelector('#faqLifePoint');
       const px = Number(xpLevel.dataset.plotX), py = Number(xpLevel.dataset.plotY);
       const pw = Number(xpLevel.dataset.plotW), ph = Number(xpLevel.dataset.plotH);
       point.setAttribute('cx', px + (level - min) / (Number(xpLevel.max) - min) * pw);
-      point.setAttribute('cy', py + ph - bonus / Number(xpLevel.dataset.yMax) * ph);
+      lifePoint.setAttribute('cx', px + (level - min) / (Number(xpLevel.max) - min) * pw);
+      const yMaxLog = Math.log10(Number(xpLevel.dataset.yMax));
+      point.setAttribute('cy', py + ph - Math.log10(Math.max(1, multiplier)) / yMaxLog * ph);
+      lifePoint.setAttribute('cy', py + ph - Math.log10(Math.max(1, lifeMultiplier)) / yMaxLog * ph);
     };
     if (xpLevel) xpLevel.oninput();
   }

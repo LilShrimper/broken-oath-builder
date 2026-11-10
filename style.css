@@ -1569,3 +1569,19 @@ body.support-page #configEnemy .hint { margin: 2px 0 6px; }
 .hist-list .hn { display: inline-block; min-width: 26px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .hist-list li { cursor: default; }
 .tnum { display: none; fill: #fff; font-weight: 800; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: rgba(8, 12, 28, .9); stroke-width: 9px; stroke-linejoin: round; }
+
+/* Skills & Minions cards (faq.js): compact, 2-4 columns by width, text wraps instead of scrolling sideways */
+.faq-minion-grid .faq-stats { margin: 8px 0 0; font-size: 12px; }
+.faq-minion-grid details p { margin: 4px 0 0; }
+.faq-minion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(min(100%, 260px), calc((100% - 24px) / 3 - 1px)), 1fr)); gap: 12px; align-items: start; margin: 0 0 12px; }
+.faq-minion-grid .faq-card { margin: 0; padding: 12px 14px; min-width: 0; }
+.faq-minion-grid .faq-card h2 { font-size: 15px; margin: 0 0 8px; }
+.faq-minion-grid .faq-card h3 { font-size: 12.5px; margin: 10px 0 4px; }
+.faq-minion-grid .faq-card h3 small { display: block; }
+.faq-minion-grid .table-wrap { overflow: visible; }
+.faq-minion-grid .faq-tbl { width: 100%; table-layout: fixed; font-size: 12px; }
+.faq-minion-grid .faq-tbl th, .faq-minion-grid .faq-tbl td { padding: 4px 6px; white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+.faq-minion-grid .faq-tbl td:nth-child(4) { min-width: 0; }
+.faq-minion-grid .faq-tbl tbody th { width: 34%; }
+.faq-minion-grid details summary { font-size: 12px; cursor: pointer; margin-top: 8px; }
+.faq-minion-grid .faq-list { margin: 4px 0 0; padding-left: 16px; font-size: 12px; }

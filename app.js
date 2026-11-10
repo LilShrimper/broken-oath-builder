@@ -4713,30 +4713,37 @@ window.BOFaq = function (ctx) {
     const dmg = s => s.SpellMax ? r1(s.SpellMin) + '–' + r1(s.SpellMax) : '';
     const summons = SK.filter(s => s.Minion && s.Minion.MonsterId); // summon gems, then the attacks whose kills rise as minions (Gravereap, Marrow Lance)
     summons.sort((a, b) => (a.Delivery === 'Summon' ? 0 : 1) - (b.Delivery === 'Summon' ? 0 : 1));
+    let cards = '';
     for (const s of summons) {
       const m = s.Minion, mon = MM[m.MonsterId];
       const rows = [
         ['Skill', esc(s.Name) + ' <span class="faq-note">' + (s.Tags || []).map(esc).join(' · ') + '</span>'],
         ['Minion', mon ? esc(mon.Name) + (mon.Role ? ' <span class="faq-note">role: ' + esc(mon.Role) + '</span>' : '') : esc(m.MonsterId)],
         ['Count', (s.Delivery === 'Summon' ? m.Count + (m.CountEvery ? ', +1 every ' + m.CountEvery + ' gem levels' : '') + ', cap ' + m.Cap : 'up to ' + m.Cap + (m.PerLevels && m.PerLevels.length ? ', +1 at gem levels ' + m.PerLevels.join(', ') : '') + ' (raised from kills, the oldest is replaced)')],
-        s.Delivery === 'Summon' ? null : ['How they rise', esc(s.Description || '')],
         ['Base attack every', m.AttackEvery + ' s <span class="faq-note">the minion\'s pace is this × 0.72 ÷ minion speed (measured in the game log, not in the data files)</span>'],
         ['Damage', 'gem hit ' + dmg(s) + ' × minion multiplier ' + m.DamageMult + (m.LevelDamage ? ', +' + pct(m.LevelDamage) + '% per zone level' : '')],
         m.Affinity ? ['Affinity', '+' + pct(m.AffinityDamage) + '% minion damage per 10 ' + esc(m.Affinity) + (m.AffinityCap ? ', up to ' + m.AffinityCap : '')] : null,
         s.ManaCost ? ['Cast', (s.CastTime !== undefined ? s.CastTime + ' s, ' : '') + s.ManaCost + ' mana' + (s.Cooldown ? ', ' + s.Cooldown + ' s cooldown' : '')] : null,
       ].filter(Boolean);
-      if (m.GolemAuras) rows.push(['Golem auras', Object.entries(m.GolemAuras).map(([el, a]) => '<b>' + esc(el) + '</b>: ' + esc(a.Stat) + ' ' + a.Value + (a.Radius ? ' (radius ' + a.Radius + ')' : '')).join('<br>')]);
+      if (m.GolemAuras) {
+        const VAR = { Default: 'Plain golem', Fire: 'Flame golem', Cold: 'Ice golem', Lightning: 'Storm golem', Poison: 'Venom golem' };
+        const STAT = { LifeRegenPct: v => v + '% life regeneration', MinionDamage: v => v + '% more minion damage', ArmourPct: v => v + '% more armour', MinionSpeed: v => v + '% minion speed', EnemyTaken: v => 'enemies take ' + v + '% more damage' };
+        rows.push(['Variants', '<span class="faq-note">One golem, one monster. A linked element support (Flame, Ice, Storm, Venom) changes its element and so which blessing it gives; Brutality leaves the plain golem. Radius 9 m.</span>' +
+          Object.entries(m.GolemAuras).map(([el, a]) => '<br><b>' + esc(VAR[el] || el) + '</b>: ' + esc((STAT[a.Stat] || (v => a.Stat + ' ' + v))(a.Value))).join('')]);
+      }
       let body = '<div class="table-wrap"><table class="tbl faq-tbl"><tbody>' + rows.map(r => '<tr><th>' + r[0] + '</th><td>' + r[1] + '</td></tr>').join('') + '</tbody></table></div>';
       if (mon) {
-        body += '<h3>Monster base stats <small>the game\'s monster entry; enemies use the same one, a pet may be scaled differently</small></h3>' +
-          table(['Life', 'Damage', 'Armour', 'Run speed', 'Stagger resist'], [[mon.Life, r1(mon.DamageMin) + '–' + r1(mon.DamageMax), mon.Armour, mon.RunSpeed, mon.StaggerResist === undefined ? '' : pct(mon.StaggerResist) + '%']]) +
+        body += '<p class="faq-stats"><b>Monster base stats:</b> ' + mon.Life + ' life · damage ' + r1(mon.DamageMin) + '–' + r1(mon.DamageMax) + ' · ' + mon.Armour + ' armour · run speed ' + mon.RunSpeed + (mon.StaggerResist === undefined ? '' : ' · ' + pct(mon.StaggerResist) + '% stagger resist') +
+          ' <span class="faq-note">The game\'s monster entry; enemies use the same one, a pet may be scaled differently.</span></p>' +
+          (s.Delivery === 'Summon' ? '' : '<details><summary>How they rise</summary><p class="faq-note">' + esc(s.Description || '') + '</p></details>') +
           '<details><summary>Monster attack list (reference only: the sim paces minions from the line above)</summary>' +
           table(['Attack', 'Range', 'Cooldown', 'Damage ×', 'Element'], (mon.Attacks || []).map(a => [esc(a.Kind), a.Range || '', a.Cooldown === undefined ? '' : a.Cooldown + ' s', a.Damage === undefined ? '' : a.Damage, esc(a.Element || '')])) + '</details>';
       }
       const rules = MINION_RULES[s.Id.toLowerCase()] || [];
       if (rules.length) body += '<h3>Rules the sim applies</h3>' + list(rules);
-      h += card(esc(s.Name), body, esc(m.MonsterId));
+      cards += card(esc(s.Name), body, esc(m.MonsterId));
     }
+    h += '<div class="faq-minion-grid">' + cards + '</div>';
     h += card('Rules for all minions', list([
       'Your own damage lines do not reach minions: only the summon gem\'s own supports and the lines for minions count.',
       'Harmony: more damage for each different kind of minion you command, up to 4 kinds.',

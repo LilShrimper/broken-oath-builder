@@ -10598,7 +10598,7 @@ window.BOStartApp = function () {
     creator: 'creator', plan: 'plan', code: 'code' };
   const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', 'build:skills': 'Skills', 'build:gear': 'Gear', damage: 'Damage Analysis',
     compare: 'Item Simulator', items: 'Item Search', grail: 'Grail', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery",
-    faq: 'FAQ / Game Mechanics', creator: 'Save Creator', plan: 'Plan a New Build', code: 'Load Code' };
+    faq: 'FAQ / Game Mechanics', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code' };
   const ROUTING = typeof window.SITE_BASE === 'string';
   let routingReady = false, noPush = false;
   // Worked out once, before any pushState: SITE_BASE is relative to the address the page was loaded at, not the current one.
@@ -10677,7 +10677,7 @@ window.BOStartApp = function () {
   // Only real tabs; the ItemDatabase link is also styled .tab but just opens its site.
   document.querySelectorAll('.tab[data-tab]').forEach(b => b.addEventListener('click', async () => {
     if (b.dataset.tab === 'plan') { if (await planner.startNewPlan()) showTab('plan'); }
-    else if (b.dataset.tab === 'build' && b.closest('.secondary-tabs') && st.ch) showTab(lastBuildView()); // back to the Build Planner view used last
+    else if (b.dataset.tab === 'build' && st.ch) showTab(lastBuildView()); // back to the Build Planner view used last
     else showTab(b.dataset.tab);
   }));
 

@@ -1056,7 +1056,6 @@ body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page) 
 /* Item Compare tab */
 body.compare-page .layout { grid-template-columns: minmax(0, 1fr); }
 body.compare-page #controls { display: none; }
-body.creator-page .view-bar { display: none; }
 .cmp-intro .eyebrow { color: var(--dashboard-gold); font-size: 10px; font-weight: 700; letter-spacing: .16em; }
 .cmp-intro h2 { display: block; margin: 3px 0 5px; font: 600 26px/1.2 Georgia, "Times New Roman", serif; }
 .cmp-intro p { margin: 0; color: var(--muted); }

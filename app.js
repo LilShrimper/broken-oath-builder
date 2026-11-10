@@ -2150,7 +2150,7 @@ window.BOPlanner = function (ctx) {
     const r = own && ctx.sheet ? ctx.sheet(id) : null, ok = r && !r.error && !r.unsupported;
     const lvl = (ok && r.gem) ? r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus + ' from gear' : '') : ((ch && ch.gemLevels[id]) || 1);
     let h = '<b>' + esc(sk.Name) + '</b><span class="pl-tip-sub">' + esc((sk.Kind === 'Gem' ? 'Skill gem' : sk.Kind === 'Weapon' ? 'Weapon skill' : sk.Kind === 'Basic' ? 'Basic attack' : 'Skill') + (own ? ' · level ' + lvl : '') + (sk.Attribute ? ' · ' + (own ? sk.Attribute : ATTR_NAME[sk.Attribute] || sk.Attribute) : '')) + '</span>';
-    if (sk.Tags && sk.Tags.length) h += '<span class="pl-tip-sub">' + esc(tagList(sk.Tags)) + '</span>';
+    if (sk.Tags && sk.Tags.length) h += '<span class="pl-tip-tags">' + sk.Tags.concat(sk.DamageType && sk.DamageType !== 'Physical' ? [sk.DamageType] : [], sk.DamageType === 'Physical' ? ['Physical'] : []).map(x => '<i>' + esc(x) + '</i>').join('') + '</span>';
     if (sk.Description) h += '<span class="pl-tip-desc">' + esc(sk.Description) + '</span>';
     const lv = ctx.levels ? ctx.levels(id) : { rows: [] };
     if (lv.rows.length) h += '<div class="pl-tip-lv">' + lv.rows.map(x => '<span><small>LV ' + x[0] + '</small>' + esc(x[1]) + '</span>').join('') + '</div>' + (lv.unit ? '<span class="pl-tip-sub">' + esc(lv.unit + '; LV 30 and 40 count gear levels') + '</span>' : '');
@@ -2168,6 +2168,20 @@ window.BOPlanner = function (ctx) {
     if (sk.WeaponKinds && sk.WeaponKinds.length) lines.push('Weapons: ' + sk.WeaponKinds.join(', '));
     if (ok && r.speed && r.speed.usesPerSec) lines.push('Uses per second: ' + fmt(r.speed.usesPerSec, 2));
     if (lines.length) h += '<ul class="pl-tip-base">' + lines.map(li).join('') + '</ul>';
+    // Scaling: how the hit grows and which attribute helps (numbers from GD.scaling; same reading as the Skill Scaling data).
+    const Gm = (GD.scaling || {}).Gem || {}, Hr = (GD.scaling || {}).Hero || {}, tg = sk.Tags || [];
+    const sc = [];
+    const gm = Gm.DamageGrowth || 1.19;
+    if (sk.SpellMin > 0) sc.push('Each gem level multiplies the hit by ' + gm + ' (+' + Math.round((gm - 1) * 100) + '%)');
+    else if (tg.includes('Attack')) sc.push('Each gem level adds ' + Math.round((Gm.AttackEffectivenessPerLevel || 0) * 100) + '% of the level 1 weapon-damage share');
+    if (sk.Minion && Hr.IntMinionDamagePer10) sc.push('Every 10 Intelligence: +' + Hr.IntMinionDamagePer10 + '% minion damage');
+    else if (sk.SpellMin > 0 && Hr.IntSpellDamagePer10) sc.push('Every 10 Intelligence: +' + Hr.IntSpellDamagePer10 + '% spell damage');
+    if (tg.includes('Melee') && Hr.StrMeleePhysPer10) sc.push('Every 10 Strength: +' + Hr.StrMeleePhysPer10 + '% melee physical damage');
+    if (tg.includes('Attack') && Hr.DexAttackSpeedPer10) sc.push('Every 10 Dexterity: +' + Hr.DexAttackSpeedPer10 + '% attack speed');
+    if (sc.length) sc.push(sk.SpellMin > 0 || sk.Minion ? 'Levels from gear and the tree: the first 5 count like gem levels, each one after that is worth less than the last' : 'Levels from gear and the tree: the first 5 count like gem levels, after that each adds only about 1%');
+    if (sc.length) h += '<span class="pl-tip-head">Scaling</span><ul class="pl-tip-base">' + sc.map(li).join('') + '</ul>';
+    const fit = ch && S.supportChoices ? S.supportChoices(GD, ch, id, {}).length : 0;
+    if (fit) h += '<span class="pl-tip-sub pl-tip-fit">' + fit + ' support gems fit this skill</span>';
     if (ok) {
       const nums = ['Tooltip DPS: ' + fmt(r.panelDps), 'Average hit: ' + fmt(r.hitAvg) + ' (with crits ' + fmt(r.hitAvgCrit) + ')'];
       if (r.crit && !r.minion) nums.push('Crit chance: ' + fmt(r.crit.chance, 1) + '%');
@@ -4753,17 +4767,18 @@ window.BOScaling = function (ctx) {
 //   (monster_affixes.json, scaling.json Rift.GuardianMods), GD.guardians + ward + fights (bosses.json, scaling.json Rift),
 //   GD.deep (scaling.json Rift Ladder*), GD.xpPenalty (scaling.json XpLevelPenalty).
 // Rules that only the sim knows (from logs or patch notes) are quoted from sim.js with their source.
-// Skill Scaling (scaling.js) moved in here from its own tab on 8 Nov 2026. app.js calls BOFaq(ctx) and gets back { render }.
+// Skill Scaling (scaling.js) sat in here from 8 Nov 2026 and "Skills & Minions" was a section; since 10 Nov 2026 both live in the Skills tab (Skill Scaling and Minion Scaling views).
+// app.js calls BOFaq(ctx) and gets back { render, renderMinions }.
 window.BOFaq = function (ctx) {
   'use strict';
   const { $, esc } = ctx;
   const GROUPS = [
-    ['Game mechanics', [['scaling', 'Skill Scaling'], ['minions', 'Skills & Minions'], ['ailments', 'Ailments'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
+    ['Game mechanics', [['ailments', 'Ailments'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
       ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP Penalty'], ['deep', 'Rupture & the Deep']]],
     ['About this site', [['sim', 'Sim vs the Game Panel'], ['data', 'Game Data & Patches'], ['privacy', 'Privacy']]],
   ];
   const ALL = GROUPS.flatMap(g => g[1]);
-  let section = 'scaling';
+  let section = 'ailments';
   try { const s = localStorage.getItem('bo_faq_section'); if (ALL.some(x => x[0] === s)) section = s; } catch (e) { /* storage blocked */ }
 
   const pct = x => String(Math.round(x * 1000) / 10).replace(/\.0$/, '');
@@ -4790,7 +4805,7 @@ window.BOFaq = function (ctx) {
   };
   function minions(GD) {
     const MM = GD.minionMonsters, SK = Object.values(GD.skills || {});
-    let h = intro('Skills & Minions', 'Every skill with its tags and base numbers, and a card for each minion: what the game data says about it and the rules the sim applies.');
+    let h = intro('Minion Scaling', 'Every skill with its tags and base numbers, and a card for each minion: what the game data says about it and the rules the sim applies.');
     if (!MM) return needData(h);
     const dmg = s => s.SpellMax ? r1(s.SpellMin) + '–' + r1(s.SpellMax) : '';
     const summons = SK.filter(s => s.Minion && s.Minion.MonsterId); // summon gems, then the attacks whose kills rise as minions (Gravereap, Marrow Lance)
@@ -5159,21 +5174,21 @@ window.BOFaq = function (ctx) {
     const nav = $('#faqNav'), GD = ctx.gd() || {};
     nav.innerHTML = GROUPS.map(g => '<div class="faq-group"><span class="faq-group-label">' + g[0] + '</span><div class="sc-chips">' +
       g[1].map(s => '<button type="button" class="chip sc-chip' + (section === s[0] ? ' active' : '') + '" data-s="' + s[0] + '" aria-pressed="' + (section === s[0]) + '">' + s[1] + '</button>').join('') + '</div></div>').join('');
-    $('#scalingPane').hidden = section !== 'scaling';
-    $('#affixPane').hidden = section === 'scaling';
-    if (section === 'scaling') ctx.scaling.render();
-    else {
-      $('#affixPane').innerHTML = RENDER[section](GD);
-      const f = $('#skillFilter');
-      if (f) f.oninput = () => { const q = f.value.trim().toLowerCase(); document.querySelectorAll('#affixPane #skillFilter ~ .table-wrap tbody tr').forEach(r => { r.hidden = !!q && !r.textContent.toLowerCase().includes(q); }); };
-    }
+    fill($('#affixPane'), RENDER[section](GD));
   }
+  // Puts a section's html in a pane and wires its skill filter box (the Minions tab has one).
+  function fill(pane, html) {
+    pane.innerHTML = html;
+    const f = pane.querySelector('#skillFilter');
+    if (f) f.oninput = () => { const q = f.value.trim().toLowerCase(); pane.querySelectorAll('#skillFilter ~ .table-wrap tbody tr').forEach(r => { r.hidden = !!q && !r.textContent.toLowerCase().includes(q); }); };
+  }
+  function renderMinions() { const p = $('#minionsPane'); if (p) fill(p, minions(ctx.gd() || {})); }
   function render() {
     const nav = $('#faqNav'); if (!nav) return;
     nav.onclick = e => { const b = e.target.closest('[data-s]'); if (!b) return; section = b.dataset.s; try { localStorage.setItem('bo_faq_section', section); } catch (x) { /* storage blocked */ } show(); };
     show();
   }
-  return { render };
+  return { render, renderMinions };
 };
 
 ;
@@ -7947,7 +7962,7 @@ window.BOStartApp = function () {
   let planner = null; // the Build tab (planner.js), made at the start
   let creator = null; // the Save Creator tab (creator.js)
   let fossil = null; // the Fossil Planner tab (fossil.js)
-  let scaling = null; // Skill Scaling, now a section of the FAQ tab (scaling.js)
+  let scaling = null; // the Skills tab (scaling.js)
   let faq = null; // the FAQ / Game Mechanics tab (faq.js)
   let character = null; // the Character tab (character.js)
   let itemSearch = null; // the Item Search tab (itemsearch.js)
@@ -10680,10 +10695,20 @@ window.BOStartApp = function () {
   // the local DamageSim.html doesn't set it (opened from a file it can't use addresses).
   const ROUTES = { character: 'build/character', tree: 'build/tree', 'build:skills': 'build/skills', 'build:gear': 'build/gear', damage: 'build/damage',
     compare: 'itemsim', items: 'itemsearch', grail: 'grail', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', faq: 'faq',
-    creator: 'creator', plan: 'plan', code: 'code' };
+    skillscaling: 'skills', minions: 'skills/minions', creator: 'creator', plan: 'plan', code: 'code' };
   const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', 'build:skills': 'Skills', 'build:gear': 'Gear', damage: 'Damage Analysis',
     compare: 'Item Simulator', items: 'Item Search', grail: 'Grail', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery",
-    faq: 'FAQ / Game Mechanics', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code' };
+    faq: 'FAQ / Game Mechanics', skillscaling: 'Skills', minions: 'Minion Scaling', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code' };
+  // The Skills tab holds two views: Skill Scaling (scaling.js) and Minion Scaling (faq.js's minions section).
+  let skillsView = 'scaling';
+  function renderSkillsTab() {
+    // Same segmented control as Item Compare / Gear Set Sim (.cmp-modes).
+    $('#skillsNav').innerHTML = '<div class="cmp-modes" role="tablist">' + [['scaling', 'Skill Scaling', 'M12 3l2.4 5.6L20 9.3l-4.2 3.9 1.2 5.8-5-3-5 3 1.2-5.8L4 9.3l5.6-.7z'], ['minions', 'Minion Scaling', 'M12 3a6 6 0 0 0-6 6v3l-1.5 3H8v3h2v-2h4v2h2v-3h3.5L18 12V9a6 6 0 0 0-6-6']].map(v =>
+      '<button type="button" class="cmp-mode' + (skillsView === v[0] ? ' on' : '') + '" role="tab" aria-selected="' + (skillsView === v[0]) + '" data-v="' + v[0] + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + v[2] + '"/></svg>' + v[1] + '</button>').join('') + '</div>';
+    $('#scalingPane').hidden = skillsView !== 'scaling'; $('#minionsPane').hidden = skillsView !== 'minions';
+    if (skillsView === 'scaling') scaling.render(); else faq.renderMinions();
+  }
+  $('#skillsNav').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; skillsView = b.dataset.v; renderSkillsTab(); syncUrl('skillscaling'); });
   const ROUTING = typeof window.SITE_BASE === 'string';
   let routingReady = false, noPush = false;
   // Worked out once, before any pushState: SITE_BASE is relative to the address the page was loaded at, not the current one.
@@ -10697,12 +10722,13 @@ window.BOStartApp = function () {
   }
   // A route key as a tab id: 'build:skills' picks the Skills view of the build pane first.
   function openRoute(key) {
+    if (key === 'skillscaling' || key === 'minions') { skillsView = key === 'minions' ? 'minions' : 'scaling'; return 'skillscaling'; }
     const [tab, sub] = key.split(':');
     if (tab === 'build') planner.setSubTab(sub);
     return tab;
   }
   function syncUrl(tab) {
-    const key = tab === 'build' ? 'build:' + planner.subTab() : tab, route = ROUTES[key]; if (!route) return;
+    const key = tab === 'build' ? 'build:' + planner.subTab() : tab === 'skillscaling' && skillsView === 'minions' ? 'minions' : tab, route = ROUTES[key]; if (!route) return;
     document.title = ROUTE_TITLES[key] + ' · Broken Oath Builder';
     if (!ROUTING || !routingReady || noPush) return;
     const url = siteRoot() + route + '/';
@@ -10727,7 +10753,7 @@ window.BOStartApp = function () {
     document.body.classList.toggle('build-page', tab === 'build');
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'items' || tab === 'grail' || tab === 'faq' || tab === 'character');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'items' || tab === 'grail' || tab === 'faq' || tab === 'skillscaling' || tab === 'character');
     document.body.classList.toggle('character-page', tab === 'character');
     document.body.classList.toggle('creator-page', tab === 'creator'); // the Save Creator has no use for the build views
     if (tab === 'supports') {
@@ -10740,7 +10766,7 @@ window.BOStartApp = function () {
     // Character, Passive tree and Damage Analysis are sub-tabs of Build Planner: keep that main tab lit.
     document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'damage'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
     if (tab === 'tree' || tab === 'damage' || tab === 'character') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#faqPane').hidden = tab !== 'faq'; $('#characterPane').hidden = tab !== 'character';
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     renderBuildStats();
@@ -10752,6 +10778,7 @@ window.BOStartApp = function () {
     if (tab === 'items') itemSearch.render();
     if (tab === 'grail') grail.render();
     if (tab === 'faq') faq.render();
+    if (tab === 'skillscaling') renderSkillsTab();
     if (tab === 'character') character.render();
     if (tab === 'damage' && breweryDirty && st.ch) { breweryDirty = false; render(); }
     store.set('tab', tab);
@@ -10958,7 +10985,7 @@ window.BOStartApp = function () {
   if (CHARS.length) selectChar($('#charSelect').value); else render();
   // Landing: Build Planner > Character for anyone with a character; a first visit with none gets the welcome page (Damage view).
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
-  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'faq' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'items', 'grail', 'faq'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'items', 'grail', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
   routingReady = true; // from here on, switching tabs changes the address
   // Opened from a share link: load it as a plan, then drop it from the address so a refresh doesn't add it again.
   const bdbHash = /^#b=/.test(location.hash) && brokedCode(location.hash);

@@ -1031,6 +1031,10 @@ body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page) 
 .pl-pick-item:hover { background: color-mix(in srgb, var(--dashboard-gold) 18%, transparent); }
 .pl-pick-item.on { color: var(--dashboard-gold); font-weight: 650; }
 .pl-pick [hidden] { display: none; }
+.pl-tip-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 5px; }
+.pl-tip-tags i { font-style: normal; padding: 1px 7px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 11px; }
+.pl-tip-head { display: block; margin-top: 8px; color: var(--faint); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.pl-tip-fit { margin: 6px 0 0; }
 .pl-tip .bad { color: var(--bad); }
 .pl-tip .pl-tier { display: inline-block; min-width: 22px; color: var(--dashboard-gold); font-weight: 650; font-variant-numeric: tabular-nums; }
 .pl-tip .pl-range { color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }

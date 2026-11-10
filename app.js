@@ -1821,7 +1821,7 @@ window.BOPlanner = function (ctx) {
   // ---------- Dragonling tree ----------
   // dragonling.json Tree: the class's nodes with their links; the core (the Aspect) is free and always held.
   // Points: one per milestone level reached, +1 once hatched, + Gate kills and the Pinnacle (ch.dragonExtra).
-  // One path only (Ascendancy: the first path node picks it); one Keystone or Capstone at a time.
+  // Paths can be mixed (the game lets you alternate); one Keystone or Capstone at a time.
   const dTree = ch => (GD.dragon.classes || {})[lc(ch.classId)] || {};
   const dRules = () => GD.dragon.tree || { milestones: [40, 45, 50, 55, 60, 70, 80, 90], hatch: 1, maxCrowns: 1, crownKinds: ['Keystone', 'Capstone'] };
   const dCore = T => Object.values(T).find(n => n.Kind === 'Core');
@@ -1837,7 +1837,6 @@ window.BOPlanner = function (ctx) {
     return adj;
   }
   const dTaken = ch => new Set((ch.dragonNodes || []).filter(id => dTree(ch)[id]));
-  function dPathOf(ch) { const T = dTree(ch); for (const id of dTaken(ch)) if (T[id].Path) return T[id].Path; return ''; }
   // Every taken node still reaches the core once `drop` is refunded.
   function dConnected(T, set, drop) {
     const core = dCore(T); if (!core) return true;
@@ -1849,8 +1848,7 @@ window.BOPlanner = function (ctx) {
     const T = dTree(ch), n = T[id], taken = dTaken(ch);
     if (n.Kind === 'Core') return { s: 'core' };
     if (taken.has(id)) return dConnected(T, taken, id) ? { s: 'taken' } : { s: 'taken', why: 'other picks hang from it: refund those first' };
-    const path = dPathOf(ch);
-    if (ascOn(ch) && n.Path && path && n.Path !== path) return { s: 'blocked', why: 'your Dragonling follows the ' + path + ' path (the first path node picks it)' };
+    // Paths can be mixed (owner's in-game screenshot, 10 Nov 2026: Pyromancer and Stormcaller nodes held together), so no path block.
     if (isCrown(n) && [...taken].some(t => isCrown(T[t]))) return { s: 'blocked', why: 'one Keystone or Capstone at a time' };
     const adj = dAdj(T), core = dCore(T);
     if (![...adj[id] || []].some(v => taken.has(v) || (core && v === core.Id))) return { s: 'locked', why: 'not next to a node you hold' };
@@ -1865,7 +1863,7 @@ window.BOPlanner = function (ctx) {
   function dragonCard(ch, edit, dis) {
     const T = dTree(ch), nodes = Object.values(T);
     if (!nodes.length) return '';
-    const taken = dTaken(ch), pts = dPoints(ch), used = taken.size, path = dPathOf(ch);
+    const taken = dTaken(ch), pts = dPoints(ch), used = taken.size, paths = [...new Set([...taken].map(id => T[id].Path).filter(Boolean))];
     const aspects = Object.keys(GD.dragon.aspects || {});
     const I = window.TREE_ICONS;
     const R = I ? { Core: 32, Small: 15, Shared: 15, Notable: 20, Keystone: 24, Capstone: 25 } : { Core: 26, Small: 9, Shared: 9, Notable: 14, Keystone: 17, Capstone: 18 };
@@ -1894,7 +1892,7 @@ window.BOPlanner = function (ctx) {
     const list = [...taken].map(id => T[id]).sort((a, b) => (a.Path || 'zz').localeCompare(b.Path || 'zz') || a.Y - b.Y)
       .map(n => { const lab = dLabel(ch, n); return '<li><b>' + esc(lab.name) + '</b> <span class="hint">' + esc(lab.text) + '</span></li>'; }).join('');
     const over = used > pts;
-    let h = '<div class="card"><h2>Dragonling <small>' + used + ' / ' + pts + ' points' + (path ? ' · ' + esc(path) + ' path' : '') + '</small></h2>';
+    let h = '<div class="card"><h2>Dragonling <small>' + used + ' / ' + pts + ' points' + (paths.length ? ' · ' + esc(paths.join(' + ')) + (paths.length > 1 ? ' paths' : ' path') : '') + '</small></h2>';
     h += '<div class="pl-row">' + (aspects.length ? '<label class="field inline"><span>Aspect</span><select data-f="aspect"' + dis + '>' + opt('', 'None', !ch.dragonAspect) + aspects.map(a => opt(a, GD.dragon.aspects[a].Name || a, a === ch.dragonAspect)).join('') + '</select></label>' : '') +
       '<label class="field inline" title="One point for each end-game Gate killed and one for the Pinnacle"><span>Gate kills + Pinnacle</span><input type="number" min="0" max="40" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
       (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') + '</div>';
@@ -1903,7 +1901,7 @@ window.BOPlanner = function (ctx) {
     h += asp ? '<p class="dl-aspect"><b>' + esc(asp.Name || ch.dragonAspect) + ' Aspect:</b> ' + esc(asp.Text || '') + '</p>'
       : '<p class="hint">No Aspect chosen: each one gives its own bonuses (pick one above to see them).</p>';
     h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.' :
-      'Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, + Gate kills and the Pinnacle. ' + (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + 'One path (the first path node picks your Ascendancy) and one Keystone or Capstone. Hover a node for its lines.') + '</p>';
+      'Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, + Gate kills and the Pinnacle. ' + (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + 'Paths can be mixed; one Keystone or Capstone at a time. Hover a node for its lines.') + '</p>';
     h += '<svg class="dl-tree" viewBox="-560 -640 1120 1100" role="img" aria-label="Dragonling tree">' + '<g class="dl-links">' + lines + '</g>' + dots + '</svg>';
     if (list) h += '<ul class="dl-list">' + list + '</ul>';
     return h + '</div>';

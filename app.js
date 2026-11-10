@@ -5282,6 +5282,9 @@ window.BOCharacter = function (ctx) {
     if (!(n > 1)) return 1;
     return (1 + (Math.min(n, 6) - 1) * next + Math.max(0, n - 6) * past6) / n;
   }
+  // Checked against in-game Storm Spark tooltips (owner screenshots, 10 Nov 2026, "Levels from gear and passives: X% more damage in total"):
+  // gem 20 -> 23: +69% (1.19^3 = 1.685), 25: +139% (1.19^5 = 2.386), 27: +213% (2.386 x 1.16 x 1.13 = 3.128). So steps 1.16 and 1.13
+  // are confirmed; 1.10 and 1.08 (levels 28+) are still patch-note only.
   const BONUS_CURVE_056 = [1.16, 1.13, 1.10, 1.08];
   const spellFade = GD => is056(GD) ? BONUS_CURVE_056 : BONUS_FADE_SPELL;
   const minionFade = GD => is056(GD) ? BONUS_CURVE_056 : BONUS_FADE_MINION;

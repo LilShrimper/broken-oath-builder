@@ -4713,6 +4713,12 @@ window.BOFaq = function (ctx) {
     const dmg = s => s.SpellMax ? r1(s.SpellMin) + '–' + r1(s.SpellMax) : '';
     const summons = SK.filter(s => s.Minion && s.Minion.MonsterId); // summon gems, then the attacks whose kills rise as minions (Gravereap, Marrow Lance)
     summons.sort((a, b) => (a.Delivery === 'Summon' ? 0 : 1) - (b.Delivery === 'Summon' ? 0 : 1));
+    const monBlock = mon => {
+              return '<p class="faq-stats"><b>Monster base stats:</b> ' + mon.Life + ' life · damage ' + r1(mon.DamageMin) + '–' + r1(mon.DamageMax) + ' · ' + mon.Armour + ' armour · run speed ' + mon.RunSpeed + (mon.StaggerResist === undefined ? '' : ' · ' + pct(mon.StaggerResist) + '% stagger resist') +
+              ' <span class="faq-note">The game\'s monster entry; enemies use the same one, a pet may be scaled differently.</span></p>' +
+              '<details><summary>Monster attack list (reference only: the sim paces minions from the attack interval of the gem)</summary>' +
+              table(['Attack', 'Range', 'Cooldown', 'Damage ×', 'Element'], (mon.Attacks || []).map(a => [esc(a.Kind), a.Range || '', a.Cooldown === undefined ? '' : a.Cooldown + ' s', a.Damage === undefined ? '' : a.Damage, esc(a.Element || '')])) + '</details>';;
+    };
     let cards = '';
     for (const s of summons) {
       const m = s.Minion, mon = MM[m.MonsterId];
@@ -4733,11 +4739,7 @@ window.BOFaq = function (ctx) {
       }
       let body = '<div class="table-wrap"><table class="tbl faq-tbl"><tbody>' + rows.map(r => '<tr><th>' + r[0] + '</th><td>' + r[1] + '</td></tr>').join('') + '</tbody></table></div>';
       if (mon) {
-        body += '<p class="faq-stats"><b>Monster base stats:</b> ' + mon.Life + ' life · damage ' + r1(mon.DamageMin) + '–' + r1(mon.DamageMax) + ' · ' + mon.Armour + ' armour · run speed ' + mon.RunSpeed + (mon.StaggerResist === undefined ? '' : ' · ' + pct(mon.StaggerResist) + '% stagger resist') +
-          ' <span class="faq-note">The game\'s monster entry; enemies use the same one, a pet may be scaled differently.</span></p>' +
-          (s.Delivery === 'Summon' ? '' : '<details><summary>How they rise</summary><p class="faq-note">' + esc(s.Description || '') + '</p></details>') +
-          '<details><summary>Monster attack list (reference only: the sim paces minions from the line above)</summary>' +
-          table(['Attack', 'Range', 'Cooldown', 'Damage ×', 'Element'], (mon.Attacks || []).map(a => [esc(a.Kind), a.Range || '', a.Cooldown === undefined ? '' : a.Cooldown + ' s', a.Damage === undefined ? '' : a.Damage, esc(a.Element || '')])) + '</details>';
+        body += monBlock(mon).replace('<details><summary>Monster attack list', (s.Delivery === 'Summon' ? '' : '<details><summary>How they rise</summary><p class="faq-note">' + esc(s.Description || '') + '</p></details>') + '<details><summary>Monster attack list') + '';
       }
       const rules = MINION_RULES[s.Id.toLowerCase()] || [];
       if (rules.length) body += '<h3>Rules the sim applies</h3>' + list(rules);
@@ -4747,7 +4749,7 @@ window.BOFaq = function (ctx) {
     // Zombies (nothing in sim.js reads the support; no log or tooltip numbers for them yet), so the card says so.
     const gc = (GD.supports || {}).grave_conscription;
     if (gc) cards += card(esc(gc.Name), '<p class="faq-stats">' + esc(gc.Description || '') + '</p>' +
-      (MM.zombie ? '<p class="faq-stats"><b>Minion:</b> ' + esc(MM.zombie.Name) + ' (the same monster as Raise Zombie).</p>' : '') +
+      (MM.zombie ? '<p class="faq-stats"><b>Minion:</b> ' + esc(MM.zombie.Name) + ' (the same monster as Raise Zombie)' + (MM.zombie.Role ? ', role: ' + esc(MM.zombie.Role) : '') + '.</p>' + monBlock(MM.zombie) : '') +
       '<p class="faq-note">A support gem, not a summon. The sim does not count these Zombies in any DPS number yet.</p>', 'support');
     h += '<div class="faq-minion-grid">' + cards + '</div>';
     h += card('Rules for all minions', list([

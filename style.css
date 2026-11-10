@@ -1331,6 +1331,18 @@ body.compare-page #controls { display: none; }
 .faq-tbl td:nth-child(4) { min-width: 260px; }
 .faq-note { display: block; color: var(--faint); font-size: 11.5px; margin-top: 3px; }
 .faq-off { opacity: .55; }
+.faq-xp-chart { width: 100%; margin: 4px 0 0; overflow: hidden; }
+.faq-xp-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.faq-xp-chart text { fill: var(--faint); font: 11px system-ui, sans-serif; }
+.faq-xp-chart .faq-xp-axis { fill: var(--muted); font-size: 12px; }
+.faq-xp-grid { stroke: var(--line); stroke-width: 1; }
+.faq-xp-line { fill: none; stroke: var(--dashboard-green); stroke-width: 3; }
+.faq-xp-point { fill: var(--dashboard-green); stroke: var(--panel); stroke-width: 2; }
+.faq-xp-slider { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.faq-xp-slider output { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.faq-xp-range { display: block; width: 100%; margin: 0 0 8px; accent-color: var(--dashboard-green); cursor: pointer; }
+.faq-xp-range:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.faq-card .faq-xp-chart + .faq-xp-slider + .faq-xp-range + .table-wrap { margin-top: 6px; }
 :root[data-theme="light"] .sc-chip.active { color: #8a6a1e; border-color: #8a6a1e; }
 .sc-red { --sc-c: var(--gem-str); } .sc-green { --sc-c: var(--gem-dex); } .sc-blue { --sc-c: var(--gem-blue); }
 .sc-card header { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }

@@ -4702,6 +4702,8 @@ window.BOFaq = function (ctx) {
   const MINION_RULES = {
     summon_skeletons: ['The army is shared with your other summons: 40 in all, the oldest go first (game log 6 Nov 2026, build 26474163).'],
     summon_skeletal_mage: ['Multistrike on the mage: each strike does 52% less damage and all 3 strikes land (the mage throws all 3 bolts since the 5 Nov patch; the developer, 5 Nov: real damage is 94% of the panel).', 'Follows Faster Casting (patch notes, 7 Nov 2026).'],
+    grave_reap: ['Kills rise as Risen Thralls (Bone Warrior). The skill panel shows the risen minions only, not the sweep (tooltip: "DPS (all its minions)"); they stand in the same 40-minion army as your summons.', 'Minion damage multiplier 0.12 (skills.json; the sim works the minion hit out from the skill\'s base damage).'],
+    marrow_lance: ['Kills rise as Risen Casters (Skeleton Wizard). The skill panel shows the risen minions only, not the lance.', 'Log, 9 Nov 2026 (Marrow Lance gem 11, 11 summons on the bar): 4 risen at gem 11 (3 + 1), shared with the other summons in one army; PetSheet68 "marrow_lance avg 107-108" at gem 11.'],
     summon_bone_golem: ['Always exactly one golem, whatever "+minions" lines say (log: PetSheet68 cap 1).', 'The fire golem blessing (12.5% more minion damage) applies to the golem itself too.', 'Brutality removes all fire, cold and lightning: linked Added Fire is idle and the golem deals no element.'],
   };
   function minions(GD) {
@@ -4709,17 +4711,19 @@ window.BOFaq = function (ctx) {
     let h = intro('Skills & Minions', 'Every skill with its tags and base numbers, and a card for each minion: what the game data says about it and the rules the sim applies.');
     if (!MM) return needData(h);
     const dmg = s => s.SpellMax ? r1(s.SpellMin) + '–' + r1(s.SpellMax) : '';
-    const summons = SK.filter(s => s.Minion && s.Minion.MonsterId && s.Delivery === 'Summon');
+    const summons = SK.filter(s => s.Minion && s.Minion.MonsterId); // summon gems, then the attacks whose kills rise as minions (Gravereap, Marrow Lance)
+    summons.sort((a, b) => (a.Delivery === 'Summon' ? 0 : 1) - (b.Delivery === 'Summon' ? 0 : 1));
     for (const s of summons) {
       const m = s.Minion, mon = MM[m.MonsterId];
       const rows = [
         ['Skill', esc(s.Name) + ' <span class="faq-note">' + (s.Tags || []).map(esc).join(' · ') + '</span>'],
         ['Minion', mon ? esc(mon.Name) + (mon.Role ? ' <span class="faq-note">role: ' + esc(mon.Role) + '</span>' : '') : esc(m.MonsterId)],
-        ['Count', m.Count + (m.CountEvery ? ', +1 every ' + m.CountEvery + ' gem levels' : '') + ', cap ' + m.Cap],
+        ['Count', (s.Delivery === 'Summon' ? m.Count + (m.CountEvery ? ', +1 every ' + m.CountEvery + ' gem levels' : '') + ', cap ' + m.Cap : 'up to ' + m.Cap + (m.PerLevels && m.PerLevels.length ? ', +1 at gem levels ' + m.PerLevels.join(', ') : '') + ' (raised from kills, the oldest is replaced)')],
+        s.Delivery === 'Summon' ? null : ['How they rise', esc(s.Description || '')],
         ['Base attack every', m.AttackEvery + ' s <span class="faq-note">the minion\'s pace is this × 0.72 ÷ minion speed (measured in the game log, not in the data files)</span>'],
         ['Damage', 'gem hit ' + dmg(s) + ' × minion multiplier ' + m.DamageMult + (m.LevelDamage ? ', +' + pct(m.LevelDamage) + '% per zone level' : '')],
         m.Affinity ? ['Affinity', '+' + pct(m.AffinityDamage) + '% minion damage per 10 ' + esc(m.Affinity) + (m.AffinityCap ? ', up to ' + m.AffinityCap : '')] : null,
-        s.ManaCost ? ['Cast', s.CastTime + ' s, ' + s.ManaCost + ' mana' + (s.Cooldown ? ', ' + s.Cooldown + ' s cooldown' : '')] : null,
+        s.ManaCost ? ['Cast', (s.CastTime !== undefined ? s.CastTime + ' s, ' : '') + s.ManaCost + ' mana' + (s.Cooldown ? ', ' + s.Cooldown + ' s cooldown' : '')] : null,
       ].filter(Boolean);
       if (m.GolemAuras) rows.push(['Golem auras', Object.entries(m.GolemAuras).map(([el, a]) => '<b>' + esc(el) + '</b>: ' + esc(a.Stat) + ' ' + a.Value + (a.Radius ? ' (radius ' + a.Radius + ')' : '')).join('<br>')]);
       let body = '<div class="table-wrap"><table class="tbl faq-tbl"><tbody>' + rows.map(r => '<tr><th>' + r[0] + '</th><td>' + r[1] + '</td></tr>').join('') + '</tbody></table></div>';

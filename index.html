@@ -879,6 +879,9 @@ body.support-page .build-settings-summary,
 body.support-page .configure-heading,
 body.support-page .config-tabs { display: none; }
 body.support-page .support-simulator-heading { display: block; margin: 2px 0 14px; }
+/* The heading and the two columns sit on the page, not inside one big box (as the other tools' pages) */
+body.support-page .controls, body.support-page .build-settings { background: none; border: 0; box-shadow: none; padding: 0; }
+body.support-page .build-settings-content { padding: 0; }
 body.support-page .config-panel[data-config-panel="skill"],
 body.support-page .config-panel[data-config-panel="character"] { display: none; }
 /* Two columns up top: gem setup on the left, the enemy (target) on the right; search and results run full width below */
@@ -969,6 +972,7 @@ body.dashboard-view .configure-heading { display: flex; }
 .nav-data:not(:has(.btn:not([hidden]))) { display: none; }
 @media (max-width: 760px) { .nav-data { display: none; } } /* a phone has no game Data folder to pick (owner, 8 Nov 2026) */
 .view-bar { margin-top: 14px; }
+.view-bar-title { margin: 0 0 8px 6px; color: var(--dashboard-gold); font: 700 14px/1.2 Georgia, "Times New Roman", serif; letter-spacing: .18em; text-transform: uppercase; }
 .view-bar .tabs { flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
 .view-bar .tab { width: auto; flex: 0 1 auto; white-space: nowrap; }
 .view-bar .tab:hover { background: var(--panel-2); }
@@ -1087,6 +1091,31 @@ body.creator-page .view-bar { display: none; }
   .view-bar .main-tabs .tab,
   .top .secondary-tabs .tab { flex: 1 1 calc(33.333% - 4px); min-width: 0; white-space: normal; }
 }
+/* Item Compare: the Item Sim / Gear Set Sim switch */
+.cmp-modes { display: flex; gap: 6px; width: fit-content; max-width: 100%; margin: 0 0 14px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.cmp-mode { display: flex; align-items: center; justify-content: center; gap: 10px; min-width: 150px; min-height: 42px; padding: 8px 18px; border: 0; border-radius: 9px; background: none; color: var(--muted); font: inherit; font-weight: 600; font-size: 13.5px; white-space: nowrap; cursor: pointer; }
+.cmp-mode svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.cmp-mode:hover { color: var(--text); background: var(--panel-2); }
+.cmp-mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cmp-mode.on { color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 12%, var(--panel)); box-shadow: inset 3px 0 0 var(--dashboard-gold); }
+@media (max-width: 520px) { .cmp-modes { width: 100%; } .cmp-mode { flex: 1 1 0; min-width: 0; padding: 8px; gap: 6px; font-size: 12.5px; white-space: normal; } }
+/* Gear Set Sim */
+.gs-card .hint { margin: 0 0 10px; }
+.gs-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 18px; margin-bottom: 4px; }
+.gs-controls .field input[type=number] { width: 84px; }
+.gs-prog { margin-top: 12px; }
+.gs-bar { height: 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
+.gs-bar > div { height: 100%; background: var(--dashboard-gold); transition: width .25s; }
+.gs-prog .hint { margin: 6px 0 0; }
+.gs-table td { font-size: 12.5px; vertical-align: top; }
+.gs-table th:nth-child(-n+3), .gs-table td:nth-child(-n+3) { text-align: left; }
+.gs-table td:nth-child(n+4) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gs-table tr.gs-changed td:nth-child(3) { background: color-mix(in srgb, var(--good) 6%, transparent); }
+.gs-unique { color: var(--dashboard-gold); }
+.gs-lines { margin-top: 4px; }
+.gs-lines summary { color: var(--accent); cursor: pointer; font-size: 12px; }
+.gs-lines .cmp-tip.pl-tip { margin: 6px 0 0; max-width: 420px; }
+.gs-result .cmp-actions { margin: 10px 0; }
 /* Item Compare: slot buttons, the winning item */
 .cmp-pick-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 16px; margin-bottom: 10px; }
 .cmp-pick-head h2 { margin: 0; }
@@ -1611,9 +1640,10 @@ body.support-page #configEnemy .hint { margin: 2px 0 6px; }
   </div>
 </header>
 <div class="view-bar">
+    <div class="view-bar-title">Tools</div>
     <nav class="tabs main-tabs" role="tablist" aria-label="Views">
-      <button class="tab" type="button" role="tab" data-tab="compare" aria-selected="false" aria-label="Item Compare">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4"/></svg><span>Item Compare</span>
+      <button class="tab" type="button" role="tab" data-tab="compare" aria-selected="false" aria-label="Item Simulator">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4"/></svg><span>Item Simulator</span>
       </button>
       <button class="tab" type="button" role="tab" data-tab="items" aria-selected="false" aria-label="Item Search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13M15.2 15.2 21 21"/></svg><span>Item Search</span>
@@ -1993,7 +2023,7 @@ Fan-made tool, not affiliated with the developers of Broken Oath. Game data come
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":160,"at":"2026-11-10T03:25:52.376Z"};
+window.SITE_VERSION = {"v":161,"at":"2026-11-10T04:06:49.794Z"};
 window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"aegis_N":0,"aegis_N_D":1,"aegis_S":2,"aegis_S_D":3,"affliction_N":4,"affliction_N_D":5,"affliction_S":6,"affliction_S_D":7,"anvil_oath_N":8,"anvil_oath_N_D":9,"anvil_oath_S":10,"anvil_oath_S_D":11,"area_N":12,"area_N_D":13,"area_S":14,"area_S_D":15,"armour_N":16,"armour_N_D":17,"armour_S":18,"armour_S_D":19,"artillery_N":20,"artillery_N_D":21,"artillery_S":22,"artillery_S_D":23,"attack_N":24,"attack_N_D":25,"attack_S":26,"attack_S_D":27,"blightword_N":28,"blightword_N_D":29,"bone_N":30,"bone_N_D":31,"bone_S":32,"bone_S_D":33,"bone_choir_N":34,"bone_choir_N_D":35,"bone_choir_S":36,"bone_choir_S_D":37,"bow_N":38,"bow_N_D":39,"bow_S":40,"bow_S_D":41,"bulwark_N":42,"bulwark_N_D":43,"bulwark_S":44,"bulwark_S_D":45,"carrion_hunt_N":46,"carrion_hunt_N_D":47,"carrion_hunt_S":48,"carrion_hunt_S_D":49,"chain_N":50,"chain_N_D":51,"chain_S":52,"chain_S_D":53,"channel_N":54,"channel_N_D":55,"channel_S":56,"channel_S_D":57,"cleave_N":58,"cleave_N_D":59,"cleave_S":60,"cleave_S_D":61,"cold_N":62,"cold_N_D":63,"cold_S":64,"cold_S_D":65,"conduit_N":66,"conduit_N_D":67,"conduit_S":68,"conduit_S_D":69,"crest_Mage":70,"crest_Mage_D":71,"crest_Necromancer":72,"crest_Necromancer_D":73,"crest_Paladin":74,"crest_Paladin_D":75,"crest_Ranger":76,"crest_Ranger_D":77,"crest_Samurai":78,"crest_Samurai_D":79,"crest_Warrior":80,"crest_Warrior_D":81,"crit_N":82,"crit_N_D":83,"crit_S":84,"crit_S_D":85,"crusade_N":86,"crusade_N_D":87,"crusade_S":88,"crusade_S_D":89,"dawn_N":90,"dawn_N_D":91,"dawn_S":92,"dawn_S_D":93,"dawnstorm_N":94,"dawnstorm_N_D":95,"dawnstorm_S":96,"dawnstorm_S_D":97,"dawnsworn_N":98,"dawnsworn_N_D":99,"deadeye_N":100,"deadeye_N_D":101,"deadeye_S":102,"deadeye_S_D":103,"deathknell_N":104,"deathknell_N_D":105,"deathknell_S":106,"deathknell_S_D":107,"edge_N":108,"edge_N_D":109,"edge_S":110,"edge_S_D":111,"elemental_N":112,"elemental_N_D":113,"elemental_S":114,"elemental_S_D":115,"energy_shield_N":116,"energy_shield_N_D":117,"energy_shield_S":118,"energy_shield_S_D":119,"evasion_N":120,"evasion_N_D":121,"evasion_S":122,"evasion_S_D":123,"faith_N":124,"faith_N_D":125,"faith_S":126,"faith_S_D":127,"falling_leaf_N":128,"falling_leaf_N_D":129,"falling_leaf_S":130,"falling_leaf_S_D":131,"fire_N":132,"fire_N_D":133,"fire_S":134,"fire_S_D":135,"fury_N":136,"fury_N_D":137,"fury_S":138,"fury_S_D":139,"grave_N":140,"grave_N_D":141,"grave_S":142,"grave_S_D":143,"holy_N":144,"holy_N_D":145,"holy_S":146,"holy_S_D":147,"iron_tempest_N":148,"iron_tempest_N_D":149,"iron_tempest_S":150,"iron_tempest_S_D":151,"ki_N":152,"ki_N_D":153,"ki_S":154,"ki_S_D":155,"ks_aegis_rebuke":156,"ks_aegis_rebuke_D":157,"ks_ancestral_host":158,"ks_ancestral_host_D":159,"ks_blood_magic":160,"ks_blood_magic_D":161,"ks_cascade_of_ruin":162,"ks_cascade_of_ruin_D":163,"ks_chain_reaction":164,"ks_chain_reaction_D":165,"ks_choir_of_bones":166,"ks_choir_of_bones_D":167,"ks_comet_step":168,"ks_comet_step_D":169,"ks_dawnstorm_covenant":170,"ks_dawnstorm_covenant_D":171,"ks_eagle_eye":172,"ks_eagle_eye_D":173,"ks_earthbreaker_stride":174,"ks_earthbreaker_stride_D":175,"ks_elemental_overload":176,"ks_elemental_overload_D":177,"ks_forked_sky":178,"ks_forked_sky_D":179,"ks_glass_cannon":180,"ks_glass_cannon_D":181,"ks_hammer_of_judgement":182,"ks_hammer_of_judgement_D":183,"ks_hollow_covenant":184,"ks_hollow_covenant_D":185,"ks_iron_resolve":186,"ks_iron_resolve_D":187,"ks_lord_of_the_dead":188,"ks_lord_of_the_dead_D":189,"ks_oath_of_a_thousand_cuts":190,"ks_oath_of_a_thousand_cuts_D":191,"ks_oath_of_many_fires":192,"ks_oath_of_many_fires_D":193,"ks_oath_of_slow_ruin":194,"ks_oath_of_slow_ruin_D":195,"ks_oath_of_the_living_storm":196,"ks_oath_of_the_living_storm_D":197,"ks_oath_of_the_long_night":198,"ks_oath_of_the_long_night_D":199,"ks_oath_of_the_pyre":200,"ks_oath_of_the_pyre_D":201,"ks_oath_of_the_red_harvest":202,"ks_oath_of_the_red_harvest_D":203,"ks_oath_of_the_snare":204,"ks_oath_of_the_snare_D":205,"ks_oath_of_the_white_silence":206,"ks_oath_of_the_white_silence_D":207,"ks_one_breath":208,"ks_one_breath_D":209,"ks_pyre_covenant":210,"ks_pyre_covenant_D":211,"ks_r59_hold_k3":212,"ks_r59_hold_k3_D":213,"ks_r59_mountain_k3":214,"ks_r59_mountain_k3_D":215,"ks_r59_sure_strike_k3":216,"ks_r59_sure_strike_k3_D":217,"ks_r74_bone_sovereign":218,"ks_r74_bone_sovereign_D":219,"ks_radiant_crusade":220,"ks_radiant_crusade_D":221,"ks_rotting_gospel":222,"ks_rotting_gospel_D":223,"ks_sanctified":224,"ks_sanctified_D":225,"ks_siege_pact":226,"ks_siege_pact_D":227,"ks_spellblade":228,"ks_spellblade_D":229,"ks_tempest_vow":230,"ks_tempest_vow_D":231,"ks_the_hunting_dead":232,"ks_the_hunting_dead_D":233,"ks_thousand_hands":234,"ks_thousand_hands_D":235,"ks_twice_fallen_sky":236,"ks_twice_fallen_sky_D":237,"ks_unbroken_wall":238,"ks_unbroken_wall_D":239,"ks_wake_of_spells":240,"ks_wake_of_spells_D":241,"ks_way_of_the_blade":242,"ks_way_of_the_blade_D":243,"ks_wind_and_steel_oath":244,"ks_wind_and_steel_oath_D":245,"leech_N":246,"leech_N_D":247,"leech_S":248,"leech_S_D":249,"lichfire_N":250,"lichfire_N_D":251,"lichfire_S":252,"lichfire_S_D":253,"life_N":254,"life_N_D":255,"life_S":256,"life_S_D":257,"life_big_N":258,"life_big_N_D":259,"life_big_S":260,"life_big_S_D":261,"lightning_N":262,"lightning_N_D":263,"lightning_S":264,"lightning_S_D":265,"lingering_N":266,"lingering_N_D":267,"lingering_S":268,"lingering_S_D":269,"malediction_N":270,"malediction_N_D":271,"malediction_S":272,"malediction_S_D":273,"mana_N":274,"mana_N_D":275,"mana_S":276,"mana_S_D":277,"manasteal_N":278,"manasteal_N_D":279,"manasteal_S":280,"manasteal_S_D":281,"melee_N":282,"melee_N_D":283,"melee_S":284,"melee_S_D":285,"mirrorblade_N":286,"mirrorblade_N_D":287,"mirrorblade_S":288,"mirrorblade_S_D":289,"orbit_N":290,"orbit_N_D":291,"orbit_S":292,"orbit_S_D":293,"ossuary_N":294,"ossuary_N_D":295,"ossuary_S":296,"ossuary_S_D":297,"overcharge_N":298,"overcharge_N_D":299,"overcharge_S":300,"overcharge_S_D":301,"permafrost_N":302,"permafrost_N_D":303,"permafrost_S":304,"permafrost_S_D":305,"plague_quiver_N":306,"plague_quiver_N_D":307,"plague_quiver_S":308,"plague_quiver_S_D":309,"poison_N":310,"poison_N_D":311,"poison_S":312,"poison_S_D":313,"portrait_Mage":314,"portrait_Mage_D":315,"portrait_Necromancer":316,"portrait_Necromancer_D":317,"portrait_Paladin":318,"portrait_Paladin_D":319,"portrait_Ranger":320,"portrait_Ranger_D":321,"portrait_Samurai":322,"portrait_Samurai_D":323,"portrait_Warrior":324,"portrait_Warrior_D":325,"projectile_N":326,"projectile_N_D":327,"projectile_S":328,"projectile_S_D":329,"radiance_N":330,"radiance_N_D":331,"radiance_S":332,"radiance_S_D":333,"radiant_ward_N":334,"radiant_ward_N_D":335,"radiant_ward_S":336,"radiant_ward_S_D":337,"rain_N":338,"rain_N_D":339,"rain_S":340,"rain_S_D":341,"reaper_N":342,"reaper_N_D":343,"reaper_S":344,"reaper_S_D":345,"regrowth_N":346,"regrowth_N_D":347,"regrowth_S":348,"regrowth_S_D":349,"resist_N":350,"resist_N_D":351,"resist_S":352,"resist_S_D":353,"shatter_N":354,"shatter_N_D":355,"shatter_S":356,"shatter_S_D":357,"siege_N":358,"siege_N_D":359,"siege_S":360,"siege_S_D":361,"sigil_N":362,"sigil_N_D":363,"sigil_S":364,"sigil_S_D":365,"slam_N":366,"slam_N_D":367,"slam_S":368,"slam_S_D":369,"souls_N":370,"souls_N_D":371,"souls_S":372,"souls_S_D":373,"speed_N":374,"speed_N_D":375,"speed_S":376,"speed_S_D":377,"spell_N":378,"spell_N_D":379,"spell_S":380,"spell_S_D":381,"spell_crit_N":382,"spell_crit_N_D":383,"spell_crit_S":384,"spell_crit_S_D":385,"spellsword_N":386,"spellsword_N_D":387,"spellsword_S":388,"spellsword_S_D":389,"starfall_N":390,"starfall_N_D":391,"starfall_S":392,"starfall_S_D":393,"stillness_N":394,"stillness_N_D":395,"stillness_S":396,"stillness_S_D":397,"swift_N":398,"swift_N_D":399,"swift_S":400,"swift_S_D":401,"tether_N":402,"tether_N_D":403,"tether_S":404,"tether_S_D":405,"trap_N":406,"trap_N_D":407,"trap_S":408,"trap_S_D":409,"two_storms_N":410,"two_storms_N_D":411,"two_storms_S":412,"two_storms_S_D":413,"vigil_N":414,"vigil_N_D":415,"vigil_S":416,"vigil_S_D":417,"voidbound_N":418,"voidbound_N_D":419,"voidbound_S":420,"voidbound_S_D":421,"vowkeeper_N":422,"vowkeeper_N_D":423,"vowkeeper_S":424,"vowkeeper_S_D":425,"warcaller_N":426,"warcaller_N_D":427,"warcaller_S":428,"warcaller_S_D":429,"warpath_N":430,"warpath_N_D":431,"warpath_S":432,"warpath_S_D":433,"waygate_S":434,"waygate_S_D":435,"wellspring_N":436,"wellspring_N_D":437,"wellspring_S":438,"wellspring_S_D":439,"wind_and_steel_N":440,"wind_and_steel_N_D":441,"wind_and_steel_S":442,"wind_and_steel_S_D":443,"windstep_N":444,"windstep_N_D":445,"windstep_S":446,"windstep_S_D":447,"zeal_N":448,"zeal_N_D":449,"zeal_S":450,"zeal_S_D":451},"dragons":"icons/dragons.webp","dragonOrder":["Fire","Lightning","Cold","Arcane","Poison","Physical"]};
 </script>
 <script>
@@ -3004,6 +3034,302 @@ window.TREE_ICONS = {"src":"icons/tree.webp","T":64,"cols":22,"rows":21,"idx":{"
 
   const api = { optimize };
   root.BOTreeOpt = api;
+  if (typeof module !== 'undefined') module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+// Gear set optimizer (Item Compare > Gear Set Sim): finds the gear that gives the chosen skill the most DPS, with the
+// passive tree, skills, supports and idols left as they are. Works in the browser (run in small slices) and in Node.
+//   gen = BOGearOpt.optimize(GD, S, ch, skillId, simOpts, cfg)   (a generator: each next() does a little work)
+//   each next() returns { value: { phase, p } } until the last one, which returns the result (see the end).
+// What it tries for each slot, in the context of the other slots' current picks:
+//   - every unique for the slot (rolled at its best; a red item then gets up to 6 Vows, chosen like affixes),
+//   - every Oathword on every base it fits (plain item, runes in order),
+//   - Rare items on each distinct base with the prefixes and suffixes (top tier for the item level) that add the most
+//     DPS, one at a time, then the best runes in the sockets.
+// The slot's own current item stays a candidate, so the result is never worse than what the character wears.
+// Slots are optimized in rounds (a few passes) because gear lines scale each other; weapons are chosen as a set
+// (two-hander, or one-hander + off hand, or bow + quiver).
+// Not counted: defences (life, resistances, armour), attribute requirements, what the items cost or how rare they are.
+// Same item rules as planner.js (affixesFor, oathwordBases, rollUnique, topTier); keep them in step.
+(function (root) {
+  'use strict';
+
+  const lc = s => String(s == null ? '' : s).toLowerCase();
+  const SINGLE = ['Helm', 'Chest', 'Gloves', 'Boots', 'Amulet', 'Ring1', 'Ring2', 'Belt', 'DwarvenRune'];
+  // A slot key is the slot name; 'DwarvenRune2' is the second Dwarven rune of a save that has two.
+  const realSlot = key => key === 'DwarvenRune2' ? 'DwarvenRune' : key;
+  const baseSlot = key => /^Ring\d$/.test(key) ? 'Ring' : realSlot(key);
+  const LIMIT = 3;      // prefixes and suffixes on a rare
+  const VOW_MAX = 6;    // Vows on one red item (planner.js VOW_MAX)
+  const MIN_GAIN = 1e-6;
+  const PASSES = 4;
+  const LISTED = 20;    // affixes that go on to the later steps of the greedy fill
+
+  function* optimize(GD, S, ch, skill, simOpt, cfg) {
+    cfg = cfg || {};
+    const t0 = Date.now();
+    const ilvl = Math.max(1, Math.min(100, +cfg.ilvl || 84));
+    const deadline = t0 + (cfg.seconds > 0 ? cfg.seconds : 80) * 1000;
+    const lvOk = lv => cfg.ignoreLevel || !lv || lv <= (ch.level || 1);
+    const useVows = cfg.vows !== false, useRunes = cfg.runes !== false, useLimited = cfg.limited !== false;
+    let calcs = 0, lastYield = 0, curPhase = 'Starting', curP = 0, rush = false;
+    const late = () => Date.now() > deadline;
+    const prog = () => ({ phase: curPhase, p: curP });
+    const due = () => calcs - lastYield >= 12 && (lastYield = calcs, true);
+
+    // ---- value of a set of items ----
+    const V = items => {
+      calcs++;
+      const r = S.calcSkill(GD, Object.assign({}, ch, { items }), skill, simOpt);
+      return r && !r.error && !r.unsupported && isFinite(r.totalDps) && r.totalDps > 0 ? r.totalDps : 0;
+    };
+    // Replace (or, with null, remove) the item in a slot key; the item keeps its place in the list.
+    const put = (items, key, it) => {
+      const s = realSlot(key), n = key === 'DwarvenRune2' ? 1 : 0; let c = -1, placed = false; const out = [];
+      for (const i of items) { if (i.slot === s && ++c === n) { if (it) out.push(it); placed = true; } else out.push(i); }
+      if (!placed && it) out.push(it);
+      return out;
+    };
+    const at = (items, key) => items.filter(i => i.slot === realSlot(key))[key === 'DwarvenRune2' ? 1 : 0] || null;
+    // A weapon skill only works with the weapon kinds it lists (skills.json WeaponKinds).
+    const kinds = ((GD.skills[lc(skill)] || {}).WeaponKinds || []).map(lc);
+    const mainOk = b => !kinds.length || kinds.includes(lc(b.Class));
+    const wordOk = w => !w.Class || lc(w.Class) === lc(ch.classId); // some Oathwords belong to one class
+
+    // ---- item rules (as planner.js) ----
+    const baseOf = it => it && GD.bases[lc(it.base)];
+    const twoHanded = b => !!b && (b.bTwoHanded || (b.Tags || []).includes('TwoHand'));
+    // Off hand: a quiver only with a bow; a shield or tome only with a one-hander (a Mace and Shield is one item).
+    const offOk = (main, off) => !main || !off || (off.Class === 'Quiver' ? main.Class === 'Bow' : !twoHanded(main));
+    const affixesFor = base => {
+      const tags = new Set((base && base.Tags) || []);
+      return Object.values(GD.affixes).filter(a => (a.BaseTags || []).some(t => tags.has(t)) && !(a.ExcludeTags || []).some(t => tags.has(t)) && (a.Tiers || []).length);
+    };
+    const tierFor = af => af.Tiers.findIndex(t => t.ILvl <= ilvl); // tiers run best first; -1: too low an item level for any
+    const runeSlots = base => {
+      const R = GD.runeSockets || {}, tags = base.Tags || [], keys = Object.keys(R).filter(k => tags.includes(k) || base.Slot === k);
+      return keys.length ? Math.max(...keys.map(k => R[k])) : 0;
+    };
+    const rollUnique = (it, roll) => {
+      const u = GD.uniques[lc(it.unique)], pt = (lo, hi) => lo == null ? 0 : Math.round((lo + (hi - lo) * roll) * 100) / 100;
+      it.roll = roll;
+      it.affixes = u.Mods.map((m, i) => m.Mod ? { id: 'unique:' + i, tier: 0, v: pt(m.Min, m.Max), v2: pt(m.Min2, m.Max2) } : null).filter(Boolean);
+    };
+    const oathBases = (slot, word) => {
+      const allowed = new Set((word.Bases || []).map(lc));
+      return baseList(slot).filter(b => [b.Class, b.Slot, ...(b.Tags || [])].some(tag => tag && allowed.has(lc(tag))) && runeSlots(b) >= word.Runes.length);
+    };
+    // Bases the character can use, newest rules first; bases that differ only in defences count once (they play the same).
+    const baseCache = {};
+    const baseList = slot => baseCache[slot] || (baseCache[slot] = Object.values(GD.bases).filter(b => b.Slot === baseSlot(slot) && lvOk(b.Level)));
+    const sig = b => JSON.stringify([b.Class, (b.Tags || []).filter(t => !/^(Armour|Evasion|EnergyShield|Defences)$/.test(t)).sort(), b.Implicits, b.DamageMin, b.DamageMax, b.AttacksPerSecond, b.Crit, b.bTwoHanded, b.Block]);
+    const distinct = list => { const m = new Map(); for (const b of list) { const k = sig(b); const o = m.get(k); if (!o || (b.Level || 0) > (o.Level || 0)) m.set(k, b); } return [...m.values()]; };
+
+    // ---- the greedy fillers ----
+    // Affixes on a rare (3 + 3) or Vows on a red item (6): the pick that adds the most DPS, again and again.
+    function* fillAffixes(items, slot, it, vow) {
+      const base = baseOf(it), pool = [];
+      for (const af of affixesFor(base)) {
+        const ti = tierFor(af); if (ti < 0) continue;
+        const t = af.Tiers[ti];
+        pool.push({ af, g: af.Group, type: af.Type, a: { id: af.Id, tier: ti, v: t.Max, v2: t.Max2 != null ? t.Max2 : 0 } });
+      }
+      const cur = { ...it, affixes: it.affixes.slice() };
+      let v = V(put(items, slot, cur));
+      const used = () => new Set(cur.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
+      const count = t => cur.affixes.filter(a => (GD.affixes[lc(a.id)] || {}).Type === t).length;
+      const room = c => vow ? cur.affixes.filter(a => !a.id.startsWith('unique:')).length < VOW_MAX : count(c.type) < LIMIT;
+      const gains = new Map();
+      let listed = null;
+      for (let step = 0; step < (vow ? VOW_MAX : LIMIT * 2) && !late(); step++) {
+        const u = used();
+        let best = null, bv = v;
+        for (const c of listed || pool) {
+          if (u.has(c.g) || !room(c)) continue;
+          cur.affixes.push(c.a);
+          const x = V(put(items, slot, cur));
+          cur.affixes.pop();
+          if (!listed && x > v * (1 + MIN_GAIN)) gains.set(c, x);
+          if (x > bv * (1 + MIN_GAIN)) { bv = x; best = c; }
+          if (due()) yield prog();
+        }
+        if (!listed) listed = [...gains.keys()].sort((p, q) => gains.get(q) - gains.get(p)).slice(0, LISTED);
+        if (!best) break;
+        cur.affixes.push(best.a); v = bv;
+      }
+      // One swap pass: each chosen line against the listed ones.
+      if (!rush && listed) for (let i = cur.affixes.length - 1; i >= 0; i--) {
+        const a = cur.affixes[i]; if (a.id.startsWith('unique:')) continue;
+        const rest = cur.affixes.filter((_, j) => j !== i), u = new Set(rest.map(x => (GD.affixes[lc(x.id)] || {}).Group));
+        let bestA = null;
+        for (const c of listed) {
+          if (u.has(c.g) || c.a.id === a.id) continue;
+          if (!vow && c.type !== (GD.affixes[lc(a.id)] || {}).Type) continue;
+          const x = V(put(items, slot, { ...cur, affixes: rest.concat([c.a]) }));
+          if (x > v * (1 + MIN_GAIN)) { v = x; bestA = c; }
+          if (due()) yield prog();
+        }
+        if (bestA) cur.affixes[i] = bestA.a;
+      }
+      return { item: cur, v };
+    }
+    // Runes in a rare's sockets (rune stats differ for weapons and armour; sim.js counts the right ones).
+    const runeList = Object.values(GD.runes).filter(r => r.Kind === 'rune' && lvOk(r.Level));
+    function* fillRunes(items, slot, it, v) {
+      const n = runeSlots(baseOf(it));
+      let cur = { ...it, runes: [] };
+      for (let i = 0; i < n; i++) {
+        let best = null, bv = v;
+        for (const r of runeList) {
+          const x = V(put(items, slot, { ...cur, runes: cur.runes.concat([r.Id]) }));
+          if (x > bv * (1 + MIN_GAIN)) { bv = x; best = r.Id; }
+          if (due()) yield prog();
+        }
+        if (!best) break;
+        cur = { ...cur, runes: cur.runes.concat([best]) }; v = bv;
+      }
+      return { item: cur, v };
+    }
+
+    // ---- candidates for one slot ----
+    const uniqueIds = items => new Set(items.filter(i => i.rarity === 'Unique').map(i => lc(i.unique)));
+    // filter(base): which bases may go here (weapon sets). K: how many Rare bases / uniques go on to the fill.
+    function* bestFor(slot, items, filter, K) {
+      const keepIt = at(items, slot), others = put(items, slot, null), taken = uniqueIds(others);
+      const mainB = baseOf(at(items, 'MainHand'));
+      const okBase = b => (!filter || filter(b)) && (slot !== 'MainHand' || mainOk(b));
+      let best = { item: keepIt, v: keepIt && okBase(baseOf(keepIt)) ? V(items) : 0 };
+      const offer = (it, v) => { if (v > best.v * (1 + MIN_GAIN)) best = { item: it, v }; };
+      // A candidate in this slot; the other hand is cleared when it can't be held with it.
+      const trial = it => {
+        let its = put(items, slot, it);
+        if (slot === 'MainHand' && !offOk(baseOf(it), baseOf(at(its, 'OffHand')))) its = put(its, 'OffHand', null);
+        return its;
+      };
+      const mk = (b, over) => ({ slot: realSlot(slot), base: b.Id, rarity: 'Rare', unique: 'None', name: '', level: ilvl, quality: 0, affixes: [], runes: [], ...over });
+      const bases = baseList(slot).filter(okBase);
+
+      // Uniques
+      const uniq = Object.values(GD.uniques).filter(u => {
+        const b = GD.bases[lc(u.BaseId)];
+        return b && b.Slot === baseSlot(slot) && okBase(b) && lvOk(u.Level || b.Level) && !taken.has(lc(u.Id)) && (useLimited || !u.Limited);
+      });
+      curPhase = phaseName(slot) + ': uniques';
+      const scored = [];
+      for (const u of uniq) {
+        if (late()) break;
+        const it = mk(GD.bases[lc(u.BaseId)], { rarity: 'Unique', unique: u.Id, name: u.Name });
+        rollUnique(it, 1);
+        const v = V(trial(it)); scored.push({ it, v });
+        offer(it, v);
+        if (due()) yield prog();
+      }
+      if (useVows) {
+        scored.sort((a, b) => b.v - a.v);
+        for (const s of scored.slice(0, Math.max(1, K - 1))) {
+          if (late()) break;
+          const f = yield* fillAffixes(items, slot, s.it, true);
+          offer(f.item, V(trial(f.item)));
+        }
+      }
+      // Oathwords (a plain item with the runes in order)
+      curPhase = phaseName(slot) + ': Oathwords';
+      for (const w of (GD.runewords || []).filter(wordOk)) {
+        if (late()) break;
+        for (const b of distinct(oathBases(slot, w).filter(okBase))) {
+          const it = mk(b, { rarity: 'Normal', runes: w.Runes.slice() });
+          offer(it, V(trial(it)));
+          if (due()) yield prog();
+        }
+      }
+      // Rares: each distinct base bare, then the best few filled
+      if (realSlot(slot) !== 'DwarvenRune') {
+        curPhase = phaseName(slot) + ': rares';
+        const rs = [];
+        for (const b of distinct(bases)) { const it = mk(b); rs.push({ it, v: V(trial(it)) }); if (due()) yield prog(); }
+        rs.sort((a, b) => b.v - a.v);
+        for (const s of rs.slice(0, K)) {
+          if (late()) break;
+          const f = yield* fillAffixes(items, slot, s.it, false);
+          let item = f.item, v = f.v;
+          if (useRunes && runeSlots(baseOf(item)) && !late()) { const r = yield* fillRunes(trial(item).filter(i => i.slot !== slot), slot, item, v); item = r.item; }
+          offer(item, V(trial(item)));
+        }
+      }
+      return { item: best.item, v: best.v, kept: best.item === keepIt };
+    }
+    const phaseName = slot => ({ MainHand: 'Weapon', OffHand: 'Off hand', Ring1: 'Ring 1', Ring2: 'Ring 2', DwarvenRune: 'Dwarven rune', DwarvenRune2: 'Dwarven rune 2' }[slot] || slot);
+
+    // ---- passes ----
+    let items = (ch.items || []).map(i => i);
+    const base0 = V(items);
+    if (!(base0 > 0)) return { error: 'This skill has no DPS to optimize.' };
+    const SLOTS = SINGLE.concat(items.filter(i => i.slot === 'DwarvenRune').length > 1 ? ['DwarvenRune2'] : []);
+    const total = 1 + SLOTS.length;
+    let done = 0;
+    const apply = (slot, r, tag) => { if (r.item !== at(items, slot)) items = put(items, slot, r.item); };
+
+    for (let pass = 0; pass < PASSES; pass++) {
+      const K = pass === 0 ? 5 : 3, before = V(items);
+      if (pass > 0 && late()) break;
+      if (Date.now() - t0 > (deadline - t0) * 0.55) rush = true;
+      // Weapons as a set
+      curPhase = 'Pass ' + (pass + 1) + ' · weapons'; curP = (pass * total) / (PASSES * total); yield prog();
+      {
+        const main0 = at(items, 'MainHand'), off0 = at(items, 'OffHand');
+        let bestSet = { v: V(items), items };
+        const consider = its => { const v = V(its); if (v > bestSet.v * (1 + MIN_GAIN)) bestSet = { v, items: its }; };
+        // Two-hander (a bow keeps a quiver): the off hand is picked for it next.
+        const A = yield* bestFor('MainHand', put(items, 'OffHand', null), b => twoHanded(b), K);
+        if (A.item && twoHanded(baseOf(A.item))) {
+          let its = put(put(items, 'OffHand', null), 'MainHand', A.item);
+          if (baseOf(A.item).Class === 'Bow') { const o = yield* bestFor('OffHand', its, b => offOk(baseOf(A.item), b), K); its = put(its, 'OffHand', o.item); }
+          consider(its);
+        }
+        // One-hander and an off hand.
+        if (!late()) {
+          let its = put(items, 'OffHand', off0 && !twoHanded(baseOf(main0)) ? off0 : null);
+          const B = yield* bestFor('MainHand', its, b => !twoHanded(b), K);
+          if (B.item && !twoHanded(baseOf(B.item))) {
+            its = put(its, 'MainHand', B.item);
+            const o = yield* bestFor('OffHand', its, b => offOk(baseOf(B.item), b), K);
+            its = put(its, 'OffHand', o.item);
+            const B2 = yield* bestFor('MainHand', its, b => !twoHanded(b), 2);
+            if (B2.item) its = put(its, 'MainHand', B2.item);
+            consider(its);
+          }
+        }
+        items = bestSet.items;
+      }
+      done = 1;
+      for (const slot of SLOTS) {
+        if (late()) break;
+        curPhase = 'Pass ' + (pass + 1) + ' · ' + phaseName(slot); curP = (pass * total + done) / (PASSES * total); yield prog();
+        const r = yield* bestFor(slot, items, null, K);
+        apply(slot, r); done++;
+      }
+      const after = V(items);
+      if (after < before * 1.002) break; // a pass that gains under 0.2% ends the search
+    }
+
+    // ---- result ----
+    const value = V(items);
+    const out = [];
+    for (const slot of ['MainHand', 'OffHand', ...SLOTS]) {
+      const it = at(items, slot), was = at(ch.items || [], slot);
+      if (!it && !was) continue;
+      const worth = it ? 1 - V(put(items, slot, null)) / value : 0;
+      const changed = JSON.stringify(it) !== JSON.stringify(was);
+      // gain: what this slot's pick adds over the item you wear now, with the rest of the set as found
+      out.push({ slot, item: it, was, worth, changed, gain: changed ? value / (V(put(items, slot, was)) || value) - 1 : 0 });
+    }
+    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl };
+  }
+
+  const api = { optimize };
+  root.BOGearOpt = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 
@@ -11117,7 +11443,7 @@ window.BOStartApp = function () {
     const entries = Array.from(e.dataTransfer.items || []).map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
     const files = Array.from(e.dataTransfer.files);
     if (files[0] && /^image\//.test(files[0].type) && planner && planner.readDrop(e.target, files[0])) return; // Build tab: a screenshot dropped on an item box
-    if (cmpVisible() && files[0] && /^image\//.test(files[0].type)) { cmpReadImage(files[0]); return; } // Item Compare: a screenshot of an item
+    if (cmpItemMode() && files[0] && /^image\//.test(files[0].type)) { cmpReadImage(files[0]); return; } // Item Compare: a screenshot of an item
     if (entries.some(x => x.isDirectory)) { walkDropped(entries).then(loadFolder, err => saveTip('Could not read that folder: ' + err.message)); return; }
     const saves = files.filter(f => /\.sav$/i.test(f.name));
     if (saves.length > 1) loadFolder(saves);
@@ -11803,7 +12129,7 @@ window.BOStartApp = function () {
   // or pasted text): every counted skill's DPS with each, and the two items' lines side by side. The character
   // only changes with "Equip the new item".
   const lc = s => String(s == null ? '' : s).toLowerCase();
-  const CMP = { key: '', src: null, a: null, b: null, ka: null, kb: null, aEdited: false, read: null, busy: '', msg: '' };
+  const CMP = { key: '', src: null, a: null, b: null, ka: null, kb: null, aEdited: false, read: null, busy: '', msg: '', mode: store.get('cmpMode', 'item') === 'gear' ? 'gear' : 'item' }; // mode: Item Sim or Gear Set Sim
   const cmpVisible = () => !$('#comparePane').hidden;
   const itemName = it => { const u = it.rarity === 'Unique' && GD.uniques[lc(it.unique)], b = GD.bases[lc(it.base)]; return u ? u.Name : it.name || (b ? b.Name : it.base); };
   // Keys: a slot name, "idol:<index in ch.items>", or "idol:new" (an extra idol).
@@ -11930,10 +12256,107 @@ window.BOStartApp = function () {
     return '<div class="cmp-slots" role="group" aria-label="Gear">' + gear.map(btn).join('') + '</div>' +
       '<h3>Idols</h3><div class="cmp-slots" role="group" aria-label="Idols">' + idols.map(btn).join('') + '</div>';
   }
+  // ---------- Gear Set Sim (the second sub-tab of Item Compare) ----------
+  // Searches every unique, Oathword and rare (best prefixes and damage suffixes) for the best gear for the selected
+  // skill, with the tree, skills, supports and idols as they are (gearopt.js, run in slices so the page stays usable).
+  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true }, store.get('gearSim', {})) };
+  const cmpModesHtml = () => '<div class="cmp-modes" role="tablist" aria-label="Item Simulator tools">' +
+    [['item', 'Item Compare', 'M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4'], ['gear', 'Gear Set Sim', 'M12 3 4 6v6c0 4.5 3.4 7.8 8 9 4.6-1.2 8-4.5 8-9V6z']].map(([k, n, d]) => '<button type="button" class="cmp-mode' + (CMP.mode === k ? ' on' : '') + '" role="tab" aria-selected="' + (CMP.mode === k) + '" data-cmpmode="' + k + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '"/></svg><span>' + n + '</span></button>').join('') + '</div>';
+  // Anything that changes the answer: the character's gear, tree and supports, the enemy settings, this tab's settings.
+  function gsKey() {
+    if (!st.ch) return '';
+    const s = JSON.stringify([st.ch.id || st.ch.name, st.skill, st.ch.items, st.ch.passives, st.ch.level, st.supports, st.rarity, st.enemyLevel, st.res, st.curses, st.charges, [...st.off], GS.set]);
+    let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return s.length + ':' + h;
+  }
+  const gsSlotName = key => key === 'DwarvenRune2' ? 'Dwarven rune 2' : planner.slotName[key] || key;
+  function gsItemLabel(it) {
+    if (!it) return '<span class="meta">empty</span>';
+    const b = GD.bases[lc(it.base)], bn = b ? b.Name : it.base, word = planner.oathwordForItem(it, it.slot);
+    if (it.rarity === 'Unique') {
+      const u = GD.uniques[lc(it.unique)], v = it.affixes.filter(a => !a.id.startsWith('unique:')).length;
+      return '<b class="gs-unique">' + esc(u ? u.Name : it.name) + '</b> <span class="meta">' + esc(bn) + (v ? ' · ' + v + ' Vow' + (v > 1 ? 's' : '') : '') + '</span>';
+    }
+    if (word) return '<b>' + esc(word.Name) + '</b> <span class="meta">Oathword · ' + esc(bn) + '</span>';
+    const n = it.affixes.length;
+    return '<b>' + esc(it.rarity + ' ' + bn) + '</b> <span class="meta">' + (n ? n + ' line' + (n > 1 ? 's' : '') : 'no lines') + (it.runes.length ? ' · ' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') : '') + '</span>';
+  }
+  function gsProgress() {
+    const bar = $('#gsBar'), ph = $('#gsPhase'); if (!bar || !ph) return;
+    bar.style.width = Math.max(2, Math.round(GS.p * 100)) + '%';
+    ph.textContent = GS.phase + ' · ' + Math.round((performance.now() - GS.t0) / 1000) + ' s';
+  }
+  function gsRun() {
+    if (!st.ch || !st.skill || GS.running || !window.BOGearOpt) return;
+    const job = ++GS.job, key = gsKey();
+    Object.assign(GS, { running: true, res: null, msg: '', phase: 'Starting', p: 0, t0: performance.now(), key });
+    // Gear ticked off on the Damage tab still counts here: this search chooses the gear.
+    const o = opts({ off: new Set([...st.off].filter(k => !/^item:/.test(k))) });
+    const gen = BOGearOpt.optimize(GD, S, st.ch, st.skill, o, Object.assign({ seconds: 80 }, GS.set));
+    renderCompare();
+    const step = () => {
+      if (job !== GS.job) return;
+      const t = performance.now(); let r;
+      try { do { r = gen.next(); if (r.value && r.value.phase) { GS.phase = r.value.phase; GS.p = r.value.p || 0; } } while (!r.done && performance.now() - t < 30); }
+      catch (err) { GS.running = false; GS.msg = 'The search failed: ' + err.message; return renderCompare(); }
+      if (!r.done) { gsProgress(); setTimeout(step, 0); return; }
+      GS.running = false;
+      if (r.value.error) GS.msg = r.value.error; else GS.res = Object.assign(r.value, { key, skill: st.skill });
+      renderCompare();
+    };
+    setTimeout(step, 0);
+  }
+  function gsCancel() { GS.job++; GS.running = false; GS.msg = 'Search stopped.'; renderCompare(); }
+  function gsEquip() {
+    const r = GS.res; if (!r || !st.ch || r.key !== gsKey()) return;
+    const ch = buildEditable(), n = r.slots.filter(s => s.changed).length;
+    ch.items = JSON.parse(JSON.stringify(r.items));
+    GS.res = null; CMP.aEdited = false; CMP.a = null; CMP.b = null; CMP.read = null;
+    GS.msg = 'Equipped the best set (' + n + ' slot' + (n === 1 ? '' : 's') + ' changed) on ' + ch.name + ' in this page; the Build and Damage tabs use it too.' + (ch.plan ? '' : ' Your save is never changed: Reset to save on the Build tab undoes it.');
+    if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {});
+  }
+  function gsResultHtml(r) {
+    const skillName = (GD.skills[lc(r.skill)] || {}).Name || r.skill, g = planner.gear;
+    let h = '<div class="card cmp-result"><h2>Best gear <span class="hint">' + esc(skillName) + ', vs the enemy set in Damage Analysis</span></h2>';
+    h += '<div class="headline small">' + stat('Your gear', num(r.base), '', '', esc(skillName) + ', total DPS') +
+      stat('Best gear', num(r.value), '', 'main', esc(skillName) + ', total DPS') +
+      stat('Change', (r.gain >= 0 ? '+' : '') + num(r.value - r.base) + ' DPS', '<div class="delta ' + (r.gain >= 0 ? 'up' : 'down') + '">' + pct(r.gain) + '</div>', '', 'found in ' + (r.ms / 1000).toFixed(1) + ' s' + (r.timedOut ? ' (stopped at the time limit)' : '')) + '</div>';
+    h += '<div class="cmp-actions"><button class="btn" type="button" data-gs="equip">Equip the best set</button><span class="hint">Puts every changed slot on ' + esc(st.ch.name) + ' in this page; idols and the tree stay.' + (st.ch.plan ? '' : ' Your save is never changed.') + '</span></div>';
+    h += '<div class="table-wrap"><table class="tbl gs-table"><thead><tr><th>Slot</th><th>Your item</th><th>Best item</th><th title="DPS this slot\'s pick adds over your current item, with the rest of the best set in place">Adds</th><th title="DPS lost if this slot were left empty in the best set">Slot worth</th></tr></thead><tbody>' +
+      r.slots.map(s => {
+        const tip = s.item ? '<details class="gs-lines"><summary>Lines</summary><div class="cmp-tip pl-tip">' + g.tip(s.item, s.item.slot) + '</div></details>' : '';
+        return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(gsSlotName(s.slot)) + '</td><td>' + gsItemLabel(s.was) + '</td><td>' + (s.changed ? '' : '<span class="meta">kept: </span>') + gsItemLabel(s.item) + tip + '</td><td>' +
+          (s.changed ? '<span class="' + (s.gain >= 0 ? 'up' : 'down') + '">' + pct(s.gain) + '</span>' : '<span class="meta">–</span>') + '</td><td>' + (s.item ? num(s.worth * 100, 1) + '%' : '–') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    h += '<p class="hint">Every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best, so this is the most the gear can give, not a drop you will see soon. Rares carry the prefixes and suffixes that add the most DPS and the best runes in their sockets; a rare with every line at its top tier counts as a Flawless Rare in the sim. Life, resistances and other defences are only counted where the sim counts them for damage; attribute requirements, rune and item prices and drop chances are ignored. Idols, the tree and the supports stay as they are.</p>';
+    return h + '</div>';
+  }
+  function gsHtml() {
+    const S_ = GS.set, key = gsKey();
+    if (GS.running && GS.key !== key) { GS.job++; GS.running = false; GS.msg = 'The character or a setting changed, so the search was stopped.'; }
+    if (GS.res && GS.res.key !== key) GS.res = null;
+    const chk = (f, label, tip) => '<label class="check-row" title="' + esc(tip) + '"><input type="checkbox" data-gs-set="' + f + '"' + (S_[f] ? ' checked' : '') + (GS.running ? ' disabled' : '') + '><span>' + label + '</span></label>';
+    let h = '<div class="card gs-card"><div class="cmp-pick-head"><h2>Gear Set Sim</h2><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + (GS.running ? ' disabled' : '') + '>' + cmpSkillOptions() + '</select></label></div>' +
+      '<p class="hint">Finds the best gear for the selected skill: every unique (with Vows), every Oathword, and rare items with the best prefixes and damage suffixes. Your passive tree, skills, supports and idols stay as they are.</p>' +
+      '<div class="gs-controls"><label class="field inline" title="Item level of the rares: 84 and up gives the top tier of every line"><span>Item level</span><input type="number" min="1" max="100" id="gsIlvl" value="' + S_.ilvl + '"' + (GS.running ? ' disabled' : '') + '></label>' +
+      chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
+      chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
+      chk('vows', 'Vows on uniques', 'A red item takes up to 6 lines from rares at the cube; the best ones are added') +
+      chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') + '</div>' +
+      '<div class="cmp-actions">' + (GS.running ? '<button class="btn ghost" type="button" data-gs="cancel">Stop</button>' :
+        '<button class="btn" type="button" data-gs="run"' + (st.skill ? '' : ' disabled') + '>' + (GS.res ? 'Search again' : 'Find the best gear') + '</button>') +
+      '<span class="hint">' + (st.skill ? 'Takes under two minutes; the page stays usable.' : 'This plan has no damage skill yet: add one on the Build tab.') + '</span></div>' +
+      (GS.running ? '<div class="gs-prog" role="progressbar" aria-label="Search progress"><div class="gs-bar"><div id="gsBar" style="width:' + Math.max(2, Math.round(GS.p * 100)) + '%"></div></div><div class="hint" id="gsPhase">' + esc(GS.phase) + '</div></div>' : '') +
+      (GS.msg ? '<p class="hint pl-status">' + esc(GS.msg) + '</p>' : '') + '</div>';
+    if (GS.res) h += gsResultHtml(GS.res);
+    return h;
+  }
+  const cmpItemMode = () => cmpVisible() && CMP.mode !== 'gear';
   function renderCompare() {
     const el = $('#comparePane'); if (!el || el.hidden) return;
-    let h = '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Item Compare</h2><p>Pick one of your items, then fill in the item you found or paste a screenshot of it, to see what swapping does to your damage.</p></div>';
+    let h = cmpModesHtml() + '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Item Simulator</h2><p>' + (CMP.mode === 'gear' ? 'Find the best gear for a skill from every unique, Oathword and rare, and see what it would do to your damage.' : 'Pick one of your items, then fill in the item you found or paste a screenshot of it, to see what swapping does to your damage.') + '</p></div>';
     if (!st.ch) { el.innerHTML = h + '<div class="empty">Load a character or start a plan first.</div>'; return; }
+    if (CMP.mode === 'gear') { el.innerHTML = h + gsHtml(); return; }
     cmpSync();
     const g = planner.gear, slot = cmpSlot(), ia = CMP.a.items[0] || null, ib = CMP.b.items[0] || null;
     h += '<div class="card cmp-pick"><div class="cmp-pick-head"><h2>Item slot</h2>' +
@@ -11990,12 +12413,18 @@ window.BOStartApp = function () {
     el.addEventListener('change', e => {
       const t = e.target;
       if (t.id === 'cmpSkill') return selectSkill(t.value);
+      if (t.dataset.gsSet) { GS.set[t.dataset.gsSet] = t.checked; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsIlvl') { GS.set.ilvl = Math.max(1, Math.min(100, Math.round(+t.value) || 84)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'cmpFile') { if (t.files[0]) cmpReadImage(t.files[0]); return; }
       const s = side(t); if (!s || !t.dataset.f) return;
       CMP.msg = '';
       planner.gear.change(s === 'a' ? CMP.a : CMP.b, t, s === 'a' ? CMP.ka : CMP.kb, () => { if (s === 'a') CMP.aEdited = true; renderCompare(); }, renderCompare);
     });
     el.addEventListener('click', e => {
+      const mb = e.target.closest('[data-cmpmode]');
+      if (mb) { if (mb.dataset.cmpmode !== CMP.mode) { CMP.mode = mb.dataset.cmpmode; store.set('cmpMode', CMP.mode); renderCompare(); } return; }
+      const gb = e.target.closest('[data-gs]');
+      if (gb) { const a = gb.dataset.gs; if (a === 'run') gsRun(); else if (a === 'cancel') gsCancel(); else if (a === 'equip') gsEquip(); return; }
       if (e.target.closest('.pl-item > summary')) { e.preventDefault(); return; } // the editors stay open here
       const sb = e.target.closest('[data-slot]');
       if (sb) {
@@ -12035,7 +12464,7 @@ window.BOStartApp = function () {
     el.addEventListener('keydown', e => { if (e.target.id === 'cmpDrop' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); const f = $('#cmpFile'); if (f) f.click(); } });
     // Ctrl+V anywhere on this tab (not while typing in a box): an image is read, item text is parsed.
     document.addEventListener('paste', e => {
-      if (!cmpVisible() || !st.ch || (e.target.closest && e.target.closest('input, textarea, select'))) return;
+      if (!cmpItemMode() || !st.ch || (e.target.closest && e.target.closest('input, textarea, select'))) return;
       const items = Array.from((e.clipboardData && e.clipboardData.items) || []);
       const img = items.find(i => i.kind === 'file' && /^image\//.test(i.type));
       if (img) { e.preventDefault(); cmpReadImage(img.getAsFile()); return; }

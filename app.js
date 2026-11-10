@@ -5079,9 +5079,9 @@ window.BOFaq = function (ctx) {
     return h;
   }
 
-  // Compare the existing Deep scaling formulas across a moving 20-level window.
-  function xpComparison(base, rate, lifeRate, start) {
-    const end = start + 20, xp = level => Math.max(1, 1 + (level - base) * rate / 100);
+  // Compare the existing Deep scaling formulas across an adjustable Rupture range.
+  function xpComparison(base, rate, lifeRate, start, end) {
+    const span = end - start, xp = level => Math.max(1, 1 + (level - base) * rate / 100);
     const xpGrowth = level => (xp(level) / xp(start) - 1) * 100;
     const lifeGrowth = level => (Math.pow(lifeRate, level - start) - 1) * 100;
     const life = level => Math.pow(lifeRate, level - base);
@@ -5093,18 +5093,18 @@ window.BOFaq = function (ctx) {
     const padding = Math.max(0.01, (highLog - lowLog) * 0.04);
     const bottom = Math.max(0, lowLog - padding), top = highLog + padding;
     const axisFmt = value => value.toLocaleString('en-US', { notation: value >= 10000 ? 'compact' : 'standard', maximumFractionDigits: 2 });
-    const x = level => 60 + (level - start) * 31.5, y = multiplier => 198 - (Math.log10(multiplier) - bottom) / (top - bottom) * 174;
-    const path = growth => Array.from({ length: 21 }, (_, i) => (i ? 'L' : 'M') + x(start + i) + ' ' + y(growth(start + i)).toFixed(2)).join(' ');
+    const x = level => 60 + (level - start) / span * 630, y = multiplier => 198 - (Math.log10(multiplier) - bottom) / (top - bottom) * 174;
+    const path = growth => Array.from({ length: span + 1 }, (_, i) => (i ? 'L' : 'M') + x(start + i) + ' ' + y(growth(start + i)).toFixed(2)).join(' ');
     const ticks = Array.from({ length: 5 }, (_, i) => {
       const multiplier = Math.pow(10, bottom + (top - bottom) * i / 4), py = y(multiplier);
       return '<line class="faq-xp-grid" x1="60" y1="' + py + '" x2="690" y2="' + py + '"></line><text x="50" y="' + (py + 4) + '" text-anchor="end">×' + axisFmt(multiplier) + '</text>';
-    }).join('') + Array.from({ length: 6 }, (_, i) => {
-      const level = start + i * 4, px = x(level);
+    }).join('') + Array.from({ length: Math.min(5, span) + 1 }, (_, i) => {
+      const level = start + Math.round(i * span / Math.min(5, span)), px = x(level);
       return '<line class="faq-xp-grid" x1="' + px + '" y1="24" x2="' + px + '" y2="198"></line><text x="' + px + '" y="220" text-anchor="middle">' + level + '</text>';
     }).join('');
     return '<div class="faq-xp-summary" aria-live="polite"><b>Rupture ' + start + ' → ' + end + '</b>' +
       '<span class="faq-xp-summary-xp">Monster XP <strong>+' + fmt(xpGain) + '%</strong> (×' + fmt(xp(end) / xp(start)) + ')</span>' +
-      '<span class="faq-xp-summary-life">Monster life <strong>+' + fmt(lifeGain) + '%</strong> (×' + fmt(Math.pow(lifeRate, 20)) + ')</span></div>' +
+      '<span class="faq-xp-summary-life">Monster life <strong>+' + fmt(lifeGain) + '%</strong> (×' + fmt(Math.pow(lifeRate, span)) + ')</span></div>' +
       '<div class="faq-xp-legend"><span>Monster XP</span><span class="faq-xp-legend-life">Monster life</span></div>' +
       '<div class="faq-xp-chart" tabindex="0" role="group" aria-label="Rupture comparison. Hover or use the left and right arrow keys to inspect each level." aria-describedby="faqXpTooltip"><svg viewBox="0 0 720 246" role="img" aria-label="Rupture ' + start + ' to ' + end + ': monster XP and life growth" aria-describedby="faqXpChartDesc">' +
       '<desc id="faqXpChartDesc">Monster XP and life multipliers versus Rupture ' + base + ', on a logarithmic axis that rescales to the selected range. At Rupture ' + end + ', monster XP is ×' + fmt(xp(end)) + ' and life is ×' + fmt(life(end)) + '.</desc>' +
@@ -5133,12 +5133,17 @@ window.BOFaq = function (ctx) {
       const M = Dp.MapMaxLevel, rate = Dp.LadderXpPctPerLevel, maxLevel = Math.max(400, M + 20);
       const startLevel = Math.min(maxLevel - 20, M + 70);
       h += card('Monster XP in the Deep',
-        '<div id="faqXpComparison">' + xpComparison(M, rate, Dp.LadderLifePerLevel, startLevel) + '</div>' +
-        '<label class="faq-xp-slider" for="faqXpLevel"><span>Compare a 20-level gap</span><output id="faqXpLevelValue" for="faqXpLevel">' + startLevel + '–' + (startLevel + 20) + '</output></label>' +
-        '<input class="faq-xp-range" id="faqXpLevel" type="range" min="' + M + '" max="' + (maxLevel - 20) + '" step="1" value="' + startLevel + '" aria-label="Start of the 20-level Rupture comparison" data-per-level="' + rate + '" data-life-per-level="' + Dp.LadderLifePerLevel + '">' +
+        '<div id="faqXpComparison">' + xpComparison(M, rate, Dp.LadderLifePerLevel, startLevel, startLevel + 20) + '</div>' +
+        '<div class="faq-xp-controls" data-base="' + M + '" data-max="' + maxLevel + '" data-per-level="' + rate + '" data-life-per-level="' + Dp.LadderLifePerLevel + '">' +
+        '<label class="faq-xp-slider" for="faqXpStartNumber">Start level <input id="faqXpStartNumber" type="number" min="' + M + '" max="' + (maxLevel - 1) + '" step="1" value="' + startLevel + '"></label>' +
+        '<label class="faq-xp-slider" for="faqXpEndNumber">End level <input id="faqXpEndNumber" type="number" min="' + (M + 1) + '" max="' + maxLevel + '" step="1" value="' + (startLevel + 20) + '"></label>' +
+        '<div class="faq-xp-range-bar" role="group" aria-label="Selected Rupture range"><div class="faq-xp-range-rail">' +
+        '<div class="faq-xp-range-selection" tabindex="0" role="slider" aria-label="Move selected Rupture range"></div>' +
+        '<button id="faqXpStart" class="faq-xp-range-handle faq-xp-range-start" type="button" role="slider" data-endpoint="start" aria-label="Start Rupture level"></button>' +
+        '<button id="faqXpEnd" class="faq-xp-range-handle faq-xp-range-end" type="button" role="slider" data-endpoint="end" aria-label="End Rupture level"></button></div></div></div>' +
         list([
           'Each Rupture level past ' + M + ' adds <b>+' + rate + '%</b> monster XP, added level by level (not compounded). The +2% is the number in the game data; that it adds (not compounds) is read from the data and not yet checked against a log.',
-          'Monster life multiplies by ×' + Dp.LadderLifePerLevel + ' per level. The chart compares XP and life growth across the selected 20 Rupture levels.',
+          'Monster life multiplies by ×' + Dp.LadderLifePerLevel + ' per level. The chart compares XP and life growth across the selected Rupture range.',
         ]));
     }
     return h;
@@ -5233,21 +5238,51 @@ window.BOFaq = function (ctx) {
     pane.innerHTML = html;
     const f = pane.querySelector('#skillFilter');
     if (f) f.oninput = () => { const q = f.value.trim().toLowerCase(); pane.querySelectorAll('#skillFilter ~ .table-wrap tbody tr').forEach(r => { r.hidden = !!q && !r.textContent.toLowerCase().includes(q); }); };
-    const xpLevel = pane.querySelector('#faqXpLevel');
-    if (xpLevel) xpLevel.oninput = () => {
-      const level = Number(xpLevel.value);
-      pane.querySelector('#faqXpLevelValue').textContent = level + '–' + (level + 20);
-      pane.querySelector('#faqXpComparison').innerHTML = xpComparison(Number(xpLevel.min), Number(xpLevel.dataset.perLevel), Number(xpLevel.dataset.lifePerLevel), level);
-      xpLevel.setAttribute('aria-valuetext', 'Rupture ' + level + ' to ' + (level + 20));
+    const controls = pane.querySelector('.faq-xp-controls');
+    if (!controls) return;
+    const startSlider = pane.querySelector('#faqXpStart'), endSlider = pane.querySelector('#faqXpEnd');
+    const startNumber = pane.querySelector('#faqXpStartNumber'), endNumber = pane.querySelector('#faqXpEndNumber');
+    const base = Number(controls.dataset.base), max = Number(controls.dataset.max);
+    const rail = pane.querySelector('.faq-xp-range-rail'), selection = pane.querySelector('.faq-xp-range-selection');
+    let level = Number(startNumber.value), end = Number(endNumber.value);
+    const update = (source, isStart) => {
+      if (source) {
+        const value = source.value.trim() === '' ? NaN : Number(source.value);
+        if (Number.isFinite(value)) {
+          if (isStart) level = Math.max(base, Math.min(end - 1, Math.round(value)));
+          else end = Math.max(level + 1, Math.min(max, Math.round(value)));
+        }
+      }
+      startSlider.value = startNumber.value = String(level);
+      endSlider.value = endNumber.value = String(end);
+      startNumber.max = String(end - 1);
+      endNumber.min = String(level + 1);
+      startSlider.setAttribute('aria-valuetext', 'Start Rupture ' + level + ', end ' + end);
+      endSlider.setAttribute('aria-valuetext', 'End Rupture ' + end + ', start ' + level);
+      const startPct = (level - base) / (max - base) * 100, endPct = (end - base) / (max - base) * 100;
+      startSlider.style.left = selection.style.left = startPct + '%';
+      endSlider.style.left = endPct + '%';
+      selection.style.width = (endPct - startPct) + '%';
+      selection.setAttribute('aria-valuemin', String(base));
+      selection.setAttribute('aria-valuemax', String(max - (end - level)));
+      selection.setAttribute('aria-valuenow', String(level));
+      selection.setAttribute('aria-valuetext', 'Rupture ' + level + ' to ' + end + ', gap ' + (end - level) + ' levels');
+      for (const [handle, value, low, high] of [[startSlider, level, base, end - 1], [endSlider, end, level + 1, max]]) {
+        handle.setAttribute('aria-valuenow', String(value));
+        handle.setAttribute('aria-valuemin', String(low));
+        handle.setAttribute('aria-valuemax', String(high));
+      }
+      const span = end - level;
+      pane.querySelector('#faqXpComparison').innerHTML = xpComparison(base, Number(controls.dataset.perLevel), Number(controls.dataset.lifePerLevel), level, end);
       const chart = pane.querySelector('.faq-xp-chart'), tooltip = chart.querySelector('.faq-xp-tooltip');
       const cursor = chart.querySelector('.faq-xp-cursor');
       let hoveredLevel = level;
       const inspect = selected => {
-        hoveredLevel = Math.max(level, Math.min(level + 20, Math.round(selected)));
-        const base = Number(xpLevel.min), rate = Number(xpLevel.dataset.perLevel);
+        hoveredLevel = Math.max(level, Math.min(end, Math.round(selected)));
+        const rate = Number(controls.dataset.perLevel);
         const fmt = value => value.toLocaleString('en-US', { maximumFractionDigits: 2 });
         const xp = at => Math.max(1, 1 + (at - base) * rate / 100);
-        const lifeRate = Number(xpLevel.dataset.lifePerLevel);
+        const lifeRate = Number(controls.dataset.lifePerLevel);
         tooltip.innerHTML = '<b>Rupture Level: ' + hoveredLevel + '</b><ul>' +
           '<li>Monster XP vs lowest in selected range (lvl ' + level + '): <strong>×' + fmt(xp(hoveredLevel) / xp(level)) + '</strong></li>' +
           '<li>Monster XP vs lvl ' + base + ': <strong>×' + fmt(xp(hoveredLevel)) + '</strong></li>' +
@@ -5255,8 +5290,8 @@ window.BOFaq = function (ctx) {
           '<li>Life vs lvl ' + base + ': <strong>×' + fmt(Math.pow(lifeRate, hoveredLevel - base)) + '</strong></li></ul>';
         tooltip.hidden = false;
         cursor.removeAttribute('hidden');
-        cursor.setAttribute('x1', 60 + (hoveredLevel - level) * 31.5);
-        cursor.setAttribute('x2', 60 + (hoveredLevel - level) * 31.5);
+        cursor.setAttribute('x1', 60 + (hoveredLevel - level) / span * 630);
+        cursor.setAttribute('x2', 60 + (hoveredLevel - level) / span * 630);
       };
       const position = (mouseX, mouseY) => {
         // Keep the tooltip beside the pointer, flipping at the viewport edges.
@@ -5268,12 +5303,12 @@ window.BOFaq = function (ctx) {
       };
       const positionForKeyboard = () => {
         const bounds = chart.querySelector('svg').getBoundingClientRect();
-        position(bounds.left + (60 + (hoveredLevel - level) * 31.5) / 720 * bounds.width, bounds.top + bounds.height / 2);
+        position(bounds.left + (60 + (hoveredLevel - level) / span * 630) / 720 * bounds.width, bounds.top + bounds.height / 2);
       };
       const hide = () => { tooltip.hidden = true; cursor.setAttribute('hidden', ''); };
       chart.onpointermove = chart.onpointerdown = event => {
         const bounds = chart.querySelector('svg').getBoundingClientRect();
-        inspect(level + ((event.clientX - bounds.left) / bounds.width * 720 - 60) / 31.5);
+        inspect(level + ((event.clientX - bounds.left) / bounds.width * 720 - 60) / 630 * span);
         position(event.clientX, event.clientY);
       };
       chart.onpointerleave = chart.onblur = hide;
@@ -5282,11 +5317,71 @@ window.BOFaq = function (ctx) {
         if (event.key === 'Escape') { hide(); return; }
         if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();
-        inspect(event.key === 'Home' ? level : event.key === 'End' ? level + 20 : hoveredLevel + (event.key === 'ArrowRight' ? 1 : -1));
+        inspect(event.key === 'Home' ? level : event.key === 'End' ? end : hoveredLevel + (event.key === 'ArrowRight' ? 1 : -1));
         positionForKeyboard();
       };
     };
-    if (xpLevel) xpLevel.oninput();
+    let dragging = null, dragOffset = 0, dragStart = 0, dragEnd = 0, dragPointer = 0;
+    const moveRange = (start, gap) => {
+      level = Math.max(base, Math.min(max - gap, Math.round(start)));
+      end = level + gap;
+      update();
+    };
+    const pointerLevel = event => {
+      const bounds = rail.getBoundingClientRect();
+      return base + (event.clientX - bounds.left) / bounds.width * (max - base);
+    };
+    const drag = event => {
+      if (dragging === null) return;
+      if (dragging === 'range') {
+        moveRange(dragStart + pointerLevel(event) - dragPointer, dragEnd - dragStart);
+        return;
+      }
+      update({ value: String(pointerLevel(event) - dragOffset) }, dragging);
+    };
+    rail.onpointerdown = event => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      const handle = event.target.closest('[data-endpoint]');
+      const selected = pointerLevel(event);
+      if (!handle && selected >= level && selected <= end) {
+        dragging = 'range';
+        dragStart = level; dragEnd = end; dragPointer = selected;
+        selection.style.cursor = 'grabbing';
+        selection.focus();
+      } else {
+        dragging = handle ? handle.dataset.endpoint === 'start' : Math.abs(selected - level) <= Math.abs(selected - end);
+        dragOffset = handle ? selected - (dragging ? level : end) : 0;
+        (dragging ? startSlider : endSlider).focus();
+      }
+      rail.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      // Keep the handle from jumping when grabbed off-centre.
+      if (!handle) drag(event);
+    };
+    rail.onpointermove = drag;
+    const stopDrag = () => { dragging = null; selection.style.cursor = 'grab'; };
+    rail.onpointerup = event => {
+      stopDrag();
+      if (rail.hasPointerCapture(event.pointerId)) rail.releasePointerCapture(event.pointerId);
+    };
+    rail.onpointercancel = rail.onlostpointercapture = stopDrag;
+    selection.onkeydown = event => {
+      const steps = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -10, PageUp: 10 };
+      if (!(event.key in steps) && event.key !== 'Home' && event.key !== 'End') return;
+      event.preventDefault();
+      const gap = end - level;
+      moveRange(event.key === 'Home' ? base : event.key === 'End' ? max - gap : level + steps[event.key], gap);
+    };
+    for (const [handle, isStart] of [[startSlider, true], [endSlider, false]]) handle.onkeydown = event => {
+      const steps = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageDown: -10, PageUp: 10 };
+      if (!(event.key in steps) && event.key !== 'Home' && event.key !== 'End') return;
+      event.preventDefault();
+      const value = event.key === 'Home' ? (isStart ? base : level + 1) : event.key === 'End' ? (isStart ? end - 1 : max) : (isStart ? level : end) + steps[event.key];
+      update({ value: String(value) }, isStart);
+    };
+    startNumber.onchange = () => update(startNumber, true);
+    endNumber.onchange = () => update(endNumber, false);
+    update();
   }
   function renderMinions() { const p = $('#minionsPane'); if (p) fill(p, minions(ctx.gd() || {})); }
   function render() {

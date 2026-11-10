@@ -4743,6 +4743,12 @@ window.BOFaq = function (ctx) {
       if (rules.length) body += '<h3>Rules the sim applies</h3>' + list(rules);
       cards += card(esc(s.Name), body, esc(m.MonsterId));
     }
+    // Grave Conscription (support, skills in supports.json): raises the same Zombie monster from kills. The sim does not count these
+    // Zombies (nothing in sim.js reads the support; no log or tooltip numbers for them yet), so the card says so.
+    const gc = (GD.supports || {}).grave_conscription;
+    if (gc) cards += card(esc(gc.Name), '<p class="faq-stats">' + esc(gc.Description || '') + '</p>' +
+      (MM.zombie ? '<p class="faq-stats"><b>Minion:</b> ' + esc(MM.zombie.Name) + ' (the same monster as Raise Zombie).</p>' : '') +
+      '<p class="faq-note">A support gem, not a summon. The sim does not count these Zombies in any DPS number yet.</p>', 'support');
     h += '<div class="faq-minion-grid">' + cards + '</div>';
     h += card('Rules for all minions', list([
       'Your own damage lines do not reach minions: only the summon gem\'s own supports and the lines for minions count.',

@@ -7037,7 +7037,10 @@ window.BOCharacter = function (ctx) {
     {
       const trig = [];
       for (const m of mods) {
-        if (m.stat !== 'Trigger' || m.key !== 'passives') continue;
+        // Tree lines, and gear lines (Overclock Coil: log 10 Nov 2026 13:43-13:49, equipped on Ember Spark / Flame Dash:
+        // "Trigger: Hit -> Nova (ember_spark, fired N) el Lightning pct 40 nth 4" beside the tree's Fire one on the same
+        // hits; Rupture 150 Zul Descendant kill: both novas together 10.1% of the damage, 32 Lightning + 40 Fire in 24 s).
+        if (m.stat !== 'Trigger' || !(m.key === 'passives' || String(m.key || '').startsWith('item:'))) continue;
         const t = trigParse(m);
         if (!['Hit', 'Crit', 'SkillUse'].includes(t.when) || !t.pct) continue;
         if (!condsOk(ctx, t.conds)) continue;
@@ -7084,7 +7087,7 @@ window.BOCharacter = function (ctx) {
         (res.triggers = res.triggers || []).push({ src: name, when: t.when, nth: t.nth, pct: t.pct, count: t.count, element: t.element, perSec: events, dps });
         const what = t.when === 'Hit' ? (t.nth > 1 ? 'every ' + t.nth + 'th hit' : 'every hit') + (t.state.length ? ' on a ' + (t.state.includes('VsBurningOrShocked') ? 'Burning or Shocked' : 'Burning') + ' enemy (' + Math.round(share * 100) + '% of the time)' : '')
           : t.when === 'Crit' ? 'every crit' : (t.nth > 1 ? 'every ' + t.nth + 'th use' : 'every use');
-        res.notes.push(name + ': ' + what + ' adds ' + (t.count > 1 ? t.count + ' x ' : '') + t.pct + '% of the hit' + (t.element ? ' as ' + t.element : '') + capped + ', ' + events.toFixed(2) + ' a second = +' + Math.round(hitDpsNow > 0 ? dps / hitDpsNow * 100 : 0) + '% hit damage on one enemy (splash to others not counted).' + (/Pyre/.test(name) ? '' : ' From the node text; not checked against the game yet.'));
+        res.notes.push(name + ': ' + what + ' adds ' + (t.count > 1 ? t.count + ' x ' : '') + t.pct + '% of the hit' + (t.element ? ' as ' + t.element : '') + capped + ', ' + events.toFixed(2) + ' a second = +' + Math.round(hitDpsNow > 0 ? dps / hitDpsNow * 100 : 0) + '% hit damage on one enemy (splash to others not counted).' + (/Pyre|Overclock/.test(name) ? '' : ' From the node text; not checked against the game yet.'));
       }
     }
     // Elemental Overload's buff: up for 8 s after any crit, so the share of time it is up is 1 - exp(-crits a second x 8).

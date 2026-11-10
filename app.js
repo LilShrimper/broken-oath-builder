@@ -4774,7 +4774,7 @@ window.BOFaq = function (ctx) {
   const { $, esc } = ctx;
   const GROUPS = [
     ['Game mechanics', [['ailments', 'Ailments'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
-      ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP Penalty'], ['deep', 'Rupture & the Deep']]],
+      ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep']]],
     ['About this site', [['sim', 'Sim vs the Game Panel'], ['data', 'Game Data & Patches'], ['privacy', 'Privacy']]],
   ];
   const ALL = GROUPS.flatMap(g => g[1]);
@@ -5082,7 +5082,7 @@ window.BOFaq = function (ctx) {
   // ---------- XP penalty ----------
   function xp(GD) {
     const X = GD.xpPenalty;
-    let h = intro('XP Penalty', 'When monsters give you less XP, and when they give you more.');
+    let h = intro('XP', 'How much XP monsters give: less when they are far below you, more in the Deep.');
     if (!X || X.PerLevel == null) return needData(h);
     h += card('The rule', list([
       'Monsters within <b>' + X.SafeRange + '</b> levels of you give full XP. The range grows by ' + X.SafeRangePer16Levels + ' for every 16 hero levels.',
@@ -5090,6 +5090,17 @@ window.BOFaq = function (ctx) {
       X.CatchUpPerLevel ? 'Monsters above your level give <b>' + pct(X.CatchUpPerLevel) + '% more XP</b> per level, up to <b>+' + pct(X.CatchUpMax) + '%</b>.' : '',
       X.bNoneOnLadder ? 'There is <b>no</b> penalty in the Deep (Rupture 81 and up).' : '',
     ]) + hint('In short: keep Rupture level close to your hero level, or a little above.'));
+    const Dp = GD.deep;
+    if (Dp && Dp.LadderXpPctPerLevel != null) {
+      const M = Dp.MapMaxLevel, lv = [M + 10, 100, 120, 150, 200];
+      h += card('Monster XP in the Deep', table(['Rupture', 'XP per kill', 'vs Rupture ' + M].concat([]), lv.map(L => {
+        const m = 1 + (L - M) * Dp.LadderXpPctPerLevel / 100;
+        return [String(L), '+' + (L - M) * Dp.LadderXpPctPerLevel + '%', '×' + r1(m)];
+      })) + list([
+        'Each Rupture level past ' + M + ' adds <b>+' + Dp.LadderXpPctPerLevel + '%</b> monster XP, added level by level (not compounded). The +2% is the number in the game data; that it adds (not compounds) is read from the data and not yet checked against a log.',
+        'Example: Rupture 150 gives about ' + r1((1 + (150 - M) * Dp.LadderXpPctPerLevel / 100) / (1 + (100 - M) * Dp.LadderXpPctPerLevel / 100)) + '× the XP per kill of Rupture 100. Monster life grows faster (×' + Dp.LadderLifePerLevel + ' per level), so XP per kill rises slower than the fights get longer.',
+      ]));
+    }
     return h;
   }
 

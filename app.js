@@ -5241,7 +5241,7 @@ window.BOFaq = function (ctx) {
       pane.querySelector('#faqXpSelectedLevel').textContent = level.toLocaleString('en-US');
       pane.querySelector('#faqXpBonus').textContent = '+' + r1(bonus) + '%';
       pane.querySelector('#faqXpMultiplier').textContent = '×' + r1(multiplier);
-      pane.querySelector('#faqLifeMultiplier').textContent = '×' + fmtMult(lifeMultiplier);
+      pane.querySelector('#faqLifeMultiplier').textContent = fmtMult(lifeMultiplier);
       xpLevel.setAttribute('aria-valuetext', 'Rupture ' + level + ', +' + r1(bonus) + '% XP per kill, ×' + r1(multiplier) + ' XP and ×' + fmtMult(lifeMultiplier) + ' monster life vs Rupture ' + min);
       const point = pane.querySelector('#faqXpPoint');
       const lifePoint = pane.querySelector('#faqLifePoint');

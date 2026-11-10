@@ -9330,7 +9330,7 @@ window.BOStartApp = function () {
   // Share links: the character on screen, edits included (gear, supports and gem level picked on the Damage tab,
   // tree), opens on the other end as a plan. Short form <site>#s=<id>: the code is kept by the share-worker
   // (Cloudflare, share-worker/). If that can't be reached, the long form <site>#build=<code> carries it all.
-  const SITE_URL = 'https://lilshrimper.github.io/broken-oath-damage-sim/';
+  const SITE_URL = 'https://lilshrimper.github.io/broken-oath-builder/';
   const SHARE_API = 'https://bo-share.bo-share.workers.dev';
   // ItemDatabase planner links (broked-db.vercel.app/planner.html#b=...): "z" + base64url(raw deflate(JSON)) or
   // "j" + base64url(JSON). Same format tools/offline-clone.js reads. Unlike a BO1. code they carry rolled items:

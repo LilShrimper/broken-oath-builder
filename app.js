@@ -10587,7 +10587,7 @@ window.BOStartApp = function () {
       const cls = s.d > 0.0005 ? 'up' : s.d < -0.0005 ? 'down' : '';
       if (on) h += '<div class="gain ' + cls + '">Refund: ' + pct(s.d) + ' ' + esc(skillName) + ' DPS' + (s.cost < -1 ? ' (' + (-s.cost) + ' nodes go with it)' : '') + '</div>';
       else if (s.swapped) h += '<div class="gain ' + cls + '">Swap for ' + esc(GD.nodes[s.swapped].Name) + ' (one choice per altar): ' + pct(s.d) + ' ' + esc(skillName) + ' DPS' + (s.cost > 0 ? ' · ' + s.cost + ' more point' + (s.cost > 1 ? 's' : '') : '') + '</div>';
-      else h += '<div class="gain ' + cls + '">Take: ' + pct(s.d) + ' ' + esc(skillName) + ' DPS · ' + s.cost + ' point' + (s.cost > 1 ? 's' : '') + (s.cost > 1 ? ' (' + pct(s.d / s.cost) + ' a point)' : '') + '</div>';
+      else h += '<div class="gain ' + cls + '">Take: ' + pct(s.cost > 1 ? s.d / s.cost : s.d) + ' ' + esc(skillName) + ' DPS' + (s.cost > 1 ? ' per point · ' + s.cost + ' points (' + pct(s.d) + ' total)' : ' · ' + s.cost + ' point') + '</div>';
     } else h += '<div class="tk">' + (on ? 'Click to refund' : 'Click to take') + ' · scoring…</div>';
     const unc = [n, s && s.swapped ? GD.nodes[s.swapped] : null].filter(Boolean).flatMap(uncounted);
     if (unc.length) h += '<div class="tk" style="margin-top:5px">Not in the DPS number: ' + esc(unc.join(' · ')) + '</div>';

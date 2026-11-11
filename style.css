@@ -426,6 +426,26 @@ details.report pre { white-space: pre-wrap; word-break: break-word; font-size: 1
 .tree-sheet-x { order: -1; width: 30px; height: 26px; padding: 0; border: 0; background: none; color: var(--faint); font-size: 20px; line-height: 1; cursor: pointer; }
 .tree-view.sheet-open .tree-zoom { bottom: calc(var(--sheet-h, 0px) + 12px); }
 .tn.sel { stroke: #fff; stroke-width: 18; }
+/* Oath Mastery sockets: a diamond (the game's own shape), dim while locked, gold outline once open, gold fill when an Oath is sworn. */
+.tm { fill: var(--panel-2); stroke: var(--faint); stroke-width: 6; stroke-linejoin: round; cursor: pointer; opacity: .6; }
+.tm.open { stroke: var(--dashboard-gold, #d9b45b); stroke-width: 10; opacity: 1; }
+.tm.sworn { fill: var(--dashboard-gold, #d9b45b); stroke: var(--text); }
+.tm.found { stroke: #fff; stroke-width: 16; opacity: 1; }
+.tm:hover, .tm.sel { stroke: var(--text); stroke-width: 14; opacity: 1; }
+.tmlabel { fill: var(--dashboard-gold, #d9b45b); font-size: 46px; font-weight: 600; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 12px; display: none; }
+.tmlabel.sworn, .tree-view.zoomed .tmlabel.open { display: block; }
+.oath-list { display: grid; gap: 5px; margin: 6px 0 2px; padding: 0; list-style: none; }
+.oath-row { display: grid; gap: 1px; text-align: left; font: inherit; color: var(--text); }
+button.oath-row { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); cursor: pointer; }
+button.oath-row:hover:not(:disabled) { border-color: var(--dashboard-gold, #d9b45b); }
+button.oath-row:disabled { opacity: .55; cursor: default; }
+.oath-row.sworn { border-color: var(--dashboard-gold, #d9b45b); }
+li.oath-row.sworn .on, button.oath-row.sworn .on { color: var(--dashboard-gold, #d9b45b); }
+.oath-row .on { font-weight: 600; }
+.oath-row .on .c { font-weight: 400; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.oath-row .ot { color: var(--muted); }
+.oath-row .ov { color: var(--bad); }
+.ch-node.oath .c { color: var(--faint); font-size: 12px; }
 @media (pointer: coarse) { .tree-zoom { gap: 6px; } .tree-zoom button { min-width: 44px; height: 40px; font-size: 18px; } }
 .best-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
 .best-list li { display: flex; gap: 10px; align-items: baseline; justify-content: space-between; padding: 5px 8px; border-radius: 6px; background: var(--panel-2); cursor: pointer; font-size: 13px; }
@@ -1066,6 +1086,9 @@ body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page) 
 :root[data-theme="light"] { --gem-str: #c3262d; --gem-dex: #178a3f; --gem-int: #6d3fd6; --gem-blue: #1f6fd1; }
 .gem { display: inline-block; flex: none; width: 8px; height: 8px; margin-right: 6px; vertical-align: 0; transform: rotate(45deg); border-radius: 1.5px; background: var(--gem-c); box-shadow: 0 0 0 1px color-mix(in srgb, var(--gem-c) 45%, var(--text) 25%); }
 .gem-red { --gem-c: var(--gem-str); } .gem-green { --gem-c: var(--gem-dex); } .gem-purple { --gem-c: var(--gem-int); } .gem-blue { --gem-c: var(--gem-blue); }
+/* Skill gem icon (one sheet, --gem-sheet set by app.js); a thin line in the gem's colour around it */
+.gem-ico { display: inline-block; flex: none; width: 22px; height: 22px; margin-right: 7px; vertical-align: -6px; border-radius: 4px; background-image: var(--gem-sheet); background-repeat: no-repeat; box-shadow: 0 0 0 1px color-mix(in srgb, var(--gem-c, var(--text)) 55%, transparent); }
+.pl-skill > .pl-row > .gem-ico { align-self: end; width: 30px; height: 30px; margin: 0 -2px 4px 0; }
 .pl-skill > .pl-row > .gem { align-self: end; margin: 0 -4px 15px 4px; } /* level with the skill dropdown */
 .chip .gem { margin-right: 2px; }
 /* Page version, under Reset (sidebar) */

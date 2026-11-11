@@ -6123,6 +6123,10 @@ window.BOCharacter = function (ctx) {
       const lines = ctx.nodeLines(n);
       return '<div class="ch-node ' + lc(n.Kind) + '"><b>' + esc(n.Name) + '</b>' + (lines.length ? '<ul>' + lines.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>' : '') + '</div>';
     }).join('');
+    // Sworn Oaths (Oath Masteries, patch 0.56.8): the ones whose mastery is open on this tree.
+    const sworn = ctx.oaths ? ctx.oaths() : [];
+    if (sworn.length) h += '<h3>Oaths sworn <small>' + sworn.length + '</small></h3>' + sworn.map(x =>
+      '<div class="ch-node oath"><b>' + esc(x.oath.Name) + '</b> <span class="c">' + esc(x.mastery.Name) + '</span><ul><li>' + esc(x.oath.Text) + '</li>' + (x.oath.Vow ? '<li>Price: ' + esc(x.oath.Vow) + '</li>' : '') + '</ul></div>').join('');
     return h + '<p class="hint">The full tree is on the Skill tree tab.</p></div>';
   }
 
@@ -6670,6 +6674,15 @@ window.BOCharacter = function (ctx) {
     for (const b of [mainBase, offBase]) if (b) for (const t of [...(b.Tags || []), b.Class]) gear.add(lc(t));
     if (mainBase && offBase && offBase.DamageMin) gear.add('dualwielding');
     if (offBase && lc(offBase.Class) === 'shield') gear.add('holdingshield');
+    // "While you wield a two handed weapon" / "While you wield a Staff" lines (tags TwoHanded, WieldingStaff: Oath
+    // Masteries and the notables Cleave, Reaper and Spellcraft). They are wield conditions like DualWielding and
+    // HoldingShield, so they hold for spells too. Proof: the Oaths' own text in oath_masteries.json ("While you wield a
+    // two handed weapon: 8% increased area of effect and 8% increased Melee damage", "While you wield a Staff: ...") and
+    // the game log, 11 Nov 2026: "OathStyle95: on (an Oath with a while wielding / holding line says if it is on for
+    // you now)", "OathStyle95: oath_twin_fangs DualWielding off" (a Necromancer with one weapon).
+    // Until then these two tags matched nothing, so those lines were left out.
+    if (mainBase && (mainBase.bTwoHanded || (mainBase.Tags || []).includes('TwoHand'))) gear.add('twohanded');
+    if (mainBase && (lc(mainBase.Class) === 'staff' || (mainBase.Tags || []).includes('Staff'))) gear.add('wieldingstaff');
     if (!mainBase) gear.add('martial');
     if (mainBase && ['fist', 'claw'].includes(lc(mainBase.Class))) gear.add('martial');
     return { tags, gear, isAttack, isSpell: has(tags, 'Spell'), dealt: new Set() };
@@ -6679,7 +6692,7 @@ window.BOCharacter = function (ctx) {
     for (const c of conds) {
       const t = lc(c);
       if (ctx.tags.has(t)) continue;
-      if (t === 'dualwielding' || t === 'holdingshield') { if (ctx.gear.has(t)) continue; return false; }
+      if (t === 'dualwielding' || t === 'holdingshield' || t === 'twohanded' || t === 'wieldingstaff') { if (ctx.gear.has(t)) continue; return false; }
       if (ctx.isAttack && ctx.gear.has(t)) continue; // weapon-kind lines (Bow, Staff, TwoHand ...) on attacks
       return false;
     }
@@ -8853,7 +8866,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare,cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  const api = { dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare,cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -8873,6 +8886,14 @@ window.BOStartApp = function () {
   if (TI && /^data:/.test(TI.src)) {
     try { const b64 = TI.src.slice(TI.src.indexOf(',') + 1), bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); TI.src = URL.createObjectURL(new Blob([u], { type: 'image/webp' })); }
     catch (e) { window.TREE_ICONS = null; }
+  }
+  // Skill gem icons: one sheet, shown as a CSS background (--gem-sheet); the local page's inline copy becomes a blob: link too.
+  const GI = window.GEM_ICONS;
+  if (GI) {
+    try {
+      if (/^data:/.test(GI.src)) { const bin = atob(GI.src.slice(GI.src.indexOf(',') + 1)), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); GI.src = URL.createObjectURL(new Blob([u], { type: 'image/webp' })); }
+      document.documentElement.style.setProperty('--gem-sheet', 'url("' + GI.src + '")');
+    } catch (e) { window.GEM_ICONS = null; }
   }
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -8982,13 +9003,20 @@ window.BOStartApp = function () {
       '<div class="update-btns"><button class="btn" type="button" data-upd="go">Refresh now</button><button class="btn small ghost" type="button" data-upd="later">Remind me in 5 minutes</button></div></div>';
     const go = m.querySelector('[data-upd="go"]'); if (go) go.focus();
   }
-  // Gem colour next to a gem's name (no icons). The game colours gems by attribute: supports red / green / purple,
+  // Gem colour next to a gem's name. Skill gems show their icon where the sheet has one (GEM_ICONS), else the colour
+  // dot; supports only have the dot. The game colours gems by attribute: supports red / green / purple,
   // skill gems red / green / blue (Int is blue on skill gems: the shop list, 4 Nov 2026).
   const GEM_COLOR = { Str: 'Red', Dex: 'Green', Int: 'Purple' }, SKILL_COLOR = { Str: 'Red', Dex: 'Green', Int: 'Blue' };
   const dot = c => c ? '<i class="gem gem-' + c.toLowerCase() + '" title="' + c + ' gem" aria-label="' + c + ' gem"></i>' : '';
   const gemDot = id => dot(GEM_COLOR[(GD.supports[String(id).toLowerCase()] || {}).Attribute]);
   // Skill gems only (Gem and Weapon kinds: Death Coil is a Weapon skill sold as a gem); not basic attacks.
-  const skillDot = id => { const s = GD.skills[String(id).toLowerCase()] || {}; return ['Gem', 'Weapon'].includes(s.Kind) ? dot(SKILL_COLOR[s.Attribute]) : ''; };
+  const skillDot = id => {
+    const s = GD.skills[String(id).toLowerCase()] || {}, I = window.GEM_ICONS; if (!['Gem', 'Weapon'].includes(s.Kind)) return '';
+    const i = I ? I.idx[String(id).toLowerCase()] : null, c = SKILL_COLOR[s.Attribute];
+    if (i == null) return dot(c);
+    // position in % so the icon can be drawn at any size
+    return '<i class="gem-ico' + (c ? ' gem-' + c.toLowerCase() : '') + '" style="background-position:' + (I.cols > 1 ? (i % I.cols) / (I.cols - 1) * 100 : 0) + '% ' + (I.rows > 1 ? Math.floor(i / I.cols) / (I.rows - 1) * 100 : 0) + '%;background-size:' + I.cols * 100 + '% ' + I.rows * 100 + '%"' + (c ? ' title="' + c + ' gem"' : '') + ' aria-hidden="true"></i>';
+  };
   const resGrid = $('#resGrid');
   resGrid.innerHTML = DT.map(d => '<label class="field"><span><span class="type" style="--c:' + typeColor(d) + '">' + (d === 'Lightning' ? 'Light.' : d) + '</span></span><input type="number" data-res="' + d + '" placeholder="auto"></label>').join('');
   const drop = document.createElement('div'); drop.className = 'drop-hint'; drop.textContent = 'Drop the SaveGames folder, a BO_Char_*.sav file or BrokenOath.log'; document.body.appendChild(drop);
@@ -9608,7 +9636,7 @@ window.BOStartApp = function () {
     const itemSources = sources.filter(source => source.group === 'Gear');
     const supportKeys = [...new Set((r.supports || []).map(support => support.key))];
     const sourceGroups = [
-      { label: 'Passive tree', keys: activeKeys(sources.filter(source => source.key === 'passives' || source.key === 'dragon').map(source => source.key)), color: '#8b4bd1' },
+      { label: 'Passive tree', keys: activeKeys(sources.filter(source => source.key === 'passives' || source.key === 'dragon' || source.key === 'oaths').map(source => source.key)), color: '#8b4bd1' },
       { label: 'Weapon', keys: activeKeys(itemSources.filter(source => source.key === 'item:MainHand' || source.key === 'item:OffHand').map(source => source.key)), color: '#f3922c', weapon: true },
       { label: 'Support gems', keys: activeKeys(supportKeys), color: '#438ddd', supports: true },
       { label: 'Gear (other)', keys: activeKeys(itemSources.filter(source => source.key !== 'item:MainHand' && source.key !== 'item:OffHand').map(source => source.key)), color: '#49bd72' },
@@ -11028,7 +11056,19 @@ window.BOStartApp = function () {
         gT.appendChild(t);
       }
     }
-    svg.append(gL, gN, gT, gB);
+    // Oath Mastery sockets (patch 0.56.8): a diamond, as the game draws them (owner, 11 Nov 2026), where the game puts the socket; its label under it.
+    const gM = document.createElementNS(NS, 'g');
+    for (const m of Object.values(GD.masteries || {})) {
+      if (!isFinite(m.X) || !isFinite(m.Y)) continue;
+      const r = 36, p = document.createElementNS(NS, 'polygon');
+      p.setAttribute('points', [[0, -r], [r, 0], [0, r], [-r, 0]].map(([x, y]) => (m.X + x) + ',' + (m.Y + y)).join(' '));
+      p.setAttribute('class', 'tm'); p.dataset.mid = m.Id;
+      gM.appendChild(p);
+      const t = document.createElementNS(NS, 'text');
+      t.setAttribute('x', m.X); t.setAttribute('y', m.Y + r + 50); t.setAttribute('class', 'tmlabel'); t.dataset.mid = m.Id;
+      gT.appendChild(t);
+    }
+    svg.append(gL, gN, gM, gT, gB);
     T.built = true;
     fitTree();
   }
@@ -11092,11 +11132,23 @@ window.BOStartApp = function () {
       ln.classList.toggle('opt-rem', inOld(a) && inOld(b) && (orm.has(a) || orm.has(b)));
     }
     for (const t of $('#treeSvg').querySelectorAll('text.tlabel')) { const id = t.dataset.id; t.classList.toggle('alloc', have.has(id)); t.classList.toggle('top', top.has(id)); t.classList.toggle('opt', oa.has(id) || orm.has(id)); }
+    T.og = new Map(); // Oath DPS values, worked out again when a card or tip asks
+    const sw = swornNow();
+    for (const p of $('#treeSvg').querySelectorAll('polygon.tm')) {
+      const m = GD.masteries[p.dataset.mid]; if (!m) continue;
+      p.classList.toggle('open', masteryOpen(m, have)); p.classList.toggle('sworn', sw.has(m.Id)); p.classList.toggle('sel', m.Id === T.selM);
+      p.classList.toggle('found', !!q && masteryText(m).includes(q));
+    }
+    for (const t of $('#treeSvg').querySelectorAll('text.tmlabel')) {
+      const m = GD.masteries[t.dataset.mid]; if (!m) continue;
+      const o = sw.get(m.Id); t.textContent = o ? o.Name : m.Name;
+      t.classList.toggle('sworn', !!o); t.classList.toggle('open', masteryOpen(m, have));
+    }
     const order = pickOrder();
     for (const b of $('#treeSvg').querySelectorAll('text.tnum')) { const k = order.get(b.dataset.id); b.textContent = k || ''; b.style.display = k ? 'block' : 'none'; }
     const saved = (st.chOrig.passives || []).length;
     const free = S.freePoints(GD, st.chOrig || st.ch);
-    $('#treePoints').textContent = have.size + ' points taken' + (have.size !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level + (free ? ' · ' + free + ' free' : '');
+    $('#treePoints').textContent = have.size + ' points taken' + (have.size !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level + (free ? ' · ' + free + ' free' : '') + (sw.size ? ' · ' + sw.size + ' Oath' + (sw.size > 1 ? 's' : '') + ' sworn' : '');
     const pp = $('#planPoints'), who = (st.chOrig || st.ch).id + '|' + (st.chOrig || st.ch).level;
     if (pp.dataset.for !== who) {
       pp.dataset.for = who; pp.value = free > 0 ? free : 5;
@@ -11106,6 +11158,7 @@ window.BOStartApp = function () {
     $('#treeUndo').disabled = !T.undo.length;
     historyList();
     if (T.sel) showSheet(T.sel);
+    else if (T.selM) showMastery(T.selM);
   }
 
   // Touch screens have no hover: a tap opens this panel along the bottom of the tree
@@ -11113,6 +11166,7 @@ window.BOStartApp = function () {
   function showSheet(id) {
     const n = GD.nodes[id];
     if (!n) return hideSheet();
+    if (T.selM) hideSheet();
     T.sel = id;
     const have = allocSet(), on = have.has(id), s = T.scores.get(id);
     // No damage skill picked: no DPS score is coming, so drop the "scoring…" line.
@@ -11126,7 +11180,81 @@ window.BOStartApp = function () {
     $('#treeView').classList.add('sheet-open');
     $('#treeView').style.setProperty('--sheet-h', sh.offsetHeight + 'px');
   }
+  // ---------- Oath Masteries (patch 0.56.8) ----------
+  // A mastery socket opens once one of its notables is taken, and holds one sworn Oath (game log + save, 11 Nov 2026;
+  // the proof is written out in sim.js collectMods). The sworn Oaths live on the character as oaths = { mastery id: Oath id }.
+  // NOT CHECKED: whether the same Oath can be sworn at two masteries of one name (Mastery of Frost has three sockets
+  // with the same four Oaths). The game keeps 84 Oaths for 318 choices, so the page lets each Oath be sworn once.
+  const OATH_ONCE = true;
+  const masteryOpen = (m, have) => m.Notables.some(n => have.has(n));
+  const swornNow = () => new Map(st.ch ? S.swornOaths(GD, st.ch).map(x => [x.mastery.Id, x.oath]) : []);
+  const masteryText = m => (m.Name + ' oath mastery ' + m.Oaths.map(id => { const o = GD.oaths[id] || {}; return (o.Name || '') + ' ' + (o.Text || '') + ' ' + (o.Vow || ''); }).join(' ')).toLowerCase();
+  // Why this Oath cannot be sworn here right now ('' = it can).
+  function oathBlocked(m, oid, have, sw) {
+    if (!masteryOpen(m, have)) return 'Take one of this mastery\'s notables first';
+    if (OATH_ONCE) for (const [mid, o] of sw) if (mid !== m.Id && o.Id === oid) return 'Already sworn at another ' + GD.masteries[mid].Name + ' socket';
+    return '';
+  }
+  // What swearing (or giving up) each Oath of a mastery does to the selected skill's DPS.
+  function masteryGains(mid) {
+    if (T.og && T.og.has(mid)) return T.og.get(mid);
+    const out = new Map(), m = GD.masteries[mid];
+    if (st.ch && st.skill && m) {
+      const o = opts(), base = S.calcSkill(GD, st.ch, st.skill, o);
+      if (!base.error && !base.unsupported && base.totalDps > 0) for (const oid of m.Oaths) {
+        const map = Object.assign({}, st.ch.oaths || {}); if (map[mid] === oid) delete map[mid]; else map[mid] = oid;
+        out.set(oid, S.calcSkill(GD, Object.assign({}, st.ch, { oaths: map }), st.skill, o).totalDps / base.totalDps - 1);
+      }
+    }
+    if (T.og) T.og.set(mid, out);
+    return out;
+  }
+  // The mastery's card: pick = true gives buttons (the panel under the tree), false a plain list (hover tip).
+  function masteryHtml(mid, pick) {
+    const m = GD.masteries[mid]; if (!m || !st.ch) return '';
+    const have = allocSet(), sw = swornNow(), open = masteryOpen(m, have), cur = sw.get(mid), gains = open ? masteryGains(mid) : new Map();
+    const skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
+    let h = '<div class="tk">Oath Mastery' + (m.Class ? ' · ' + esc(m.Class) : '') + ' · ' + (cur ? 'sworn' : open ? 'pick one Oath' : 'locked') + '</div><b>' + esc(m.Name) + '</b>';
+    if (!open) {
+      const names = m.Notables.map(id => (GD.nodes[id] || {}).Name).filter(Boolean);
+      h += '<div>Opens when you take one of its notables: ' + esc(names.slice(0, 6).join(', ')) + (names.length > 6 ? ' and ' + (names.length - 6) + ' more' : '') + '.</div>';
+    }
+    const rows = m.Oaths.map(oid => {
+      const o = GD.oaths[oid]; if (!o) return '';
+      const on = !!cur && cur.Id === oid, why = on ? '' : oathBlocked(m, oid, have, sw), d = gains.get(oid);
+      const unc = (o.Mods || []).filter(x => !S.counted(x.Stat)).length;
+      const body = '<span class="on">' + esc(o.Name) + (on ? ' <span class="c">sworn</span>' : '') + '</span><span class="ot">' + esc(o.Text) + '</span>' +
+        (o.Vow ? '<span class="ov">Price: ' + esc(o.Vow) + '</span>' : '') +
+        (d != null && !why ? '<span class="gain ' + (d > 0.0005 ? 'up' : d < -0.0005 ? 'down' : '') + '">' + (on ? 'Give up: ' : cur ? 'Swear instead: ' : 'Swear: ') + pct(d) + ' ' + esc(skillName) + ' DPS' + (unc ? ' (has lines not in the DPS number)' : '') + '</span>' : '') +
+        (why && open ? '<span class="tk">' + esc(why) + '</span>' : '');
+      return pick ? '<button type="button" class="oath-row' + (on ? ' sworn' : '') + '" data-oath="' + esc(oid) + '"' + (why ? ' disabled' : '') + '>' + body + '</button>' : '<li class="oath-row' + (on ? ' sworn' : '') + '">' + body + '</li>';
+    }).join('');
+    h += pick ? '<div class="oath-list">' + rows + '</div>' : '<ul class="oath-list">' + rows + '</ul><div class="tk">Click to ' + (open ? 'pick an Oath' : 'see its Oaths') + '</div>';
+    return h;
+  }
+  function showMastery(mid) {
+    if (!GD.masteries || !GD.masteries[mid]) return hideSheet();
+    if (T.sel) hideSheet();
+    T.selM = mid;
+    $('#treeSheetBody').innerHTML = masteryHtml(mid, true);
+    $('#treeSheetAct').hidden = true;
+    const sh = $('#treeSheet'); sh.hidden = false;
+    $('#treeView').classList.add('sheet-open');
+    $('#treeView').style.setProperty('--sheet-h', sh.offsetHeight + 'px');
+    for (const p of $('#treeSvg').querySelectorAll('polygon.tm')) p.classList.toggle('sel', p.dataset.mid === mid);
+  }
+  // Swear an Oath at a mastery; the sworn one again gives it up. Kept like Dragonling edits (a plan saves it, a loaded save keeps it until Reset).
+  function swearOath(mid, oid) {
+    const m = GD.masteries[mid]; if (!m || !st.ch || !m.Oaths.includes(oid)) return;
+    const map = Object.assign({}, st.ch.oaths || {}), o = GD.oaths[oid];
+    let msg;
+    if (map[mid] === oid) { delete map[mid]; msg = o.Name + ' given up.'; }
+    else { if (oathBlocked(m, oid, allocSet(), swornNow())) return; map[mid] = oid; msg = o.Name + ' sworn at ' + m.Name + '.'; }
+    setDragon({ oaths: map });
+    $('#treeStatus').textContent = msg;
+  }
   function hideSheet() {
+    if (T.selM) { T.selM = null; for (const p of $('#treeSvg').querySelectorAll('polygon.tm.sel')) p.classList.remove('sel'); }
     const was = T.sel; T.sel = null;
     $('#treeSheet').hidden = true; $('#treeView').classList.remove('sheet-open');
     if (was) { const c = $('#treeSvg').querySelector('circle.tn[data-id="' + was + '"]'); if (c) c.classList.remove('sel'); }
@@ -11838,7 +11966,7 @@ window.BOStartApp = function () {
       return;
     }
     if (pts.size > 2) return;
-    T.drag = { x: e.clientX, y: e.clientY, vb: T.vb.slice(), moved: false, touch: e.pointerType !== 'mouse', id: e.target.dataset && e.target.dataset.id };
+    T.drag = { x: e.clientX, y: e.clientY, vb: T.vb.slice(), moved: false, touch: e.pointerType !== 'mouse', id: e.target.dataset && e.target.dataset.id, mid: e.target.dataset && e.target.dataset.mid };
   });
   view.addEventListener('pointermove', e => {
     if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -11857,8 +11985,9 @@ window.BOStartApp = function () {
     if (e.pointerType !== 'mouse') return; // touch uses the bottom panel instead of the hover tip
     const el = document.elementFromPoint(e.clientX, e.clientY);
     const id = el && el.classList && el.classList.contains('tn') ? el.dataset.id : null;
-    if (!id) { tip.hidden = true; return; }
-    tip.innerHTML = tipHtml(id); tip.hidden = false;
+    const mid = el && el.classList && el.classList.contains('tm') ? el.dataset.mid : null;
+    if (!id && !mid) { tip.hidden = true; return; }
+    tip.innerHTML = mid ? masteryHtml(mid, false) : tipHtml(id); tip.hidden = false;
     const r = view.getBoundingClientRect(); let x = e.clientX - r.left + 14, y = e.clientY - r.top + 14;
     if (x + tip.offsetWidth > r.width - 6) x = e.clientX - r.left - tip.offsetWidth - 14;
     if (y + tip.offsetHeight > r.height - 6) y = Math.max(6, r.height - tip.offsetHeight - 6);
@@ -11876,6 +12005,8 @@ window.BOStartApp = function () {
     }
     const d = T.drag; T.drag = null; view.classList.remove('dragging');
     if (cancelled || !d || d.moved) return;
+    if (d.mid) { lastTap = null; tip.hidden = true; if (T.selM === d.mid) hideSheet(); else showMastery(d.mid); return; } // the Oaths open in the panel under the tree
+    if (!d.id && T.selM) { hideSheet(); lastTap = null; return; }
     if (d.id && d.touch) {
       lastTap = null;
       if (T.sel === d.id) { clickNode(d.id); return; } // tap again = Take / Refund; the repaint refreshes the panel
@@ -11901,6 +12032,7 @@ window.BOStartApp = function () {
   $('#treeFit').onclick = () => { if (T.full) setVB(T.full.slice()); };
   $('#treeSheetAct').onclick = () => { if (T.sel) clickNode(T.sel); }; // the repaint refreshes the panel
   $('#treeSheetClose').onclick = hideSheet;
+  $('#treeSheetBody').addEventListener('click', e => { const b = e.target.closest && e.target.closest('button[data-oath]'); if (b && T.selM && !b.disabled) swearOath(T.selM, b.dataset.oath); });
   $('#treeSearch').addEventListener('input', paintTree);
   $('#treeHeat').addEventListener('change', paintTree);
   $('#treeUndo').onclick = () => { if (T.undo.length) setPassives(T.undo.pop(), false); };
@@ -12002,6 +12134,7 @@ window.BOStartApp = function () {
     $, esc, planner, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats,
     sheet: () => st.ch && st.skill ? S.calcSkill(GD, st.ch, st.skill, opts()) : null,
     passives: () => [...allocSet()].map(id => GD.nodes[id]),
+    oaths: () => st.ch ? S.swornOaths(GD, st.ch) : [],
     // Build notes: kept in this browser per character, and sent along in share links (liveCopy / keepSharedTabs).
     notes: { get: () => (st.chOrig ? store.get('notes:' + st.chOrig.id, '') : ''), set: v => { if (st.chOrig) store.set('notes:' + st.chOrig.id, String(v).slice(0, NOTES_MAX)); } },
     nodeLines: n => {

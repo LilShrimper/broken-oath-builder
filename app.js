@@ -4110,8 +4110,8 @@ window.BOItemSearch = function (ctx) {
   const { $, esc } = ctx;
   const S = window.BOSim;
   const lc = s => String(s || '').toLowerCase();
-  // Search text: lower case, everything but letters and digits turned to a space, so a word only matches a whole word
-  // ("fire" does not match "fires").
+  // Search text: lower case, everything but letters and digits turned to a space. A search word matches from the start of a
+  // word, so typing "mir" finds "Mirror" (it does not match in the middle: "ire" does not find "fire").
   const norm = s => lc(s).replace(/[^a-z0-9]+/g, ' ').trim();
   // The query as search terms: a "quoted phrase" stays together (its words must follow each other); other words match alone.
   const terms = q => { const out = []; String(q || '').replace(/"([^"]*)"|(\S+)/g, (m, ph, w) => { const t = norm(ph != null ? ph : w); if (t) out.push(t); return m; }); return out; };
@@ -4306,7 +4306,7 @@ window.BOItemSearch = function (ctx) {
       if (F.cat === 'mod' && F.affix && e.affixType !== F.affix) return false;
       if (F.cat === 'oathword' && F.craft) { const inv = owned(); if (inv && inv.loaded) { const s = ctx.owned().wordStatus(e.w, inv); if (!s.held.length && !(s.craftable && (!e.secret || F.secrets))) return false; } }
       const lv = levelOf(e); if (lv < min || lv > max) return false;
-      if (words.length) { const t = ' ' + e.text + (e.runeText && (!e.secret || F.secrets) ? ' ' + norm(e.runeText) : '') + ' '; if (!words.every(w => t.includes(' ' + w + ' '))) return false; }
+      if (words.length) { const t = ' ' + e.text + (e.runeText && (!e.secret || F.secrets) ? ' ' + norm(e.runeText) : '') + ' '; if (!words.every(w => t.includes(' ' + w))) return false; }
       return true;
     });
   }

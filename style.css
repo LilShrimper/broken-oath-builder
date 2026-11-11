@@ -1011,10 +1011,6 @@ body.dashboard-view .configure-heading { display: flex; }
 .nav .character-picker { flex: none; }
 .nav .toolbar-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; flex: none; }
 .nav .toolbar-actions > .btn, .nav .toolbar-actions > label.btn { padding: 6px; font-size: 11.5px; line-height: 1.2; white-space: normal; text-align: center; }
-.nav-data { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-.nav-data .hint { margin: 0; font-size: 11.5px; line-height: 1.35; }
-.nav-data:not(:has(.btn:not([hidden]))) { display: none; }
-@media (max-width: 760px) { .nav-data { display: none; } } /* a phone has no game Data folder to pick (owner, 8 Nov 2026) */
 .view-bar { margin-top: 14px; }
 .view-bar-title { margin: 0 0 8px 6px; color: var(--dashboard-gold); font: 700 14px/1.2 Georgia, "Times New Roman", serif; letter-spacing: .18em; text-transform: uppercase; }
 .view-bar .tabs { flex-direction: row; flex-wrap: wrap; gap: 6px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
@@ -1360,17 +1356,23 @@ body.compare-page #controls { display: none; }
 .bw-potion .kv small { color: var(--faint); }
 
 /* Skill Scaling tab (scaling.js): a square per skill, coloured like its gem */
-.sc-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin: 14px 0; }
-.sc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.sc-bar input[type="search"] { flex: 0 1 240px; min-width: 0; }
+.sc-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin: 14px 0; }
+.sc-chips { display: flex; gap: 6px; width: fit-content; max-width: 100%; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.sc-bar input[type="search"] { flex: 1 1 280px; max-width: 420px; min-width: 0; box-sizing: border-box; height: 40px; padding: 8px 12px; border: 1px solid var(--dashboard-gold); border-radius: 9px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 15px; }
+.sc-bar input[type="search"]::placeholder { color: var(--muted); }
+.sc-bar input[type="search"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+:root[data-theme="light"] .sc-bar input[type="search"] { border-color: #8a6a1e; }
+@media (max-width: 600px) { .sc-bar input[type="search"] { flex-basis: 100%; max-width: none; } }
+.card.sc-howto { padding: 12px 16px; margin-top: 0; border-top: 1px solid var(--line); }
 .sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; align-items: start; }
 .sc-card { --sc-c: var(--faint); background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--sc-c); border-radius: var(--radius); padding: 14px; min-width: 0; box-shadow: var(--shadow); }
 .sc-card[hidden], .sc-group[hidden] { display: none; }
 .sc-group { margin-bottom: 8px; }
 .sc-sep { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; padding: 0; border: 0; font-size: 13px; line-height: 1; letter-spacing: .12em; text-transform: uppercase; color: var(--sc-c); }
 .sc-sep::after { content: ""; flex: 1; height: 1px; background: color-mix(in srgb, var(--sc-c) 55%, var(--line)); }
-.sc-chip { padding: 6px 14px; line-height: 1.2; font: inherit; font-size: 13px; color: var(--text); cursor: pointer; white-space: nowrap; }
-.sc-chip.active { border-color: var(--dashboard-gold); color: var(--dashboard-gold); }
+.sc-chip { min-width: 72px; min-height: 38px; padding: 6px 16px; border: 0; border-radius: 9px; background: none; font: inherit; font-weight: 600; font-size: 13.5px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.sc-chip:hover { color: var(--text); background: var(--panel-2); }
+.sc-chip.active { color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 12%, var(--panel)); box-shadow: inset 3px 0 0 var(--dashboard-gold); }
 /* FAQ / Game Mechanics tab (faq.js): section chips, reference tables */
 .faq-nav { display: flex; flex-direction: column; gap: 8px; margin: 0 0 4px; }
 .faq-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
@@ -1427,7 +1429,7 @@ body.compare-page #controls { display: none; }
 .faq-xp-range-handle::after { content: ''; position: absolute; top: 8px; bottom: 8px; left: 8px; width: 4px; border-left: 1px solid var(--dashboard-green); border-right: 1px solid var(--dashboard-green); }
 .faq-xp-range-handle:hover, .faq-xp-range-handle:focus-visible { z-index: 1; border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 640px) { .faq-xp-chart text { font-size: 15px; } .faq-xp-chart .faq-xp-axis { font-size: 17px; } }
-:root[data-theme="light"] .sc-chip.active { color: #8a6a1e; border-color: #8a6a1e; }
+:root[data-theme="light"] .sc-chip.active { color: #8a6a1e; box-shadow: inset 3px 0 0 #8a6a1e; }
 .sc-red { --sc-c: var(--gem-str); } .sc-green { --sc-c: var(--gem-dex); } .sc-blue { --sc-c: var(--gem-blue); }
 .sc-card header { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
 .sc-card header .gem-ico { width: 40px; height: 40px; margin: 0; border-radius: 6px; }

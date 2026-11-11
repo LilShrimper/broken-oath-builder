@@ -5905,7 +5905,6 @@ window.BOFaq = function (ctx) {
     h += card('After a game patch', list([
       'The site checks for a new Steam build every 15 minutes and updates its numbers by itself.',
       'New things (a new skill, tree changes, a new mechanic) need code changes. Those come after the patch notes are read, so they can take a little longer.',
-      'If the site is behind your game, on a computer use <b>Use my own game files</b> near the bottom of the side menu, above <b>Reset loaded characters</b>, and pick your game\'s Data folder. It is read in your browser only. <b>Use the site\'s data</b> switches back.',
     ]));
     return h;
   }
@@ -12364,9 +12363,8 @@ window.BOStartApp = function () {
   const newer = (a, b) => (Date.parse(a.filesAt || '') || 0) > (Date.parse(b.filesAt || '') || 0);
   const start = () => {
     setup.hidden = true; document.body.classList.remove('needs-data');
-    // Public site: the game data ships with it ("bundled"); players can still read their own files.
-    if (window.GD && (window.GD.source === 'picked' || window.GD.source === 'bundled')) $('#dataBtn').hidden = false;
-    if (window.GD && window.GD.source === 'picked') { $('#siteDataBtn').hidden = !bundled; checkOld(); }
+    // Public site: the game data ships with it ("bundled"); the menu no longer offers picking your own files (owner, 11 Nov 2026: a mismatch is covered by the API).
+    if (window.GD && window.GD.source === 'picked') checkOld();
     if (!started) { started = true; window.BOStartApp(); } else location.reload();
   };
   // Data read from the player's folder stays in this browser; after a patch it is out of date until
@@ -12382,7 +12380,7 @@ window.BOStartApp = function () {
     $('#dataOldText').textContent = 'Your game data was read ' + ago + '. If Broken Oath has patched since, update it so the sim uses the new numbers (pick the Data folder again).';
     $('#dataOld').hidden = false;
   }
-  $('#dataOldUpdate').addEventListener('click', () => $('#dataBtn').click());
+  $('#dataOldUpdate').addEventListener('click', () => openPicker());
   $('#dataOldOk').addEventListener('click', () => { store.set('dataOk', new Date().toISOString()); $('#dataOld').hidden = true; });
   const showSetup = msg => { setup.hidden = false; document.body.classList.add('needs-data'); if (msg) status.textContent = msg; };
 
@@ -12424,12 +12422,11 @@ window.BOStartApp = function () {
     } catch (err) { status.textContent = 'Could not read the game data: ' + err.message; }
     e.target.value = '';
   });
-  $('#dataBtn').addEventListener('click', () => {
+  function openPicker() {
     $('#setupCancel').hidden = false;
     showSetup(bundled ? 'Only needed when Broken Oath has patched and the site has not caught up yet: your own files are used while they are newer than the site’s.' : 'Pick the folder again after a game patch to load the new numbers.');
-  });
+  }
   $('#setupCancel').addEventListener('click', () => { setup.hidden = true; document.body.classList.remove('needs-data'); status.textContent = ''; });
-  $('#siteDataBtn').addEventListener('click', () => { store.del('gd'); location.reload(); });
 
   if (window.GD) return start(); // local DamageSim.html: data built in
   const fresh = gd => gd && (gd.schema || 1) >= window.BOGameData.SCHEMA;

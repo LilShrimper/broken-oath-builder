@@ -8,10 +8,10 @@
     'Items/affixes.json', 'Items/uniques.json', 'Items/item_bases.json', 'Items/runes.json', 'Items/runewords.json',
     'Gameplay/dragonling.json', 'Gameplay/curses.json', 'Gameplay/blessings.json', 'Gameplay/scaling.json', 'Items/stat_text.json', 'Rifts/bosses.json',
     'Gameplay/animsets.json', 'Gameplay/progression.json', 'Rifts/riftmap.json', 'Rifts/riven_atlas.json',
-    'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json', 'Gameplay/monster_affixes.json', 'Gameplay/monsters.json'];
+    'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json', 'Gameplay/monster_affixes.json', 'Gameplay/monsters.json', 'Gameplay/oath_masteries.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 23; // 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 24; // 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -73,6 +73,16 @@
     const tree = J('Gameplay/passive_tree.json');
     const nodes = {};
     for (const n of tree.nodes) nodes[n.Id] = pick(n, ['Id', 'Name', 'Kind', 'Mods', 'Text', 'Region', 'X', 'Y', 'Links', 'ClassStart', 'Price', 'Choice', 'Group', 'Fp']); // Fp: the save's PassiveFp per node (the Creator tab writes it, as tools/offline-clone.js does)
+
+    // Oath Masteries (oath_masteries.json, new in patch 0.56.8, 11 Nov 2026): 84 sockets on the tree, each tied to a list of
+    // notables and offering 3 or 4 Oaths. The same Oath id shows up under several masteries of one name (318 entries,
+    // 84 different Oaths, always with the same lines), so the Oaths are kept once and each mastery lists their ids.
+    const OM = J('Gameplay/oath_masteries.json');
+    const masteries = {}, oaths = {};
+    for (const m of OM.Masteries || []) {
+      masteries[m.Id] = Object.assign(pick(m, ['Id', 'Name', 'X', 'Y', 'Notables', 'Class']), { Oaths: (m.Oaths || []).map(x => x.Id) });
+      for (const x of m.Oaths || []) oaths[x.Id] = pick(x, ['Id', 'Name', 'Text', 'Vow', 'Mods']);
+    }
 
     const affixes = {};
     for (const a of J('Items/affixes.json').affixes) affixes[a.Id.toLowerCase()] = Object.assign(pick(a, ['Id', 'Type', 'Group', 'Mod', 'BaseTags', 'ExcludeTags']), { Tiers: (a.Tiers || []).map(t => pick(t, ['ILvl', 'Min', 'Max', 'Min2', 'Max2', 'Name'])) });
@@ -214,7 +224,7 @@
     for (const t of J('Items/stat_text.json').texts) statText[t.Key] = t.Text;
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
-      { skills, classes, supports, nodes, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
+      { skills, classes, supports, nodes, masteries, oaths, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
         affixes, uniques, bases, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds });
   }
 
@@ -4955,11 +4965,20 @@ window.BOItemSearch = function (ctx) {
         const items = (h.build.items || []).flatMap(itemNames);
         try {
           const ch = charFromApi(h), d = ctx.defence(ch);
-          // Sim the skill the ladder lists as main (the build file's own main_skill is often empty).
+          // Sim the skill the hero has dealt the most damage with (build.skill_damage), owner 11 Nov 2026: the ladder's
+          // main skill can be one they barely use (a Necromancer listed as Death Coil had dealt 6x more with Venom Spark).
+          // A skill the sim can't run (no hit of its own) gives way to the next one, then to the ladder's main skill.
           const row = (S.ladder.heroes || []).find(x => x.hero === h.hero);
-          if (row && row.main_skill && !isHidden(row.main_skill)) ch.mainSkill = row.main_skill;
-          let sim = null; try { sim = ctx.simDps ? ctx.simDps(ch, h.rupture_level || 0) : null; } catch (e) { sim = null; }
-          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), sim, simSkill: ch.mainSkill, items, find: items.join('\n').toLowerCase() };
+          const sd = h.build.skill_damage || {};
+          const order = Object.keys(sd).filter(k => !isHidden(k) && sd[k] > 0).sort((a, b) => sd[b] - sd[a]);
+          if (row && row.main_skill && !isHidden(row.main_skill) && !order.includes(row.main_skill)) order.push(row.main_skill);
+          let sim = null, simSkill = '';
+          for (const id of order) {
+            ch.mainSkill = id;
+            try { sim = ctx.simDps ? ctx.simDps(ch, h.rupture_level || 0) : null; } catch (e) { sim = null; }
+            if (sim > 0) { simSkill = id; break; }
+          }
+          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), sim, simSkill, items, find: items.join('\n').toLowerCase() };
         } catch (e) { roster(league)[h.hero] = { life: null, es: null, ehp: null, sim: null, items, find: items.join('\n').toLowerCase() }; }
         if (++n % 15 === 0) { S.rosterBusy = 'Running the sim on the builds… ' + n; paint(); await new Promise(r => setTimeout(r, 0)); }
       }
@@ -4980,7 +4999,9 @@ window.BOItemSearch = function (ctx) {
       const x = roster()[r.hero];
       if (!r.has_build) return '<span class="meta" title="Builds are published for the top 50 of each class">–</span>';
       if (!x) return '<span class="meta" title="Build not read yet (build files refresh hourly)">' + (S.rosterBusy ? '…' : '–') + '</span>';
-      return x.sim > 0 ? '<span title="' + esc(skillName(x.simSkill)) + ', sim estimate">' + short(x.sim) + '</span>' : '<span class="meta" title="The sim does not cover this skill or build yet">–</span>';
+      if (!(x.sim > 0)) return '<span class="meta" title="The sim does not cover this skill or build yet">–</span>';
+      return '<span title="' + esc(skillName(x.simSkill)) + ' (the skill this hero has dealt the most damage with), sim estimate">' + short(x.sim) + '</span>' +
+        (x.simSkill && x.simSkill !== r.main_skill ? '<br><small class="meta">' + esc(skillName(x.simSkill)) + '</small>' : '');
     };
     const metric = r => {
       const x = roster()[r.hero];
@@ -5091,8 +5112,8 @@ window.BOItemSearch = function (ctx) {
           '<td class="go" aria-hidden="true">' + (r.has_build && r.build ? '›' : '') + '</td></tr>';
       }).join('');
       const note = extra ? (extra === 'EHP' ? ' EHP here: (life + energy shield) against elemental hits after the hero\'s resistances (capped at ' + cap() + '%); armour, evasion and block are not counted.' : ' Life and energy shield as the Build Planner adds them up from gear and tree.') + ' Only heroes with a published build have one.' : '';
-      return '<div class="card lad-table-card"><div class="table-wrap"><table class="tbl lad-table"><thead><tr><th class="num">#</th><th title="Class, with its rank inside the class">Class</th><th>Main skill</th><th class="num">Level</th><th class="num" title="Best Rupture Level">Rupture</th><th class="num" title="The game\'s own median Guardian DPS over its real fights (heroes with a build file)">Boss DPS</th><th class="num" title="Our damage sim on the published build: the main skill against a Guardian at the hero\'s Rupture Level. An estimate">Sim DPS <small class="meta">est.</small></th>' + (extra ? '<th class="num">' + extra + '</th>' : '') + '<th aria-label="Build"></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
-        '<p class="hint">' + rows.length + ' heroes shown. Click a hero to see their build (published for the top 50 of each class). Ladder rank: best Rupture Level, then level, experience, fastest clear and who got there first. Boss DPS is the game\'s own median over its Guardian fights. Sim DPS is our damage sim run on the published build (main skill against a Guardian at that Rupture Level, curses on the hotbar counted): an estimate, which can be off for skills the sim has not been checked on.' + note + '</p></div>';
+      return '<div class="card lad-table-card"><div class="table-wrap"><table class="tbl lad-table"><thead><tr><th class="num">#</th><th title="Class, with its rank inside the class">Class</th><th>Main skill</th><th class="num">Level</th><th class="num" title="Best Rupture Level">Rupture</th><th class="num" title="The game\'s own median Guardian DPS over its real fights (heroes with a build file)">Boss DPS</th><th class="num" title="Our damage sim on the published build: the skill the hero has dealt the most damage with, against a Guardian at the hero\'s Rupture Level. An estimate">Sim DPS <small class="meta">est.</small></th>' + (extra ? '<th class="num">' + extra + '</th>' : '') + '<th aria-label="Build"></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
+        '<p class="hint">' + rows.length + ' heroes shown. Click a hero to see their build (published for the top 50 of each class). Ladder rank: best Rupture Level, then level, experience, fastest clear and who got there first. Boss DPS is the game\'s own median over its Guardian fights. Sim DPS is our damage sim run on the published build (the skill the hero has dealt the most damage with, named under the number when it is not the listed main skill, against a Guardian at that Rupture Level, curses on the hotbar counted): an estimate, which can be off for skills the sim has not been checked on.' + note + '</p></div>';
     }
     function itemCard(it, classId) {
       const unique = it.unique && it.unique !== 'None';
@@ -6407,6 +6428,17 @@ window.BOCharacter = function (ctx) {
     return (it.name || (u && u.Name) || (base && base.Name) || it.base) + ' (' + it.slot + ')';
   }
 
+  // The sworn Oaths that count: the mastery exists, offers that Oath, and one of its notables is taken (see collectMods).
+  function swornOaths(GD, ch) {
+    const out = [], M = GD.masteries || {}, O = GD.oaths || {};
+    const have = new Set((ch.passives || []).map(id => GD.nodes[id] ? id : (GD.moved || {})[id] || id));
+    for (const [mid, oid] of Object.entries(ch.oaths || {})) {
+      const mastery = M[mid], oath = O[oid];
+      if (mastery && oath && mastery.Oaths.includes(oid) && mastery.Notables.some(n => have.has(n))) out.push({ mastery, oath });
+    }
+    return out;
+  }
+
   // Every modifier the character has, before choosing a skill. Returns {mods, notes, sources}.
   function collectMods(GD, ch, o) {
     const off = o.off || new Set();
@@ -6483,6 +6515,20 @@ window.BOCharacter = function (ctx) {
         if (!n) { notes.push('Passive node not in current tree: ' + id); continue; }
         for (const m of n.Mods || []) add(m, m.Value, m.Value2, 'Passive · ' + n.Name + (n.Kind === 'Keystone' || n.Kind === 'Notable' ? ' (' + n.Kind + ')' : ''), 'passives');
       }
+    }
+
+    // Oath Masteries (patch 0.56.8): ch.oaths = { mastery id: sworn Oath id }. An Oath's lines are plain mods in the same
+    // Stat / Mode / Tags form as tree nodes, so they go through the same math; nothing new is modelled here.
+    // What proves it: game log 11 Nov 2026 "OathMasteries95: 84 masteries, 84 Oaths, 103 mods read (...oath_masteries.json)"
+    // (the game reads these mods from that file) and "OathPicker95: card om_necromancer_legion open, 4 oaths, 4 swearable,
+    // sworn None" (one sworn Oath per mastery). A mastery counts only while one of its notables is taken: same log, a
+    // level 6 Necromancer whose save holds 1 of the Legion mastery's 16 notables (grave_n0) had "4 swearable" there, and
+    // "0 swearable" on om_mage_wind and om_necromancer_blight_3, where the save holds none.
+    // NOT CHECKED: an Oath's damage in a fight (no save has a sworn Oath yet, 11 Nov 2026).
+    const sworn = swornOaths(GD, ch);
+    if (sworn.length) {
+      sources.push({ key: 'oaths', label: 'Oath Masteries (' + sworn.length + ' sworn)', group: 'Character' });
+      if (!off.has('oaths')) for (const { mastery, oath } of sworn) for (const m of oath.Mods || []) add(m, m.Value, m.Value2, 'Oath · ' + oath.Name + ' (' + mastery.Name + ')', 'oaths');
     }
 
     const dcls = GD.dragon.classes[lc(ch.classId)] || {};

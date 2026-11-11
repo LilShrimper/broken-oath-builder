@@ -8910,7 +8910,46 @@ window.BOCharacter = function (ctx) {
     res.speed = { inc: spInc, more: spMore, animRate: 1, rateMult: (1 + spInc / 100) * spMore, usesPerSec: hitsPerSec, useTime: pace, cooldown: sk.Cooldown || 0, stat: 'MinionSpeed', hitFactor: 1 };
     res.hits = { repeats: 0, projectiles: 0, projOnTarget: 1, projWeight: 1, perHitFactor: 1, strikes, hitsPerUse: 1, hitsPerSec, fullHitsPerSec: hitsPerSec };
     res.ailments = {}; res.notModelled = []; res.poisonDps = 0; res.igniteDps = 0; res.bleedDps = 0;
-    res.sheetHitDps = res.panelDps = res.hitDps = res.totalDps = dps;
+    // Curses on minion blows (owner request 11 Nov 2026). Evidence is DIRECTIONAL only, not a fit: same Guardian (ashen_wyrm, Empowered),
+    // Woe of Sundering on at Rupture 46 = 51.0 s (life 2,888,516) vs off at Rupture 48 = 99.4 s (life 3,702,594), blows per 10 s alike
+    // (150-211 vs 125-218), Mage sheet hit 767 vs 918; the gap is far bigger than Sundering's +20% Physical alone, so other things differ.
+    // Basis: the Woe's own text ("enemies take X% more damage"), as on your own hits. Curses only: no resistances, armour, Marks or
+    // Maim here, so the panel DPS (res.panelDps, "before the enemy's resistances and curses") is unchanged; res.hitDps / totalDps get the curses.
+    const rarity = o.enemyRarity || 'rare', isBoss = rarity === 'boss';
+    let curseInc = 0; for (const m of pickMods(mods, 'CurseEffect', 'Inc')) { curseInc += m.v; use(m, 'minion, curses'); }
+    const curseRows = [];
+    for (const [id, cfg] of Object.entries(o.curses || {})) {
+      const c = GD.curses[id]; if (!c || !cfg || !cfg.on) continue;
+      const tough = (rarity === 'rare' || isBoss) && c.Tough && c.Tough.Holds ? (c.Tough.Cap || 0) : 0;
+      const dread = Math.max(+cfg.dread || 0, tough);
+      const dreadPct = c.Dread && dread ? Math.min(dread, isBoss ? (c.Dread.BossCap || c.Dread.Cap) : c.Dread.Cap) * c.Dread.EffectPct : 0;
+      const woeSups = c.Skill && lc(c.Skill) === lc(sk.Id) && o.supportsOverride ? o.supportsOverride : ((ch.sockets || []).find(s => c.Skill && lc(s.skill) === lc(c.Skill)) || {}).supports || [];
+      let curseMore = 0;
+      for (const sid of woeSups) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'CurseMore' && m.Mode === 'Flat') curseMore += m.Value;
+      const eff = (1 + curseInc / 100) * (1 + dreadPct / 100) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
+      const row = { id, name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, more: curseMore, resDown: {} };
+      for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
+      curseRows.push(row);
+    }
+    let woeExtra = 0; for (const m of pickMods(mods, 'CurseLimit', 'Flat')) { woeExtra += m.v; use(m, 'minion, curses'); }
+    const LIMIT = { Sentence: 1, Woe: 2 + woeExtra };
+    const hitTot = avg || 1;
+    const worth = r => Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTot * (r.taken + (r.elem[d] || 0)), 0);
+    const kindOf = r => (GD.curses[r.id] || {}).Kind || '';
+    const activeCurses = [];
+    for (const kind of new Set(curseRows.map(kindOf))) {
+      const rows = curseRows.filter(r => kindOf(r) === kind).sort((a, b) => worth(b) - worth(a));
+      activeCurses.push(...(LIMIT[kind] ? rows.slice(0, LIMIT[kind]) : rows));
+    }
+    let curseK = 1;
+    if (activeCurses.length && avg > 0) {
+      curseK = Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTot * activeCurses.reduce((p, r) => p * (1 + (r.taken + (r.elem[d] || 0)) / 100), 1), 0);
+      res.notes.push('Curses on minion blows: ' + activeCurses.map(r => r.name).join(' + ') + ' make the enemy take x' + curseK.toFixed(3) + ' on these hits. Counted in the vs-enemy DPS only (not the game\'s panel number, which comes before curses, nor the enemy\'s resistances). Checked only in direction against a Guardian fight on 11 Nov 2026.');
+    }
+    res.enemy = { level: o.enemyLevel || ch.level, rarity, curses: curseRows, activeCurses: activeCurses.map(r => r.id), curseEffInc: curseInc };
+    res.minionCurseK = curseK;
+    res.sheetHitDps = res.panelDps = dps;
+    res.hitDps = res.totalDps = dps * curseK;
     res.minion = { monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.stat === 'MinionDamage' ? 1 + golem.v / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth };
     res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
     if (near > 1) res.notes.push('Counted at your side: minions deal ' + MINION_NEAR + '% more within 7 m of you (fading to none at 12 m), as the game\'s panel counts it.');

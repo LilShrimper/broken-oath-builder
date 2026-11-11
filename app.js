@@ -6268,7 +6268,10 @@ window.BOCharacter = function (ctx) {
       // A granted Skyfall is dropped when the skill already has a socketed shape (Orbit, Rain, Trap, Totem):
       // log 4-5 Nov "Grant62: death_coil Skyfall lost to a socketed transform" (Orbit socketed), and the
       // Death Coil tooltip 5 Nov lists no Skyfall; its 20% more was the gap to the game's hit.
-      if (lc(sid) === 'skyfall' && supportList.some(s => ['orbit', 'rain_support', 'trap_support', 'totem_support'].includes(lc(s)))) {
+      // A Trap keeps its granted Skyfall (11 Nov 2026 log, Arc trap on the Training Post: 5,428 "Skyfall: second fall for 50% (1 hits)"
+      // lines against 5,435 "TrapMine: strike arc" lines, one per strike; the Training Post readouts with only Trap Support (1, 3 and 7
+      // traps: 52M, 140M, 300M) were x1.5-1.7 the sim without it and x1.0-1.1 with it).
+      if (lc(sid) === 'skyfall' && supportList.some(s => ['orbit', 'rain_support', 'totem_support'].includes(lc(s)))) {
         res.notes.push('Skyfall (granted) is lost: this skill already has a socketed shape (game log "lost to a socketed transform").');
         continue;
       }
@@ -7175,7 +7178,9 @@ window.BOCharacter = function (ctx) {
     let skyRep = 0;
     // Not on Sparks: Storm Spark tooltip 4 Nov with Twice Judged (50%) = hit x crit x 6 sparks x 2 strikes a
     // second + ignite (91,918 vs the game's 91,880), no second fall; the log has no second-fall line for them.
-    if ((sk.Delivery === 'Skyfall' || shape === 'skyfall') && sk.Delivery !== 'Brand') {
+    // A Trap with the granted Skyfall also falls twice (11 Nov 2026 log: one "Skyfall: second fall for 50% (1 hits)" per trap strike, 5,428 vs 5,435).
+    const trapSky = shape === 'trap_support' && !totemAttack && (res.supports || []).some(x => x.ok && lc(x.id) === 'skyfall');
+    if ((sk.Delivery === 'Skyfall' || shape === 'skyfall' || trapSky) && sk.Delivery !== 'Brand') {
       for (const m of pickMods(mods, 'SkyfallRepeat', 'Flat')) if (applies(ctx, m)) { skyRep += m.v; use(m); }
       skyRep = Math.min(SKYFALL_REPEAT_CAP, skyRep) / 100;
       if (skyRep > 0) res.notes.push('Skyfall falls again 0.4 s later for ' + Math.round(skyRep * 100) + '% of the damage' + (skyRep >= SKYFALL_REPEAT_CAP / 100 ? ' (the game caps this at ' + SKYFALL_REPEAT_CAP + '%)' : '') + ': the target is struck a second time each cast.');
@@ -7192,7 +7197,12 @@ window.BOCharacter = function (ctx) {
       res.notes.push(sk.Name + ' cuts ' + mirage.Hops + ' times per use; the last cut deals ' + Math.round(fin * 100) + '% (' + (mirage.Hops - 1 + fin).toFixed(1) + ' full hits per use).');
     }
     if (strikes > 1 && !rainWaves && !mirage) res.notes.push(sk.Name + ' strikes ' + strikes + ' times per use; every strike is counted at the full hit (a stronger finisher is not modelled).');
-    let hitsPerUse = o.hitsPerSecOverride > 0 ? 1 : (1 + repeats) * projOnTarget * strikes * falls;
+    // Spell Echo on a Trap (11 Nov 2026): the repeat throws another trap, but the traps stand under one cap (log: "Echo: arc repeat 1"
+    // then "Totem: arc placed (n / 8)", 600 of 712 throws at 8 / 8, never past 8), so it adds no strikes. The Training Post readouts with only
+    // Trap + Chain Detonation 300-350M, + Spell Echo 330-360M (+6%); the sim had doubled the hits (+83%).
+    const echoTrap = shape === 'trap_support' && !totemAttack && repeats > 0;
+    let hitsPerUse = o.hitsPerSecOverride > 0 ? 1 : (echoTrap ? 1 : 1 + repeats) * projOnTarget * strikes * falls;
+    if (echoTrap) res.notes.push('Spell Echo on a Trap: the repeat throws another trap, but your traps stand under one cap, so it adds no strikes (Training Post, 11 Nov 2026).');
     // Spell Echo on a Spark does not repeat the cast: it adds one more body of 3 Sparks (Ember Spark tooltip 9 Nov: "Spell
     // Echo adds one more body of 3 Sparks, so you hold 9 in all", 9 Sparks = 3 bodies x 2/s = 6.0 strikes/s, 29,024 DPS).
     if (sk.Delivery === 'Brand' && res.brand && res.brand.rate && repeats > 0 && !(o.hitsPerSecOverride > 0)) {

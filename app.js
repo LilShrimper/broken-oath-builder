@@ -2256,7 +2256,9 @@ window.BOPlanner = function (ctx) {
     else if (sk.SpellMin > 0 && Hr.IntSpellDamagePer10) sc.push('Every 10 Intelligence: +' + Hr.IntSpellDamagePer10 + '% spell damage');
     if (tg.includes('Melee') && Hr.StrMeleePhysPer10) sc.push('Every 10 Strength: +' + Hr.StrMeleePhysPer10 + '% melee physical damage');
     if (tg.includes('Attack') && Hr.DexAttackSpeedPer10) sc.push('Every 10 Dexterity: +' + Hr.DexAttackSpeedPer10 + '% attack speed');
+    const exLines = ctx.extras ? ctx.extras(id) : [];
     if (sc.length) sc.push(sk.SpellMin > 0 || sk.Minion ? 'Levels from gear and the tree: the first 5 count like gem levels, each one after that is worth less than the last' : 'Levels from gear and the tree: the first 5 count like gem levels, after that each adds only about 1%');
+    sc.push(...exLines);
     if (sc.length) h += '<span class="pl-tip-head">Scaling</span><ul class="pl-tip-base">' + sc.map(li).join('') + '</ul>';
     const fit = ch && S.supportChoices ? S.supportChoices(GD, ch, id, {}).length : 0;
     if (fit) h += '<span class="pl-tip-sub pl-tip-fit">' + fit + ' support gems fit this skill</span>';
@@ -4831,6 +4833,17 @@ window.BOScaling = function (ctx) {
   const mana = (sk, G, L) => sk.ManaCost ? num(sk.ManaCost * ((G.ManaCostAtGemLevel || [])[L - 1] || 1)) : '';
   const unitOf = k => k === 'attack' ? '% of weapon damage' : k === 'spell' ? 'damage per hit' : '';
 
+  // Extra scaling: things a skill's damage also grows with, besides gem level. Today that is LifeAsBase (a share of
+  // maximum life joins the base damage: Pyre of Faith 0.75%, Rending Slam 4%; sim.js, owner's tooltip 10 Nov 2026 and
+  // game log 6 Nov). Pyre of Faith hits every Ground.Tick seconds, so its per-second share is shown too.
+  function extras(sk) {
+    const out = [];
+    if (sk.LifeAsBase) {
+      const per = sk.Ground && sk.Ground.Tick ? sk.LifeAsBase / sk.Ground.Tick : 0;
+      out.push(sk.LifeAsBase + '% of your maximum life is added to the ' + (kindOf(sk) === 'attack' ? 'weapon\'s base damage' : 'skill\'s base damage') + ' each hit' + (per ? ' (' + +per.toFixed(2) + '% per second at one hit every ' + sk.Ground.Tick + ' s)' : ''));
+    }
+    return out;
+  }
   function card(sk, G, max) {
     const k = kindOf(sk), col = COLOR[sk.Attribute];
     const tags = [ATTR[sk.Attribute] ? sk.Attribute : '', sk.Kind === 'Basic' ? 'Basic' : sk.Kind === 'Weapon' ? 'Weapon' : '', ...(sk.Tags || []), sk.DamageType && sk.DamageType !== 'Physical' ? sk.DamageType : ''].filter(Boolean);
@@ -4846,6 +4859,8 @@ window.BOScaling = function (ctx) {
     if (sk.Cooldown) meta.push('Cooldown ' + sk.Cooldown + 's');
     if (sk.ManaCost) meta.push('Mana ' + mana(sk, G, 1) + ' → ' + mana(sk, G, max));
     if (meta.length) h += '<p class="sc-meta">' + esc(meta.join(' · ')) + '</p>';
+    const ex = extras(sk);
+    if (ex.length) h += '<p class="sc-meta sc-extra">' + ex.map(t => '<b>Also scales:</b> ' + esc(t)).join('<br>') + '</p>';
     if (k === 'attack' || k === 'spell') {
       let rows = '';
       for (let L = 1; L <= max; L++) rows += '<tr><td>' + L + '</td><td>' + at(sk, G, L) + '</td><td>' + (mana(sk, G, L) || '–') + '</td></tr>';
@@ -4904,7 +4919,7 @@ window.BOScaling = function (ctx) {
     const rows = [1, 10, 20].map(L => [L, at(sk, G, L)]).concat([10, 20].map(b => [max + b, atBonus(sk, G, b)]));
     return { unit: unitOf(k), rows };
   }
-  return { render, levels };
+  return { render, levels, extras: id => { const sk = (ctx.gd() || { skills: {} }).skills[String(id).toLowerCase()]; return sk ? extras(sk) : []; } };
 };
 
 ;
@@ -11350,6 +11365,7 @@ window.BOStartApp = function () {
       return Object.assign({}, ch, { trees: { active: t.active, sets: t.sets.map(s => ({ name: s.name, passives: s.passives.slice() })) } });
     },
     current: () => st.ch, workingCopy: () => st.ch,
+    extras: id => scaling ? scaling.extras(id) : [], // extra scaling lines (life share), for the hover tooltips
     levels: id => scaling ? scaling.levels(id) : { unit: '', rows: [] }, // skill hit by gem level, for the hover tooltips
     sheet: id => { try { return st.ch ? S.calcSkill(GD, st.ch, id, opts()) : null; } catch (e) { return null; } }, // the Skills view's gem tooltips
 

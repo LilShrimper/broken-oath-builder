@@ -105,6 +105,19 @@ body:not(.dashboard-view) .fight-check-banner { display: none; }
 .card { background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 100%, transparent), color-mix(in srgb, var(--panel) 92%, var(--bg))); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); min-width: 0; }
 .confirm-dialog { width: min(440px, calc(100% - 32px)); padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(180deg, var(--panel), color-mix(in srgb, var(--panel) 90%, var(--bg))); color: var(--text); box-shadow: var(--shadow), 0 24px 80px rgba(0, 0, 0, .45); }
 .confirm-dialog::backdrop { background: rgba(5, 8, 20, .68); backdrop-filter: blur(3px); }
+.save-tutorial { --accent: var(--dashboard-gold); --accent-strong: #d7b66d; --accent-2: #edcf91; --accent-ink: #172032; width: min(800px, calc(100% - 24px)); max-height: calc(100dvh - 24px); overflow: auto; }
+:root[data-theme="light"] .save-tutorial { --accent: #795714; }
+.save-tutorial-content { padding: 20px; }
+.save-tutorial-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.save-tutorial-heading h2 { margin: 0; }
+.save-tutorial video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #101827; border: 1px solid var(--line); border-radius: var(--radius-sm); margin-top: 14px; }
+.save-tutorial ol { padding-left: 22px; color: var(--muted); }
+.save-tutorial li + li { margin-top: 6px; }
+.save-tutorial-path { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.save-tutorial-path code { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; color: var(--text); }
+.save-tutorial .check { margin-top: 14px; }
+.save-tutorial #saveTutorialStatus { margin-top: 8px; }
+@media (max-width: 540px) { .save-tutorial-content { padding: 14px; } .save-tutorial .confirm-actions .btn { width: 100%; } }
 .confirm-dialog form { padding: 20px; }
 .confirm-dialog h2 { margin: 0 0 8px; font-size: 16px; }
 .confirm-dialog p { margin: 0; color: var(--muted); }

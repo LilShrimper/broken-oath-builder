@@ -9559,6 +9559,39 @@ window.BOStartApp = function () {
   // open a folder by itself, and Chrome/Edge will not let it remember one inside AppData, so "Reload
   // saves" opens the picker again (Windows starts it in the last folder used).
   const SAVE_PATH = '%LOCALAPPDATA%\\BrokenOath\\Saved\\SaveGames';
+  const saveTutorial = $('#saveTutorial'), saveTutorialVideo = $('#saveTutorialVideo');
+  function showSaveTutorial() {
+    $('#saveTutorialSkip').checked = store.get('skipSaveTutorial', false) === true;
+    $('#saveTutorialStatus').textContent = '';
+    if (!saveTutorialVideo.src) saveTutorialVideo.src = window.SITE_BASE ? window.SITE_BASE + 'assets/save-import.webm' : saveTutorialVideo.dataset.src;
+    saveTutorial.showModal();
+    saveTutorialVideo.currentTime = 0;
+    // Muted playback is allowed by most browsers; native controls remain available if it is blocked.
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) saveTutorialVideo.play().catch(() => {});
+  }
+  function openSavePicker() {
+    if (store.get('skipSaveTutorial', false) === true) $('#saveDirInput').click();
+    else showSaveTutorial();
+  }
+  $('#saveDirBtn').addEventListener('click', openSavePicker);
+  $('#saveTutorialHelp').addEventListener('click', showSaveTutorial);
+  $('#saveTutorialClose').addEventListener('click', () => saveTutorial.close());
+  saveTutorial.addEventListener('close', () => saveTutorialVideo.pause());
+  $('#saveTutorialSkip').addEventListener('change', e => {
+    try {
+      localStorage.setItem('bods:skipSaveTutorial', JSON.stringify(e.target.checked));
+      $('#saveTutorialStatus').textContent = e.target.checked ? 'Saved for this browser. Save import help can replay the video.' : 'The tutorial will appear when you load saves.';
+    } catch (err) { $('#saveTutorialStatus').textContent = 'This browser could not remember the preference. The tutorial may appear again.'; }
+  });
+  $('#saveTutorialCopy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(SAVE_PATH); $('#saveTutorialStatus').textContent = 'Path copied. Open the folder picker and paste it into the address bar.'; }
+    catch (err) { window.prompt('Copy this path:', SAVE_PATH); }
+  });
+  $('#saveTutorialPick').addEventListener('click', () => {
+    saveTutorial.close();
+    $('#saveDirInput').click(); // keep the native picker in the user's click gesture
+  });
+  saveTutorialVideo.addEventListener('error', () => { $('#saveTutorialStatus').textContent = 'The video could not play. Follow the steps below to load your saves.'; });
   // The folder, not the file: a file path in the picker's address bar opens the file in Notepad.
   const LOG_PATH = '%LOCALAPPDATA%\\BrokenOath\\Saved\\Logs';
   const isCharSave = name => /^BO_Char_.*\.sav$/i.test(name) && !/_bak\.sav$/i.test(name);
@@ -11174,7 +11207,7 @@ window.BOStartApp = function () {
   // Welcome banner buttons: the same actions as the toolbar's.
   document.querySelectorAll('[data-hero]').forEach(b => b.addEventListener('click', async () => {
     const act = b.dataset.hero;
-    if (act === 'saves') { document.body.classList.remove('landing-view'); $('#saveDirInput').click(); }
+    if (act === 'saves') { document.body.classList.remove('landing-view'); openSavePicker(); }
     else if (act === 'plan') { if (await planner.startNewPlan()) showTab('plan'); }
     else if (act === 'code') showTab('code');
     else if (act === 'savepath') $('#copySavePath').click();

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · Broken Oath Builder</title>
+<meta name="description" content="How Broken Oath Builder handles your files, shared builds and reports.">
+<script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}</script>
+<style>:root { color-scheme: dark; --bg: #0b0f1e; --panel: #131a2e; --text: #e7e9f4; --muted: #a0a8c4; --line: #273152; --gold: #d7b66d; }
+:root[data-theme="light"] { color-scheme: light; --bg: #f7f5ef; --panel: #fff; --text: #24283a; --muted: #555e73; --line: #ded9cb; --gold: #795714; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.7 "Segoe UI", system-ui, sans-serif; }
+a { color: var(--gold); text-underline-offset: 4px; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 5px; }
+header, nav, main, footer { width: min(840px, calc(100% - 40px)); margin-inline: auto; }
+header { padding: 28px 0 24px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.brand { color: var(--text); font-size: 19px; font-weight: 700; text-decoration: none; }
+.brand span { color: var(--gold); }
+button { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); padding: 9px 12px; cursor: pointer; font: inherit; font-size: 13px; }
+nav { display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+nav a { border: 1px solid var(--line); padding: 6px 14px; border-radius: 8px; text-decoration: none; font-size: 14px; }
+nav a[aria-current] { border-color: var(--gold); background: var(--panel); }
+main { padding: 36px 0 32px; overflow-wrap: anywhere; }
+.eyebrow { color: var(--gold); text-transform: uppercase; letter-spacing: .12em; font-size: 12px; font-weight: 700; margin: 0 0 8px; }
+h1 { font: 700 clamp(27px, 5vw, 38px)/1.2 Georgia, serif; margin: 0 0 16px; }
+.intro { font-size: 18px; color: var(--muted); margin: 0 0 8px; }
+.updated { color: var(--muted); font-size: 13px; margin-bottom: 36px; }
+h2 { font-size: 20px; line-height: 1.35; margin: 32px 0 10px; }
+p { margin: 0 0 16px; }
+ul { padding-left: 24px; }
+li { margin-bottom: 14px; }
+footer { padding: 24px 0 36px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.skip { position: absolute; top: -100px; left: 20px; padding: 10px; background: var(--panel); }
+.skip:focus { top: 8px; }
+@media (max-width: 480px) { header, nav, main, footer { width: calc(100% - 32px); } header { align-items: flex-start; } .brand { max-width: 155px; line-height: 1.3; } main { padding-top: 28px; } nav a { padding: 6px 11px; } }
+</style></head><body>
+<a class="skip" href="#content">Skip to content</a>
+<header><a class="brand" href="../../">Broken Oath <span>Builder</span></a><button id="theme" type="button">Switch to light mode</button></header>
+<nav aria-label="Legal pages"><a href="../privacy/index.html" aria-current="page">Privacy Policy</a><a href="../terms/index.html">Terms of Use</a><a href="../disclaimer/index.html">Disclaimer</a><a href="../contact/index.html">Contact</a></nav>
+<main id="content"><p class="eyebrow">Site information</p><h1>Privacy Policy</h1><p class="intro">How Broken Oath Builder handles your files, shared builds and reports.</p><p class="updated">Last updated <time datetime="2026-11-11">11 November 2026</time></p>
+
+<h2>Your files stay on your device</h2>
+<p>Save files, game data, screenshots and the game log you open are processed in your browser. The site does not upload those files. The Save Creator edits eligible offline saves in your browser and gives you a download; you decide whether to copy it into the game folder.</p>
+<h2>Browser storage</h2>
+<p>The builder uses local storage and browser storage for loaded character summaries, plans, settings and remembered folder access where supported. This lets you return to your work on the same device. Use the builder's Reset control to remove loaded characters and plans, or clear this site's browser data to remove its saved settings and permissions too. Export anything you want to keep first.</p>
+<h2>Shared builds</h2>
+<p>Choosing Copy share link sends an encoded build to our Cloudflare share service so it can create a short link. The build can include the character name, class, level, equipment, skills and passive tree. Anyone with the link can open it; treat it as public. It does not include your original save file or Steam ID. Stored short links have no automatic expiry. A long build code or link can also contain the build itself, so anyone you give that code or link to can read it.</p>
+<h2>Problem reports and fight checks</h2>
+<p>Sending a report submits the text you write, the current tab and game-data version, and any fight-check summary shown in the form. A build is attached only if you tick that option; attaching it creates a share link with the access described above. Fight log excerpts are optional too: the form previews the selected combat lines with identifying details removed. The full game log is never uploaded. Review your text and attachments before sending and leave out personal information.</p>
+<p>Reports are stored in Cloudflare KV for up to 180 days, unless removed earlier, and are accessible to the site owner through an authenticated tool. Attached build links are stored separately and do not expire with the report. To limit spam, the service derives a daily hash from your IP address and keeps a report counter under that hash for one hour. It does not store your raw IP address with your report.</p>
+<h2>Hosting, analytics and other services</h2>
+<ul>
+<li>GitHub Pages hosts the public site. GitHub and Cloudflare process network request information, including IP addresses, to deliver and protect their services. See <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a> and <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare's privacy policy</a>.</li>
+<li>The builder's public pages use GoatCounter for visitor statistics, including page views, referrers and browser or device information. GoatCounter does not use tracking cookies. See <a href="https://www.goatcounter.com/help/privacy">GoatCounter's privacy information</a>. These legal pages do not load the counter.</li>
+<li>The support button loads a Buy Me a Coffee script. Using the donation service is optional and subject to <a href="https://www.buymeacoffee.com/privacy-policy">its privacy policy</a>. The builder does not receive payment-card details.</li>
+<li>Reading text from a screenshot downloads Tesseract software and language data from external delivery services such as jsDelivr. Image processing stays in your browser.</li>
+<li>The Ladder displays the game's public API data through our Cloudflare cache. The builder does not upload your local saves to the ladder. Importing a Broked DB short link asks our service to retrieve that shared build from Broked DB.</li>
+</ul>
+<p>The builder does not require an account, sell your data or set advertising cookies. External services have their own data-handling practices.</p>
+<h2>Your choices and requests</h2>
+<p>You can use the tools without sharing a build or sending a report. To ask about access, correction or removal of a stored report or short link, use the <a href="../contact/index.html">contact page</a>. Include the report reference or share link so the owner can find it. Clearing browser data does not delete information already sent to the share or report service. Copies other people have made cannot be recalled.</p>
+<p>If this policy changes, the update date on this page will change.</p></main>
+<footer><p>Unofficial fan tool. Game content belongs to its respective owners. Calculated results are estimates.</p><a href="../../">Back to the builder</a></footer>
+<script>(function () { const b = document.getElementById('theme'), r = document.documentElement; function label() { b.textContent = r.dataset.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'; } label(); b.addEventListener('click', function () { const t = r.dataset.theme === 'light' ? 'dark' : 'light'; r.dataset.theme = t; try { localStorage.setItem('bods:theme', t); } catch (e) {} label(); }); })();</script>
+</body></html>

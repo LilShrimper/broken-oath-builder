@@ -354,6 +354,8 @@ summary .count { color: var(--faint); font-weight: 400; }
 .notes li { margin: 3px 0; }
 .warn { border-left: 3px solid var(--accent); padding: 10px 12px; background: var(--panel-2); border-radius: 6px; color: var(--muted); font-size: 13px; }
 .foot { color: var(--faint); font-size: 12px; text-align: center; padding: 10px 20px 30px; }
+.foot-legal { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; margin-bottom: 12px; font-size: 13px; }
+.foot-legal a { padding: 5px 0; text-underline-offset: 3px; }
 .nav-support { align-self: stretch; display: flex; justify-content: center; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 /* Shrink the Buy Me a Coffee button (its own CSS makes it 60px tall, 270px wide) to fit the rail */
 .nav-support .bmc-btn { min-width: 0; width: 100%; height: 40px; padding: 0 12px; justify-content: center; border-radius: 9px; font-size: 16px; }

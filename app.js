@@ -10703,14 +10703,15 @@ window.BOStartApp = function () {
     if (have.has(id)) { const r = new Set(refundList(have, id)); setPassives([...have].filter(x => !r.has(x))); }
     else {
       const pl = planTake(have, id); if (!pl) return;
-      // Cap: one point per level up to max level 99 (not the character's own level, so you can plan ahead) plus the 13 Inscribed Quartz.
+      // Cap: one point per level up to max level 100 (not the character's own level, so you can plan ahead) plus the 13 Inscribed Quartz.
+      // Proof (owner's screenshot, 11 Nov 2026): a level 100 character shows 111 allocated and "1 point left" = 112 points.
       const per = (GD.scaling.Hero || {}).PassivePointsPerLevel || 1;
       {
         // Quartz quests: 7 Gates + 6 Guardian milestones = 13 bonus points (log and saves, 6 Nov 2026; see creator.js).
-        const QUARTZ = 13, cap = Math.round((99 - 1) * per + QUARTZ);
+        const QUARTZ = 13, cap = Math.round((100 - 1) * per + QUARTZ);
         const used = pl.list.filter(x => GD.nodes[x] && GD.nodes[x].Kind !== 'Start').length;
         if (used > cap && pl.list.length > have.size) {
-          $('#treeStatus').textContent = 'No points left: level 99 plus ' + QUARTZ + ' quartz points is ' + cap + ' passive points' + (pl.cost > 1 ? ' and this path needs ' + pl.cost : '') + '. Take a point back first.';
+          $('#treeStatus').textContent = 'No points left: level 100 plus ' + QUARTZ + ' quartz points is ' + cap + ' passive points' + (pl.cost > 1 ? ' and this path needs ' + pl.cost : '') + '. Take a point back first.';
           return;
         }
       }

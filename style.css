@@ -1676,3 +1676,67 @@ body.support-page #configEnemy .hint { margin: 2px 0 6px; }
 .faq-minion-grid .faq-tbl tbody th { width: 34%; }
 .faq-minion-grid details summary { font-size: 12px; cursor: pointer; margin-top: 8px; }
 .faq-minion-grid .faq-list { margin: 4px 0 0; padding-left: 16px; font-size: 12px; }
+
+/* ---------- Ladder tab (ladder.js): public ladders and top builds, Broken Oath public API ---------- */
+.ladder-pane .lad-controls { display: flex; flex-wrap: wrap; gap: 12px; margin: 14px 0 10px; }
+.ladder-pane .lad-controls .field { display: flex; flex-direction: column; gap: 4px; min-width: 220px; flex: 0 1 340px; }
+.ladder-pane .lad-controls .field span { color: var(--muted); font-size: 11.5px; }
+.ladder-pane .lad-controls select { width: 100%; }
+.lad-classes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.lad-class { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.lad-class small { color: var(--faint); font-weight: 400; margin-left: 3px; }
+.lad-class:hover { color: var(--text); }
+.lad-class.on { color: var(--dashboard-gold); border-color: color-mix(in srgb, var(--dashboard-gold) 55%, var(--line)); background: color-mix(in srgb, var(--dashboard-gold) 10%, var(--panel)); }
+.lad-class:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.lad-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+@media (max-width: 1100px) { .lad-grid { grid-template-columns: minmax(0, 1fr); } }
+.lad-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.lad-table th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.lad-table td { padding: 6px 8px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); vertical-align: top; }
+.lad-table th, .lad-table td { text-align: left; }
+.lad-table td.num, .lad-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.lad-table td.go { width: 1%; text-align: right; color: var(--faint); font-size: 16px; line-height: 1; }
+.lad-table tr.on td.go, .lad-table tr[data-build]:hover td.go { color: var(--dashboard-gold); }
+.lad-table td.num { white-space: nowrap; }
+.lad-table tr[data-build] { cursor: pointer; }
+.lad-table tr[data-build]:hover td { background: var(--panel-2); }
+.lad-table tr[data-build]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lad-table tr.on td { background: color-mix(in srgb, var(--dashboard-gold) 10%, var(--panel)); }
+.lad-table tr.dead td { opacity: .7; }
+.lad-dead { color: var(--bad); font-size: 11px; font-weight: 600; }
+.lad-hero { position: sticky; top: 12px; }
+@media (max-width: 1100px) { .lad-hero { position: static; } }
+.lad-hero-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.lad-hero .eyebrow { color: var(--dashboard-gold); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.lad-hero h3.lad-hero-title { margin: 3px 0 2px; color: var(--text); font-size: 15px; text-transform: none; letter-spacing: 0; }
+.lad-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.lad-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 4px; }
+.lad-stats div { padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); }
+.lad-stats span { display: block; color: var(--muted); font-size: 11px; }
+.lad-stats b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.lad-skills { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.lad-skills li { padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 12.5px; }
+.lad-skills li.main { border-color: color-mix(in srgb, var(--dashboard-gold) 55%, var(--line)); }
+.lad-tag { color: var(--dashboard-gold); font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.lad-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.lad-item { padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); font-size: 12px; min-width: 0; }
+.lad-item-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.lad-item-head b { overflow-wrap: anywhere; }
+.lad-slot { color: var(--faint); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; flex-basis: 100%; }
+.lad-item.r-unique b { color: var(--dashboard-gold); }
+.lad-item.r-rare b { color: #e8d36a; }
+.lad-item.r-magic b { color: #7fa8ff; }
+:root[data-theme="light"] .lad-item.r-rare b { color: #8a6d00; }
+:root[data-theme="light"] .lad-item.r-unique b, :root[data-theme="light"] .lad-tag, :root[data-theme="light"] .lad-hero .eyebrow, :root[data-theme="light"] .lad-class.on { color: #7a5200; }
+:root[data-theme="light"] .lad-item.r-magic b { color: #2a5bd0; }
+.lad-item ul { margin: 6px 0 0; padding-left: 16px; }
+.lad-item li { margin: 1px 0; overflow-wrap: anywhere; }
+.lad-facts { font-size: 11px; margin-top: 2px; }
+.lad-credit { margin-top: 12px; }
+@media (max-width: 520px) {
+  .ladder-pane .lad-controls .field { min-width: 0; flex: 1 1 100%; }
+  .lad-stats { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .lad-table { font-size: 12px; }
+  .lad-table th, .lad-table td { padding: 5px 5px; }
+  .lad-table th:nth-child(2), .lad-table td:nth-child(2) { display: none; } /* Class #: the class filter shows it */
+}

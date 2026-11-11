@@ -4781,6 +4781,259 @@ window.BOItemSearch = function (ctx) {
 })(typeof window !== 'undefined' ? window : globalThis);
 
 ;
+// Ladder tab: the public leagues' ladders and the top heroes' builds, from the Broken Oath public API
+// (https://api.playbrokenoath.com/v1/, "Data: Broken Oath public API").
+//
+// The API's rules (CLAUDE.md, read 11 Nov 2026):
+//   - The page never fetches the API itself: every file comes through the share worker's /api/ route, which keeps one
+//     copy per refresh time (ladder 15 min, builds hourly) and serves all readers from it.
+//   - Heroes are opaque ids only (no names), and nothing here tries to tie one to a person.
+//   - "hidden" ids (undiscovered uniques, runewords, nodes, supports, runes_hidden) stay "Undiscovered"; they are never
+//     looked up in our game data.
+//   - Tell users that numbers, skills and the meta change with every patch.
+//   - The API is alpha: check schema, show generated_at, ignore unknown fields.
+// Not used: build.skill_damage as DPS (it is total damage dealt per skill; only its share picks the main skill).
+//
+// app.js calls BOLadder(ctx) with { $, esc, gd, num, api, itemLines(item, classId), openBuild(ch) } and gets back
+// { render, charFromApi, openFromHash }.
+(function (root) {
+  'use strict';
+  const CLASSES = ['Warrior', 'Mage', 'Necromancer', 'Paladin', 'Ranger', 'Samurai'];
+  const SLOT_ORDER = ['MainHand', 'OffHand', 'Helm', 'Chest', 'Body', 'Gloves', 'Boots', 'Belt', 'Amulet', 'Ring1', 'Ring2'];
+  const SLOT_NAME = { MainHand: 'Weapon', OffHand: 'Off hand', Helm: 'Helmet', Chest: 'Body', Body: 'Body', Ring1: 'Ring', Ring2: 'Ring' };
+  const HIDDEN = 'hidden';
+  const isHidden = id => String(id || '').toLowerCase() === HIDDEN;
+
+  // An API hero build as the page's character (same shape as characterFromBroked in app.js). Hidden ids are left out.
+  function charFromApi(h) {
+    const b = h.build || {}, l = h.level || 1;
+    const items = (b.items || []).map(it => ({
+      slot: it.slot, base: it.base, rarity: it.rarity || 'Normal', unique: it.unique && !isHidden(it.unique) ? it.unique : 'None', name: '',
+      level: it.item_level || l, quality: it.quality || 0, forged: it.forged || 0,
+      affixes: (it.affixes || []).filter(a => !isHidden(a.id)).map(a => ({ id: a.id, tier: a.tier || 0, v: +a.value || 0, v2: +a.value2 || 0, crafted: !!a.crafted })),
+      runes: it.runes_hidden ? [] : (it.runes || []).filter(r => r && !isHidden(r)),
+    }));
+    const gemLevels = {}; for (const [k, v] of Object.entries(b.gem_levels || {})) if (!isHidden(k)) gemLevels[k] = v;
+    const hotbar = (b.hotbar || []).filter(x => x && !isHidden(x));
+    const sockets = (b.skills || []).filter(s => s.skill && !isHidden(s.skill))
+      .map(s => ({ skill: s.skill, supports: (s.supports || []).filter(x => x && !isHidden(x)), conduit: s.conduit_link && !isHidden(s.conduit_link) ? s.conduit_link : '' }));
+    const gems = [...new Set([...Object.keys(gemLevels), ...hotbar, ...sockets.map(s => s.skill)])];
+    const asc = b.ascendancy || {};
+    return {
+      id: 'api:' + h.hero, name: h.class + ' #' + (h.class_rank || '?') + ' (ladder ' + String(h.hero).slice(0, 6) + ')', classId: h.class, level: l,
+      league: h.league || '', lastZone: '', items, passives: (b.passive_nodes || []).filter(id => id && !isHidden(id) && !/^start_/.test(id)),
+      bonusPoints: b.bonus_passive_points || 0, gems, gemLevels, sockets, hotbar, weaponId: '',
+      dragonNodes: (asc.nodes || []).filter(x => x && !isHidden(x)), dragonAspect: asc.aspect && asc.aspect !== 'None' ? asc.aspect : '',
+      mainSkill: mainSkillOf(h), supportGems: [], fromCode: true, fromLadder: true,
+      codeWarnings: ['From the ' + (h.league || '') + ' ladder (Data: Broken Oath public API). Undiscovered items, nodes and supports are left out.'],
+      savedAt: h.updated_at || new Date().toISOString(),
+    };
+  }
+  // The hero's main skill: the build's pick, else the skill with the most damage dealt.
+  function mainSkillOf(h) {
+    const b = h.build || {}, sd = b.skill_damage || {};
+    if (b.main_skill && !isHidden(b.main_skill)) return b.main_skill;
+    return Object.keys(sd).filter(k => !isHidden(k)).sort((x, y) => sd[y] - sd[x])[0] || '';
+  }
+
+  root.BOLadder = function (ctx) {
+    const { $, esc } = ctx, GD = () => ctx.gd() || {};
+    const S = { leagues: null, league: null, cls: 'All', skill: '', ladder: null, hero: null, heroData: null, err: '', loading: false };
+    const mem = new Map(); // path -> { at, data } (this page only; the worker does the real caching)
+    async function get(path) {
+      const m = mem.get(path);
+      if (m && Date.now() - m.at < 5 * 60000) return m.data;
+      const r = await fetch(ctx.api + path);
+      if (r.status === 404) { mem.set(path, { at: Date.now(), data: null }); return null; }
+      if (!r.ok) throw new Error((await r.text().catch(() => '')) || 'The ladder service answered ' + r.status + '.');
+      const data = await r.json();
+      if (data && data.schema != null && data.schema !== 1) console.warn('Ladder: API schema ' + data.schema + ' (written for 1).');
+      mem.set(path, { at: Date.now(), data });
+      return data;
+    }
+    const name = (kind, id) => {
+      if (!id) return '';
+      if (isHidden(id)) return 'Undiscovered';
+      const t = (GD()[kind] || {})[id] || (GD()[kind] || {})[String(id).toLowerCase()];
+      return t && t.Name ? t.Name : String(id).replace(/_/g, ' ');
+    };
+    const skillName = id => name('skills', id), supportName = id => name('supports', id);
+    const ago = iso => {
+      const t = Date.parse(iso || ''); if (!t) return '';
+      const m = Math.round((Date.now() - t) / 60000);
+      return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 48 * 60 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago';
+    };
+    const fmt = x => x == null || !isFinite(x) ? '–' : Math.round(x).toLocaleString('en-US');
+    const secs = s => s == null ? '–' : s < 60 ? Math.round(s) + ' s' : Math.floor(s / 60) + ' m ' + String(Math.round(s % 60)).padStart(2, '0') + ' s';
+
+    // ---------- data ----------
+    async function loadLeagues() {
+      const L = await get('leagues.json');
+      const now = Date.now();
+      const list = ((L && L.leagues) || []).map(l => Object.assign({}, l, { running: Date.parse(l.starts_at) <= now && (!l.ends_at || Date.parse(l.ends_at) > now), upcoming: Date.parse(l.starts_at) > now }));
+      // Running first (trade before SSF, softcore before hardcore), then ended, upcoming last.
+      const rank = l => (l.running ? 0 : l.upcoming ? 2 : 1) * 10 + (l.hardcore ? 2 : 0) + (l.trade ? 0 : 1);
+      list.sort((a, b) => rank(a) - rank(b) || Date.parse(b.starts_at) - Date.parse(a.starts_at));
+      S.leagues = list;
+      if (!S.league || !list.some(l => l.id === S.league)) S.league = (list.find(l => l.running) || list[0] || {}).id || null;
+    }
+    async function loadLadder() {
+      S.ladder = S.league ? await get('ladder/' + S.league + '.json') : null;
+    }
+    async function loadHero(path) {
+      S.heroData = null; S.hero = path;
+      const h = await get(path);
+      if (S.hero !== path) return; // another hero was picked meanwhile
+      S.heroData = h || { gone: true };
+    }
+    async function refresh(fn) {
+      S.loading = true; S.err = ''; paint();
+      try { await fn(); } catch (e) { S.err = e.message || String(e); }
+      S.loading = false; paint();
+    }
+
+    // ---------- view ----------
+    function rowsShown() {
+      const rows = (S.ladder && S.ladder.heroes) || [];
+      return rows.filter(r => (S.cls === 'All' || r.class === S.cls) && (!S.skill || r.main_skill === S.skill));
+    }
+    function leagueLabel(l) {
+      return l.name + ' · ' + (l.hardcore ? 'Hardcore' : 'Softcore') + ' ' + (l.trade ? 'Trade' : 'SSF') + (l.running ? '' : l.upcoming ? ' (starts ' + l.starts_at.slice(0, 10) + ')' : ' (ended)');
+    }
+    function controls() {
+      const ls = S.leagues || [];
+      const opt = l => '<option value="' + esc(l.id) + '"' + (l.id === S.league ? ' selected' : '') + '>' + esc(leagueLabel(l)) + '</option>';
+      const groups = [['Running', ls.filter(l => l.running)], ['Ended (last 14 days)', ls.filter(l => !l.running && !l.upcoming)], ['Upcoming', ls.filter(l => l.upcoming)]]
+        .filter(g => g[1].length).map(g => '<optgroup label="' + g[0] + '">' + g[1].map(opt).join('') + '</optgroup>').join('');
+      const rows = (S.ladder && S.ladder.heroes) || [];
+      const skills = [...new Set(rows.filter(r => S.cls === 'All' || r.class === S.cls).map(r => r.main_skill).filter(Boolean))].sort((a, b) => skillName(a).localeCompare(skillName(b)));
+      const counts = {}; for (const r of rows) counts[r.class] = (counts[r.class] || 0) + 1;
+      return '<div class="lad-controls">' +
+        '<label class="field"><span>League</span><select id="ladLeague">' + groups + '</select></label>' +
+        '<label class="field"><span>Main skill</span><select id="ladSkill"><option value="">All skills</option>' + skills.map(s => '<option value="' + esc(s) + '"' + (s === S.skill ? ' selected' : '') + '>' + esc(skillName(s)) + '</option>').join('') + '</select></label>' +
+        '</div><div class="lad-classes" role="tablist" aria-label="Class">' + ['All', ...CLASSES].map(c => '<button type="button" role="tab" class="lad-class' + (S.cls === c ? ' on' : '') + '" aria-selected="' + (S.cls === c) + '" data-cls="' + c + '">' + c + (c !== 'All' && counts[c] ? ' <small>' + counts[c] + '</small>' : '') + '</button>').join('') + '</div>';
+    }
+    function table() {
+      if (!S.ladder) return '<div class="card"><p class="hint">' + (S.loading ? 'Loading the ladder…' : 'No ladder for this league.') + '</p></div>';
+      const rows = rowsShown();
+      if (!rows.length) return '<div class="card"><p class="hint">' + ((S.ladder.heroes || []).length ? 'No heroes match these filters.' : 'Nobody is on this ladder yet.') + '</p></div>';
+      const hc = (S.leagues || []).some(l => l.id === S.league && l.hardcore);
+      const body = rows.map(r => {
+        const sup = (r.main_supports || []).map(supportName).join(', ');
+        const on = S.hero && r.build === S.hero;
+        return '<tr class="' + (on ? 'on' : '') + (r.dead ? ' dead' : '') + '"' + (r.has_build && r.build ? ' data-build="' + esc(r.build) + '" tabindex="0"' : '') + '>' +
+          '<td class="num">' + (r.rank || '') + '</td><td class="num">' + (r.class_rank || '') + '</td>' +
+          '<td>' + esc(r.class || '') + (r.ascendancy && r.ascendancy !== 'None' ? ' <small class="meta">' + esc(r.ascendancy) + '</small>' : '') + (hc && r.dead ? ' <span class="lad-dead">dead</span>' : '') + '</td>' +
+          '<td class="num">' + (r.level || '') + '</td><td class="num">' + (r.rupture_level || 0) + '</td>' +
+          '<td>' + (r.main_skill ? esc(skillName(r.main_skill)) : '<span class="meta">–</span>') + (sup ? '<br><small class="meta">' + esc(sup) + '</small>' : '') + '</td>' +
+          '<td class="num">' + (r.guardian_dps_median ? fmt(r.guardian_dps_median) : '<span class="meta">–</span>') + '</td>' +
+          '<td class="go" aria-hidden="true">' + (r.has_build && r.build ? '›' : '') + '</td></tr>';
+      }).join('');
+      return '<div class="card lad-table-card"><div class="table-wrap"><table class="tbl lad-table"><thead><tr><th class="num">#</th><th class="num" title="Rank inside the class">Class #</th><th>Class</th><th class="num">Level</th><th class="num" title="Best Rupture Level">Rupture</th><th>Main skill</th><th class="num" title="The game\'s own median Guardian DPS (heroes with a build file)">Guardian DPS</th><th aria-label="Build"></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
+        '<p class="hint">' + rows.length + ' heroes shown. Click a hero to see their build (published for the top 50 of each class). Ranked by best Rupture Level, then level, experience, fastest clear and who got there first.</p></div>';
+    }
+    function itemCard(it, classId) {
+      const unique = it.unique && it.unique !== 'None';
+      const base = name('bases', it.base);
+      const title = unique ? (isHidden(it.unique) ? 'Undiscovered unique' : name('uniques', it.unique)) : base;
+      let lines = [];
+      try { lines = ctx.itemLines(it, classId) || []; } catch (e) { lines = []; }
+      const runes = it.runes_hidden ? ['Runes: undiscovered Oathword'] : (it.runes || []).length ? ['Runes: ' + it.runes.map(r => isHidden(r) ? 'Undiscovered' : name('runes', r)).join(', ')] : [];
+      const hiddenAffixes = (it.affixes || []).filter(a => isHidden(a.id)).length;
+      const facts = [it.item_level ? 'item level ' + it.item_level : '', it.quality ? 'quality ' + it.quality + '%' : '', it.sockets ? it.sockets + ' sockets' : '', it.forged ? 'forged' : ''].filter(Boolean).join(' · ');
+      return '<div class="lad-item r-' + esc(String(it.rarity || 'normal').toLowerCase()) + '"><div class="lad-item-head"><span class="lad-slot">' + esc(SLOT_NAME[it.slot] || it.slot || '') + '</span><b>' + esc(title) + '</b>' + (unique && !isHidden(it.unique) ? '<small class="meta">' + esc(base) + '</small>' : '') + '</div>' +
+        (facts ? '<div class="meta lad-facts">' + esc(facts) + '</div>' : '') +
+        '<ul>' + [...lines, ...runes].map(l => '<li>' + esc(l) + '</li>').join('') + (hiddenAffixes ? '<li class="meta">' + hiddenAffixes + ' undiscovered line' + (hiddenAffixes > 1 ? 's' : '') + '</li>' : '') + '</ul></div>';
+    }
+    function heroPanel() {
+      if (!S.hero) return '<div class="card lad-hero lad-empty"><p class="hint">Pick a hero with a build (View) to see their gear, skills and passives, and open it in the Build Planner to sim it.</p></div>';
+      const h = S.heroData;
+      if (!h) return '<div class="card lad-hero"><p class="hint">Loading the build…</p></div>';
+      if (h.gone) return '<div class="card lad-hero"><p class="hint">This build is no longer published (the hero left the top 50, or its player hid it).</p></div>';
+      const b = h.build || {}, m = h.measured || {}, main = mainSkillOf(h);
+      const skills = (b.skills || []).filter(s => s.skill).map(s => {
+        const lv = (b.gem_levels || {})[s.skill];
+        const sup = (s.supports || []).filter(Boolean).map(x => supportName(x) + ((b.gem_levels || {})[x] ? ' ' + b.gem_levels[x] : ''));
+        return '<li' + (s.skill === main ? ' class="main"' : '') + '><b>' + esc(skillName(s.skill)) + '</b>' + (lv ? ' <small class="meta">gem ' + lv + '</small>' : '') + (s.skill === main ? ' <span class="lad-tag">main</span>' : '') +
+          (sup.length ? '<br><small>' + esc(sup.join(' · ')) + '</small>' : '') + (s.conduit_link ? '<br><small class="meta">Conduit: ' + esc(skillName(s.conduit_link)) + '</small>' : '') + '</li>';
+      }).join('');
+      const nodes = (b.passive_nodes || []);
+      const hiddenNodes = nodes.filter(isHidden).length;
+      const big = nodes.filter(id => !isHidden(id)).map(id => (GD().nodes || {})[id]).filter(n => n && (n.Kind === 'Keystone' || n.Kind === 'Notable'));
+      const keys = big.filter(n => n.Kind === 'Keystone').map(n => n.Name), notables = big.filter(n => n.Kind === 'Notable').map(n => n.Name);
+      const items = (b.items || []).slice().sort((x, y) => (SLOT_ORDER.indexOf(x.slot) + 99) % 99 - (SLOT_ORDER.indexOf(y.slot) + 99) % 99);
+      const asc = b.ascendancy || {};
+      const measured = m.guardian_kills || m.guardian_losses ?
+        '<div class="lad-stats"><div><span>Guardian DPS</span><b>' + fmt(m.guardian_dps_median) + '</b></div><div><span>Kill time</span><b>' + secs(m.guardian_kill_seconds_median) + '</b></div><div><span>Kills / losses</span><b>' + (m.guardian_kills || 0) + ' / ' + (m.guardian_losses || 0) + '</b></div></div>' +
+        '<p class="hint">Measured by the game: medians over the last ' + (m.window_days || 1) + ' day' + ((m.window_days || 1) > 1 ? 's' : '') + ' of Guardian fights' + (m.at ? ', ' + esc(ago(m.at)) : '') + '.</p>'
+        : '<p class="hint">No Guardian fights measured yet (the game measures them every 6 hours).</p>';
+      return '<div class="card lad-hero">' +
+        '<div class="lad-hero-head"><div><div class="eyebrow">' + esc(h.league || '') + ' · hero ' + esc(String(h.hero).slice(0, 8)) + '</div><h3 class="lad-hero-title">' + esc(h.class) + (h.ascendancy && h.ascendancy !== 'None' ? ' · ' + esc(h.ascendancy) : '') + ' · level ' + (h.level || '?') + ' · Rupture ' + (h.rupture_level || 0) + '</h3>' +
+        '<small class="meta">Class rank ' + (h.class_rank || '?') + (h.dead ? ' · dead' : '') + (h.updated_at ? ' · build updated ' + esc(ago(h.updated_at)) : '') + '</small></div>' +
+        '<div class="lad-actions"><button type="button" class="btn" id="ladOpen">Open in Build Planner</button><button type="button" class="btn ghost" id="ladLink">Copy link</button></div></div>' +
+        measured +
+        '<h3>Skills</h3><ul class="lad-skills">' + (skills || '<li class="meta">None listed</li>') + '</ul>' +
+        '<h3>Passives</h3><p>' + nodes.length + ' points' + (b.bonus_passive_points ? ' (' + b.bonus_passive_points + ' bonus)' : '') + (hiddenNodes ? ', ' + hiddenNodes + ' undiscovered' : '') + '.' +
+        (keys.length ? '<br><b>Keystones:</b> ' + esc(keys.join(', ')) : '') + (notables.length ? '<br><b>Notables:</b> ' + esc(notables.join(', ')) : '') + '</p>' +
+        (asc.aspect && asc.aspect !== 'None' ? '<h3>Dragonling</h3><p>' + esc(asc.aspect) + ' aspect, ' + (asc.nodes || []).length + ' nodes.</p>' : '') +
+        '<h3>Gear</h3><div class="lad-items">' + (items.map(it => itemCard(it, h.class)).join('') || '<p class="meta">No gear.</p>') + '</div>' +
+        '<p class="hint">Open in Build Planner to see the passive tree and run the damage sim on this build. Undiscovered items, nodes and supports stay hidden until the community finds them.</p></div>';
+    }
+    function paint() {
+      const el = $('#ladderPane'); if (!el) return;
+      const L = S.ladder;
+      const fresh = L && L.generated_at ? 'Ladder updated ' + ago(L.generated_at) + ' (refreshed every 15 minutes, builds hourly)' : '';
+      el.innerHTML = '<div class="cmp-intro"><div class="eyebrow">PUBLIC LEAGUES</div><h2>Ladder</h2><p>The top heroes of each class and the builds of the top 50, as the game publishes them. Numbers, skills and the meta change with every patch.</p></div>' +
+        controls() +
+        (S.err ? '<div class="card"><p class="hint bad">' + esc(S.err) + '</p></div>' : '') +
+        '<div class="lad-grid">' + table() + heroPanel() + '</div>' +
+        '<p class="hint lad-credit">' + esc(fresh) + (fresh ? ' · ' : '') + 'Data: <a href="https://store.steampowered.com/app/5452900/Broken_Oath/" target="_blank" rel="noopener noreferrer">Broken Oath public API</a>. Heroes are shown by an anonymous id only. This page is a fan-made tool, not an official one.</p>';
+    }
+    // ---------- events ----------
+    let bound = false;
+    function bind() {
+      if (bound) return; bound = true;
+      const el = $('#ladderPane');
+      el.addEventListener('change', e => {
+        if (e.target.id === 'ladLeague') { S.league = e.target.value; S.skill = ''; S.hero = null; S.heroData = null; refresh(loadLadder); }
+        if (e.target.id === 'ladSkill') { S.skill = e.target.value; paint(); }
+      });
+      const pick = path => { if (!path) return; refresh(() => loadHero(path)); setTimeout(() => { const p = el.querySelector('.lad-hero'); if (p && window.innerWidth < 1100) p.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); };
+      el.addEventListener('click', async e => {
+        const c = e.target.closest('[data-cls]'); if (c) { S.cls = c.dataset.cls; S.skill = ''; paint(); return; }
+        if (e.target.closest('#ladOpen') && S.heroData && S.heroData.build) { ctx.openBuild(charFromApi(S.heroData)); return; }
+        if (e.target.closest('#ladLink') && S.hero) {
+          const url = location.origin + location.pathname + '#hero=' + S.hero.replace(/^builds\//, '').replace(/\.json$/, '');
+          try { await navigator.clipboard.writeText(url); e.target.textContent = 'Copied'; } catch (err) { prompt('Copy this link:', url); }
+          return;
+        }
+        const row = e.target.closest('[data-build]'); if (row) pick(row.dataset.build);
+      });
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') { const row = e.target.closest('tr[data-build]'); if (row) pick(row.dataset.build); } });
+    }
+    let started = false;
+    async function render() {
+      bind();
+      if (!started) { started = true; await refresh(async () => { await loadLeagues(); await loadLadder(); }); return; }
+      paint();
+    }
+    // A shared hero link: <site>/ladder/#hero=<league>/<Class>/<hero>.
+    const HASH = /^#hero=([a-z0-9-]{1,40})\/([A-Za-z]{2,20})\/([A-Za-z0-9]{8,32})$/;
+    function openFromHash(hash) {
+      const m = HASH.exec(hash || ''); if (!m) return false;
+      S.league = m[1]; S.cls = m[2];
+      const path = 'builds/' + m[1] + '/' + m[2] + '/' + m[3] + '.json';
+      started = true;
+      refresh(async () => { await loadLeagues(); S.league = m[1]; await loadLadder(); await loadHero(path); });
+      return true;
+    }
+    return { render, charFromApi, openFromHash };
+  };
+  root.BOLadderChar = charFromApi;
+  if (typeof module !== 'undefined') module.exports = { charFromApi };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+;
 // Skill Scaling tab: one square per skill, coloured like its gem, with what the skill does at gem levels 1-20.
 // Display only: it reads the game data and repeats the sim's per-level formulas for the gem's OWN level (no gear levels):
 //   attack: % of weapon damage = effectiveness(L) x (1 + Gem.AttackEffectivenessPerLevel x (L - 1))   (sim.js, "levelFactor")
@@ -8433,6 +8686,7 @@ window.BOStartApp = function () {
   let faq = null; // the FAQ / Game Mechanics tab (faq.js)
   let character = null; // the Character tab (character.js)
   let itemSearch = null; // the Item Search tab (itemsearch.js)
+  let ladder = null; // the Ladder tab (ladder.js): public ladders and top builds, Broken Oath public API
   let grail = null; // the Grail tab (grail.js): found uniques, held / craftable Oathwords, runes owned
   let brewery = null, breweryDirty = false; // the Brewery tab (brewery.js); dirty: potions changed since the last damage render
 
@@ -11205,10 +11459,10 @@ window.BOStartApp = function () {
   // Share codes (#b=, #s=) stay in the hash. window.SITE_BASE is the way up to the site root ('' on the root page);
   // the local DamageSim.html doesn't set it (opened from a file it can't use addresses).
   const ROUTES = { character: 'build/character', tree: 'build/tree', 'build:skills': 'build/skills', 'build:gear': 'build/gear', damage: 'build/damage',
-    compare: 'itemsim', items: 'itemsearch', grail: 'grail', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', faq: 'faq',
+    compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', faq: 'faq',
     skillscaling: 'skills', minions: 'skills/minions', creator: 'creator', plan: 'plan', code: 'code' };
   const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', 'build:skills': 'Skills', 'build:gear': 'Gear', damage: 'Damage Analysis',
-    compare: 'Item Simulator', items: 'Item Search', grail: 'Grail', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery",
+    compare: 'Item Simulator', items: 'Item Search', grail: 'Grail', ladder: 'Ladder', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery",
     faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code' };
   // The Skills tab holds two views: Skill Scaling (scaling.js) and Minion Scaling (faq.js's minions section).
   let skillsView = 'scaling';
@@ -11264,7 +11518,7 @@ window.BOStartApp = function () {
     document.body.classList.toggle('build-page', tab === 'build');
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'items' || tab === 'grail' || tab === 'faq' || tab === 'skillscaling' || tab === 'character');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'faq' || tab === 'skillscaling' || tab === 'character');
     document.body.classList.toggle('character-page', tab === 'character');
     document.body.classList.toggle('creator-page', tab === 'creator'); // the Save Creator has no use for the build views
     if (tab === 'supports') {
@@ -11277,7 +11531,7 @@ window.BOStartApp = function () {
     // Character, Passive tree and Damage Analysis are sub-tabs of Build Planner: keep that main tab lit.
     document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'damage'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
     if (tab === 'tree' || tab === 'damage' || tab === 'character') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character';
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     renderBuildStats();
@@ -11288,6 +11542,7 @@ window.BOStartApp = function () {
     if (tab === 'brewery') brewery.render();
     if (tab === 'items') itemSearch.render();
     if (tab === 'grail') grail.render();
+    if (tab === 'ladder') ladder.render();
     if (tab === 'faq') faq.render();
     if (tab === 'skillscaling') renderSkillsTab();
     if (tab === 'character') character.render();
@@ -11452,6 +11707,27 @@ window.BOStartApp = function () {
   grail = window.BOGrail({ $, esc, gd: () => GD, current: () => st.ch, icons: () => itemSearch,
     onChange: () => { if (!$('#itemSearchPane').hidden) itemSearch.render(); } });
   itemSearch = window.BOItemSearch({ $, esc, gd: () => GD, owned: () => grail });
+  // The Ladder tab (ladder.js): public ladders and top builds from the Broken Oath public API, read only through the
+  // share worker's cache (/api/). ?ladderapi=local points it at `wrangler dev` on port 8787 for testing.
+  ladder = window.BOLadder({ $, esc, gd: () => GD, num,
+    api: (new URLSearchParams(location.search).get('ladderapi') === 'local' ? 'http://localhost:8787' : SHARE_API) + '/api/',
+    // An item's lines as text: base numbers (weapon damage or defences) then its own lines, added up by stat (as Item Simulator).
+    itemLines: (item, classId) => {
+      const out = [], it = Object.assign({}, item, { unique: item.unique && item.unique !== 'hidden' ? item.unique : 'None',
+        affixes: (item.affixes || []).filter(a => a.id !== 'hidden').map(a => ({ id: a.id, tier: a.tier || 0, v: +a.value || 0, v2: +a.value2 || 0, crafted: !!a.crafted })),
+        runes: item.runes_hidden ? [] : (item.runes || []).filter(r => r && r !== 'hidden'), level: item.item_level || 1 });
+      try { for (const x of planner.gear.baseStats(it, it.slot)) out.push(lineText(Object.assign({ v2: 0 }, x))); } catch (e) { /* no base stats */ }
+      const lone = { items: [it], passives: [], dragonNodes: [], dragonAspect: '', hotbar: [], gemLevels: {}, gems: [], classId };
+      const m = new Map();
+      for (const x of S.collectMods(GD, lone, {}).mods) {
+        const k = x.text ? 'T|' + x.text : x.stat + '|' + x.mode + '|' + x.tags.join('+') + (x.local ? '|local' : '');
+        const e = m.get(k) || Object.assign({}, x, { v: 0, v2: 0 }); e.v += x.v; e.v2 += x.v2; m.set(k, e);
+      }
+      for (const x of m.values()) out.push(lineText(x));
+      return out;
+    },
+    openBuild: ch => { addChars([ch], 'code', ch.id); showTab('character'); saveTip('Loaded a ladder build as a plan. Damage Analysis sims it; your own characters are unchanged.'); },
+  });
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling });
   character = window.BOCharacter({
     $, esc, planner, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats,
@@ -11497,11 +11773,13 @@ window.BOStartApp = function () {
   if (CHARS.length) selectChar($('#charSelect').value); else render();
   // Landing: Build Planner > Character for anyone with a character; a first visit with none gets the welcome page (Damage view).
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
-  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'items', 'grail', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'items', 'grail', 'ladder', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
   routingReady = true; // from here on, switching tabs changes the address
   // Opened from a share link: load it as a plan, then drop it from the address so a refresh doesn't add it again.
   const bdbHash = /^#b=/.test(location.hash) && brokedCode(location.hash);
   if (bdbHash) { history.replaceState(null, '', location.pathname + location.search); openBroked(bdbHash); }
+  // A ladder hero link (#hero=<league>/<Class>/<id>): open the Ladder tab on that build. The hash stays, so it can be copied again.
+  if (/^#hero=/.test(location.hash) && ladder.openFromHash(location.hash)) showTab('ladder');
   const sharedCode = linkCode(location.hash), sharedId = linkId(location.hash);
   if (sharedCode || sharedId) { history.replaceState(null, '', location.pathname + location.search); openShared(sharedCode, sharedId); }
 };

@@ -3498,7 +3498,7 @@ window.BOCreator = function (ctx) {
     const lvl = summary().Level || 1;
     C.edit = { level: lvl, items: i >= 0 ? [toItem(items()[i])] : [] };
   }
-  const codeKind = t => /broked-db\.vercel\.app|#b=|^[zj][A-Za-z0-9_-]{40,}$/.test(t) ? 'ItemDatabase link' : /#s=|#build=/.test(t) ? 'share link'
+  const codeKind = t => /broked-db\.(?:vercel\.app|pages\.dev)|#b=|^[zj][A-Za-z0-9_-]{40,}$/.test(t) ? 'ItemDatabase link' : /#s=|#build=/.test(t) ? 'share link'
     : /^BO[PS]1\./.test(t) ? 'plan code' : /^BO1\./.test(t) ? 'tree code' : 'code';
   async function doImport() {
     const box = $('#crCode'), text = box ? box.value.trim() : '';
@@ -10662,7 +10662,7 @@ window.BOStartApp = function () {
   // (Cloudflare, share-worker/). If that can't be reached, the long form <site>#build=<code> carries it all.
   const SITE_URL = 'https://lilshrimper.github.io/broken-oath-builder/';
   const SHARE_API = 'https://bo-share.bo-share.workers.dev';
-  // ItemDatabase planner links (broked-db.vercel.app/planner.html#b=...): "z" + base64url(raw deflate(JSON)) or
+  // ItemDatabase planner links (broked-db.pages.dev/planner#b=...; broked-db.vercel.app/planner.html#b= before 11 Nov 2026): "z" + base64url(raw deflate(JSON)) or
   // "j" + base64url(JSON). Same format tools/offline-clone.js reads. Unlike a BO1. code they carry rolled items:
   // it = [{ s slot, b base, r rarity, u unique, n name, il item level, q quality, ef, ru runes, a: [[id, tier, v, v2, crafted]] }].
   const brokedCode = text => { const m = String(text || '').trim().match(/(?:#b=|^)([zj][A-Za-z0-9_-]{40,})$/); return m ? m[1] : null; };

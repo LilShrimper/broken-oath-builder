@@ -6866,8 +6866,13 @@ window.BOCharacter = function (ctx) {
         const eff = inc <= 100 ? inc : 100 + (inc - 100) / 2;
         if (inc > 0) { rearm /= 1 + eff / 100; res.notes.push('Trap re-arm speed +' + Math.round(inc) + '% increased' + (inc > 100 ? ' (counts as +' + Math.round(eff) + '%, patch 0.56.4)' : '') + '.'); }
       }
-      usesPerSec = traps / rearm; useTime = 1 / usesPerSec;
-      res.notes.push('Trap: ' + traps + ' traps each striking every ' + rearm + ' s once laid; assumes the boss stands on them.');
+      // 11 Nov 2026 log (Arc trap on the Training Post, +100% re-arm): "TrapMine: r62 v2 ON - lock 0.15 s, re-arm 0.90 s" and
+      // "strike arc #n" gaps of 0.606-0.62 s per trap (#9-#12: 0.609, 0.607, 0.606, 0.608; 27 strikes in the 16 s life).
+      // So a strike every lock 0.15 s + 0.90 s / (1 + re-arm speed), not "about a second" / (1 + re-arm speed) = 0.5 s.
+      if (!re && /re-arms about a second/i.test(d) && is0565(GD)) { rearm *= 0.9; } // scales the same before or after the re-arm speed division
+      const trapLock = !re && is0565(GD) ? 0.15 : 0;
+      usesPerSec = traps / (rearm + trapLock); useTime = 1 / usesPerSec;
+      res.notes.push('Trap: ' + traps + ' traps each striking every ' + Math.round((rearm + trapLock) * 1000) / 1000 + ' s once laid (re-arm ' + Math.round(rearm * 1000) / 1000 + ' s + ' + trapLock + ' s lock); assumes the boss stands on them.');
       // Patch 0.56.0 notes: "With several traps of one skill out, each extra trap deals 10% less." The first trap
       // full, the others 10% less each: averaged over the traps out. Taken from Trap's text when it says so.
       const xt = /each extra trap deals (\d+)% less/i.exec(d);

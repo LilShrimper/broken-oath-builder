@@ -1658,6 +1658,10 @@ body.compare-page #controls { display: none; }
 .is-badge.craft { border-color: color-mix(in srgb, var(--good) 55%, var(--line)); color: var(--good); }
 .is-badge.held { border-color: color-mix(in srgb, #e0896f 55%, var(--line)); color: #e0896f; }
 :root[data-theme="light"] .is-badge.held { color: #b2522f; }
+/* New this patch (GD.itemAdded) */
+.is-badge.new { border-color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 18%, transparent); color: var(--dashboard-gold); font-weight: 700; }
+:root[data-theme="light"] .is-badge.new { color: #7a5a14; }
+.is-tag.new { --tag: #e6c13a; }
 .is-have { font-size: 11px; font-weight: 700; padding: 0 5px; border-radius: 999px; color: var(--good); background: color-mix(in srgb, var(--good) 15%, transparent); }
 .is-have.none { color: var(--faint); background: var(--panel-2); }
 

@@ -4111,7 +4111,8 @@ window.BOBrewery = function (ctx) {
 
 ;
 // Item Search tab: every unique, Oathword, item base, item mod (affix), rune and jewel in the game data, with
-// filters (category, slot, type, tier, level range, text) and a sort (level low to high by default).
+// filters (category, slot, type, tier, level range, text) and a sort (level low to high by default; "New this patch
+// first" puts what the latest game patch added on top, then the patch before it, and so on).
 // Display only: nothing here feeds the sim. Icons are generic line drawings per item type (ICONS below) until the
 // game's own item art can be used; runes and jewels draw their glyph from runes.json (Glyph, Color).
 // Filters are kept in this browser (bods:itemsearch).
@@ -4233,7 +4234,17 @@ window.BOItemSearch = function (ctx) {
   }
 
   // ---------- the list (built once per game data) ----------
-  let cacheFor = null, ALL = [];
+  let cacheFor = null, ALL = [], NEWEST = 0, ADDED_DAY = {};
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const dayText = build => { const m = /^\d{4}-(\d\d)-(\d\d)/.exec(ADDED_DAY[build] || ''); return m ? +m[2] + ' ' + MONTHS[+m[1] - 1] : ''; };
+  // "New this patch" on an entry of the newest build; with the New sort on, older ones say when they came.
+  function addedBadge(e, tag) {
+    if (!e.added) return '';
+    const day = dayText(e.added), title = ' title="Added in Steam build ' + e.added + (day ? ' (' + day + ')' : '') + '"';
+    if (tag) return e.added === NEWEST ? '<span class="is-tag new"' + title + '>New</span>' : '';
+    if (e.added === NEWEST) return '<span class="is-badge new"' + title + '>New this patch</span>';
+    return F.sort === 'new' ? '<span class="is-badge muted"' + title + '>Added ' + esc(day || 'build ' + e.added) + '</span>' : '';
+  }
   function entries() {
     const GD = ctx.gd();
     if (!GD || cacheFor === GD) return ALL;
@@ -4286,6 +4297,13 @@ window.BOItemSearch = function (ctx) {
     }
     // Flavour and lore text is left out of the search on purpose: it matched things like "fire" in "Light a fire".
     for (const e of ALL) e.text = norm(e.text);
+    // The Steam build each entry first appeared in (GD.itemAdded, written by build.js from tools/item-added.js); 0 = it was
+    // there before our oldest game data, or the data has no record (your own game files). NEWEST: the last build that
+    // added anything, which is what "New this patch" means here.
+    const IA = GD.itemAdded || {}, ids = IA.ids || {};
+    ADDED_DAY = IA.builds || {};
+    NEWEST = 0;
+    for (const e of ALL) { e.added = +ids[e.cat + ':' + e.id] || 0; if (e.added > NEWEST) NEWEST = e.added; }
     return ALL;
   }
 
@@ -4323,7 +4341,7 @@ window.BOItemSearch = function (ctx) {
   }
   function sorted(list) {
     const path = e => (e.jewel ? 1000 : 0) + (e.r && e.r.Index != null ? e.r.Index : e.level);
-    const by = { path: (a, b) => path(a) - path(b), affix: (a, b) => (a.affixType === 'Suffix') - (b.affixType === 'Suffix') || levelOf(a) - levelOf(b), level: (a, b) => levelOf(a) - levelOf(b), leveldesc: (a, b) => levelOf(b) - levelOf(a), name: () => 0,
+    const by = { path: (a, b) => path(a) - path(b), affix: (a, b) => (a.affixType === 'Suffix') - (b.affixType === 'Suffix') || levelOf(a) - levelOf(b), level: (a, b) => levelOf(a) - levelOf(b), new: (a, b) => b.added - a.added || levelOf(a) - levelOf(b), leveldesc: (a, b) => levelOf(b) - levelOf(a), name: () => 0,
       cat: (a, b) => CATS.findIndex(c => c[0] === a.cat) - CATS.findIndex(c => c[0] === b.cat) || levelOf(a) - levelOf(b) }[F.sort] || (() => 0);
     return list.slice().sort((a, b) => by(a, b) || a.name.localeCompare(b.name));
   }
@@ -4418,6 +4436,7 @@ window.BOItemSearch = function (ctx) {
       const inv = owned(), n = inv && inv.loaded ? inv.runes[lc(r.Id)] || 0 : null;
       if (n != null) badges.push(badge(n ? 'You have ' + n + ' (' + inv.runeWhere[lc(r.Id)].join(', ') + ')' : 'You have none', n ? 'held' : 'muted'));
     }
+    const nb = addedBadge(e); if (nb) badges.unshift(nb);
     return '<article class="is-card cat-' + e.cat + '"><header>' + ico + '<div class="is-head"><b class="is-name">' + esc(e.name) + '</b><small>' + esc((e.cat === 'rune' ? (e.jewel ? 'Jewel' : 'Rune') : CAT_NAME[e.cat]) + ' · ' + sub) + '</small></div>' +
       '<span class="is-lvl" title="' + (e.cat === 'mod' ? 'Item level the ' + (F.tier && e.tiers.includes(F.tier) ? F.tier : 'lowest') + ' tier needs' : 'Level') + '">' + (e.cat === 'mod' ? 'iLvl ' : 'Lvl ') + levelOf(e) + '</span></header>' +
       body + (badges.length ? '<footer>' + badges.join('') + '</footer>' : '') + '</article>';
@@ -4433,7 +4452,7 @@ window.BOItemSearch = function (ctx) {
     const tags = (a.Mod.Tags || []).map(x => '<span class="is-tag ' + (TAG_CLS[lc(x)] || '') + '">' + esc(x) + '</span>').join('');
     return '<details class="is-mrow ' + lc(a.Type) + '"><summary>' +
       '<span class="is-aff ' + lc(a.Type) + '">' + esc(a.Type) + '</span>' +
-      '<span class="is-mtext"><span class="is-mline">' + esc(text) + '</span>' + tags + '<small class="is-mslots">' + esc(e.slots.join(', ')) + '</small></span>' +
+      '<span class="is-mtext"><span class="is-mline">' + esc(text) + '</span>' + addedBadge(e, true) + tags + '<small class="is-mslots">' + esc(e.slots.join(', ')) + '</small></span>' +
       '<span class="is-nums"><span class="n tiers" title="' + (t ? 'Tier ' + (on + 1) + ' of ' + a.Tiers.length : a.Tiers.length + ' tiers') + '">' + (t ? 'T' + (on + 1) : a.Tiers.length) + '</span>' +
       '<span class="n ilvl" title="Item level ' + (t ? 'tier ' + (on + 1) + ' needs' : 'the lowest and highest tiers need') + '">' + (t ? t.ILvl || 1 : lo === hi ? lo : lo + '–' + hi) + '</span></span>' +
       '</summary><div class="is-mbody"><p class="is-into">Rolls on: ' + esc(e.slots.join(', ') || 'nothing') + (e.types.length ? ' (' + esc(e.types.join(', ')) + ')' : '') + '</p>' +
@@ -4458,7 +4477,7 @@ window.BOItemSearch = function (ctx) {
     if (!tierOk || (F.tier && !tiers.includes(F.tier))) F.tier = '';
     const mods = F.cat === 'mod';
     if (!mods) F.affix = '';
-    const sorts = (F.cat === 'rune' ? [['path', 'Upgrade path']] : []).concat([['level', 'Level, low to high'], ['leveldesc', 'Level, high to low'], ['name', 'Name, A to Z']], mods ? [['affix', 'Prefixes, then suffixes']] : F.cat === 'all' ? [['cat', 'Category']] : []);
+    const sorts = (F.cat === 'rune' ? [['path', 'Upgrade path']] : []).concat([['level', 'Level, low to high'], ['leveldesc', 'Level, high to low'], ['name', 'Name, A to Z']], NEWEST ? [['new', 'New this patch first']] : [], mods ? [['affix', 'Prefixes, then suffixes']] : F.cat === 'all' ? [['cat', 'Category']] : []);
     if (!sorts.some(s => s[0] === F.sort)) F.sort = 'level';
     return '<div class="is-cats" role="group" aria-label="Category">' + CATS.map(([k, t]) => '<button type="button" class="is-cat' + (F.cat === k ? ' active' : '') + '" data-cat="' + k + '" aria-pressed="' + (F.cat === k) + '">' + esc(t) + ' <small>' + (k === 'all' ? all.length : counts[k] || 0) + '</small></button>').join('') + '</div>' +
       '<div class="is-filters' + (mods ? ' with-affix' : '') + '">' +
@@ -4476,7 +4495,8 @@ window.BOItemSearch = function (ctx) {
   }
   function results() {
     const list = sorted(pick());
-    const head = '<p class="is-count">' + list.length + ' result' + (list.length === 1 ? '' : 's') + (F.cat === 'mod' && F.tier ? ' · item level shown for ' + F.tier : '') + '</p>';
+    const head = '<p class="is-count">' + list.length + ' result' + (list.length === 1 ? '' : 's') + (F.cat === 'mod' && F.tier ? ' · item level shown for ' + F.tier : '') +
+      (F.sort === 'new' && NEWEST ? ' · ' + list.filter(e => e.added === NEWEST).length + ' new this patch (Steam build ' + NEWEST + (dayText(NEWEST) ? ', ' + dayText(NEWEST) : '') + ')' : '') + '</p>';
     if (!list.length) return head + '<div class="card"><p class="hint">Nothing matches. Clear a filter or try other words.</p></div>';
     const n = F.cat === 'mod' ? shown * 3 : shown, page = list.slice(0, n);
     let body;

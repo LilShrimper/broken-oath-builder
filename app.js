@@ -5715,6 +5715,8 @@ window.BOCharacter = function (ctx) {
   // ... Minion skills: 8% a level." Attacks unchanged. Gem-scaled added damage on attacks keeps the old x1.04
   // (BONUS_FADE_ADDED, the Ballista fit below) until a log shows whether it moved with spells.
   const BONUS_FULL_LEVELS = 5, BONUS_FADE_SPELL = 1.06, BONUS_FADE_MINION = 1.08, BONUS_FADE_ATTACK = 1.01, BONUS_FADE_ADDED = 1.04;
+  // 0.56.8: attacks keep their full per-level bonus (6% more) past +5; before it only x1.01.
+  const attackFade = (GD, G) => is0568(GD) ? (G.BonusLevelAttackMore > 1 ? G.BonusLevelAttackMore : 1.06) : BONUS_FADE_ATTACK;
   const bonusSplit = bonus => [Math.min(bonus, BONUS_FULL_LEVELS), Math.max(0, bonus - BONUS_FULL_LEVELS)];
   // Patch 0.56.0 (developer's patch notes, Discord 6 Nov 2026 21:28 UTC). Its rules below switch on with game data
   // newer than Steam build 26474163 (0.55.2), or, for game files a player loads (no build number), files dated
@@ -5752,6 +5754,13 @@ window.BOCharacter = function (ctx) {
   // and traps "past your sixth adds 25%" (Trap Support text; was 40%). Switches on with data newer than 0.56.6 (build 26551640).
   const LAST_BUILD_0566 = 26551640;
   const is0567 = GD => GD.steamBuild ? +GD.steamBuild > LAST_BUILD_0566 : String(GD.filesAt || '') >= '2026-11-10';
+  // Patch 0.56.8 (developer's patch notes, pasted by the owner 11 Nov 2026; game texts in Steam build 26595060): "No hidden soft caps: the
+  // knees in the damage, armour, strength and trap math are gone. What the tooltip says is what you get"; "Every bonus gem level on gear
+  // and passives gives attacks 6% more damage, no drop off past +5"; Bloodlust is melee Increased (0.5% damage, 0.2% attack speed, 0.1%
+  // move speed a stack), Kindling (new, spells) 0.5% damage and 0.2% cast speed a stack; Hunter's Mark no longer doubles on Guardians and
+  // Uniques; each extra Totem or Ballista 50% (was 80%), each extra Trap 20% (was 35%). Switches on with data newer than 0.56.7 (build 26568753).
+  const LAST_BUILD_0567 = 26568753;
+  const is0568 = GD => GD.steamBuild ? +GD.steamBuild > LAST_BUILD_0567 : String(GD.filesAt || '') >= '2026-11-11';
   // Knee: m <= 8 stays; above it 8 x 1.41^log2(m/8). Not applied to minion sheets (minionSheet is separate).
   const moreKnee = m => m <= 8 ? m : 8 * Math.pow(1.41, Math.log2(m / 8));
   // 0.56.5 count rule (Multiple Totems and Trap Support texts, build 26543267): "each past the first adds 80% of one's
@@ -6027,7 +6036,7 @@ window.BOCharacter = function (ctx) {
       for (const m of b.Mods || []) add(m, ((m.Value || 0) + (m.PerLevel || 0) * (lvl - 1)) * brk, m.Value2, b.Name + (brk > 1 ? ' (Vowbreak x' + brk + ')' : ''), key);
     }
     // Charges: Fury / Insight / Resolve, counted by the user.
-    // Bloodlust (blessings.json Stack): 0.6% more damage a stack, at most 50 + BloodlustMax lines (tree, The Red
+    // Bloodlust (blessings.json Stack): until 0.56.7 0.6% more damage a stack, from 0.56.8 melee Increased (0.5% damage, 0.2% attack speed, 0.1% move speed; the lines come from the data), at most 50 + BloodlustMax lines (tree, The Red
     // Hunger, The Wolf's Due). Gained on kills (or boss crits with The Wolf's Due), so the user sets the stacks.
     for (const [id, n0] of Object.entries(o.charges || {})) {
       const b = GD.blessings[id]; if (!b || !n0) continue;
@@ -6037,6 +6046,8 @@ window.BOCharacter = function (ctx) {
         n = Math.min(n0, max);
         if (n < n0) notes.push('Bloodlust: at most ' + max + ' stacks with your gear and tree (50 + "maximum Bloodlust" lines).');
       }
+      // Kindling (0.56.8 support text): 0.5% increased spell damage and 0.2% cast speed a stack, up to 50, from kills with the linked spell.
+      if (id === 'kindling' && n > 50) { n = 50; notes.push('Kindling: at most 50 stacks.'); }
       for (const m of b.Mods || []) add(m, (m.Value || 0) * (m.PerStack ? n : 1), m.Value2, b.Name + ' x' + n, 'charge:' + id);
     }
     // Brewmaw's potions from the Brewery tab (brewery.js works out each potion's lines; the user turns a slot off in
@@ -6410,7 +6421,7 @@ window.BOCharacter = function (ctx) {
       if (engine0565) {
         // Node text in build 26543267: "1.75% more Physical Attack damage, up to 300 Strength, and 0.5% more for every 10 above that."
         const nt = /up to (\d+) Strength, and ([\d.]+)% more for every 10 above/i.exec(((GD.nodes || {}).r59_mountain_k3 || {}).Text || '');
-        const cap = nt ? +nt[1] : 300, past = nt ? +nt[2] : 0.5;
+        const cap = is0568(GD) ? Infinity : nt ? +nt[1] : 300, past = nt ? +nt[2] : 0.5; // 0.56.8: no strength knee
         strSteps = Math.min(attr.Str, cap) / 10 + Math.max(0, attr.Str - cap) / 10 * (past / m.v);
       } else {
         // 0.56.4 notes + node text: "1.75% more ... for every 10 Strength, up to 500 Strength, and 0.75% more for every 10 above that."
@@ -6431,7 +6442,7 @@ window.BOCharacter = function (ctx) {
       for (const m of mods.filter(m => DEF_ENGINE[m.stat] && m.mode === 'Flat' && !m.local)) {
         if (!applies(ctx, m)) continue;
         const [s, knee] = DEF_ENGINE[m.stat], t = get(s);
-        const units = s === 'Block' ? t : (Math.min(t, knee) + Math.max(0, t - knee) / 4) / 1000;
+        const units = s === 'Block' ? t : (is0568(GD) ? t : Math.min(t, knee) + Math.max(0, t - knee) / 4) / 1000; // 0.56.8: no knee
         use(m, s === 'Block' ? 'more per 1% block' : 'more per 1,000 ' + label[s]);
         engine.push({ v: m.v * units, types: splitTags(m.tags).types, src: m.src + ' (' + Math.round(t).toLocaleString('en-US') + (s === 'Block' ? '' : ' ') + label[s] + ', estimated)' });
       }
@@ -6541,7 +6552,7 @@ window.BOCharacter = function (ctx) {
       }
       weapon = weaponStats(GD, mainItem, mainBase, mods, use, lifeBase);
       const [fullB, fadedB] = bonusSplit(bonus);
-      const levelFactor = (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(BONUS_FADE_ATTACK, fadedB);
+      const levelFactor = (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB);
       attackMult = effAt(sk.Effectiveness != null ? sk.Effectiveness : 1) * levelFactor;
       for (const d of DT) addPart(d, weapon.dmg[d][0] * attackMult, weapon.dmg[d][1] * attackMult);
       res.base = { kind: 'attack', weapon, effectiveness: attackMult, levelFactor };
@@ -6755,7 +6766,7 @@ window.BOCharacter = function (ctx) {
       for (const m of pickMods(mods, 'Damage', 'Inc')) if (hits(m)) { inc += m.v; use(m); }
       for (const m of pickMods(mods, 'Damage', 'More')) if (hitsMore(m)) { more *= 1 + m.v / 100; use(m); }
       // 0.56.7 knee on the more multipliers of your own hits (the young-gem factor `early` stays outside it: my reading).
-      if (is0567(GD) && more > 8) { kneeHit = Math.max(kneeHit, more); more = moreKnee(more); }
+      if (is0567(GD) && !is0568(GD) && more > 8) { kneeHit = Math.max(kneeHit, more); more = moreKnee(more); }
       more *= early;
       if (p.scales.has('Physical') && ctx.tags.has('melee')) inc += per10('Str', 'StrMeleePhysPer10');
       const k = Math.max(0, 1 + inc / 100) * more;
@@ -6888,8 +6899,10 @@ window.BOCharacter = function (ctx) {
       res.notes.push('Totem: ' + tcount + ' totem' + (tcount > 1 ? 's' : '') + ', each casting it every ' + spellEvery.toFixed(2) + ' s' + (tsInc ? ' (' + baseEvery + ' s with ' + Math.round(tsInc) + '% increased totem speed)' : '') + '; your cast speed only places totems faster; assumes every totem casts at this enemy.');
       // 0.56.5: totems of one skill share their damage (80% each past the first, 20% past the sixth).
       if (is0565(GD) && tcount > 1) {
-        countFactor = countShare(tcount, 0.8, 0.2);
-        res.notes.push('Totems share their damage (patch 0.56.5): each past the first adds 80% of one, past the sixth 20% (x' + countFactor.toFixed(3) + ' on average over ' + tcount + ').');
+        const tt = /each past the first adds (d+)% of one's damage/i.exec((GD.supports.multiple_totems || {}).Description || '');
+        const tNext = is0568(GD) ? (tt ? +tt[1] / 100 : 0.5) : 0.8, tPast = is0568(GD) ? tNext : 0.2; // 0.56.8 text: 50% each, no second step
+        countFactor = countShare(tcount, tNext, tPast);
+        res.notes.push('Totems share their damage (patch 0.56.5): each past the first adds ' + Math.round(tNext * 100) + '% of one' + (tPast !== tNext ? ', past the sixth 20%' : '') + ' (x' + countFactor.toFixed(3) + ' on average over ' + tcount + ').');
       }
     } else if (shape === 'trap_support' && !totemAttack) { // a ballista keeps its totem rate (below): tooltip 5 Nov "8 totems, each firing every 0.31 s" with Trap Support
       const d = GD.supports.trap_support.Description; const n = /up to (\d+)/i.exec(d), re = /re-arms ([\d.]+) seconds/i.exec(d);
@@ -6919,7 +6932,9 @@ window.BOCharacter = function (ctx) {
       // (all your Trap skills count) adds 40%". Counted for this skill's traps alone.
       const tx = /past the first adds (\d+)% of a Trap's damage, and each past your sixth[^.]*?adds (\d+)%/i.exec(d);
       if (is0565(GD) && traps > 1) {
-        const a = tx ? +tx[1] / 100 : 0.9, b = tx ? +tx[2] / 100 : is0567(GD) ? 0.25 : 0.4;
+        // 0.56.8 text: "each Trap past the first adds 20% of a Trap's damage" (one step, no sixth-trap step).
+        const t68 = is0568(GD) ? /each Trap past the first adds (d+)%/i.exec(d) : null;
+        const a = t68 ? +t68[1] / 100 : tx ? +tx[1] / 100 : is0568(GD) ? 0.2 : 0.9, b = t68 ? a : tx ? +tx[2] / 100 : is0568(GD) ? 0.2 : is0567(GD) ? 0.25 : 0.4;
         countFactor = countShare(traps, a, b);
         res.notes.push('Traps share their damage (patch 0.56.5): each past the first adds ' + Math.round(a * 100) + '% of one, past the sixth ' + Math.round(b * 100) + '% (x' + countFactor.toFixed(3) + ' on average over ' + traps + '; other Trap skills count toward the six in game, not here).');
       } else if (extraLess && traps > 1) {
@@ -7341,7 +7356,7 @@ window.BOCharacter = function (ctx) {
       const t = /([\d.]+)% more damage for each Mark, up to (\d+)/i.exec((GD.supports.hunters_mark_support || {}).Description || '');
       const per = t ? +t[1] : 1.4; let cap = t ? +t[2] : 10;
       for (const m of pickMods(mods, 'MarkMax', 'Flat')) { cap += m.v; use(m); }
-      if (isBoss) cap *= 2;
+      if (isBoss && !is0568(GD)) cap *= 2; // 0.56.8: "no longer doubles on Guardians and Uniques"
       let eff = 0; for (const m of pickMods(mods, 'MarkEffect', 'Inc')) { eff += m.v; use(m); }
       // Marks fall off 3 s after the LAST hit, so any skill hitting more often than that keeps
       // stacking them to the cap.
@@ -8300,7 +8315,7 @@ window.BOCharacter = function (ctx) {
   // at own level + bonus gear levels. attack: levelFactor (effectiveness not included); spell: spellGrowth.
   function gemLevelGrowth(GD, kind, own, bonus) {
     const G = GD.scaling.Gem;
-    if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(BONUS_FADE_ATTACK, fadedB); }
+    if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
   const api = { dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare,cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };

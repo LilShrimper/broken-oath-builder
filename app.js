@@ -2222,7 +2222,8 @@ window.BOPlanner = function (ctx) {
   const tagList = t => (t || []).join(', ');
   // own: true when the skill is already on the character (adds the sim's numbers); false for the picker (game data only).
   const ATTR_NAME = { Str: 'Strength (red)', Dex: 'Dexterity (green)', Int: 'Intelligence (blue)' };
-  function skillTip(ch, id, own = true) {
+  // noScaling: the Skill Scaling tab's hover leaves out the level rows and the Scaling list (the card shows them).
+  function skillTip(ch, id, own = true, noScaling = false) {
     const sk = GD.skills[lc(id)]; if (!sk) return '';
     const li = t => '<li>' + esc(t) + '</li>';
     const r = own && ctx.sheet ? ctx.sheet(id) : null, ok = r && !r.error && !r.unsupported;
@@ -2230,7 +2231,7 @@ window.BOPlanner = function (ctx) {
     let h = '<b>' + esc(sk.Name) + '</b><span class="pl-tip-sub">' + esc((sk.Kind === 'Gem' ? 'Skill gem' : sk.Kind === 'Weapon' ? 'Weapon skill' : sk.Kind === 'Basic' ? 'Basic attack' : 'Skill') + (own ? ' · level ' + lvl : '') + (sk.Attribute ? ' · ' + (own ? sk.Attribute : ATTR_NAME[sk.Attribute] || sk.Attribute) : '')) + '</span>';
     if (sk.Tags && sk.Tags.length) h += '<span class="pl-tip-tags">' + sk.Tags.concat(sk.DamageType && sk.DamageType !== 'Physical' ? [sk.DamageType] : [], sk.DamageType === 'Physical' ? ['Physical'] : []).map(x => '<i>' + esc(x) + '</i>').join('') + '</span>';
     if (sk.Description) h += '<span class="pl-tip-desc">' + esc(sk.Description) + '</span>';
-    const lv = ctx.levels ? ctx.levels(id) : { rows: [] };
+    const lv = ctx.levels && !noScaling ? ctx.levels(id) : { rows: [] };
     if (lv.rows.length) h += '<div class="pl-tip-lv">' + lv.rows.map(x => '<span><small>LV ' + x[0] + '</small>' + esc(x[1]) + '</span>').join('') + '</div>' + (lv.unit ? '<span class="pl-tip-sub">' + esc(lv.unit + '; LV 30 and 40 count gear levels') + '</span>' : '');
     const lines = [];
     if (sk.DamageType) lines.push('Damage type: ' + sk.DamageType);
@@ -2259,7 +2260,7 @@ window.BOPlanner = function (ctx) {
     const exLines = ctx.extras ? ctx.extras(id) : [];
     if (sc.length) sc.push(sk.SpellMin > 0 || sk.Minion ? 'Levels from gear and the tree: the first 5 count like gem levels, each one after that is worth less than the last' : 'Levels from gear and the tree: the first 5 count like gem levels, after that each adds only about 1%');
     sc.push(...exLines);
-    if (sc.length) h += '<span class="pl-tip-head">Scaling</span><ul class="pl-tip-base">' + sc.map(li).join('') + '</ul>';
+    if (sc.length && !noScaling) h += '<span class="pl-tip-head">Scaling</span><ul class="pl-tip-base">' + sc.map(li).join('') + '</ul>';
     const fit = ch && S.supportChoices ? S.supportChoices(GD, ch, id, {}).length : 0;
     if (fit) h += '<span class="pl-tip-sub pl-tip-fit">' + fit + ' support gems fit this skill</span>';
     if (ok) {
@@ -4932,10 +4933,13 @@ window.BOScaling = function (ctx) {
     if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'pl-tip'; tipEl.setAttribute('role', 'tooltip'); document.body.appendChild(tipEl); }
     if (tipEl.dataset.key !== id) { tipEl.innerHTML = html; tipEl.dataset.key = id; }
     tipEl.hidden = false;
-    const r = head.getBoundingClientRect(), w = tipEl.offsetWidth, hgt = tipEl.offsetHeight;
-    const x = Math.min(e.clientX + 14, innerWidth - w - 8); let y = r.bottom + 6;
-    if (y + hgt > innerHeight - 8) y = Math.max(8, r.top - hgt - 6);
-    tipEl.style.left = Math.max(8, x) + 'px'; tipEl.style.top = y + 'px';
+    // Beside the card, never over it: right of it, else left, else under it (narrow screens).
+    const c = head.parentElement.getBoundingClientRect(), w = tipEl.offsetWidth, hgt = tipEl.offsetHeight;
+    let x, y = Math.max(8, Math.min(c.top, innerHeight - hgt - 8));
+    if (c.right + 8 + w <= innerWidth - 8) x = c.right + 8;
+    else if (c.left - 8 - w >= 8) x = c.left - 8 - w;
+    else { x = Math.max(8, Math.min(c.left, innerWidth - w - 8)); y = c.bottom + 6; if (y + hgt > innerHeight - 8) y = Math.max(8, c.top - hgt - 6); }
+    tipEl.style.left = x + 'px'; tipEl.style.top = y + 'px';
   }
   // Filter by colour and search without redrawing (keeps open "All levels" tables open).
   function apply() {
@@ -11443,7 +11447,7 @@ window.BOStartApp = function () {
   fossil = window.BOFossil({ $, esc, gd: () => GD, chars: () => CHARS });
   // The Brewery tab (brewery.js): Brewmaw's potions; the active ones count in the damage sim.
   brewery = window.BOBrewery({ $, esc, gd: () => GD, current: () => st.ch, onChange: () => { breweryDirty = true; } });
-  scaling = window.BOScaling({ $, esc, gd: () => GD, tip: id => planner.skillTip(null, id, false) }); // hover tooltip on a card's title (the Build tab's skill tooltip, game data only)
+  scaling = window.BOScaling({ $, esc, gd: () => GD, tip: id => planner.skillTip(null, id, false, true) }); // hover tooltip on a card's title (the Build tab's skill tooltip, game data only)
   // The Item Search tab (itemsearch.js): uniques, Oathwords, bases, mods, runes and jewels from the game data.
   grail = window.BOGrail({ $, esc, gd: () => GD, current: () => st.ch, icons: () => itemSearch,
     onChange: () => { if (!$('#itemSearchPane').hidden) itemSearch.render(); } });

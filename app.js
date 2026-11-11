@@ -4908,6 +4908,7 @@ window.BOItemSearch = function (ctx) {
       const t = (GD()[kind] || {})[id] || (GD()[kind] || {})[String(id).toLowerCase()];
       return t && t.Name ? t.Name : String(id).replace(/_/g, ' ');
     };
+    const clsIco = c => (ctx.classIcon ? ctx.classIcon(c) : '');
     const skillName = id => name('skills', id), supportName = id => name('supports', id), uniqueName = id => name('uniques', id);
     const ago = iso => {
       const t = Date.parse(iso || ''); if (!t) return '';
@@ -5080,7 +5081,7 @@ window.BOItemSearch = function (ctx) {
         '<div class="lad-switches">' + toggle('ladHc', 'Softcore', 'Hardcore', S.hc) + toggle('ladSsf', 'Trade', SOLO, S.ssf) + '</div>' +
         '</div>' +
         '<details class="card lad-meta" id="ladMeta"' + (S.metaOpen ? ' open' : '') + '><summary><b>Meta</b><span class="meta">Most played classes, skills and uniques in this league</span></summary>' + metaBody() + '</details>' +
-        '<div class="lad-classes" role="tablist" aria-label="Class">' + ['All', ...CLASSES].map(c => '<button type="button" role="tab" class="lad-class' + (S.cls === c ? ' on' : '') + '" aria-selected="' + (S.cls === c) + '" data-cls="' + c + '">' + c + (c !== 'All' && counts[c] ? ' <small>' + counts[c] + '</small>' : '') + '</button>').join('') + '</div>' +
+        '<div class="lad-classes" role="tablist" aria-label="Class">' + ['All', ...CLASSES].map(c => '<button type="button" role="tab" class="lad-class' + (S.cls === c ? ' on' : '') + '" aria-selected="' + (S.cls === c) + '" data-cls="' + c + '">' + clsIco(c) + c + (c !== 'All' && counts[c] ? ' <small>' + counts[c] + '</small>' : '') + '</button>').join('') + '</div>' +
         '<div class="lad-filters">' +
         '<label class="field"><span>Skill</span><select id="ladSkill"><option value="">All skills</option>' + skills.map(s => '<option value="' + esc(s) + '"' + (s === S.skill ? ' selected' : '') + '>' + esc(skillName(s)) + '</option>').join('') + '</select></label>' +
         '<label class="field lad-item-search"><span>Item worn</span><input id="ladItem" type="search" list="ladItemList" autocomplete="off" placeholder="Unique or base, e.g. Squire\'s Promise" value="' + esc(S.item) + '"><datalist id="ladItemList">' + [...names].sort((a, b) => a.localeCompare(b)).map(nm => '<option value="' + esc(nm) + '"></option>').join('') + '</datalist></label>' +
@@ -5104,7 +5105,7 @@ window.BOItemSearch = function (ctx) {
       const cnt = x => (x.heroes || 0) + ' <small class="meta">(' + (x.share || 0).toFixed(1) + '%)</small>';
       const box = (title, note, body) => '<div class="lad-meta-box"><h3>' + title + '</h3>' + body + (note ? '<p class="hint">' + note + '</p>' : '') + '</div>';
       return '<div class="lad-meta-grid">' +
-        box('Classes', (M.heroes || 0) + ' heroes active in the last ' + (M.window_days || 7) + ' days with a Rupture Level.', '<ul>' + classes.map(c => li('data-f-cls="' + esc(c.id) + '"', esc(c.id), '', c.share, 100, cnt(c))).join('') + '</ul>') +
+        box('Classes', (M.heroes || 0) + ' heroes active in the last ' + (M.window_days || 7) + ' days with a Rupture Level.', '<ul>' + classes.map(c => li('data-f-cls="' + esc(c.id) + '"', clsIco(c.id) + esc(c.id), '', c.share, 100, cnt(c))).join('') + '</ul>') +
         box('Most played skills', 'Main skill of each active hero. Click one to filter the ladder.', '<ul>' + topSkills.map(s => li('data-f-skill="' + esc(s.skill) + '" data-f-scls="' + esc(s.class || '') + '"', esc(skillName(s.skill)), esc(s.class || ''), s.share, 100, cnt(s))).join('') + '</ul>') +
         box('Most used uniques', 'Worn by the published builds (top 50 of each class).' + (hiddenU ? ' ' + hiddenU + ' undiscovered.' : ''), uniques.length ? '<ul>' + uniques.map(u => li('data-f-unique="' + esc(u.id) + '"', esc(uniqueName(u.id)), '', u.share, 100, cnt(u))).join('') + '</ul>' : '<p class="meta">None yet.</p>') +
         box('Deepest Rupture by top 5 skills', 'The five most played main skills, by the deepest Rupture Level reached (median in brackets).', '<ul>' + deep.map(s => li('data-f-skill="' + esc(s.skill) + '" data-f-scls="' + esc(s.class || '') + '"', esc(skillName(s.skill)), esc(s.class || ''), s.best_rupture_level || 0, maxD, (s.best_rupture_level || 0) + ' <small class="meta">(' + (s.median_rupture_level || 0) + ')</small>')).join('') + '</ul>') +
@@ -5124,7 +5125,7 @@ window.BOItemSearch = function (ctx) {
         const ex = extra ? '<td class="num">' + (metric(r) != null ? fmt(metric(r)) : '<span class="meta">–</span>') + '</td>' : '';
         return '<tr class="' + (on ? 'on' : '') + (r.dead ? ' dead' : '') + '"' + (r.has_build && r.build ? ' data-build="' + esc(r.build) + '" tabindex="0"' : '') + '>' +
           '<td class="num">' + (r.rank || '') + '</td>' +
-          '<td>' + esc(r.class || '') + (r.class_rank ? ' <small class="meta" title="Rank inside the class">#' + r.class_rank + '</small>' : '') + (r.ascendancy && r.ascendancy !== 'None' ? ' <small class="meta">' + esc(r.ascendancy) + '</small>' : '') + (hc && r.dead ? ' <span class="lad-dead">dead</span>' : '') + '</td>' +
+          '<td class="lad-cls">' + clsIco(r.class) + esc(r.class || '') + (r.class_rank ? ' <small class="meta" title="Rank inside the class">#' + r.class_rank + '</small>' : '') + (r.ascendancy && r.ascendancy !== 'None' ? ' <small class="meta">' + esc(r.ascendancy) + '</small>' : '') + (hc && r.dead ? ' <span class="lad-dead">dead</span>' : '') + '</td>' +
           '<td class="lad-skill">' + (r.main_skill ? '<b>' + (ctx.skillDot && !isHidden(r.main_skill) ? ctx.skillDot(r.main_skill) : '') + esc(skillName(r.main_skill)) + '</b>' : '<span class="meta">–</span>') + (sups ? '<div class="lad-sups">' + sups + '</div>' : '') + '</td>' +
           '<td class="num">' + (r.level || '') + '</td><td class="num">' + (r.rupture_level || 0) + '</td>' +
           '<td class="num">' + (r.guardian_dps_median ? fmt(r.guardian_dps_median) : '<span class="meta">–</span>') + '</td>' +
@@ -8919,6 +8920,10 @@ window.BOStartApp = function () {
       document.documentElement.style.setProperty('--gem-sheet', 'url("' + GI.src + '")');
     } catch (e) { window.GEM_ICONS = null; }
   }
+  // Class emblems (Ladder tab): one strip, as a CSS background (--class-sheet). Small enough to stay a data: link locally.
+  const CI = window.CLASS_ICONS;
+  if (CI) document.documentElement.style.setProperty('--class-sheet', 'url("' + CI.src + '")');
+  const classIcon = c => { const i = CI ? CI.order.indexOf(c) : -1; return i < 0 ? '' : '<i class="cls-ico" style="background-position:' + (CI.order.length > 1 ? i / (CI.order.length - 1) * 100 : 0) + '% 0;background-size:' + CI.order.length * 100 + '% 100%" aria-hidden="true"></i>'; };
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const num = (x, d) => {
@@ -12126,7 +12131,7 @@ window.BOStartApp = function () {
   itemSearch = window.BOItemSearch({ $, esc, gd: () => GD, owned: () => grail });
   // The Ladder tab (ladder.js): public ladders and top builds from the Broken Oath public API, read only through the
   // share worker's cache (/api/). ?ladderapi=local points it at `wrangler dev` on port 8787 for testing.
-  ladder = window.BOLadder({ $, esc, gd: () => GD, num, gemDot, skillDot,
+  ladder = window.BOLadder({ $, esc, gd: () => GD, num, gemDot, skillDot, classIcon,
     api: (new URLSearchParams(location.search).get('ladderapi') === 'local' ? 'http://localhost:8787' : SHARE_API) + '/api/',
     // An item's lines as text: base numbers (weapon damage or defences) then its own lines, added up by stat (as Item Simulator).
     itemLines: (item, classId) => {

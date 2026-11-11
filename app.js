@@ -2770,6 +2770,8 @@ window.BOCreator = function (ctx) {
   const DEFAULT_FILL = { gems: true, supports: true, runes: true, gold: true, forge: true, sigils: true, cube: true };
   C.fill = { ...DEFAULT_FILL };
   C.fillSnaps = {};
+  // Typed-in gold and gem levels: unticking a QoL option keeps these instead of putting the old values back.
+  C.manual = { gold: false, gems: {} };
   const R = () => W.get(C.save.props, 'Record').v.props;
   const sumP = () => W.get(R(), 'Summary').v.props;
   const summary = () => W.toPlain(sumP());
@@ -2882,7 +2884,7 @@ window.BOCreator = function (ctx) {
       const S = W.toPlain(sm.v.props);
       if (S.Realm === 'Online' || S.League) throw new Error((S.Name || 'This character') + ' is an online character (' + (S.League || S.Realm) + '). The Save Creator only changes offline characters.');
       if (!W.same(W.serialize(save), bytes)) throw new Error('This save has something the Save Creator cannot write back exactly, so it will not change it.');
-      Object.assign(C, { file: file.name, orig: bytes, save, log: [], edit: null, editIdx: -1, runeSnap: null, fillSnaps: {}, fill: { ...DEFAULT_FILL }, copied: null, copyMode: '' }); // a build imported first stays picked
+      Object.assign(C, { file: file.name, orig: bytes, save, log: [], edit: null, editIdx: -1, runeSnap: null, fillSnaps: {}, manual: { gold: false, gems: {} }, fill: { ...DEFAULT_FILL }, copied: null, copyMode: '' }); // a build imported first stays picked
       C.msg = 'Loaded ' + S.Name + ' (' + S.ClassId + ' ' + (S.Level || 1) + ', offline).';
       const added = fillAll(); if (added.length) C.log.push(...added);
     } catch (e) { C.err = e.message; }
@@ -2983,6 +2985,7 @@ window.BOCreator = function (ctx) {
   }
   function copyBuild(ch) {
     // Remove only the automatic additions first, so unchecking after an import restores the imported build.
+    C.manual.gems = {}; // the build brings its own gem list
     for (const key of Object.keys(C.fillSnaps)) unfill(key);
     changed(applyBuild(JSON.parse(JSON.stringify(ch)), ALL_PARTS));
     const added = fillAll(); if (added.length) C.log.push(...added); // the build's gem list replaced the full one
@@ -3129,7 +3132,7 @@ window.BOCreator = function (ctx) {
     if (key === 'runes') unfillRunes();
     else {
       const props = /^(forge|sigils)$/.test(key) ? mapProps() : R();
-      if (props) for (const [name, before] of snap.fields) {
+      if (props && !(key === 'gold' && C.manual.gold)) for (const [name, before] of snap.fields) {
         const i = props.findIndex(p => p.name === name);
         if (key === 'cube') {
           // Other controls add zone flags too: remove only cube flags introduced by this option.
@@ -3139,6 +3142,10 @@ window.BOCreator = function (ctx) {
         } else if (before) {
           if (i < 0) props.push(structuredClone(before)); else props[i] = structuredClone(before);
         } else if (i >= 0) props.splice(i, 1);
+      }
+      if (key === 'gems') for (const [id, l] of Object.entries(C.manual.gems)) {
+        const list = arr(R(), 'Gems'); if (!list.some(g => lc(g) === lc(id))) setArr(R(), 'Gems', list.concat(id));
+        setGemLevel(id, l);
       }
     }
     C.log = C.log.filter(x => !snap.log.includes(x));
@@ -3499,9 +3506,9 @@ window.BOCreator = function (ctx) {
       const rec = R();
       if (t.id === 'crName') { const n = t.value.trim().slice(0, 24); if (n) { setV(sumP(), 'Name', n); changed('Name: ' + n + '.'); } return render(); }
       if (t.id === 'crLevel') { const l = setLevel(t.value); changed('Level ' + l + '.'); return render(); }
-      if (t.id === 'crGold') { const v = Math.max(0, Math.round(+t.value) || 0); setV(rec, 'gold', v); changed('Gold ' + v + '.'); return render(); }
+      if (t.id === 'crGold') { const v = Math.max(0, Math.round(+t.value) || 0); setV(rec, 'gold', v); C.manual.gold = true; changed('Gold ' + v + '.'); return render(); }
       if (t.id === 'crBonus') { const v = Math.max(0, Math.round(+t.value) || 0); setV(rec, 'BonusPassivePoints', v); changed('Bonus passive points ' + v + '.'); return render(); }
-      if (t.dataset.gem) { const l = setGemLevel(t.dataset.gem, t.value); changed(((GD.skills[lc(t.dataset.gem)] || GD.supports[lc(t.dataset.gem)] || {}).Name || t.dataset.gem) + ' gem level ' + l + '.'); return render(); }
+      if (t.dataset.gem) { const l = setGemLevel(t.dataset.gem, t.value); C.manual.gems[t.dataset.gem] = l; changed(((GD.skills[lc(t.dataset.gem)] || GD.supports[lc(t.dataset.gem)] || {}).Name || t.dataset.gem) + ' gem level ' + l + '.'); return render(); }
       if (t.id === 'crBuild') { C.buildId = t.value; return render(); }
       if (t.dataset.rcount != null) {
         const s = items()[+t.dataset.rcount]; if (!s) return;
@@ -3572,7 +3579,7 @@ window.BOCreator = function (ctx) {
       }
       if (act === 'download') return download();
       if (act === 'preview') return preview();
-      if (act === 'undo') { C.save = W.parse(C.orig); C.log = []; C.runeSnap = null; C.fillSnaps = {}; C.fill = Object.fromEntries(Object.keys(DEFAULT_FILL).map(k => [k, false])); C.copied = null; C.copyMode = ''; C.edit = null; C.editIdx = -1; C.msg = 'Back to the save as loaded.'; return render(); }
+      if (act === 'undo') { C.save = W.parse(C.orig); C.log = []; C.runeSnap = null; C.fillSnaps = {}; C.manual = { gold: false, gems: {} }; C.fill = Object.fromEntries(Object.keys(DEFAULT_FILL).map(k => [k, false])); C.copied = null; C.copyMode = ''; C.edit = null; C.editIdx = -1; C.msg = 'Back to the save as loaded.'; return render(); }
     });
   })();
 

@@ -1753,7 +1753,8 @@ window.BOPlanner = function (ctx) {
   const uniquesFor = slot => Object.values(GD.uniques).filter(u => { const b = GD.bases[lc(u.BaseId)]; return b && b.Slot === baseSlot(slot); }).sort(byName);
   const oathwordBases = (slot, word) => {
     const allowed = new Set((word && word.Bases || []).map(lc));
-    return basesFor(slot).filter(b => [b.Class, b.Slot, ...(b.Tags || [])].some(tag => tag && allowed.has(lc(tag))));
+    // The base must take the word's tag and have room for all its runes (Kindling, Sunder and Sigilbreaker skip the weapons with fewer sockets).
+    return basesFor(slot).filter(b => [b.Class, b.Slot, ...(b.Tags || [])].some(tag => tag && allowed.has(lc(tag))) && runeSlots(b) >= ((word && word.Runes) || []).length);
   };
   const oathwordsFor = slot => (GD.runewords || []).filter(w => oathwordBases(slot, w).length).sort(byName);
   const oathwordByRunes = (slot, runes) => (GD.runewords || []).find(w =>
@@ -6235,11 +6236,19 @@ window.BOCharacter = function (ctx) {
   // loaded character; the save file is never written.
   const G = planner.gear;
   const RAR = ['Normal', 'Magic', 'Rare'];
+  let RD = { busy: '', r: null }; // the screenshot reader's state: progress text and last result
   let M = null, back = null, lastFocus = null; // M: { slot, idx, tab, kind, cat, q, word }
   const rarCls = it => it.rarity === 'Unique' ? 'unique' : lc(it.rarity);
   const safe = f => { try { return f(); } catch (e) { return ''; } };
   const itemNow = ch => !M ? null : M.slot === 'Idol' ? (ch.items[M.idx] || null) : (ch.items.find(i => i.slot === M.slot) || null);
   const baseTypeName = b => b.TypeName || b.Name;
+  // Sidebar group of a base: its weapon / off-hand type, or for armour its defence mix (Armour, Armour / Evasion ...).
+  const DEF_ORDER = ['Armour', 'Evasion', 'Energy Shield', 'Armour / Evasion', 'Armour / Energy Shield', 'Evasion / Energy Shield'];
+  const catOf = b => {
+    if (b.TypeName) return b.TypeName;
+    const d = [b.Armour && 'Armour', b.Evasion && 'Evasion', b.EnergyShield && 'Energy Shield'].filter(Boolean).join(' / ');
+    return d;
+  };
 
   function openItem(el) {
     if (!ctx.current()) return;
@@ -6247,11 +6256,24 @@ window.BOCharacter = function (ctx) {
     const slot = el.dataset.slot, idx = +el.dataset.idx;
     lastFocus = el.closest('.ch-slot') || el;
     const it = idx >= 0 ? ctx.current().items[idx] : null;
+    RD = { busy: '', r: null };
     M = { slot, idx: it ? idx : -1, tab: it ? 'edit' : 'select', kind: 'basic', cat: '', q: '', word: '' };
     if (!back) {
       back = document.createElement('div'); back.className = 'io-back'; back.setAttribute('role', 'dialog'); back.setAttribute('aria-modal', 'true'); back.setAttribute('aria-label', 'Item');
       back.addEventListener('mousedown', e => { if (e.target === back) closeItem(); });
       back.addEventListener('click', onIoClick); back.addEventListener('change', onIoChange);
+      back.addEventListener('dragover', e => e.preventDefault());
+      back.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); document.body.classList.remove('dragging'); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f && /^image\//.test(f.type)) readShot(f); });
+      back.addEventListener('keydown', e => { const r = e.target.closest && e.target.closest('#ioRead'); if (r && e.target === r && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); const i = r.querySelector('input[type=file]'); if (i) i.click(); } });
+      // Ctrl+V: a screenshot is read wherever the cursor is; item text only when not typing in a box.
+      document.addEventListener('paste', e => {
+        if (!M || !back || back.hidden) return;
+        const items = Array.from((e.clipboardData && e.clipboardData.items) || []), img = items.find(i => i.kind === 'file' && /^image\//.test(i.type));
+        if (img) { e.preventDefault(); return readShot(img.getAsFile()); }
+        if (e.target.closest && e.target.closest('input, textarea, select')) return;
+        const text = e.clipboardData && e.clipboardData.getData('text/plain');
+        if (text && /\n/.test(text.trim()) && /\d/.test(text)) { e.preventDefault(); readShot(text); }
+      });
       back.addEventListener('input', e => { if (e.target.id === 'ioSearch') { M.q = e.target.value; renderList(); } });
       document.addEventListener('keydown', e => { if (M && e.key === 'Escape') { e.preventDefault(); closeItem(); } });
       document.body.appendChild(back);
@@ -6276,16 +6298,55 @@ window.BOCharacter = function (ctx) {
     const tab = (id, label, off) => '<button class="io-tab' + (M.tab === id ? ' on' : '') + '" type="button" data-io="tab" data-v="' + id + '"' + (off ? ' disabled' : '') + '>' + label + '</button>';
     let h = '<div class="io-win"><div class="io-head">' + tab('select', 'Select') + tab('edit', 'Edit', !it) +
       '<span class="io-slotname">' + esc(planner.slotName[M.slot] || M.slot) + '</span><button class="io-x" type="button" data-io="close" aria-label="Close">×</button></div>';
-    h += '<div class="io-body" id="ioBody">' + (M.tab === 'select' ? selectHtml() : editHtml(ch, it)) + '</div>';
+    h += '<div class="io-body" id="ioBody">' + readBar() + (M.tab === 'select' ? selectHtml() : editHtml(ch, it)) + '</div>';
     back.innerHTML = h + '</div>';
     if (M.tab === 'select') renderList();
+  }
+
+  // ----- Screenshot: read an item from a screenshot or its tooltip text (itemread.js) into this slot -----
+  function readBar() {
+    let h = '<div class="io-read" id="ioRead" tabindex="0" role="button" aria-label="Paste, drop or pick a screenshot of the item"><b>' + esc(RD.busy || 'Read a screenshot') + '</b>' +
+      (RD.busy ? '' : ' <span>Press Ctrl+V to paste one, drop it here, or <label class="linkish">pick an image<input type="file" id="ioFile" accept="image/*" hidden></label>. Item text works too. The image is read in this browser and never uploaded.</span>') + '</div>';
+    const r = RD.r;
+    if (r && r.error) h += '<p class="hint bad">' + esc(r.error) + '</p>';
+    else if (r) {
+      const cls = { affix: 'good', unique: 'good', unread: 'bad' }, n = r.lines.filter(l => l.kind === 'affix' || l.kind === 'unique').length;
+      h += '<details class="cmp-readout"' + (r.unread.length || r.notes.length ? ' open' : '') + '><summary>Read ' + n + ' item line' + (n === 1 ? '' : 's') + (r.unread.length ? ', <span class="bad">' + r.unread.length + ' not recognised</span>' : '') + '. Check them against the screenshot.</summary><ul>' +
+        r.lines.map(l => '<li class="' + (cls[l.kind] || 'meta') + '">' + esc(l.text) + (l.label ? ' <span class="meta">· ' + esc(l.label) + '</span>' : l.kind === 'unread' ? ' <span class="meta">· not recognised</span>' : '') + '</li>').join('') + '</ul>' +
+        r.notes.map(t => '<p class="hint bad">' + esc(t) + '</p>').join('') +
+        (r.unread.length ? '<p class="hint">Add lines that were not recognised with the Add Prefix / Add Suffix lists.</p>' : '') + '</details>';
+    }
+    return h;
+  }
+  // src is an image (Blob) or item text. The read item replaces what the slot holds.
+  async function readShot(src) {
+    if (!M || RD.busy) return;
+    if (!window.BOItemRead) { RD.r = { error: 'The screenshot reader is not available in this page.' }; return renderItem(); }
+    RD.r = null;
+    let text = src;
+    if (typeof src !== 'string') {
+      RD.busy = 'Loading the text reader…'; renderItem();
+      try { text = await window.BOItemRead.readImage(src, t => { RD.busy = t; const e = back && back.querySelector('#ioRead b'); if (e) e.textContent = t; }); }
+      catch (err) { RD.busy = ''; RD.r = { error: 'Could not read the screenshot: ' + err.message }; return renderItem(); }
+      RD.busy = '';
+    }
+    if (!M || !ctx.current()) return;
+    const ch = ctx.editable(), old = itemNow(ch);
+    const r = window.BOItemRead.parse(GD(), ctx.sim, text, { slot: M.slot, base: old && old.base, level: ch.level });
+    if (!r.item) { RD.r = { error: typeof src === 'string' ? 'That text does not look like an item.' : 'No item text found in that image. Crop it to the tooltip and try again.' }; return renderItem(); }
+    const item = Object.assign(r.item, { slot: M.slot });
+    if (M.slot === 'Idol') { if (old) ch.items[M.idx] = item; else { ch.items.push(item); M.idx = ch.items.length - 1; } }
+    else { const i = ch.items.findIndex(x => x.slot === M.slot); if (i >= 0) ch.items[i] = item; else ch.items.push(item); }
+    RD.r = r; M.tab = 'edit'; M.word = '';
+    commit(ch);
   }
 
   // ----- Select tab -----
   function categories() {
     const bases = G.basesFor(M.slot), cats = new Map();
-    for (const b of bases) { const k = baseTypeName(b); if (!cats.has(k)) cats.set(k, { name: k, two: !!b.bTwoHanded || (b.Tags || []).includes('TwoHand') }); }
-    return [...cats.values()].sort((a, b) => a.name.localeCompare(b.name));
+    for (const b of bases) { const k = catOf(b); if (k && !cats.has(k)) cats.set(k, { name: k, two: !!b.bTwoHanded || (b.Tags || []).includes('TwoHand') }); }
+    const rank = n => { const i = DEF_ORDER.indexOf(n); return i < 0 ? 99 : i; };
+    return [...cats.values()].sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
   }
   function selectHtml() {
     const cats = categories(), weapon = M.slot === 'MainHand';
@@ -6314,11 +6375,11 @@ window.BOCharacter = function (ctx) {
     lines.slice(0, 8).map(l => '<span class="io-line">' + esc(l) + '</span>').join('') + (lines.length > 8 ? '<span class="io-line meta">+' + (lines.length - 8) + ' more</span>' : '') + '</button>';
   function listFor() {
     const q = M.q.trim().toLowerCase(), has = (...s) => !q || s.join(' ').toLowerCase().includes(q);
-    const inCat = b => !M.cat || baseTypeName(b) === M.cat;
+    const inCat = b => !M.cat || catOf(b) === M.cat;
     const basic = G.basesFor(M.slot).filter(b => inCat(b) && has(b.Name, baseTypeName(b)));
     const uniques = G.uniquesFor(M.slot).filter(u => { const b = GD().bases[lc(u.BaseId)]; return inCat(b) && has(u.Name, baseTypeName(b), uniqueLines(u).join(' ')); });
-    const words = G.oathwordsFor(M.slot).filter(w => has(w.Name, (w.Runes || []).join(' ')));
-    return { basic, uniques, words };
+    const words = G.oathwordsFor(M.slot).filter(w => has(w.Name, (w.Runes || []).join(' ')) && G.oathwordBases(M.slot, w).some(inCat)); // only words with a base in the chosen group
+    return { basic, uniques, words, inCat };
   }
   const GD = () => ctx.gd();
   function renderList() {
@@ -6335,10 +6396,10 @@ window.BOCharacter = function (ctx) {
     else if (M.word) {
       const w = G.oathwordsFor(M.slot).find(x => lc(x.Id) === lc(M.word));
       h += '<div class="io-wordbar"><button type="button" class="btn small ghost" data-io="wordback">‹ All Oathwords</button><b>' + esc(w ? w.Name : '') + '</b><span class="meta">Pick a base item type</span></div>';
-      cards = w ? G.oathwordBases(M.slot, w).map(b => card('wbase', b.Id, b.Name, '', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), baseLines(b))).join('') : '';
+      cards = w ? G.oathwordBases(M.slot, w).filter(L.inCat).map(b => card('wbase', b.Id, b.Name, '', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), baseLines(b))).join('') : '';
     } else cards = L.words.map(w => {
       const rn = (w.Runes || []).map(r => (gd.runes[lc(r)] || { Name: r }).Name);
-      return card('word', w.Id, w.Name, 'rare', G.oathwordBases(M.slot, w).length + ' base type' + (G.oathwordBases(M.slot, w).length === 1 ? '' : 's'), ['Runes: ' + rn.join(' · ')]);
+      return card('word', w.Id, w.Name, 'rare', (n => n + (n === 1 ? ' base' : ' bases'))(G.oathwordBases(M.slot, w).filter(L.inCat).length), ['Runes: ' + rn.join(' · ')]);
     }).join('');
     h += cards ? '<div class="io-cards">' + cards + '</div>' : '<p class="hint">Nothing matches.</p>';
     if (total) h += '<p class="hint">Picking an item replaces the one in this slot.</p>';
@@ -6453,7 +6514,9 @@ window.BOCharacter = function (ctx) {
     if (act === 'rmaffix') { it.affixes.splice(+b.dataset.ai, 1); return commit(ch); }
   }
   function onIoChange(e) {
-    const t = e.target, f = t.dataset.f; if (!M || !f) return;
+    const t = e.target, f = t.dataset.f;
+    if (t.id === 'ioFile') { if (t.files[0]) readShot(t.files[0]); t.value = ''; return; }
+    if (!M || !f) return;
     const ch = ctx.editable(), it = ch && itemNow(ch); if (!it) return;
     const v = t.value, ai = +((t.closest('[data-ai]') || {}).dataset || {}).ai, gd = GD();
     switch (f) {
@@ -12585,7 +12648,7 @@ window.BOStartApp = function () {
   });
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon });
   character = window.BOCharacter({
-    $, esc, planner, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats,
+    $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats,
     // Item overlay: edits go to a plan itself, or to a copy of a loaded character (as on the Build tab); the save file is never written.
     editable: buildEditable, commit: ch => { if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {}); planner.render(); }, // the caller redraws the Character tab
     sheet: () => st.ch && st.skill ? S.calcSkill(GD, st.ch, st.skill, opts()) : null,

@@ -1822,7 +1822,18 @@ window.BOPlanner = function (ctx) {
     if (/^BOS1\./.test(String(text).trim()) && p) unpackShare(p); // share link: items come as short rows
     if (!p || !p.classId || !Array.isArray(p.items) || !Array.isArray(p.sockets)) throw new Error('This is not a build plan.');
     const base = blankPlan(p.classId, p.level || 1);
-    return Object.assign(base, p, { id: newId(), plan: true, savedAt: new Date().toISOString() });
+    const plan = Object.assign(base, p, { id: newId(), plan: true, savedAt: new Date().toISOString() });
+    // A support that does not fit its skill cannot be socketed in the game, so a code carrying one (made by an older page) loses it.
+    const dropped = [];
+    for (const s of plan.sockets || []) {
+      if (!GD.skills[lc(s.skill)]) continue;
+      const fit = new Set(S.supportChoices(GD, plan, s.skill, { conduit: s.conduit }).map(c => c.id));
+      const keep = (s.supports || []).filter(id => fit.has(lc(id)) || !GD.supports[lc(id)]);
+      for (const id of s.supports || []) if (!keep.includes(id)) dropped.push((GD.supports[lc(id)] || { Name: id }).Name + ' (' + GD.skills[lc(s.skill)].Name + ')');
+      s.supports = keep;
+    }
+    if (dropped.length) status = 'Left out because they do not fit their skill: ' + dropped.join(', ') + '.';
+    return plan;
   }
 
   // ---------- view ----------
@@ -2438,8 +2449,16 @@ window.BOPlanner = function (ctx) {
         else { ensureSocket(ch, skill); ch.hotbar = ch.hotbar.filter(h => h !== skill); }
         status = ''; return done({ skills: true });
       case 'main': ch.mainSkill = skill; return done({ select: skill });
-      case 'addsup': if (v) { const s = ensureSocket(ch, skill); if (!s.supports.some(x => lc(x) === lc(v))) s.supports.push(v); } return done({ skills: true });
-      case 'conduit': ensureSocket(ch, skill).conduit = v; return done({ skills: true });
+      case 'addsup': if (v && GD.skills[lc(skill)] && !S.supportChoices(GD, ch, skill, { conduit: (ch.sockets.find(x => x.skill === skill) || {}).conduit }).some(c => c.id === lc(v))) { status = ((GD.supports[lc(v)] || {}).Name || v) + ' cannot go into ' + GD.skills[lc(skill)].Name + '.'; return render(); } if (v) { const s = ensureSocket(ch, skill); if (!s.supports.some(x => lc(x) === lc(v))) s.supports.push(v); } return done({ skills: true });
+      case 'conduit': {
+        const s = ensureSocket(ch, skill);
+        if (v && GD.skills[lc(skill)]) {
+          const fit = new Set(S.supportChoices(GD, ch, skill, { conduit: v }).map(c => c.id));
+          const bad = s.supports.filter(id => GD.supports[lc(id)] && !fit.has(lc(id)));
+          if (bad.length) { status = 'Cannot link ' + ((GD.skills[lc(v)] || {}).Name || v) + ': ' + bad.map(id => GD.supports[lc(id)].Name).join(', ') + ' would not fit. Take ' + (bad.length > 1 ? 'them' : 'it') + ' out first.'; return render(); }
+        }
+        s.conduit = v; return done({ skills: true });
+      }
     }
     return gearChange(ch, t, K, done, render);
   }
@@ -2564,6 +2583,7 @@ window.BOPlanner = function (ctx) {
       const SHAPES = ['orbit', 'rain_support', 'trap_support', 'totem_support'];
       const swap = SHAPES.includes(id) ? s.supports.find(x => SHAPES.includes(lc(x))) : null;
       const slots = S.socketsFor(GD, ch, skill, ch.gemLevels[skill] || 1);
+      if (GD.skills[lc(skill)] && !S.supportChoices(GD, ch, skill, { conduit: s.conduit }).some(c => c.id === id)) { status = (sd.Name || id) + ' cannot go into ' + (GD.skills[lc(skill)].Name) + (S.dealsNoHits(GD.skills[lc(skill)]) ? ': ' + GD.skills[lc(skill)].Name + ' deals no hits.' : '.'); return render(); }
       if (swap) { s.supports = s.supports.filter(x => x !== swap); status = (sd.Name || id) + ' replaces ' + (GD.supports[lc(swap)] || { Name: swap }).Name + ': only one shape support counts.'; }
       else if (s.supports.length >= slots) { status = 'All ' + slots + ' sockets are used: take a support out first (a higher gem level opens more).'; return render(); }
       else status = '';
@@ -6277,7 +6297,7 @@ window.BOCharacter = function (ctx) {
       if (hostTags && !granted && !fitsHost) { res.supports.push({ id, key, name: sd.Name, ok: false, why: 'cannot be socketed in ' + host.name + ' (needs ' + req.join(' or ') + ')', desc: sd.Description }); continue; }
       const onHost = !ok && fitsHost && !granted;
       if (onHost) { res.supports.push({ id, key, name: sd.Name + ' (on ' + host.name + ')', ok: true, hostOnly: true, why: '', desc: 'Works on ' + host.name + ' itself; for this spell it only matters through ' + host.name + '\'s ticks. ' + sd.Description }); continue; }
-      res.supports.push({ id, key, name: sd.Name + (granted ? ' (granted)' : ''), granted, ok, why: ok ? '' : brandTrapMiss(sd, sk) ? 'cannot be thrown as a trap: Brands cannot take it' : meleeOnlyMiss(sd, sk) ? 'the minions of ' + sk.Name + ' cannot use it (melee minions only)' : 'does not support this skill (' + (ex.some(t => ctx.tags.has(lc(t))) ? 'not for ' + ex.filter(t => ctx.tags.has(lc(t))).join(' or ') + ' skills' : 'needs ' + req.join(' or ')) + ')', desc: sd.Description });
+      res.supports.push({ id, key, name: sd.Name + (granted ? ' (granted)' : ''), granted, ok, why: ok ? '' : noHitMiss(sd, sk) ? 'no effect: ' + sk.Name + ' deals no hits' : brandTrapMiss(sd, sk) ? 'cannot be thrown as a trap: Brands cannot take it' : meleeOnlyMiss(sd, sk) ? 'the minions of ' + sk.Name + ' cannot use it (melee minions only)' : 'does not support this skill (' + (ex.some(t => ctx.tags.has(lc(t))) ? 'not for ' + ex.filter(t => ctx.tags.has(lc(t))).join(' or ') + ' skills' : 'needs ' + req.join(' or ')) + ')', desc: sd.Description });
       if (!ok || (o.off && o.off.has(key))) continue;
       for (const m of sd.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: m.Value || 0, v2: m.Value2 || 0, local: false, src: 'Support · ' + sd.Name, key });
     }
@@ -8065,7 +8085,16 @@ window.BOCharacter = function (ctx) {
   // Trap cannot go into a Brand (Storm / Rime / Venom Spark carry the Chain tag, so the tags alone let it in). Owner, 9 Nov 2026: the game's Trap
   // tooltip lists only Zap, Marrow Lance, Ember Bolt and Frost Nova for the character, with Venom Spark not among them, and the owner confirms it cannot be socketed.
   const brandTrapMiss = (sp, sk) => !!sp && lc(sp.Id) === 'trap_support' && !!sk && sk.Delivery === 'Brand';
-  const noFit = (sp, sk) => meleeOnlyMiss(sp, sk) || brandTrapMiss(sp, sk);
+  // Death Sentence deals no hits, so Inspiration and Hunter's Mark cannot go into it. Game tooltip (owner's screenshots, 11 Nov 2026): the sockets
+  // list "Inspiration Support (no effect: Death Sentence deals no hits)" and "Hunter's Mark Support (no effect: Hunter's Mark needs a skill that hits:
+  // Death Sentence deals no hits)"; trying to place one shows the toast "Death Sentence deals no hits". Only these two are confirmed; Spell Echo is fine.
+  const NO_HIT_SKILL_MISS = new Set(['inspiration', 'hunters_mark_support']);
+  // Same day, Inspiration's tooltip: "Won't fit: Vow of Warding deals no hits; Vow of Clarity deals no hits; Herald of Storms deals no hits; Woe of the
+  // Tempest deals no hits; and 2 more", "No effect: Woe of Faltering deals no hits"; placing it on a Vow or Herald shows the toast "<skill> deals no hits".
+  // So every Vow, Herald, Woe and Sentence (all Curse-tagged or Vow-tagged) deals no hits.
+  const dealsNoHits = sk => !!sk && (sk.Tags || []).some(t => t === 'Curse' || t === 'Vow' || t === 'Woe' || t === 'Sentence');
+  const noHitMiss = (sp, sk) => !!sp && NO_HIT_SKILL_MISS.has(lc(sp.Id)) && dealsNoHits(sk);
+  const noFit = (sp, sk) => meleeOnlyMiss(sp, sk) || brandTrapMiss(sp, sk) || noHitMiss(sp, sk);
   // Faster Casting is a Spell support (no Minion tag) but speeds up shooting minions (patch notes 7 Nov, 0.56.3).
   const castsForMinions = (sp, sk) => !!sp && lc(sp.Id) === 'faster_casting' && !!sk && isSummon(sk) && (sk.Tags || []).includes('Projectile');
   const minionCounts = (sp, sk) => castsForMinions(sp, sk) || forMinions(sp) && (sp.Mods || []).some(m => (m.Stat === 'Damage' && m.Mode === 'More') || m.Stat === 'DamageAsExtra' || m.Stat === 'MinionStrikes' || m.Stat === 'RuthlessBlow' || ((m.Stat === 'MinionSpeed' || m.Stat === 'AttackSpeed') && m.Mode === 'More'));
@@ -8249,7 +8278,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(BONUS_FADE_ATTACK, fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { heroMaxLife, gemLevelGrowth, vowShare,cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  const api = { dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare,cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -8708,6 +8737,7 @@ window.BOStartApp = function () {
     if (inSet.includes(id)) {
       st.supports = st.supports.filter(s => s.toLowerCase() !== id); st.keepSup.delete(id); st.off.delete('support:' + id);
     } else {
+      if (!S.supportChoices(GD, st.ch, st.skill, opts()).some(c => c.id === id)) { const sk = GD.skills[st.skill] || {}; st.supMsg = (sd.Name || id) + ' cannot go into ' + (sk.Name || 'this skill') + (S.dealsNoHits(sk) ? ': ' + sk.Name + ' deals no hits.' : '.'); renderSupportPicker(st.last || S.calcSkill(GD, st.ch, st.skill, opts())); return; }
       const SHAPES = ['orbit', 'rain_support', 'trap_support', 'totem_support'];
       const swap = SHAPES.includes(id) ? st.supports.find(s => SHAPES.includes(s.toLowerCase())) : null;
       if (swap) { st.supports = st.supports.filter(s => s !== swap); st.keepSup.delete(swap.toLowerCase()); st.supMsg = sd.Name + ' replaces ' + (GD.supports[swap.toLowerCase()] || { Name: swap }).Name + ': only one shape support counts.'; }

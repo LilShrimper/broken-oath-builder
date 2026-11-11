@@ -587,7 +587,9 @@
   function parseLog(text) {
     const out = { heroes: [], guardians: [], casts: {}, skyfall: { falls: 0, hits: 0, blocked: 0 }, gems: {}, start: null, end: null, panel: {}, poisonCheck: null };
     let hero = null, cur = null, ail = null;
-    const rupture = {}, element = {}, ward = {}, hitMult = {};
+    const rupture = {}, element = {}, ward = {}, hitMult = {}, intros = {};
+    const releases = {};
+    let blessings = {};
     const self = {}, conduitSkills = new Set();
     // Running ailment totals ("AilmentStats: t=.. ignites N shocks N poisons N freezes N ticks N dot N ... bleeds N (dot N"):
     // the change across a fight is what ailments did then (to everything, adds too).
@@ -612,7 +614,14 @@
       if (!l.includes('LogBrokenOath')) continue;
       const t = time(l); if (t == null) continue;
       if (out.start == null) out.start = t; out.end = t;
-      if ((m = /Trigger: Crit -> CastLinked (\w+) via (\w+) \(\d+ hits?, fired (\d+)\)/.exec(l))) {
+      if ((m = /Skill: \w+ (\w+) \w+ release\b/.exec(l))) {
+        (releases[m[1]] = releases[m[1]] || []).push(t);
+        if (cur) { cur.releases = cur.releases || {}; cur.releases[m[1]] = (cur.releases[m[1]] || 0) + 1; }
+      } else if ((m = /Guardian: (\w+) \(([^,)]+), (\w+)\) ML (\d+): life (\d+)/.exec(l)) || (m = /Guardian: (\w+)\s+ML (\d+): life (\d+)/.exec(l))) {
+        const variant = m.length === 6;
+        intros[m[1]] = { level: +(variant ? m[4] : m[2]), life: +(variant ? m[5] : m[3]), colour: variant ? m[2] : null };
+        if (variant) element[m[1]] = m[3];
+      } else if ((m = /Trigger: Crit -> CastLinked (\w+) via (\w+) \(\d+ hits?, fired (\d+)\)/.exec(l))) {
         // Written only every 25th trigger ("fired 1150, 1175"), so it is a running counter, not one line a cast.
         // A fight's casts = the counter's rise; OrbitCast releases (casts + echoes) win when the spell has them.
         if (cur) { const fr = (cur.fired = cur.fired || {})[m[1]] = cur.fired[m[1]] || { first: +m[3], last: +m[3] }; fr.last = +m[3]; }
@@ -624,7 +633,10 @@
       } else if ((m = /Skyfall: second fall for \d+% \((\d+) hits?\) cast \d+, (\d+) already/.exec(l))) {
         out.skyfall.falls++; out.skyfall.hits += +m[1]; if (+m[1] === 0 && +m[2] > 0) out.skyfall.blocked++;
       } else if ((m = /Hero (.+?) \((\w+), level (\d+), weapon '([^']*)'/.exec(l))) {
+        if (hero && hero.name !== m[1]) blessings = {};
         hero = { name: m[1], cls: m[2], level: +m[3], weapon: m[4], t }; out.heroes.push(hero);
+      } else if ((m = /Blessings: swore (.+?) \(level (\d+)/.exec(l))) {
+        blessings[m[1]] = +m[2];
       } else if ((m = /(?:Harder59|BossMech): (\w+) at Rupture (\d+)/.exec(l))) {
         rupture[m[1]] = +m[2]; if (cur && cur.name === m[1]) cur.rupture = +m[2];
         const hx = /hit x([\d.]+)/.exec(l); // Harder59: the Guardian's own hit multiplier at this Rupture
@@ -641,7 +653,9 @@
       } else if ((m = /Mech70Check: (.+)/.exec(l))) {
         out.poisonCheck = m[1].slice(0, 200);
       } else if ((m = /Guardian: (\w+) engaged\s*$/.exec(l))) {
-        if (!cur || cur.name !== m[1]) cur = { name: m[1], rupture: rupture[m[1]] || null, t0: t, hero, life: null, hits: [], casts: {}, element: element[m[1]] || null, ward: ward[m[1]] || 0, ail0: ail, marks: [], interrupts: 0, refunds: 0, kills: 0, phases: 0, leaves: 0 };
+        if (!cur || cur.name !== m[1]) cur = Object.assign({ name: m[1], rupture: rupture[m[1]] || null, t0: t, hero, life: null, hits: [], casts: {}, element: element[m[1]] || null, ward: ward[m[1]] || 0, ail0: ail, marks: [], interrupts: 0, refunds: 0, kills: 0, phases: 0, leaves: 0 }, intros[m[1]]);
+        delete intros[m[1]];
+        cur.blessings = Object.assign({}, blessings);
         delete element[m[1]]; delete ward[m[1]];
       } else if (cur && (m = /Skill: \w+ \w+ (?:Attack|Spell) interrupted by/.exec(l))) {
         cur.interrupts++;
@@ -653,10 +667,30 @@
         cur.phases++;
       } else if (cur && (m = /ArenaPhase: (\w+) leaves/.exec(l)) && m[1] === cur.name) {
         cur.leaves++;
+      } else if (cur && (m = /ArenaPhase: (\w+) stands behind its shield/.exec(l)) && m[1] === cur.name) {
+        cur.shield = true;
+      } else if (cur && (m = /ArenaPhase: (\w+) stored hits land: ([\d.]+)% of its life \(stored ([\d.]+)%/.exec(l)) && m[1] === cur.name) {
+        cur.lostPct = (cur.lostPct || 0) + Math.max(0, +m[3] - +m[2]);
       } else if ((m = /BossPain60: (\w+) \S+ \(hit (\d+) of (\d+), crit (\d)\)/.exec(l))) {
         if (cur && cur.name === m[1]) { cur.life = +m[3]; cur.hits.push({ v: +m[2], crit: m[4] === '1' }); }
       } else if ((m = /ArenaPhase: (\w+) returns after ([\d.]+) s away/.exec(l))) {
-        if (cur && cur.name === m[1]) cur.away = (cur.away || 0) + +m[2];
+        if (cur && cur.name === m[1]) {
+          // 10 Nov 2026: r59 Stand shields store hits and return them on break.
+          // They are part of wall time, not time with no damage opportunity.
+          const key = cur.shield ? 'shieldSeconds' : 'away';
+          cur[key] = (cur[key] || 0) + +m[2]; delete cur.shield;
+          // 11 Nov 2026 00:04: Vampire Lord loses 8.3% + 11.7% life to
+          // shield-break wounds; stored 8.1% + wound 8.3% takes 66% to 49.4%.
+          // This scripted loss is not damage dealt by the build.
+          const wound = /\bwounded ([\d.]+)%/.exec(l);
+          if (wound) cur.woundPct = (cur.woundPct || 0) + +wound[1];
+        }
+      } else if (cur && (m = /Exposed80: (\w+) exposure (\d+) - stands ([\d.]+) s, damage taken x([\d.]+)/.exec(l)) && cur.name === m[1]) {
+        const windows = cur.exposures = cur.exposures || [];
+        if (!windows.some(w => w.id === +m[2])) windows.push({ id: +m[2], start: t, end: t + +m[3] * 1000, mult: +m[4] });
+      } else if (cur && (m = /Exposed80: (\w+) exposure (\d+) ends/.exec(l)) && cur.name === m[1]) {
+        const window = (cur.exposures || []).find(w => w.id === +m[2]);
+        if (window) window.end = t;
       } else if ((m = /GateBeat71: (\w+) mark \d+ played - held ([\d.]+) s, stored hits land ([\d.]+)% of its life \(stored ([\d.]+)%\)/.exec(l))) {
         // At a life mark the Guardian holds: hits are stored and only part lands; the rest is damage dealt but lost.
         if (cur && cur.name === m[1]) { cur.held = (cur.held || 0) + +m[2]; cur.lostPct = (cur.lostPct || 0) + Math.max(0, +m[4] - +m[3]); cur.marks.push({ held: +m[2], landed: +m[3], stored: +m[4] }); }
@@ -679,10 +713,13 @@
       }
     }
     for (const [sk, times] of Object.entries(self)) if (!conduitSkills.has(sk)) out.casts[sk] = { host: null, times };
+    // Player release lines are a fallback; projectile volleys and trigger counters are more precise.
+    for (const [sk, times] of Object.entries(releases)) if (!out.casts[sk]) out.casts[sk] = { host: null, times, playerReleases: true };
     for (const g of out.guardians) {
       for (const [sk, n] of Object.entries(g.self || {})) if (!conduitSkills.has(sk)) g.casts[sk] = n;
       for (const [sk, fr] of Object.entries(g.fired || {})) if (!g.casts[sk] && fr.last > fr.first) g.casts[sk] = fr.last - fr.first;
-      delete g.self; delete g.fired;
+      for (const [sk, n] of Object.entries(g.releases || {})) if (!g.casts[sk]) g.casts[sk] = n;
+      delete g.self; delete g.fired; delete g.releases;
     }
     for (const [sk, host] of Object.entries(out.cocHosts || {})) if (out.casts[sk] && !out.casts[sk].host) out.casts[sk].host = host;
     // Cast rate while channelling: the typical gap between back-to-back casts (gaps over 0.8 s are breaks).
@@ -704,7 +741,7 @@
   // Seen in the real log (9 Nov): Steam IDs sit in "SaveWrite79" lines and the character name in "Save:",
   // "Wallet75", "Transmog" and "Hero" lines, none of which are on the allowlist. Scrubbing is a second guard.
   // The timestamp is replaced by seconds from the first kept line, so the date and time of day are not sent.
-  const KEEP = /^LogBrokenOath: (?:Display: )?(?:BossPain60|Guardian: \w+ (?:engaged|model|element signature|gate mechanics|phase)|Harder59|BossMech|Conduit: |Skyfall: |ArenaPhase|GateBeat71|Trigger: |EnemyTakenTip66|Mech70Check|AilmentStats|Gem: |Skill: \w+ \w+ (?:Attack|Spell) interrupted|Cast refund)|^LogTemp: OrbitCast: release /;
+  const KEEP = /^LogBrokenOath: (?:Display: )?(?:BossPain60|Guardian: \w+ (?:engaged|model|element signature|gate mechanics|phase)|Harder59|BossMech|Conduit: |Skyfall: |ArenaPhase|Exposed80|GateBeat71|Trigger: |EnemyTakenTip66|Mech70Check|AilmentStats|Gem: |Skill: \w+ \w+ (?:Attack|Spell) interrupted|Cast refund)|^LogTemp: OrbitCast: release /;
   const BULK = /BossPain60|Skyfall: |OrbitCast|Conduit: |AilmentStats|Trigger: /; // thousands of lines: thinned to fit
   function scrub(line, names) {
     let s = line.replace(/\b7656119\d{10}\b/g, '<id>').replace(/\b[0-9A-F]{32}\b/g, '<id>').replace(/[A-Za-z]:[\\/]+(?:Users|Documents and Settings)[\\/]+[^\\/\s]+/gi, '<path>');
@@ -740,7 +777,37 @@
     return { text: (thinned ? '(' + keep.length + ' of ' + sel.length + ' lines kept: repeated lines were sampled evenly to fit)\n' : '') + out, lines: keep.length, thinned };
   }
 
-  const api = { parseLog, excerpt };
+  // Persistent fields strike on their own clock. Their player casts cannot be compared
+  // with strike DPS per use, nor used as a strike-rate override.
+  function castMetrics(sheet, count, seconds, host, playerReleases) {
+    const persistent = !!(sheet.brand || sheet.totem || sheet.orbit || sheet.aura);
+    const perUse = host || playerReleases || sheet.brand ? 1 : 1 + ((sheet.hits && sheet.hits.repeats) || 0);
+    const casts = count / perUse;
+    return { perUse, rate: casts / seconds, simRate: sheet.brand ? sheet.brand.castsPerSec : persistent ? NaN : sheet.speed && sheet.speed.usesPerSec,
+      perCastSim: persistent ? NaN : sheet.speed && sheet.speed.usesPerSec ? sheet.totalDps / sheet.speed.usesPerSec : NaN, persistent };
+  }
+  function fightMetrics(g) {
+    const time = g.wall > 0 ? g.wall : g.engaged;
+    const hitTime = Math.max(1, time - (g.away || 0));
+    const dealt = g.life * Math.max(0, 1 + ((g.lostPct || 0) - (g.woundPct || 0)) / 100);
+    const windows = (g.exposures || []).map(w => ({ start: Math.max(g.t0, w.start), end: Math.min(g.t1, w.end), mult: w.mult })).filter(w => w.end > w.start);
+    const points = [...new Set(windows.flatMap(w => [w.start, w.end]))].sort((a, b) => a - b);
+    let exposureBonusTime = 0, exposureSeconds = 0;
+    for (let i = 1; i < points.length; i++) {
+      const mult = Math.max(1, ...windows.filter(w => w.start <= points[i - 1] && w.end >= points[i]).map(w => w.mult));
+      const seconds = (points[i] - points[i - 1]) / 1000;
+      if (mult > 1) exposureSeconds += seconds;
+      exposureBonusTime += seconds * (mult - 1);
+    }
+    // Normalise logged vulnerability windows to the sheet's ordinary enemy.
+    // Assumes steady damage through the window; not a target-specific damage meter.
+    const effectiveTime = hitTime + exposureBonusTime;
+    return { time, hitTime, dealt, exposureSeconds, exposureBonusTime, effectiveTime, real: dealt / effectiveTime, killDps: g.life / time };
+  }
+  function blessingLevels(fight, GD) {
+    return Object.fromEntries(Object.values(GD.blessings).filter(b => b.Skill && Number.isInteger((fight.blessings || {})[b.Name])).map(b => [b.Id, fight.blessings[b.Name]]));
+  }
+  const api = { parseLog, excerpt, castMetrics, fightMetrics, blessingLevels };
   root.BOLog = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -5911,9 +5978,7 @@ window.BOCharacter = function (ctx) {
       const trying = /herald/i.test(b.Id) && tryH[b.Id] > 0 && b.Skill && !ch.hotbar.includes(b.Skill);
       if (b.Kind !== 'Vow' || !b.Skill || !(ch.hotbar.includes(b.Skill) || trying)) continue;
       const key = 'vow:' + b.Id;
-      const vsk = GD.skills[lc(b.Skill)];
-      const lvl = trying ? +tryH[b.Id] + (vsk ? levelBonus(vsk, vsk.Kind === 'Gem', mods) : 0)
-        : (ch.gemLevels[b.Skill] || 1) + (vsk ? levelBonus(vsk, ch.gems.includes(b.Skill) || vsk.Kind === 'Gem', mods) : 0);
+      const lvl = blessingGemLevel(GD, ch, b, mods, o, trying ? +tryH[b.Id] : 0);
       const brk = o.vowbreak && o.vowbreak.has(b.Id) && b.Vowbreak ? b.Vowbreak.Mult : 1;
       sources.push({ key, label: b.Name + ' (gem ' + lvl + (trying ? ', what-if, not on bar' : '') + ')', group: 'Vows & Heralds', vowbreak: !!b.Vowbreak, vowId: b.Id, defaultOff: !/herald/i.test(b.Id) });
       if (off.has(key)) continue;
@@ -5953,6 +6018,18 @@ window.BOCharacter = function (ctx) {
     let b = 0;
     for (const m of mods) if (m.stat === 'SkillLevel' && m.mode === 'Flat' && (m.tags || []).every(t => tags.has(lc(t)))) b += m.v;
     return Math.floor(b);
+  }
+
+  function blessingGemLevel(GD, ch, blessing, mods, opt, tryLevel) {
+    // Fight-only observation override. 10 Nov 23:49 to 11 Nov 00:04 log:
+    // both Heralds repeatedly swear at 28 while gear predicts 30. Keeping the
+    // damage skill at 32 and these at 28 gives panel 107.387M vs game 107.327M.
+    // This does not infer a different general rule for +levels on equipment.
+    const logged = opt.blessingLevels && opt.blessingLevels[blessing.Id];
+    if (Number.isInteger(logged) && logged > 0) return logged;
+    const sk = GD.skills[lc(blessing.Skill)];
+    const own = tryLevel || ch.gemLevels[blessing.Skill] || 1;
+    return own + (sk ? levelBonus(sk, tryLevel ? sk.Kind === 'Gem' : ch.gems.includes(blessing.Skill) || sk.Kind === 'Gem', mods) : 0);
   }
 
   // Power lines by item level: the highest band reached (PowerBandILvl) replaces the base PowerMods
@@ -6839,7 +6916,11 @@ window.BOCharacter = function (ctx) {
         const sparkLife = GD.steamBuild && +GD.steamBuild >= 26551640 ? 7 : 4;
         const baseDur = lasts ? +lasts[1] + (gather ? sparkLife : 0) : 0;
         let durInc = 0; for (const m of pickMods(mods, 'SkillDuration', 'Inc')) if (applies(ctx, m)) { durInc += m.v; use(m); }
-        const dur = baseDur * Math.max(0, 1 + durInc / 100);
+        // 10 Nov 2026 23:50 log: Ember Spark lasts 17.68 s (base 13 x1.36).
+        // The Thousand Sparks' 15% less duration multiplies the +60% increased:
+        // 13 x1.60 x0.85 = 17.68, not 20.8. Same rule for Storm: 12 x1.36 = 16.32.
+        let durMore = 1; for (const m of pickMods(mods, 'SkillDuration', 'More')) if (applies(ctx, m)) { durMore *= Math.max(0, 1 + m.v / 100); use(m); }
+        const dur = baseDur * Math.max(0, 1 + durInc / 100) * durMore;
         // "+N to the maximum number of Sparks (at most 27 Sparks in all)". Storm Spark tooltip 4 Nov: base 3,
         // Thunderhead + Brand Smith + Crown of Sparks -> "Counted with 6 brands on the enemy".
         let extra = 0; for (const m of pickMods(mods, 'BrandCount', 'Flat')) if (applies(ctx, m)) { extra += m.v; use(m); }
@@ -6876,7 +6957,7 @@ window.BOCharacter = function (ctx) {
         const sparksFor = rate => !(cap && dur) ? 1 : allAtOnce ? cap * Math.min(1, dur * rate) : Math.max(1, Math.min(cap, dur * rate));
         const sparks = sparksFor(throwsPerSec);
         usesPerSec = strikeRate(sparks); useTime = 1 / usesPerSec;
-        res.brand = { sparks, every: strikeEvery, duration: dur, cap: cap || 1, rate: strikeRate, sparksFor, allAtOnce };
+        res.brand = { sparks, every: strikeEvery, duration: dur, cap: cap || 1, rate: strikeRate, sparksFor, allAtOnce, castsPerSec: throwsPerSec };
         if (allAtOnce && cap > 1) res.notes.push('One cast throws all ' + cap + ' Sparks (patch 0.56.5).' + (sparkRate ? ' Sparks strike ' + Math.round(sparkRate) + '% faster.' : ''));
         res.notes.push('Spark: ' + (sparks % 1 ? sparks.toFixed(1) : sparks) + ' on the target' + (cap ? ' (up to ' + cap + ', each lasting ' + dur.toFixed(1) + ' s, thrown ' + throwsPerSec.toFixed(2) + ' times a second)' : '') + ', each striking every ' + (gather ? strikeEvery.toFixed(2) : ev[1]) + ' s' + (gather ? ', every 3 gathered into one body (x0.85 per spark)' : '') + '. Different Spark skills stack on the same enemy.');
       }
@@ -7535,9 +7616,7 @@ window.BOCharacter = function (ctx) {
         const tryLvl = b.Skill && !ch.hotbar.includes(b.Skill) && /herald/i.test(b.Id) && o.tryHeralds && o.tryHeralds[b.Id] > 0 ? +o.tryHeralds[b.Id] : 0;
         if (!b.Skill || !(ch.hotbar.includes(b.Skill) || tryLvl) || (o.off && o.off.has('vow:' + b.Id))) continue;
         if (!b.ReserveFlat && !b.ReservePct) continue;
-        const vsk = GD.skills[lc(b.Skill)];
-        const lvl = tryLvl ? tryLvl + (vsk ? levelBonus(vsk, vsk.Kind === 'Gem', mods) : 0)
-          : (ch.gemLevels[b.Skill] || 1) + (vsk ? levelBonus(vsk, ch.gems.includes(b.Skill) || vsk.Kind === 'Gem', mods) : 0);
+        const lvl = blessingGemLevel(GD, ch, b, mods, o, tryLvl);
         reserved += Math.round(((b.ReserveFlat || 0) + (b.ReserveFlatPerLevel || 0) * (lvl - 1) + (b.ReservePct || 0) / 100 * max) * Math.max(0, 1 + resInc / 100));
       }
       const pool = Math.max(0, max - reserved), deficit = spend - gain;
@@ -9304,24 +9383,25 @@ window.BOStartApp = function () {
     // The log counts releases for skills it sees fire (OrbitCast lines: each Repeat shot is one more), and casts
     // for Conduit and Cast on Crit lines. Releases are turned into uses so they compare with the sheet's uses.
     const host = (st.log.casts[skill] || {}).host;
-    const perUse = s => host ? 1 : 1 + ((s.hits && s.hits.repeats) || 0);
+    const playerReleases = !!(st.log.casts[skill] || {}).playerReleases;
+    const perUse = s => window.BOLog.castMetrics(s, 0, 1, host, playerReleases).perUse;
     const combo = {};
     const fights = mine.map(g => {
-      const key = (g.rupture || 0) + '|' + g.name + '|' + (g.element || '') + '|' + (g.ward || 0);
-      const fo = { enemyLevel: g.rupture || undefined, enemyRarity: 'boss', guardianElement: g.element || undefined,
+      const blessingLevels = window.BOLog.blessingLevels(g, GD);
+      const key = (g.level || g.rupture || 0) + '|' + g.name + '|' + (g.element || '') + '|' + (g.ward || 0) + '|' + g.life + '|' + JSON.stringify(blessingLevels);
+      const fo = { enemyLevel: g.level || g.rupture || undefined, enemyLife: g.life, blessingLevels, enemyRarity: 'boss', guardianElement: g.element || undefined,
         guardianVariantResist: g.element ? S.guardianVariantResist(GD, g.name, g.element) : undefined, guardianWard: g.element ? g.ward || 0 : undefined };
       if (!sim[key]) { sim[key] = S.calcSkill(GD, st.ch, skill, opts(fo)); combo[key] = comboRuns(fo).reduce((a, x) => a + x.r.totalDps, 0); }
       const s = sim[key], casts = g.casts[skill] || 0;
+      const cm = window.BOLog.castMetrics(s, casts, fightTime(g), host, playerReleases);
       const save = st.chOrig || st.ch;
       const gear = g.hero && save.weaponId && g.hero.weapon && g.hero.weapon !== save.weaponId;
-      // Damage dealt = life + what was lost at held life marks (stored hits that never landed); time it could be
-      // hit = fight time minus the time it was away (flying off the field). Both from the log, per fight.
-      const dealt = g.life * (1 + (g.lostPct || 0) / 100), hitTime = Math.max(1, fightTime(g) - (g.away || 0));
-      // You keep casting while it is away (at its summons), so the cast rate uses the whole fight and per cast
-      // counts only the share of casts made while it could be hit.
-      const uses = casts / perUse(s), usesOnBoss = uses * hitTime / Math.max(1, fightTime(g));
-      return { g, s, time: fightTime(g), hitTime, dealt, real: dealt / hitTime, simDps: s.totalDps + combo[key], casts, perUse: perUse(s), castRate: uses / fightTime(g),
-        perCastReal: casts ? dealt / usesOnBoss : NaN, perCastSim: s.speed && s.speed.usesPerSec ? s.totalDps / s.speed.usesPerSec : NaN,
+      // Remove scripted wounds and normalise vulnerability windows; keep damage
+      // lost at held marks and real off-field time, as reported by the game.
+      const fm = window.BOLog.fightMetrics(g), { dealt, hitTime } = fm;
+      const uses = casts / perUse(s);
+      return { g, s, time: fightTime(g), hitTime, dealt, real: fm.real, simDps: s.totalDps + combo[key], casts, perUse: perUse(s), castRate: uses / fightTime(g),
+        perCastReal: casts && !cm.persistent ? fm.real * fightTime(g) / uses : NaN, perCastSim: cm.perCastSim, simRate: cm.simRate, persistent: cm.persistent,
         levelDiff: g.hero && g.hero.level !== save.level ? g.hero.level : null, gear };
     });
     // The sheet uses today's save, so fights from well below its level (older gear, fewer points) read low:
@@ -9334,9 +9414,9 @@ window.BOStartApp = function () {
     return {
       name, fights, others: all.length - mine.length, skillName: (GD.skills[String(skill).toLowerCase()] || {}).Name || skill,
       realMed: median(use.map(f => f.real)), simMed: median(use.map(f => f.simDps)),
-      perUse: use[0] ? use[0].perUse : 1, rateMed: median(use.filter(f => f.casts).map(f => f.castRate)), simRate: use[0] && use[0].s.speed ? use[0].s.speed.usesPerSec : NaN,
-      perCastRatio: median(use.filter(f => f.casts).map(f => f.perCastReal / f.perCastSim)), used: use.length, gearSkipped: fights.filter(f => f.skip && f.gear).length, oldSkipped: fights.filter(f => f.skip && !f.gear).length,
-      adjusted: use.filter(f => f.g.away || f.g.lostPct).length,
+      perUse: use[0] ? use[0].perUse : 1, rateMed: median(use.filter(f => f.casts).map(f => f.castRate)), simRate: use[0] ? use[0].simRate : NaN, persistent: use.some(f => f.persistent),
+      perCastRatio: median(use.filter(f => f.casts && isFinite(f.perCastSim)).map(f => f.perCastReal / f.perCastSim)), used: use.length, gearSkipped: fights.filter(f => f.skip && f.gear).length, oldSkipped: fights.filter(f => f.skip && !f.gear).length,
+      adjusted: use.filter(f => f.g.away || f.g.lostPct || f.g.woundPct || (f.g.exposures || []).length).length,
       cast: st.log.casts[skill] || null, skyfall: st.log.skyfall,
     };
   }
@@ -9346,23 +9426,26 @@ window.BOStartApp = function () {
     const c = logCheck(); if (!c) return '';
     if (!c.fights.length) return '<div class="card"><h2>Check Against Your Fights</h2><p class="hint">This log has no Guardian kills by ' + esc(c.name) + (c.others ? ' (' + c.others + ' by other characters)' : '') + '. Kill a Guardian, then load the log again (the game writes it as you play).</p></div>';
     const ratio = c.realMed / c.simMed;
-    const verdict = !isFinite(ratio) ? '' : Math.abs(ratio - 1) <= 0.15 ? 'The sheet matches your kills (within 15%).' : ratio > 1 ? 'You kill Guardians ' + pct(ratio - 1) + ' faster than the sheet says: something adds damage it does not count (see below).' : 'You kill Guardians ' + pct(1 - ratio).replace('+', '') + ' slower than the sheet: likely time spent moving or dodging, or a rule the sheet gets wrong.';
-    const rows = c.fights.map(f => '<tr' + (f.skip ? ' class="dim"' : '') + '><td>' + esc(f.g.name.replace(/_/g, ' ')) + (f.g.element ? ' <span class="type" style="--c:' + typeColor(f.g.element) + '">' + esc(f.g.element) + (f.g.ward ? ' +' + f.g.ward : '') + '</span>' : '') + (f.gear ?' <span class="hint">(other weapon)</span>' : '') + (f.levelDiff ? ' <span class="hint">(you were ' + f.levelDiff + ')</span>' : '') + (f.g.away || f.g.lostPct ? ' <span class="hint">(away ' + num(f.g.away || 0, 0) + ' s' + (f.g.lostPct ? ', ' + num(f.g.lostPct, 0) + '% of its life lost at held marks' : '') + ')</span>' : '') +'</td><td>' + (f.g.rupture || '–') + '</td><td>' + num(f.g.life) + '</td><td>' + num(f.time, 1) + ' s</td><td><b>' + num(f.real) + '</b></td><td>' + num(f.simDps) + '</td><td>' + (f.casts ? num(f.castRate, 2) : '–') + '</td><td>' + (f.casts ? num(f.perCastReal / f.perCastSim, 2) + '×' : '–') + '</td></tr>').join('');
+    const verdict = !isFinite(ratio) ? '' : Math.abs(ratio - 1) <= 0.15 ? 'The median adjusted fight DPS is within 15% of the counted skills. Individual fights can still differ.' : ratio > 1 ? 'You kill Guardians ' + pct(ratio - 1) + ' faster than the sheet says: something adds damage it does not count (see below).' : 'You kill Guardians ' + pct(1 - ratio).replace('+', '') + ' slower than the sheet: likely time spent moving or dodging, or a rule the sheet gets wrong.';
+    const rows = c.fights.map(f => '<tr' + (f.skip ? ' class="dim"' : '') + '><td>' + esc(f.g.name.replace(/_/g, ' ')) + (f.g.element ? ' <span class="type" style="--c:' + typeColor(f.g.element) + '">' + esc(f.g.element) + (f.g.ward ? ' +' + f.g.ward : '') + '</span>' : '') + (f.gear ?' <span class="hint">(other weapon)</span>' : '') + (f.levelDiff ? ' <span class="hint">(you were ' + f.levelDiff + ')</span>' : '') + (f.g.away || f.g.lostPct ? ' <span class="hint">(away ' + num(f.g.away || 0, 0) + ' s' + (f.g.lostPct ? ', ' + num(f.g.lostPct, 0) + '% of its life lost at held marks' : '') + ')</span>' : '') +'</td><td>' + (f.g.rupture || '–') + '</td><td>' + num(f.g.life) + '</td><td>' + num(f.time, 1) + ' s</td><td><b>' + num(f.real) + '</b></td><td>' + num(f.simDps) + '</td><td>' + (f.casts ? num(f.castRate, 2) : '–') + '</td><td>' + (f.casts && isFinite(f.perCastSim) ? num(f.perCastReal / f.perCastSim, 2) + '×' : '–') + '</td></tr>').join('');
     const notes = [];
-    if (isFinite(c.rateMed) && isFinite(c.simRate)) notes.push('In fights you cast ' + c.skillName + ' ' + num(c.rateMed, 2) + ' times a second, against the sheet\'s ' + num(c.simRate, 2) + ' (' + Math.round(c.rateMed / c.simRate * 100) + '%): moving, dodging and phase changes take the rest.' + (c.perUse > 1 ? ' (The log counts ' + num(c.rateMed * c.perUse, 2) + ' shots a second: each cast fires ' + c.perUse + ' times with Repeat.)' : '') + (c.cast && c.cast.recentGap ? (c.cast.host && String(c.cast.host).startsWith('crit:') ? ' Your recent Cast on Crit casts come every ' : c.cast.host ? ' While spinning, your recent casts land every ' : ' Back to back, your recent shots leave every ') + c.cast.recentGap + ' ms (' + num(1000 / c.cast.recentGap, 2) + '/s).' : ''));
+    for (const f of c.fights) if (f.g.woundPct || (f.g.exposures || []).length) { const fm = window.BOLog.fightMetrics(f.g); notes.push(f.g.name.replace(/_/g, ' ') + ': shield-break wounds removed ' + num(f.g.woundPct || 0, 1) + '% of its life; exposure lasted ' + num(fm.exposureSeconds, 1) + ' s. Raw kill DPS ' + num(fm.killDps) + ', adjusted ' + num(fm.real) + '.'); }
+    if (!c.persistent && isFinite(c.rateMed) && isFinite(c.simRate)) notes.push('In fights you cast ' + c.skillName + ' ' + num(c.rateMed, 2) + ' times a second, against the sheet\'s ' + num(c.simRate, 2) + ' (' + Math.round(c.rateMed / c.simRate * 100) + '%): moving, dodging and phase changes take the rest.' + (c.perUse > 1 ? ' (The log counts ' + num(c.rateMed * c.perUse, 2) + ' shots a second: each cast fires ' + c.perUse + ' times with Repeat.)' : '') + (c.cast && c.cast.recentGap ? (c.cast.host && String(c.cast.host).startsWith('crit:') ? ' Your recent Cast on Crit casts come every ' : c.cast.host ? ' While spinning, your recent casts land every ' : ' Back to back, your recent shots leave every ') + c.cast.recentGap + ' ms (' + num(1000 / c.cast.recentGap, 2) + '/s).' : ''));
     if (isFinite(c.perCastRatio)) notes.push('Damage per cast, real ÷ sheet: ' + num(c.perCastRatio, 2) + '×. Real kills also include ' + (r.conduit ? r.conduit.hostName + '\'s own hits, ' : '') + 'Herald kill effects, shocks, freezes and anything else that hit the boss, so a little above 1× is expected.');
     if (c.skyfall && c.skyfall.falls) notes.push('Skyfall repeat strikes: ' + num(c.skyfall.falls) + ' fell, ' + num(c.skyfall.hits) + ' hit something; ' + num(c.skyfall.blocked) + ' were skipped because the target was already struck that cast. ' +
       (r.hits && r.hits.skyfallRepeat > 0 ? 'The sheet counts one second fall on the target per cast at ' + Math.round(r.hits.skyfallRepeat * 100) + '% (the game\'s own sheet does the same).' : 'This skill has no second fall on the sheet.'));
     if (c.gearSkipped) notes.push(c.gearSkipped + ' fight' + (c.gearSkipped > 1 ? 's' : '') + ' with a different weapon than your save (greyed) left out of the medians.');
-    if (c.adjusted) notes.push('Real DPS counts only the time the Guardian could be hit (not while it flew away) and adds the damage lost at its held life marks (stored hits that never land), both from the log. Still in it: arrows or bolts drawn off by its summons, and dodging.');
+    if (c.adjusted) notes.push('Adjusted DPS adds logged damage lost at held marks, subtracts scripted shield-break wounds, and excludes time genuinely off the field. Stored-hit shield time remains included. Logged exposure windows are normalised to ordinary damage taken, assuming steady damage through each window. Raw life divided by fight time is not a build-only damage measurement.');
     if (c.oldSkipped) notes.push(c.oldSkipped + ' fight' + (c.oldSkipped > 1 ? 's' : '') + ' from more than 2 levels below your save (greyed) left out of the medians: the sheet uses today\'s gear and points.');
     if (!c.fights.some(f => f.casts) && r.conduit) notes.push('No ' + c.skillName + ' casts during these fights: was it linked then?');
-    const rateBtn = isFinite(c.rateMed) && c.rateMed > 0 ? (st.cps ? '<button class="btn small ghost" type="button" id="clearFightRate">Back to the sheet\'s cast rate</button>' : '<button class="btn small" type="button" id="useFightRate" data-rate="' + (Math.round(c.rateMed * 100) / 100) + '">Use my fight cast rate (' + num(c.rateMed, 2) + '/s)</button>') : '';
+    if (c.persistent) notes.push('Sparks and other persistent skills strike independently of your casts. Casts/s counts player releases; damage per cast and the fight cast-rate override do not apply.');
+    notes.push('The comparison uses logged blessing activation levels where available, plus each Guardian\'s logged monster level and life for resistance and shock. Real DPS includes every skill and kill effect; the sheet includes only the selected skill and Also count choices.');
+    const rateBtn = !c.persistent && isFinite(c.rateMed) && c.rateMed > 0 ? (st.cps ? '<button class="btn small ghost" type="button" id="clearFightRate">Back to the sheet\'s cast rate</button>' : '<button class="btn small" type="button" id="useFightRate" data-rate="' + (Math.round(c.rateMed * 100) / 100) + '">Use my fight cast rate (' + num(c.rateMed, 2) + '/s)</button>') : '';
     const report = reportText(r, c);
     lastCheckReport = 'Check report: ' + c.skillName + ' (' + st.ch.classId + ' ' + st.ch.level + ')\n\n' + report;
     return '<div class="card"><h2>Check Against Your Fights <span class="hint">' + c.fights.length + ' Guardian kill' + (c.fights.length > 1 ? 's' : '') + ' in the log</span></h2>' +
-      '<div class="headline small">' + stat('Real boss DPS (median)', num(c.realMed), '', 'main', 'Boss life ÷ time from engaging it to the kill') + stat('Sheet vs a Guardian', num(c.simMed), '', '', 'Same Rupture levels, settings on the left' + (comboIds().length ? '; ' + (comboIds().length + 1) + ' skills added up (Also count)' : '')) + stat('Real ÷ sheet', isFinite(ratio) ? num(ratio, 2) + '×' : '–', '', '', verdict) + '</div>' +
-      '<div class="table-wrap"><table class="tbl"><thead><tr><th>Guardian</th><th>Rupture</th><th>Life</th><th>Fight</th><th>Real DPS</th><th>Sheet' + (comboIds().length ? ' (' + (comboIds().length + 1) + ' skills)' : '') + '</th><th>Casts/s</th><th>Per cast</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="headline small">' + stat(c.adjusted ? 'Adjusted boss DPS (median)' : 'Real boss DPS (median)', num(c.realMed), '', 'main', 'Damage excluding scripted wounds, with held-mark losses restored and exposure windows normalised; assumes steady damage through each window') + stat('Sheet vs a Guardian', num(c.simMed), '', '', 'Same Rupture levels, settings on the left' + (comboIds().length ? '; ' + (comboIds().length + 1) + ' skills added up (Also count)' : '')) + stat('Real ÷ sheet', isFinite(ratio) ? num(ratio, 2) + '×' : '–', '', '', verdict) + '</div>' +
+      '<div class="table-wrap"><table class="tbl"><thead><tr><th>Guardian</th><th>Rupture</th><th>Life</th><th>Fight</th><th>' + (c.adjusted ? 'Adjusted DPS' : 'Real DPS') + '</th><th>Sheet' + (comboIds().length ? ' (' + (comboIds().length + 1) + ' skills)' : '') + '</th><th>Casts/s</th><th>Per cast</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
       (notes.length ? '<details class="validation-notes"><summary>Notes on these fights <span class="count">(' + notes.length + ')</span></summary><ul class="notes">' + notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul></details>' : '') +
       '<div class="pinbar">' + rateBtn + '<button class="btn small ghost" type="button" id="sendCheckReport">Send a check report</button><button class="btn small ghost" type="button" id="copyReport">Copy full report</button><span>Sends only the numbers below (no names, no IDs) to the site\'s owner, for improving the sim. No account needed; you can add a note first.</span></div>' +
       '<details class="report"><summary>What the report contains</summary><pre>' + esc(report) + '</pre></details></div>';
@@ -9386,7 +9469,7 @@ window.BOStartApp = function () {
       panel ? '- Game skill panel (log, at hero level ' + panel.hero + '): ' + panel.dps + ' DPS, x' + panel.mult + ' with ' + panel.extra + ' (sheet panel now ' + Math.round(r.panelDps || 0) + ')' : '',
       st.log && st.log.poisonCheck ? '- Game poison self-check: ' + st.log.poisonCheck : '',
       '', '| Guardian | RL | Elem | Life | Fight s | Engaged s | Away s | Lost at marks % | Casts | Real DPS | Sheet DPS | Per cast | Game raw DPS / median | Hero lvl |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
-      ...fights.map(f => '| ' + f.g.name + ' | ' + (f.g.rupture || '') + ' | ' + (f.g.element || '') + (f.g.ward ? '+' + f.g.ward : '') + ' | ' + f.g.life + ' | ' + f.time.toFixed(1) + ' | ' + f.g.engaged + ' | ' + (f.g.away || 0) + ' | ' + f2(f.g.lostPct || 0, 0) + ' | ' + f.casts + ' | ' + Math.round(f.real) + ' | ' + Math.round(f.simDps) + ' | ' + (f.casts ? f2(f.perCastReal / f.perCastSim) : '') + ' | ' + (f.g.gameRaw || '') + (f.g.gameMedian ? ' / ' + f.g.gameMedian : '') + ' | ' + (f.g.hero ? f.g.hero.level : '') + ' |'),
+      ...fights.map(f => '| ' + f.g.name + ' | ' + (f.g.rupture || '') + ' | ' + (f.g.element || '') + (f.g.ward ? '+' + f.g.ward : '') + ' | ' + f.g.life + ' | ' + f.time.toFixed(1) + ' | ' + f.g.engaged + ' | ' + (f.g.away || 0) + ' | ' + f2(f.g.lostPct || 0, 0) + ' | ' + f.casts + ' | ' + Math.round(f.real) + ' | ' + Math.round(f.simDps) + ' | ' + (f.casts && isFinite(f.perCastSim) ? f2(f.perCastReal / f.perCastSim) : '') + ' | ' + (f.g.gameRaw || '') + (f.g.gameMedian ? ' / ' + f.g.gameMedian : '') + ' | ' + (f.g.hero ? f.g.hero.level : '') + ' |'),
       '', '- Median real / sheet: ' + (c.realMed / c.simMed).toFixed(2) + ', fight cast rate ' + (isFinite(c.rateMed) ? c.rateMed.toFixed(2) : 'n/a') + '/s' + (c.cast && c.cast.recentGap ? (c.cast.host ? ', spinning cast gap ' : ', back-to-back gap ') + c.cast.recentGap + ' ms' : ''),
       c.skyfall && c.skyfall.falls ? '- Skyfall repeats: ' + c.skyfall.falls + ' fell, ' + c.skyfall.hits + ' hits, ' + c.skyfall.blocked + ' skipped (target already struck)' : '',
     ];
@@ -9396,6 +9479,8 @@ window.BOStartApp = function () {
       const v = g.volleys && g.volleys[st.skill];
       if (v) bits.push('volleys ' + v.n + ' (' + f2(v.proj / v.n, 1) + ' proj each, all on one target ' + Math.round(v.full / v.n * 100) + '%, none shared ' + Math.round(v.none / v.n * 100) + '%)');
       if (g.hits && g.hits.length) { const h = g.hits.map(x => x.v).sort((a, b) => a - b); bits.push('boss hits logged ' + h.length + ' (median ' + h[h.length >> 1] + ', max ' + h[h.length - 1] + ', crit ' + Math.round(g.hits.filter(x => x.crit).length / h.length * 100) + '%)'); }
+      if (Object.keys(g.blessings || {}).length) bits.push('logged blessing levels: ' + Object.entries(g.blessings).map(([name, lv]) => name + ' ' + lv).join(', '));
+      if (g.woundPct || (g.exposures || []).length) { const fm = window.BOLog.fightMetrics(g); bits.push('shield wounds ' + (g.woundPct || 0).toFixed(1) + '%, exposed ' + fm.exposureSeconds.toFixed(2) + ' s, exposure bonus-time ' + fm.exposureBonusTime.toFixed(2) + ' s, raw kill DPS ' + Math.round(fm.killDps)); }
       if (g.ailments) { const a = g.ailments; bits.push('ailments: ignites ' + a.ignites + ', shocks ' + a.shocks + ', poisons ' + a.poisons + ', freezes ' + a.freezes + ', bleeds ' + a.bleeds + ' (dot ' + a.dot + ', bleed dot ' + a.bleedDot + ')'); }
       if (g.marks && g.marks.length) bits.push('marks ' + g.marks.map(k => k.held + 's ' + k.landed + '/' + k.stored + '%').join(', ') + ' (held, landed/stored of life)');
       if (g.leaves) bits.push('left the field ' + g.leaves + 'x');

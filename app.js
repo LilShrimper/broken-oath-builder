@@ -1898,9 +1898,21 @@ window.BOPlanner = function (ctx) {
         '<span class="hint">Edits save in this browser as you go. The passive tree and the Dragonling (the dragon button) are on the Skill tree tab; the Damage tab shows what it does.</span></div>';
     }
     if (status) h += '<p class="hint pl-status">' + esc(status) + '</p>';
+    // Any code or link opens here as a plan: plan code, share link, planner link or BO1. build code.
+    h += '<div class="pl-row pl-import"><label class="field inline grow"><span>Open a code or link</span><input type="text" id="plCode" placeholder="Paste a plan code, share link, planner link or build code" autocomplete="off" spellcheck="false" value="' + esc(codeDraft) + '"></label>' +
+      '<button class="btn small" type="button" data-act="importcode"' + (importing ? ' disabled' : '') + '>' + (importing ? 'Opening…' : 'Open') + '</button></div>';
     h += '</div>';
     if (ch) h += subTab === 'skills' ? skillsCard(ch, edit, dis) : gearCard(ch, edit, dis); // the Dragonling tree is on the Skill tree tab (dragon button)
     el.innerHTML = h;
+  }
+  let codeDraft = '', importing = false;
+  async function importCodeBox() {
+    const text = codeDraft.trim();
+    if (!text || importing) return;
+    importing = true; status = ''; render();
+    try { await ctx.importCode(text); codeDraft = ''; status = 'Opened the code as a plan.'; }
+    catch (err) { status = 'Could not open that code: ' + err.message; }
+    importing = false; render();
   }
   async function startNewPlan(classId, level) {
     if (!await ctx.confirm('Start a new build?', 'A new empty build plan will be started. You can keep any existing plans.', 'Start plan')) return false;
@@ -2037,6 +2049,7 @@ window.BOPlanner = function (ctx) {
         (edit ? '<button class="x" type="button" title="Remove this skill" data-act="rmskill">×</button>' : '') + '</div>' +
         (sk ? '' : '<p class="hint bad">Unknown skill ' + esc(r.skill) + '</p>') +
         supChips(ch, r, sups, slots, lvl, edit) +
+        (edit && sk && !S.dealsNoHits(sk) ? '<div class="pl-row pl-simbest"><button class="btn small" type="button" data-act="simbest" title="Tries the support combinations for this skill at its gem level, against the enemy set on the Damage tab, and sockets the best one">Sim best supports</button></div>' : '') +
         (link ? '<label class="field inline"><span>Linked spell <span class="meta">Cast on Crit in an attack, or a Channel Conduit, casts this</span></span><select data-f="conduit"' + dis + '>' + opt('', 'None (Cast on Crit casts the spell it sits in)', !r.sock.conduit) +
           rs.filter(x => x.skill !== r.skill && GD.skills[lc(x.skill)] && (GD.skills[lc(x.skill)].Tags || []).includes('Spell')).map(x => opt(x.skill, GD.skills[lc(x.skill)].Name, lc(x.skill) === lc(r.sock.conduit))).join('') + '</select></label>' : '') +
         '</div>';
@@ -2572,6 +2585,7 @@ window.BOPlanner = function (ctx) {
   async function onClick(e) {
     const b = e.target.closest('[data-act]'); if (!b) return;
     const act = b.dataset.act;
+    if (act === 'importcode') return importCodeBox();
     if (!ctx.current()) return;
     if (act === 'resetlinks') { status = ''; return ctx.resetLinks(); }
     const ch = ctx.editable();
@@ -2582,6 +2596,16 @@ window.BOPlanner = function (ctx) {
     }
     if (act === 'dreset') { ch.dragonNodes = []; status = 'Dragonling points refunded.'; return done(); }
     const row = b.closest('[data-skill]'), skill = row && row.dataset.skill;
+    if (act === 'simbest') {
+      if (b.disabled || !skill) return;
+      b.disabled = true; b.textContent = 'Searching…';
+      const sup = await ctx.bestSupports(skill, p => { b.textContent = 'Searching… ' + p + '%'; });
+      const name = (GD.skills[lc(skill)] || {}).Name || skill;
+      if (!sup) { status = 'No support setup found for ' + name + '.'; return render(); }
+      ensureSocket(ch, skill).supports = sup;
+      status = 'Best supports for ' + name + ': ' + (sup.map(id => (GD.supports[lc(id)] || { Name: id }).Name).join(', ') || 'none') + '.';
+      return done({ skills: true });
+    }
     if (act === 'code' && ch.plan) {
       const code = await toCode(ctx.withTabs(ch));
       try { await navigator.clipboard.writeText(code); status = 'Plan code copied (' + code.length + ' characters). Paste it into the code box at the top to open it here or in another browser.'; }
@@ -2695,6 +2719,8 @@ window.BOPlanner = function (ctx) {
   el.addEventListener('toggle', onToggle, true);
   el.addEventListener('mousedown', e => { const sel = e.target.closest && e.target.closest(PICKER); if (sel && !sel.disabled && e.button === 0) { e.preventDefault(); if (pick && pick.sel === sel) closePicker(); else openPicker(sel); } });
   el.addEventListener('keydown', e => { const sel = e.target.closest && e.target.closest(PICKER); if (sel && !sel.disabled && (e.key === 'Enter' || e.key === ' ' || (e.altKey && e.key === 'ArrowDown'))) { e.preventDefault(); openPicker(sel); } });
+  el.addEventListener('input', e => { if (e.target.id === 'plCode') codeDraft = e.target.value; });
+  el.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'plCode') { e.preventDefault(); importCodeBox(); } });
   el.addEventListener('mousemove', showItemTip);
   el.addEventListener('mouseleave', hideItemTip);
   el.addEventListener('keydown', e => { const r = e.target.closest && e.target.closest('.pl-read'); if (r && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); const i = r.querySelector('input[type=file]'); if (i) i.click(); } });
@@ -2746,7 +2772,9 @@ window.BOPlanner = function (ctx) {
     return p;
   }
   // The item editor for the Item Compare tab (app.js): its own state from gear.newKit(true), edits on its own holder.
-  const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, affixesFor };
+  const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, affixesFor,
+    // for the Character tab's item overlay (character.js)
+    oathwordsFor, oathwordBases, rollUnique, topTier, runeSlots, runeList, modLine, LIMIT, VOW_MAX };
   return { itemTip, skillTip, supTip, oathwordForItem, slotName: SLOT_NAME, rows, render, fromCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: s => { subTab = s === 'skills' ? 'skills' : 'gear'; try { localStorage.setItem('bods:buildTab', subTab); } catch (err) { /* storage off */ } }, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
 };
 
@@ -6110,9 +6138,9 @@ window.BOCharacter = function (ctx) {
   function slotCell(ch, slot) {
     const idx = ch.items.findIndex(i => i.slot === slot), it = ch.items[idx];
     const label = planner.slotName[slot] || slot;
-    if (!it) return '<div class="ch-slot ch-slot-' + slot + ' empty"><span class="ch-slot-label">' + esc(label) + '</span><span class="meta">empty</span></div>';
+    if (!it) return '<div class="ch-slot ch-slot-' + slot + ' empty" data-open="1" data-slot="' + slot + '" data-idx="-1" tabindex="0" role="button" aria-label="Pick an item for ' + esc(label) + '"><span class="ch-slot-label">' + esc(label) + '</span><span class="meta">empty · click to add</span></div>';
     const n = itemName(it, slot);
-    return '<div class="ch-slot ch-slot-' + slot + ' ' + n.cls + '" data-tip="item" data-slot="' + slot + '" data-idx="' + idx + '" tabindex="0"><span class="ch-slot-label">' + esc(label) + '</span><b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + (it.level ? ' · ilvl ' + it.level : '') + '</span>' +
+    return '<div class="ch-slot ch-slot-' + slot + ' ' + n.cls + '" data-open="1" data-tip="item" data-slot="' + slot + '" data-idx="' + idx + '" tabindex="0" role="button"><span class="ch-slot-label">' + esc(label) + '</span><b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + (it.level ? ' · ilvl ' + it.level : '') + '</span>' +
       (it.runes && it.runes.length ? '<span class="ch-item-base">' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') + '</span>' : '') + '</div>';
   }
 
@@ -6121,9 +6149,10 @@ window.BOCharacter = function (ctx) {
     let h = '<div class="card ch-gear"><h2>Gear</h2><div class="ch-doll">' + SLOTS.map(s => slotCell(ch, s)).join('') + '</div>';
     if (idols.length) h += '<h3>Idols <small>' + idols.length + '</small></h3><div class="ch-idols">' + idols.map(x => {
       const n = itemName(x.it, 'Idol');
-      return '<div class="ch-slot ' + n.cls + '" data-tip="item" data-slot="Idol" data-idx="' + x.i + '" tabindex="0"><b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + '</span></div>';
+      return '<div class="ch-slot ' + n.cls + '" data-open="1" data-tip="item" data-slot="Idol" data-idx="' + x.i + '" tabindex="0" role="button"><b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + '</span></div>';
     }).join('') + '</div>';
-    return h + '</div>';
+    else h += '<p class="hint">No idols.</p>';
+    return h + '<button class="btn small ghost" type="button" data-open="1" data-slot="Idol" data-idx="-1">Add an idol</button></div>';
   }
 
   function skillsCard(ch) {
@@ -6167,7 +6196,7 @@ window.BOCharacter = function (ctx) {
     const el = $('#characterPane'); if (!el || el.hidden) return;
     bind(el);
     const ch = ctx.current();
-    let h = '<div class="cmp-intro"><div class="eyebrow">BUILD OVERVIEW</div><h2>Character</h2><p>The loaded character at a glance: gear by slot, skills with their supports and the notable passives. Hover an item or gem for its details.</p></div>';
+    let h = '<div class="cmp-intro"><div class="eyebrow">BUILD OVERVIEW</div><h2>Character</h2><p>The loaded character at a glance: gear by slot, skills with their supports and the notable passives. Click a gear slot to pick or edit an item; hover an item or gem for its details.</p></div>';
     if (!ch) { el.innerHTML = h + '<div class="card"><p class="hint">No character loaded. Load a save, a build code or start a plan first.</p></div>'; return; }
     el.innerHTML = h + '<div class="ch-cols"><div class="ch-col">' + gearCard(ch) + notesCard() + '</div><div class="ch-col">' + skillsCard(ch) + passivesCard(ch) + '</div></div>';
   }
@@ -6195,11 +6224,251 @@ window.BOCharacter = function (ctx) {
   function bind(el) {
     if (el.dataset.bound) return; el.dataset.bound = '1';
     el.addEventListener('input', e => { if (e.target && e.target.id === 'chNotes') ctx.notes.set(e.target.value); });
+    el.addEventListener('click', e => { const s = e.target.closest && e.target.closest('[data-open]'); if (s) openItem(s); });
+    el.addEventListener('keydown', e => { const s = e.target.closest && e.target.closest('.ch-slot[data-open]'); if (s && s === e.target && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openItem(s); } });
     el.addEventListener('mouseover', show); el.addEventListener('focusin', show);
     el.addEventListener('mouseleave', hide); el.addEventListener('focusout', hide);
     window.addEventListener('scroll', hide, { passive: true });
   }
-  return { render, hide };
+  // ---------- Item overlay: click a gear slot to pick an item (Select tab) and set its affixes (Edit tab) ----------
+  // Same rules and edits as the Build tab's gear boxes (planner.js gear helpers). Edits go to a plan itself or to a copy of a
+  // loaded character; the save file is never written.
+  const G = planner.gear;
+  const RAR = ['Normal', 'Magic', 'Rare'];
+  let M = null, back = null, lastFocus = null; // M: { slot, idx, tab, kind, cat, q, word }
+  const rarCls = it => it.rarity === 'Unique' ? 'unique' : lc(it.rarity);
+  const safe = f => { try { return f(); } catch (e) { return ''; } };
+  const itemNow = ch => !M ? null : M.slot === 'Idol' ? (ch.items[M.idx] || null) : (ch.items.find(i => i.slot === M.slot) || null);
+  const baseTypeName = b => b.TypeName || b.Name;
+
+  function openItem(el) {
+    if (!ctx.current()) return;
+    hide();
+    const slot = el.dataset.slot, idx = +el.dataset.idx;
+    lastFocus = el.closest('.ch-slot') || el;
+    const it = idx >= 0 ? ctx.current().items[idx] : null;
+    M = { slot, idx: it ? idx : -1, tab: it ? 'edit' : 'select', kind: 'basic', cat: '', q: '', word: '' };
+    if (!back) {
+      back = document.createElement('div'); back.className = 'io-back'; back.setAttribute('role', 'dialog'); back.setAttribute('aria-modal', 'true'); back.setAttribute('aria-label', 'Item');
+      back.addEventListener('mousedown', e => { if (e.target === back) closeItem(); });
+      back.addEventListener('click', onIoClick); back.addEventListener('change', onIoChange);
+      back.addEventListener('input', e => { if (e.target.id === 'ioSearch') { M.q = e.target.value; renderList(); } });
+      document.addEventListener('keydown', e => { if (M && e.key === 'Escape') { e.preventDefault(); closeItem(); } });
+      document.body.appendChild(back);
+    }
+    back.hidden = false; document.body.classList.add('io-open');
+    renderItem();
+    const f = back.querySelector('.io-x'); if (f) f.focus({ preventScroll: true });
+  }
+  function closeItem() {
+    M = null; if (back) back.hidden = true; document.body.classList.remove('io-open');
+    if (lastFocus && lastFocus.isConnected) lastFocus.focus({ preventScroll: true });
+    else { const s = lastFocus && lastFocus.dataset && lastFocus.dataset.slot; const n = s && document.querySelector('#characterPane .ch-slot[data-slot="' + s + '"]'); if (n) n.focus({ preventScroll: true }); }
+  }
+  // After an edit: save it through the app (which redraws the page behind), then redraw the overlay.
+  function commit(ch) { ctx.commit(ch); render(); renderItem(); }
+
+  function renderItem() {
+    if (!M || !back) return;
+    const ch = ctx.current(); if (!ch) return closeItem();
+    const it = itemNow(ch);
+    if (M.tab === 'edit' && !it) M.tab = 'select';
+    const tab = (id, label, off) => '<button class="io-tab' + (M.tab === id ? ' on' : '') + '" type="button" data-io="tab" data-v="' + id + '"' + (off ? ' disabled' : '') + '>' + label + '</button>';
+    let h = '<div class="io-win"><div class="io-head">' + tab('select', 'Select') + tab('edit', 'Edit', !it) +
+      '<span class="io-slotname">' + esc(planner.slotName[M.slot] || M.slot) + '</span><button class="io-x" type="button" data-io="close" aria-label="Close">×</button></div>';
+    h += '<div class="io-body" id="ioBody">' + (M.tab === 'select' ? selectHtml() : editHtml(ch, it)) + '</div>';
+    back.innerHTML = h + '</div>';
+    if (M.tab === 'select') renderList();
+  }
+
+  // ----- Select tab -----
+  function categories() {
+    const bases = G.basesFor(M.slot), cats = new Map();
+    for (const b of bases) { const k = baseTypeName(b); if (!cats.has(k)) cats.set(k, { name: k, two: !!b.bTwoHanded || (b.Tags || []).includes('TwoHand') }); }
+    return [...cats.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+  function selectHtml() {
+    const cats = categories(), weapon = M.slot === 'MainHand';
+    let side = '';
+    if (cats.length > 1) {
+      const btn = c => '<button type="button" class="io-cat' + (M.cat === c.name ? ' on' : '') + '" data-io="cat" data-v="' + esc(c.name) + '">' + esc(c.name) + '</button>';
+      side = '<nav class="io-side" aria-label="Item types"><button type="button" class="io-cat all' + (M.cat === '' ? ' on' : '') + '" data-io="cat" data-v="">All Items</button>' +
+        (weapon ? '<span class="io-grp">One Handed</span>' + cats.filter(c => !c.two).map(btn).join('') + '<span class="io-grp">Two Handed</span>' + cats.filter(c => c.two).map(btn).join('') : cats.map(btn).join('')) + '</nav>';
+    }
+    return '<div class="io-search"><input id="ioSearch" type="search" value="' + esc(M.q) + '" placeholder="Search everything" aria-label="Search items" autocomplete="off"></div>' +
+      '<div class="io-sel' + (side ? '' : ' nosel') + '">' + side + '<div class="io-main" id="ioMain"></div></div>';
+  }
+  function baseLines(b) {
+    const out = [];
+    if (b.DamageMin) { out.push('Damage ' + b.DamageMin + '-' + b.DamageMax); if (b.AttacksPerSecond) out.push('Base attack rate ' + b.AttacksPerSecond); if (b.Crit) out.push('Base crit ' + b.Crit + '%'); }
+    for (const [k, n] of [['Armour', 'Armour'], ['Evasion', 'Evasion'], ['EnergyShield', 'Energy Shield']]) if (b[k]) out.push(n + ' ' + b[k]);
+    if (b.Block) out.push('Block ' + b.Block + '%');
+    for (const m of b.Implicits || []) { const t = safe(() => G.modLine(m)); if (t) out.push(t); }
+    return out;
+  }
+  function uniqueLines(u) {
+    const range = (lo, hi) => lo == null ? '0' : lo === hi ? String(lo) : lo + '-' + hi;
+    return (u.Mods || []).map(m => m.Text ? m.Text.replace(/\{(0|v)\}/g, range(m.Min, m.Max)).replace(/\{1\}/g, range(m.Min2, m.Max2)) : m.Mod ? safe(() => G.modLine(m.Mod, m.Max, m.Max2)) : '').filter(Boolean);
+  }
+  const card = (kind, id, name, cls, sub, lines) => '<button type="button" class="io-card ' + cls + '" data-io="pick" data-kind="' + kind + '" data-id="' + esc(id) + '"><b>' + esc(name) + '</b><span class="io-sub">' + esc(sub) + '</span>' +
+    lines.slice(0, 8).map(l => '<span class="io-line">' + esc(l) + '</span>').join('') + (lines.length > 8 ? '<span class="io-line meta">+' + (lines.length - 8) + ' more</span>' : '') + '</button>';
+  function listFor() {
+    const q = M.q.trim().toLowerCase(), has = (...s) => !q || s.join(' ').toLowerCase().includes(q);
+    const inCat = b => !M.cat || baseTypeName(b) === M.cat;
+    const basic = G.basesFor(M.slot).filter(b => inCat(b) && has(b.Name, baseTypeName(b)));
+    const uniques = G.uniquesFor(M.slot).filter(u => { const b = GD().bases[lc(u.BaseId)]; return inCat(b) && has(u.Name, baseTypeName(b), uniqueLines(u).join(' ')); });
+    const words = G.oathwordsFor(M.slot).filter(w => has(w.Name, (w.Runes || []).join(' ')));
+    return { basic, uniques, words };
+  }
+  const GD = () => ctx.gd();
+  function renderList() {
+    const main = back && back.querySelector('#ioMain'); if (!main || !M) return;
+    const L = listFor(), kinds = [['basic', 'Basic', L.basic.length], ['unique', 'Unique', L.uniques.length], ['oathword', 'Oathword', L.words.length]]
+      .filter(k => k[2] || k[0] === 'basic' || k[0] === M.kind);
+    if (!kinds.some(k => k[0] === M.kind)) M.kind = 'basic';
+    const total = ctx.current() && itemNow(ctx.current());
+    let h = '<div class="io-kinds" role="tablist">' + kinds.map(k => '<button type="button" role="tab" class="io-kind' + (M.kind === k[0] ? ' on' : '') + '" data-io="kind" data-v="' + k[0] + '">' + k[1] + ' (' + k[2] + ')</button>').join('') + '</div>';
+    const gd = GD();
+    let cards = '';
+    if (M.kind === 'basic') cards = L.basic.map(b => card('basic', b.Id, b.Name, '', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), baseLines(b))).join('');
+    else if (M.kind === 'unique') cards = L.uniques.map(u => { const b = gd.bases[lc(u.BaseId)]; return card('unique', u.Id, u.Name, 'unique', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), uniqueLines(u)); }).join('');
+    else if (M.word) {
+      const w = G.oathwordsFor(M.slot).find(x => lc(x.Id) === lc(M.word));
+      h += '<div class="io-wordbar"><button type="button" class="btn small ghost" data-io="wordback">‹ All Oathwords</button><b>' + esc(w ? w.Name : '') + '</b><span class="meta">Pick a base item type</span></div>';
+      cards = w ? G.oathwordBases(M.slot, w).map(b => card('wbase', b.Id, b.Name, '', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), baseLines(b))).join('') : '';
+    } else cards = L.words.map(w => {
+      const rn = (w.Runes || []).map(r => (gd.runes[lc(r)] || { Name: r }).Name);
+      return card('word', w.Id, w.Name, 'rare', G.oathwordBases(M.slot, w).length + ' base type' + (G.oathwordBases(M.slot, w).length === 1 ? '' : 's'), ['Runes: ' + rn.join(' · ')]);
+    }).join('');
+    h += cards ? '<div class="io-cards">' + cards + '</div>' : '<p class="hint">Nothing matches.</p>';
+    if (total) h += '<p class="hint">Picking an item replaces the one in this slot.</p>';
+    main.innerHTML = h;
+  }
+
+  function equip(item) {
+    const ch = ctx.editable(); if (!ch || !M) return;
+    const old = itemNow(ch);
+    item.level = (old && old.level) || ch.level;
+    if (M.slot === 'Idol') { if (old) ch.items[M.idx] = item; else { ch.items.push(item); M.idx = ch.items.length - 1; } }
+    else { const i = ch.items.findIndex(x => x.slot === M.slot); if (i >= 0) ch.items[i] = item; else ch.items.push(item); }
+    M.tab = 'edit'; M.word = '';
+    commit(ch);
+  }
+  function pick(kind, id) {
+    const gd = GD(), blank = (base, extra) => Object.assign({ slot: M.slot, base: base, rarity: M.slot === 'Idol' ? 'Magic' : 'Rare', unique: 'None', name: '', level: 0, affixes: [], runes: [] }, extra);
+    if (kind === 'basic') { const b = gd.bases[lc(id)]; if (b) equip(blank(b.Id)); }
+    else if (kind === 'unique') {
+      const u = gd.uniques[lc(id)]; if (!u) return;
+      const item = blank(u.BaseId, { rarity: 'Unique', unique: u.Id, name: u.Name }); G.rollUnique(item, 0.5); equip(item);
+    } else if (kind === 'word') { M.word = id; renderList(); }
+    else if (kind === 'wbase') {
+      const w = G.oathwordsFor(M.slot).find(x => lc(x.Id) === lc(M.word)), b = gd.bases[lc(id)];
+      if (w && b) equip(blank(b.Id, { runes: w.Runes.slice() }));
+    }
+  }
+
+  // ----- Edit tab -----
+  function affixRow(it, a, ai, tag) {
+    const af = GD().affixes[lc(a.id)];
+    if (!af) return '<div class="io-aff" data-ai="' + ai + '"><span class="meta bad">Unknown affix ' + esc(a.id) + '</span><button class="io-rm" type="button" data-io="rmaffix" data-ai="' + ai + '" title="Remove">×</button></div>';
+    const t = af.Tiers[a.tier] || af.Tiers[0], two = t && t.Min2 != null;
+    return '<div class="io-aff" data-ai="' + ai + '"><span class="io-afftext">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(safe(() => G.modLine(af.Mod, a.v, a.v2))) +
+      (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') + '</span>' +
+      '<select data-f="tier" aria-label="Tier">' + af.Tiers.map((y, ti) => '<option value="' + ti + '"' + (ti === a.tier ? ' selected' : '') + '>T' + (ti + 1) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')</option>').join('') + '</select>' +
+      '<input class="mini" type="number" step="any" data-f="v" value="' + a.v + '" aria-label="Value">' + (two ? '<input class="mini" type="number" step="any" data-f="v2" value="' + a.v2 + '" aria-label="Second value">' : '') +
+      '<button class="io-rm" type="button" data-io="rmaffix" data-ai="' + ai + '" title="Remove">×</button></div>';
+  }
+  function addSelect(it, base, type, label, isIdol) {
+    const gd = GD(), used = new Set(it.affixes.map(a => (gd.affixes[lc(a.id)] || {}).Group));
+    const all = isIdol ? Object.values(gd.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length) : G.affixesFor(base);
+    const opts = all.filter(a => a.Type === type && !used.has(a.Group)).map(a => ({ id: a.Id, t: safe(() => G.modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2)) })).sort((x, y) => x.t.localeCompare(y.t));
+    return '<select class="io-add" data-f="addaffix" aria-label="' + esc(label) + '"><option value="">&lt;' + esc(label) + '&gt;</option>' + opts.map(o => '<option value="' + esc(o.id) + '">' + esc(o.t) + '</option>').join('') + '</select>';
+  }
+  const section = (title, body) => '<div class="io-sec"><h4>' + title + '</h4>' + body + '</div>';
+  function editHtml(ch, it) {
+    const gd = GD(), base = gd.bases[lc(it.base)], n = itemName(it, M.slot), isU = it.rarity === 'Unique', u = isU && gd.uniques[lc(it.unique)];
+    const word = planner.oathwordForItem(it, M.slot);
+    let h = '<div class="io-top"><div><span class="io-slotlabel">' + esc(planner.slotName[M.slot] || M.slot) + '</span><div class="io-name ' + n.cls + '">' + esc(n.name) + '</div><span class="meta">' + esc(n.base) + (word || u ? '' : ' · ' + it.rarity) + '</span></div>' +
+      '<div class="io-acts"><button class="btn small ghost" type="button" data-io="change">⟳ Change item</button><button class="btn small ghost" type="button" data-io="unequip">✕ ' + (M.slot === 'Idol' ? 'Remove' : 'Unequip') + '</button></div></div>';
+    if (!isU) h += '<div class="io-row"><label class="field inline"><span>Rarity</span><select data-f="rarity">' + RAR.map(r => '<option' + (it.rarity === r ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></label>' +
+      '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label></div>';
+    else h += '<div class="io-row"><label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label></div>';
+    const imp = base ? baseLines(base) : [];
+    h += section('Implicits', imp.length ? imp.map(l => '<div class="io-imp">' + esc(l) + '</div>').join('') : '<div class="io-imp meta">None</div>');
+    const isIdol = M.slot === 'Idol';
+    if (isU) {
+      let un = '';
+      if (u) un = it.affixes.map((a, ai) => {
+        if (!a.id.startsWith('unique:')) return '';
+        const um = u.Mods[+a.id.slice(7)]; if (!um) return '';
+        const text = esc((um.Text ? um.Text.replace(/\{(0|v)\}/g, a.v).replace(/\{1\}/g, a.v2) : safe(() => G.modLine(um.Mod, a.v, a.v2))).replace(/\+-/g, '-'));
+        const rolls = (lo, hi) => lo != null && hi != null && lo !== hi, r1 = rolls(um.Min, um.Max), r2 = rolls(um.Min2, um.Max2);
+        const box = (f, x, lo, hi) => '<input class="mini" type="number" step="any" data-f="' + f + '" value="' + x + '" min="' + Math.min(lo, hi) + '" max="' + Math.max(lo, hi) + '" title="Rolls ' + lo + ' to ' + hi + '">';
+        if (!r1 && !r2) return '<div class="io-aff"><span class="io-afftext">' + text + '</span></div>';
+        const range = (r1 ? um.Min + ' to ' + um.Max : '') + (r1 && r2 ? ' / ' : '') + (r2 ? um.Min2 + ' to ' + um.Max2 : '');
+        return '<div class="io-aff" data-ai="' + ai + '"><span class="io-afftext">' + text + ' <span class="meta">[' + range + ']</span></span>' + (r1 ? box('v', a.v, um.Min, um.Max) : '') + (r2 ? box('v2', a.v2, um.Min2, um.Max2) : '') + '</div>';
+      }).join('');
+      h += section('Unique lines', un || '<div class="io-imp meta">None</div>');
+      const nV = it.affixes.filter(a => !a.id.startsWith('unique:')).length;
+      let vi = 0, vows = '';
+      it.affixes.forEach((a, ai) => { if (!a.id.startsWith('unique:')) vows += affixRow(it, a, ai, 'Vow ' + (++vi)); });
+      if (u && nV < G.VOW_MAX) vows += addSelect(it, base, 'Prefix', 'Add Vow (prefix)', isIdol) + addSelect(it, base, 'Suffix', 'Add Vow (suffix)', isIdol);
+      h += section('Vows <small>' + nV + ' / ' + G.VOW_MAX + '</small>', vows || '<div class="io-imp meta">None</div>');
+    } else {
+      const lim = G.LIMIT[it.rarity] || 0, type = a => (gd.affixes[lc(a.id)] || {}).Type;
+      for (const T of ['Prefix', 'Suffix']) {
+        const mine = it.affixes.map((a, ai) => ({ a, ai })).filter(x => type(x.a) === T);
+        let body = mine.map(x => affixRow(it, x.a, x.ai)).join('');
+        if (mine.length < lim) body += addSelect(it, base, T, 'Add ' + T);
+        else if (!lim) body += '<div class="io-imp meta">Normal items have no affixes. Set the rarity to Magic or Rare.</div>';
+        if (mine.length > lim) body += '<p class="hint bad">' + it.rarity + ' items hold ' + lim + ' ' + T.toLowerCase() + (lim === 1 ? '' : 'es') + '.</p>';
+        h += section(T + 'es', body);
+      }
+    }
+    const rs = G.runeSlots(base);
+    if (rs && !isU && !word) {
+      let rb = '<div class="io-row">';
+      for (let i = 0; i < rs; i++) rb += '<select data-f="rune" data-ri="' + i + '" aria-label="Rune ' + (i + 1) + '"><option value="">(no rune)</option>' + G.runeList.map(r => '<option value="' + esc(r.Id) + '"' + (lc(it.runes[i]) === lc(r.Id) ? ' selected' : '') + '>' + esc(r.Name) + '</option>').join('') + '</select>';
+      h += section('Runes <small>' + rs + ' sockets</small>', rb + '</div>');
+    } else if (word) h += section('Oathword', '<div class="io-imp">' + esc(word.Name) + ': ' + esc(it.runes.map(r => (gd.runes[lc(r)] || { Name: r }).Name).join(' · ')) + '</div>');
+    return h + '<p class="hint io-foot">Changes show on the Damage tab straight away. Your save file is never changed.</p>';
+  }
+
+  // ----- events -----
+  function onIoClick(e) {
+    const b = e.target.closest && e.target.closest('[data-io]'); if (!b || !M) return;
+    const act = b.dataset.io;
+    if (act === 'close') return closeItem();
+    if (act === 'tab') { if (!b.disabled) { M.tab = b.dataset.v; renderItem(); } return; }
+    if (act === 'change') { M.tab = 'select'; M.word = ''; return renderItem(); }
+    if (act === 'cat') { M.cat = b.dataset.v; back.querySelectorAll('.io-cat').forEach(x => x.classList.toggle('on', x.dataset.v === M.cat)); return renderList(); }
+    if (act === 'kind') { M.kind = b.dataset.v; M.word = ''; return renderList(); }
+    if (act === 'wordback') { M.word = ''; return renderList(); }
+    if (act === 'pick') return pick(b.dataset.kind, b.dataset.id);
+    const ch = ctx.editable(), it = itemNow(ch); if (!ch || !it) return;
+    if (act === 'unequip') {
+      if (M.slot === 'Idol') { ch.items.splice(M.idx, 1); ctx.commit(ch); render(); return closeItem(); }
+      ch.items = ch.items.filter(i => i !== it); M.tab = 'select'; return commit(ch);
+    }
+    if (act === 'rmaffix') { it.affixes.splice(+b.dataset.ai, 1); return commit(ch); }
+  }
+  function onIoChange(e) {
+    const t = e.target, f = t.dataset.f; if (!M || !f) return;
+    const ch = ctx.editable(), it = ch && itemNow(ch); if (!it) return;
+    const v = t.value, ai = +((t.closest('[data-ai]') || {}).dataset || {}).ai, gd = GD();
+    switch (f) {
+      case 'rarity': it.rarity = v; if (v === 'Normal') it.affixes = []; break;
+      case 'ilvl': it.level = Math.max(1, Math.min(100, +v || 1)); break;
+      case 'addaffix': { const af = gd.affixes[lc(v)]; if (!af) return renderItem(); const ti = G.topTier(af, it.level || ch.level), tt = af.Tiers[ti]; it.affixes.push({ id: af.Id, tier: ti, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); break; }
+      case 'tier': { const a = it.affixes[ai], af = a && gd.affixes[lc(a.id)], tt = af && af.Tiers[+v]; if (!tt) return; Object.assign(a, { tier: +v, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); break; }
+      case 'v': if (!it.affixes[ai]) return; it.affixes[ai].v = +v || 0; delete it.roll; break;
+      case 'v2': if (!it.affixes[ai]) return; it.affixes[ai].v2 = +v || 0; delete it.roll; break;
+      case 'rune': it.runes[+t.dataset.ri] = v; it.runes = Array.from(it.runes, r => r || '').slice(0, G.runeSlots(gd.bases[lc(it.base)])).filter(Boolean); break; // empty sockets close up (order matters for Oathwords)
+      default: return;
+    }
+    commit(ch);
+  }
+  return { render, hide, close: () => { if (M) closeItem(); } };
 };
 
 ;
@@ -12062,6 +12331,7 @@ window.BOStartApp = function () {
     document.body.classList.toggle('dashboard-view', tab === 'damage');
     document.body.classList.toggle('tree-page', tab === 'tree');
     document.body.classList.toggle('build-page', tab === 'build');
+    document.body.classList.toggle('plan-page', tab === 'plan'); // the plan setup page: no Damage-tab controls beside it
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
     document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'faq' || tab === 'skillscaling' || tab === 'character');
@@ -12215,9 +12485,31 @@ window.BOStartApp = function () {
     } catch (err) { alert('Could not make a build code: ' + err.message); }
   };
 
+    // "Sim best supports" on a Build tab skill: the support search (as the Supports tab's) for one skill at its gem level,
+    // against the configured enemy, every support, mana sustained when possible. Resolves to the best setup's ids, or null.
+  function bestSupportsFor(skill, progress) { return new Promise(resolve => {
+      const run = manaOk => {
+        let job;
+        try {
+          const o = comboOpts(); o.gemLevel = st.ch.gemLevels[skill] || undefined;
+          job = S.supportSearch(GD, st.ch, skill, o, { pool: 'all', target: 'enemy', keep: 1, manaOk, pinned: [], blocked: [] });
+        } catch (e) { return resolve(null); }
+        const tick = () => {
+          const t = performance.now();
+          while (!job.done && performance.now() - t < 40) job.step(150);
+          if (!job.done) { progress(Math.round(job.tried / Math.max(1, job.total) * 100)); return setTimeout(tick, 0); }
+          const best = job.results[0];
+          if (!best && manaOk) return run(false);
+          resolve(best ? best.sup.map(id => (GD.supports[String(id).toLowerCase()] || { Id: id }).Id) : null);
+        };
+        tick();
+      };
+      run(true);
+  }); }
+
   // The Build tab (planner.js).
   planner = window.BOPlanner({
-    GD, S, $, esc, gemDot, skillDot, confirm: confirmInPage,
+    GD, S, $, esc, gemDot, skillDot, confirm: confirmInPage, importCode: text => importAnyCode(text), bestSupports: bestSupportsFor,
     // A plan code carries the plan's tree tabs too (when it has more than one).
     withTabs: ch => {
       const t = ch === st.chOrig ? treeTabs() : null;
@@ -12294,6 +12586,8 @@ window.BOStartApp = function () {
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon });
   character = window.BOCharacter({
     $, esc, planner, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats,
+    // Item overlay: edits go to a plan itself, or to a copy of a loaded character (as on the Build tab); the save file is never written.
+    editable: buildEditable, commit: ch => { if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {}); planner.render(); }, // the caller redraws the Character tab
     sheet: () => st.ch && st.skill ? S.calcSkill(GD, st.ch, st.skill, opts()) : null,
     passives: () => [...allocSet()].map(id => GD.nodes[id]),
     oaths: () => st.ch ? S.swornOaths(GD, st.ch) : [],

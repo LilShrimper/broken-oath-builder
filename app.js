@@ -4844,16 +4844,34 @@ window.BOScaling = function (ctx) {
     }
     return out;
   }
-  function card(sk, G, max) {
+  // A toggle or aura that hits on its own clock (Unholy Void): the card's range is the SHOWN hit, but each tick deals only a
+  // share of it. Same reading as sim.js ("Toggled ground"): Ground.Tick / Ground.TickScale, else the skill text. Checked against
+  // the in-game Unholy Void tooltip (owner, 11 Nov 2026): "twice a second, 70% of the damage shown each time", Casts per second 2.00.
+  function tickNote(sk) {
+    if (!(sk.Delivery === 'Aura' || (sk.Ground && sk.Ground.Tick && !sk.Ground.Duration))) return '';
+    let tps, scale;
+    if (sk.Ground && sk.Ground.Tick) { tps = 1 / sk.Ground.Tick; scale = sk.Ground.TickScale || 1; }
+    else {
+      const d = sk.Description || '', words = { once: 1, twice: 2, 'three times': 3, 'four times': 4 };
+      const tw = /(once|twice|three times|four times|(\d+(?:\.\d+)?) times) a second/i.exec(d), pct = /(\d+)% of the damage shown/i.exec(d);
+      if (!tw) return '';
+      tps = words[tw[1].toLowerCase()] || parseFloat(tw[2]); scale = pct ? +pct[1] / 100 : 1;
+    }
+    const f = n => +n.toFixed(2);
+    return 'Stays on until switched off: ticks ' + f(tps) + ' times a second, each tick deals ' + Math.round(scale * 100) + '% of the hit above (' + f(tps * scale) + '× of it each second). Cast speed does not change the tick rate.';
+  }
+  function card(sk, G, max, id) {
     const k = kindOf(sk), col = COLOR[sk.Attribute];
     const tags = [ATTR[sk.Attribute] ? sk.Attribute : '', sk.Kind === 'Basic' ? 'Basic' : sk.Kind === 'Weapon' ? 'Weapon' : '', ...(sk.Tags || []), sk.DamageType && sk.DamageType !== 'Physical' ? sk.DamageType : ''].filter(Boolean);
     let h = '<article class="sc-card sc-' + col + '" data-name="' + esc((sk.Name + ' ' + (sk.Tags || []).join(' ') + ' ' + (sk.DamageType || '')).toLowerCase()) + '">' +
-      '<header><div><h3>' + esc(sk.Name) + '</h3><span class="sc-tags">' + esc(tags.join(' · ')) + '</span></div></header>';
+      '<header data-skill="' + esc(id) + '"><div><h3>' + esc(sk.Name) + '</h3><span class="sc-tags">' + esc(tags.join(' · ')) + '</span></div></header>';
     {
       h +='<div class="sc-row">' + SHOWN.filter(L => L <= max).map(L => '<div><span>LV ' + L + '</span><b>' + at(sk, G, L) + '</b></div>').join('') + '</div>';
       if (ext) h += '<div class="sc-row sc-ext">' + BONUS.map(b => '<div><span>LV ' + (max + b) + '</span><b>' + atBonus(sk, G, b) + '</b></div>').join('') + '</div><p class="sc-unit">' + unitOf(k) + '. Second row: levels past 20 come from gear; past LV 25 is estimated (0.56 curve).</p>';
       else h += '<p class="sc-unit">' + unitOf(k) + ', gem level only (gear levels add more)</p>';
     }
+    const tn = tickNote(sk);
+    if (tn) h += '<p class="sc-unit sc-tick">' + esc(tn) + '</p>';
     const meta = [];
     if (sk.CastTime) meta.push('Cast ' + sk.CastTime + 's');
     if (sk.Cooldown) meta.push('Cooldown ' + sk.Cooldown + 's');
@@ -4888,16 +4906,36 @@ window.BOScaling = function (ctx) {
     // Only skills with scaling data (an attack or a spell with a hit of its own), grouped by gem colour.
     const ORDER = ['Str', 'Dex', 'Int'], GROUP = { Str: ['red', 'Red · Strength'], Dex: ['green', 'Green · Dexterity'], Int: ['blue', 'Blue · Intelligence'] };
     const list = Object.values(GD.skills).filter(s => ORDER.includes(s.Attribute) && ['attack', 'spell'].includes(kindOf(s))).sort((a, b) => a.Name.localeCompare(b.Name));
+    const ids = new Map(Object.entries(GD.skills).map(([key, s]) => [s, key]));
     const groups = ORDER.map(a => ({ a, skills: list.filter(s => s.Attribute === a) })).filter(g => g.skills.length);
     if (filter !== 'all' && !groups.some(g => GROUP[g.a][0] === filter)) filter = 'all';
     const chips = [['all', 'All']].concat(groups.map(g => [GROUP[g.a][0], GROUP[g.a][0][0].toUpperCase() + GROUP[g.a][0].slice(1)]));
     h += '<div class="sc-bar"><div class="sc-chips" role="group" aria-label="Gem colour">' + chips.map(c => '<button type="button" class="chip sc-chip' + (filter === c[0] ? ' active' : '') + '" data-f="' + c[0] + '" aria-pressed="' + (filter === c[0]) + '">' + c[1] + '</button>').join('') + '</div>' +
       '<input type="search" id="scSearch" placeholder="Search skills" aria-label="Search skills" value="' + esc(query) + '"></div>';
-    h += '<div id="scGrid">' + groups.map(g => '<section class="sc-group sc-' + GROUP[g.a][0] + '"><h2 class="sc-sep"><span>' + GROUP[g.a][1] + '</span></h2><div class="sc-grid">' + g.skills.map(s => card(s, G, max)).join('') + '</div></section>').join('') + '</div><p class="hint sc-empty" id="scEmpty" hidden>No skill matches.</p>';
+    h += '<div id="scGrid">' + groups.map(g => '<section class="sc-group sc-' + GROUP[g.a][0] + '"><h2 class="sc-sep"><span>' + GROUP[g.a][1] + '</span></h2><div class="sc-grid">' + g.skills.map(s => card(s, G, max, ids.get(s))).join('') + '</div></section>').join('') + '</div><p class="hint sc-empty" id="scEmpty" hidden>No skill matches.</p>';
+    hideTip();
     el.innerHTML = h;
+    el.onmousemove = showTip; el.onmouseleave = hideTip;
     apply();
     el.querySelector('.sc-chips').onclick = e => { const b = e.target.closest('[data-f]'); if (!b) return; filter = b.dataset.f; el.querySelectorAll('.sc-chip').forEach(x => { const on = x.dataset.f === filter; x.classList.toggle('active', on); x.setAttribute('aria-pressed', on); }); apply(); };
     $('#scSearch').oninput = e => { query = e.target.value.trim().toLowerCase(); apply(); };
+  }
+  // Hovering a card's title shows the same skill tooltip as the Build tab (game data only: this tab has no character).
+  // ctx.tip(id) returns its HTML; it reuses the .pl-tip look.
+  let tipEl = null;
+  function hideTip() { if (tipEl) { tipEl.hidden = true; tipEl.dataset.key = ''; } }
+  function showTip(e) {
+    const head = ctx.tip && e.target.closest && e.target.closest('#scGrid .sc-card > header');
+    if (!head) return hideTip();
+    const id = head.dataset.skill, html = ctx.tip(id);
+    if (!html) return hideTip();
+    if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'pl-tip'; tipEl.setAttribute('role', 'tooltip'); document.body.appendChild(tipEl); }
+    if (tipEl.dataset.key !== id) { tipEl.innerHTML = html; tipEl.dataset.key = id; }
+    tipEl.hidden = false;
+    const r = head.getBoundingClientRect(), w = tipEl.offsetWidth, hgt = tipEl.offsetHeight;
+    const x = Math.min(e.clientX + 14, innerWidth - w - 8); let y = r.bottom + 6;
+    if (y + hgt > innerHeight - 8) y = Math.max(8, r.top - hgt - 6);
+    tipEl.style.left = Math.max(8, x) + 'px'; tipEl.style.top = y + 'px';
   }
   // Filter by colour and search without redrawing (keeps open "All levels" tables open).
   function apply() {
@@ -11405,7 +11443,7 @@ window.BOStartApp = function () {
   fossil = window.BOFossil({ $, esc, gd: () => GD, chars: () => CHARS });
   // The Brewery tab (brewery.js): Brewmaw's potions; the active ones count in the damage sim.
   brewery = window.BOBrewery({ $, esc, gd: () => GD, current: () => st.ch, onChange: () => { breweryDirty = true; } });
-  scaling = window.BOScaling({ $, esc, gd: () => GD });
+  scaling = window.BOScaling({ $, esc, gd: () => GD, tip: id => planner.skillTip(null, id, false) }); // hover tooltip on a card's title (the Build tab's skill tooltip, game data only)
   // The Item Search tab (itemsearch.js): uniques, Oathwords, bases, mods, runes and jewels from the game data.
   grail = window.BOGrail({ $, esc, gd: () => GD, current: () => st.ch, icons: () => itemSearch,
     onChange: () => { if (!$('#itemSearchPane').hidden) itemSearch.render(); } });

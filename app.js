@@ -2699,9 +2699,10 @@ window.BOCreator = function (ctx) {
   // ---------- state ----------
   const C = { file: '', orig: null, save: null, msg: '', err: '', log: [], edit: null, kit: null, editIdx: -1, newSlot: 'MainHand', buildId: '' };
   const ALL_PARTS = { tree: true, gear: true, skills: true, dragon: true, level: true, potions: true };
-  // Fill on load: what to add every time a save loads (remembered in this browser).
-  // Everything below is added every time a save loads (owner, 6 Nov 2026: no options, this is the default).
-  C.fill = { gems: true, supports: true, runes: false, gold: true, forge: true, sigils: true, cube: true }; // runes: the Rupture card's checkbox
+  // Owner, 10 Nov 2026: expose the existing additions as QoL checkboxes, all on by default.
+  const DEFAULT_FILL = { gems: true, supports: true, runes: true, gold: true, forge: true, sigils: true, cube: true };
+  C.fill = { ...DEFAULT_FILL };
+  C.fillSnaps = {};
   const R = () => W.get(C.save.props, 'Record').v.props;
   const sumP = () => W.get(R(), 'Summary').v.props;
   const summary = () => W.toPlain(sumP());
@@ -2814,9 +2815,9 @@ window.BOCreator = function (ctx) {
       const S = W.toPlain(sm.v.props);
       if (S.Realm === 'Online' || S.League) throw new Error((S.Name || 'This character') + ' is an online character (' + (S.League || S.Realm) + '). The Save Creator only changes offline characters.');
       if (!W.same(W.serialize(save), bytes)) throw new Error('This save has something the Save Creator cannot write back exactly, so it will not change it.');
-      Object.assign(C, { file: file.name, orig: bytes, save, log: [], edit: null, editIdx: -1, runeSnap: null, copied: null, copyMode: '' }); // a build imported first stays picked
+      Object.assign(C, { file: file.name, orig: bytes, save, log: [], edit: null, editIdx: -1, runeSnap: null, fillSnaps: {}, fill: { ...DEFAULT_FILL }, copied: null, copyMode: '' }); // a build imported first stays picked
       C.msg = 'Loaded ' + S.Name + ' (' + S.ClassId + ' ' + (S.Level || 1) + ', offline).';
-      const added = fillAll(); if (added.length) { C.log.push(...added); C.msg += ' Added: ' + added.join(' '); }
+      const added = fillAll(); if (added.length) C.log.push(...added);
     } catch (e) { C.err = e.message; }
     render();
   }
@@ -2914,6 +2915,8 @@ window.BOCreator = function (ctx) {
     return 'Copied from ' + ch.name + ': ' + done.join(', ') + '.';
   }
   function copyBuild(ch) {
+    // Remove only the automatic additions first, so unchecking after an import restores the imported build.
+    for (const key of Object.keys(C.fillSnaps)) unfill(key);
     changed(applyBuild(JSON.parse(JSON.stringify(ch)), ALL_PARTS));
     const added = fillAll(); if (added.length) C.log.push(...added); // the build's gem list replaced the full one
     C.edit = null; C.editIdx = -1;
@@ -3037,7 +3040,45 @@ window.BOCreator = function (ctx) {
   // Supports: SupportGems holds the loose (unsocketed) copies, duplicates allowed (8 of 10 saves hold 2-5 of one, 6 Nov 2026);
   // socketed ones live in Sockets. Some saves hold old capitalised ids ("Skyfall", "Orbit"), so ids are compared in lower case.
   const RUNE_FILL = RUNE_MAX, SUPPORT_FILL = 15, GEM_FILL = 20, GOLD_FILL = 10000000;
-  function fillAll() {
+  const FILL_FIELDS = { gems: ['Gems', 'GemLevels', 'GemXp'], supports: ['SupportGems'], gold: ['gold'],
+    forge: ['ForgeMats', 'ForgeEchoes', 'ForgeRecipes'], sigils: ['Pouch', 'CoreSigils'], cube: ['ZoneFlags'], runes: [] };
+  function fillAll(keys = Object.keys(C.fill)) {
+    const selected = C.fill, out = [];
+    try {
+      for (const key of keys.filter(k => selected[k])) {
+        const props = /^(forge|sigils)$/.test(key) ? mapProps() : R();
+        if (!C.fillSnaps[key]) C.fillSnaps[key] = {
+          fields: FILL_FIELDS[key].map(name => [name, structuredClone(props && getP(props, name) || null)]), log: []
+        };
+        C.fill = { [key]: true };
+        const added = fillOption();
+        C.fillSnaps[key].log.push(...added); out.push(...added);
+      }
+    } finally { C.fill = selected; }
+    return out;
+  }
+  function unfill(key) {
+    const snap = C.fillSnaps[key]; if (!snap) return;
+    if (key === 'runes') unfillRunes();
+    else {
+      const props = /^(forge|sigils)$/.test(key) ? mapProps() : R();
+      if (props) for (const [name, before] of snap.fields) {
+        const i = props.findIndex(p => p.name === name);
+        if (key === 'cube') {
+          // Other controls add zone flags too: remove only cube flags introduced by this option.
+          const old = new Set(before ? before.v.items : []), p = getP(props, name);
+          if (p) p.v.items = p.v.items.filter(f => old.has(f) || !/^(cube_have|unlk_Cube|oath_cube|oathpaid_cube|cube_rx_.*)$/.test(f));
+          if (!before && p && !p.v.items.length) props.splice(i, 1);
+        } else if (before) {
+          if (i < 0) props.push(structuredClone(before)); else props[i] = structuredClone(before);
+        } else if (i >= 0) props.splice(i, 1);
+      }
+    }
+    C.log = C.log.filter(x => !snap.log.includes(x));
+    delete C.fillSnaps[key];
+    C.edit = null; C.editIdx = -1;
+  }
+  function fillOption() {
     const rec = R(), out = [];
     if (C.fill.gems) {
       const gl = map(rec, 'GemLevels'), xp = map(rec, 'GemXp'), list = arr(rec, 'Gems'), have = new Set(Object.keys(gl).concat(list).map(lc));
@@ -3070,7 +3111,7 @@ window.BOCreator = function (ctx) {
   }
   const RUNE_LOG = / of \d+ runes\.$/;
   function fillRunes() {
-      if (!C.runeSnap) C.runeSnap = items().filter(isRune).map(x => structuredClone(x)); // the stacks before the fill
+      if (!C.runeSnap) C.runeSnap = items().flatMap((item, index) => isRune(item) ? [{ index, item: structuredClone(item) }] : []); // the stacks before the fill
       // In-game test (6 Nov 2026): all 34 rune stacks show; the game keeps 12 in the bottom row and moves the rest into the bag.
       let n = 0;
       for (const r of Object.values(GD.runes).filter(r => !/^jw_/i.test(r.Id))) {
@@ -3088,7 +3129,9 @@ window.BOCreator = function (ctx) {
   // Unticked: the rune stacks go back to how the save had them.
   function unfillRunes() {
     if (!C.runeSnap) return;
-    need(R(), 'Items').v.items = [...items().filter(x => !isRune(x)), ...C.runeSnap.map(x => structuredClone(x))];
+    const restored = items().filter(x => !isRune(x));
+    for (const { index, item } of C.runeSnap) restored.splice(Math.min(index, restored.length), 0, structuredClone(item));
+    need(R(), 'Items').v.items = restored;
     C.runeSnap = null; C.log = C.log.filter(x => !RUNE_LOG.test(x));
   }
   // In-game test passed (6 Nov 2026: all kept after the game saved): crafting materials, echoes, forge recipes, sigils and the Oathstone Cube. Field names and
@@ -3183,7 +3226,7 @@ window.BOCreator = function (ctx) {
   // Copy a build: paste a code (copied at once) or pick a build of this class from the page. Everything is copied.
   function buildHtml(S) {
     const list = ctx.chars().filter(c => lc(c.classId) === lc(S.ClassId));
-    let h = '<div class="card cr-build"><h2>Copy a build onto ' + esc(S.Name) + '</h2>';
+    let h = '<div class="card cr-build"><h2>Copy a build onto ' + esc(S.Name) + ' <span class="hint">' + esc(S.ClassId) + ' · offline · ' + esc(C.file) + '</span></h2>';
     const codeRow = '<div class="cr-import"><label class="field grow"><span>Build code or link</span><input type="text" id="crCode" placeholder="Paste an ItemDatabase link (/b/… or #b=), share link, BOP1. plan code or BO1. tree code" autocomplete="off" spellcheck="false"></label>' +
       '<button class="btn" type="button" data-cr="import">Copy</button></div>';
     const pageRow = lead => '<div class="cr-import"><label class="field grow"><span>' + lead + esc(S.ClassId) + ' from this page (a plan or a loaded character)</span><select id="crBuild">' + opt('', 'Pick a build…', !C.buildId) +
@@ -3198,7 +3241,12 @@ window.BOCreator = function (ctx) {
       if (C.copyMode === 'code') h += codeRow;
       if (C.copyMode === 'page' && list.length) h += pageRow('A ');
     }
-    return h + '<p class="hint">Copies the level, passive tree, worn gear, idols, dwarven runes, skill bar, Dragonling and potions. The bag stays, and every gem and support is added again afterwards. Tree codes (<code>BO1.</code>) carry no items; other codes carry no rolled stats unless they come from a planner.</p></div>';
+    return h + '<div class="pl-row cr-stats cr-build-stats">' +
+      '<label class="field inline"><span>Name</span><input type="text" id="crName" maxlength="24" value="' + esc(S.Name) + '"></label>' +
+      '<label class="field inline"><span>Level</span><input type="number" id="crLevel" min="1" max="100" value="' + (S.Level || 1) + '"></label>' +
+      '<label class="field inline"><span>Bonus passive points</span><input type="number" id="crBonus" min="0" max="200" value="' + val(R(), 'BonusPassivePoints', 0) + '"></label>' +
+      '<span class="hint">Passives taken: ' + arr(R(), 'PassiveNodeIds').length + '.</span></div>' +
+      '<p class="hint">Copies the level, passive tree, worn gear, idols, dwarven runes, skill bar, Dragonling and potions. The bag stays, and the checked QoL options are applied afterwards. Tree codes (<code>BO1.</code>) carry no items; other codes carry no rolled stats unless they come from a planner.</p></div>';
   }
   // ---------- Rupture map ----------
   // RiftMap fields as the saves hold them (5 Nov 2026, all six saves). In both saves past the Riven Atlas' first level
@@ -3279,12 +3327,19 @@ window.BOCreator = function (ctx) {
   }
   const ruptureNow = () => Math.max(mval('BestML', 0) || 0, mval('RivenOpen', 0) || 0);
   function mapHtml() {
-    let h = '<div class="card cr-map"><h2>Rupture map</h2>';
-    if (!mapProps()) return h + '<p class="hint">This character has no Rupture map yet. Play until the map opens, then load the save again.</p>' +
-      '<div class="field"><span>Runes</span><label class="cr-toggle"><input type="checkbox" id="crRunes"' + (C.fill.runes ? ' checked' : '') + '><span>Add ' + RUNE_FILL + ' of every rune</span></label></div></div>';
-    h += '<div class="cr-import"><label class="field"><span>Rupture Level to unlock</span><input type="number" id="crRupture" min="1" max="999" value="' + ruptureNow() + '"></label>' +
-      '<div class="field"><span>Runes</span><label class="cr-toggle"><input type="checkbox" id="crRunes"' + (C.fill.runes ? ' checked' : '') + '><span>Add ' + RUNE_FILL + ' of every rune</span></label></div></div>';
-    return h + '<p class="hint">Opens every Rupture Level up to this one: the map up to ' + MAP_TOP + ' with its Gates, and the Riven Atlas from ' + RU.riven.first + ' on. Lower numbers never take progress away.</p></div>';
+    const toggle = (key, label, detail) => '<label class="cr-toggle"><input type="checkbox" data-cr-fill="' + key + '"' + (C.fill[key] ? ' checked' : '') + '><span>' + label + '<small>' + detail + '</small></span></label>';
+    let h = '<div class="card cr-map"><h2>QoL</h2><div class="cr-qol-top">';
+    h += mapProps() ? '<label class="field"><span>Rupture Level to unlock</span><input type="number" id="crRupture" min="1" max="999" value="' + ruptureNow() + '"></label>' : '<p class="hint">This character has no Rupture map yet. Play until the map opens, then load the save again.</p>';
+    h += toggle('runes', 'Runes', RUNE_FILL + ' of every rune') + '</div>';
+    if (mapProps()) h += '<p class="hint">Opens every Rupture Level up to this one: the map up to ' + MAP_TOP + ' with its Gates, and the Riven Atlas from ' + RU.riven.first + ' on. Lower numbers never take progress away.</p>';
+    h += '<div class="cr-qol-options">' +
+      toggle('gems', 'All gems at level ' + GEM_FILL, 'Adds missing skill gems and raises gem levels') +
+      toggle('supports', SUPPORT_FILL + ' of every support gem', 'Loose copies, excluding retired supports') +
+      toggle('forge', 'Crafting materials', MAT_FILL.toLocaleString('en-US') + ' of each material, ' + ECHO_FILL + ' echoes and all forge recipes') +
+      toggle('cube', 'Cube recipes unlocked', 'Unlocks the Oathstone Cube and every recipe') +
+      toggle('gold', 'Gold', GOLD_FILL.toLocaleString('en-US')) +
+      toggle('sigils', 'Sigils', SIGIL_FILL + ' of each tier ' + SIGIL_TIER + ' kind and ' + CORE_FILL + ' core sigils') + '</div>';
+    return h + '<p class="hint">Uncheck an option to leave those contents as they were before the addition. Crafting materials, cube recipes and sigils need an unlocked Rupture map. Gold and crafting materials here are the character’s copy; the shared offline wallet can overwrite them on load.</p></div>';
   }
 
   function render() {
@@ -3294,20 +3349,16 @@ window.BOCreator = function (ctx) {
       '<span class="hint">Pick a <code>BO_Char_….sav</code> from <code>' + esc(ctx.savePath) + '</code>. It is read in this tab and never uploaded.</span></div>' +
       (C.err ? '<p class="hint bad">' + esc(C.err) + '</p>' : '') + (C.msg ? '<p class="hint pl-status">' + esc(C.msg) + '</p>' : '') + '</div>';
     if (!C.save) { el.innerHTML = h; return; }
-    const S = summary(), rec = R(), lvl = S.Level || 1;
+    const S = summary(), rec = R();
     const gl = map(rec, 'GemLevels');
     h += buildHtml(S);
-    h += '<div class="cmp-grid">';
-    h += '<div class="card"><h2>' + esc(S.Name) + ' <span class="hint">' + esc(S.ClassId) + ' · offline · ' + esc(C.file) + '</span></h2><div class="pl-row cr-stats">' +
-      '<label class="field inline"><span>Name</span><input type="text" id="crName" maxlength="24" value="' + esc(S.Name) + '"></label>' +
-      '<label class="field inline"><span>Level</span><input type="number" id="crLevel" min="1" max="100" value="' + lvl + '"></label>' +
+    h += mapHtml();
+    h += '<details class="card cr-manual"><summary>Adjust gold and individual gem levels</summary><div class="pl-row cr-stats">' +
       '<label class="field inline"><span>Gold</span><input type="number" id="crGold" min="0" step="1" value="' + val(rec, 'gold', 0) + '"></label>' +
-      '<label class="field inline"><span>Bonus passive points</span><input type="number" id="crBonus" min="0" max="200" value="' + val(rec, 'BonusPassivePoints', 0) + '"></label></div>' +
-      '<p class="hint">Level also sets the XP to the start of that level. Passives taken: ' + arr(rec, 'PassiveNodeIds').length + '.</p>';
+      '</div>';
     const gems = Object.keys(gl).sort();
     if (gems.length) h += '<h3>Gem levels</h3><div class="cr-gems">' + gems.map(k => '<label class="field inline"><span>' + esc((GD.skills[lc(k)] || GD.supports[lc(k)] || {}).Name || k) + '</span><input type="number" min="1" max="20" data-gem="' + esc(k) + '" value="' + gl[k] + '"></label>').join('') + '</div>';
-    h += '</div>';
-    h += mapHtml() + '</div>';
+    h += '</details>';
     const all = items(), worn = all.map((s, i) => [s, i]).filter(([s]) => !isBag(s)), bag = all.map((s, i) => [s, i]).filter(([s]) => isBag(s));
     const free = BAG_W * BAG_ROWS - [...bagUsed()].filter(c => +c.split(',')[1] < BAG_ROWS).length; // the rune row is not item space
     const gearBag = bag.filter(([s]) => !isRune(s)), runeBag = bag.filter(([s]) => isRune(s));
@@ -3391,10 +3442,12 @@ window.BOCreator = function (ctx) {
         changed(runeOf(iget(s, 'BaseID')).Name + ': ' + c + '.'); return render();
       }
       if (t.id === 'crRuneQ' || t.dataset.rnum != null) return;
-      if (t.id === 'crRunes') {
-        C.fill.runes = t.checked;
-        if (t.checked) { const added = fillRunes(); if (added.length) changed(added[0]); }
-        else unfillRunes();
+      if (t.dataset.crFill && Object.hasOwn(DEFAULT_FILL, t.dataset.crFill)) {
+        const key = t.dataset.crFill;
+        C.fill[key] = t.checked;
+        if (t.checked) { const added = fillAll([key]); C.log.push(...added); }
+        else unfill(key);
+        C.msg = t.checked ? 'QoL option applied.' : 'QoL addition removed.';
         return render();
       }
       if (t.id === 'crRupture' && mapProps()) { const n = setRupture(t.value); changed('Rupture Level ' + n + ' unlocked.'); return render(); }
@@ -3452,7 +3505,7 @@ window.BOCreator = function (ctx) {
       }
       if (act === 'download') return download();
       if (act === 'preview') return preview();
-      if (act === 'undo') { C.save = W.parse(C.orig); C.log = []; C.runeSnap = null; C.fill.runes = false; C.copied = null; C.copyMode = ''; C.edit = null; C.editIdx = -1; C.msg = 'Back to the save as loaded.'; return render(); }
+      if (act === 'undo') { C.save = W.parse(C.orig); C.log = []; C.runeSnap = null; C.fillSnaps = {}; C.fill = Object.fromEntries(Object.keys(DEFAULT_FILL).map(k => [k, false])); C.copied = null; C.copyMode = ''; C.edit = null; C.editIdx = -1; C.msg = 'Back to the save as loaded.'; return render(); }
     });
   })();
 

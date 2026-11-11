@@ -5105,7 +5105,7 @@ window.BOItemSearch = function (ctx) {
         return '<tr class="' + (on ? 'on' : '') + (r.dead ? ' dead' : '') + '"' + (r.has_build && r.build ? ' data-build="' + esc(r.build) + '" tabindex="0"' : '') + '>' +
           '<td class="num">' + (r.rank || '') + '</td>' +
           '<td>' + esc(r.class || '') + (r.class_rank ? ' <small class="meta" title="Rank inside the class">#' + r.class_rank + '</small>' : '') + (r.ascendancy && r.ascendancy !== 'None' ? ' <small class="meta">' + esc(r.ascendancy) + '</small>' : '') + (hc && r.dead ? ' <span class="lad-dead">dead</span>' : '') + '</td>' +
-          '<td class="lad-skill">' + (r.main_skill ? '<b>' + esc(skillName(r.main_skill)) + '</b>' : '<span class="meta">–</span>') + (sups ? '<div class="lad-sups">' + sups + '</div>' : '') + '</td>' +
+          '<td class="lad-skill">' + (r.main_skill ? '<b>' + (ctx.skillDot && !isHidden(r.main_skill) ? ctx.skillDot(r.main_skill) : '') + esc(skillName(r.main_skill)) + '</b>' : '<span class="meta">–</span>') + (sups ? '<div class="lad-sups">' + sups + '</div>' : '') + '</td>' +
           '<td class="num">' + (r.level || '') + '</td><td class="num">' + (r.rupture_level || 0) + '</td>' +
           '<td class="num">' + (r.guardian_dps_median ? fmt(r.guardian_dps_median) : '<span class="meta">–</span>') + '</td>' +
           '<td class="num lad-sim">' + simCell(r) + '</td>' + ex +
@@ -5333,7 +5333,7 @@ window.BOScaling = function (ctx) {
     const k = kindOf(sk), col = COLOR[sk.Attribute];
     const tags = [ATTR[sk.Attribute] ? sk.Attribute : '', sk.Kind === 'Basic' ? 'Basic' : sk.Kind === 'Weapon' ? 'Weapon' : '', ...(sk.Tags || []), sk.DamageType && sk.DamageType !== 'Physical' ? sk.DamageType : ''].filter(Boolean);
     let h = '<article class="sc-card sc-' + col + '" data-name="' + esc((sk.Name + ' ' + (sk.Tags || []).join(' ') + ' ' + (sk.DamageType || '')).toLowerCase()) + '">' +
-      '<header data-skill="' + esc(id) + '"><div><h3>' + esc(sk.Name) + '</h3><span class="sc-tags">' + esc(tags.join(' · ')) + '</span></div></header>';
+      '<header data-skill="' + esc(id) + '">' + (ctx.skillIcon ? ctx.skillIcon(id) : '') + '<div><h3>' + esc(sk.Name) + '</h3><span class="sc-tags">' + esc(tags.join(' · ')) + '</span></div></header>';
     {
       h +='<div class="sc-row">' + SHOWN.filter(L => L <= max).map(L => '<div><span>LV ' + L + '</span><b>' + at(sk, G, L) + '</b></div>').join('') + '</div>';
       if (ext) h += '<div class="sc-row sc-ext">' + BONUS.map(b => '<div><span>LV ' + (max + b) + '</span><b>' + atBonus(sk, G, b) + '</b></div>').join('') + '</div><p class="sc-unit">' + unitOf(k) + '. Second row: levels past 20 come from gear; past LV 25 is estimated (0.56 curve).</p>';
@@ -5512,7 +5512,7 @@ window.BOFaq = function (ctx) {
       }
       const rules = MINION_RULES[s.Id.toLowerCase()] || [];
       if (rules.length) body += '<h3>Rules the sim applies</h3>' + list(rules);
-      cards += card(esc(s.Name), body, esc(m.MonsterId));
+      cards += card((ctx.skillIcon ? ctx.skillIcon(s.Id) : '') + esc(s.Name), body, esc(m.MonsterId));
     }
     // Grave Conscription (support, skills in supports.json): raises the same Zombie monster from kills. The sim does not count these
     // Zombies (nothing in sim.js reads the support; no log or tooltip numbers for them yet), so the card says so.
@@ -6347,6 +6347,10 @@ window.BOCharacter = function (ctx) {
       sockets: (R.Sockets || []).map(s => ({ skill: s.SkillId, supports: (s.Supports || []).filter(Boolean), conduit: s.ConduitLink || '' })),
       hotbar: R.Hotbar || [], weaponId: R.WeaponId, dragonNodes: R.DragonlingNodes || [], dragonAspect: R.DragonlingAspect || '',
       mainSkill: R.MainSkillPin || '',
+      // Sworn Oaths: the save's OathMasteries95 map, mastery id -> Oath id (Shrimpslam's save, 11 Nov 2026:
+      // {"om_warrior_fury":"oath_brute","om_class_warrior":"oath_war_unbowed"}, matching the log's "Shrimpslam swore
+      // oath_brute at om_warrior_fury" and "swore oath_war_unbowed at om_class_warrior (was None, paid 0 gold, 2 Oaths sworn)").
+      oaths: Object.assign({}, R.OathMasteries95 || {}),
       supportGems: R.SupportGems || [], // spare support gems in the inventory
     };
   }
@@ -6528,7 +6532,7 @@ window.BOCharacter = function (ctx) {
     // sworn None" (one sworn Oath per mastery). A mastery counts only while one of its notables is taken: same log, a
     // level 6 Necromancer whose save holds 1 of the Legion mastery's 16 notables (grave_n0) had "4 swearable" there, and
     // "0 swearable" on om_mage_wind and om_necromancer_blight_3, where the save holds none.
-    // NOT CHECKED: an Oath's damage in a fight (no save has a sworn Oath yet, 11 Nov 2026).
+    // NOT CHECKED: an Oath's damage in a fight.
     const sworn = swornOaths(GD, ch);
     if (sworn.length) {
       sources.push({ key: 'oaths', label: 'Oath Masteries (' + sworn.length + ' sworn)', group: 'Character' });
@@ -11229,6 +11233,8 @@ window.BOStartApp = function () {
         (why && open ? '<span class="tk">' + esc(why) + '</span>' : '');
       return pick ? '<button type="button" class="oath-row' + (on ? ' sworn' : '') + '" data-oath="' + esc(oid) + '"' + (why ? ' disabled' : '') + '>' + body + '</button>' : '<li class="oath-row' + (on ? ' sworn' : '') + '">' + body + '</li>';
     }).join('');
+    // Game log, 11 Nov 2026: "swore oath_wide_swing at om_warrior_fury (was oath_earthbreaker, paid 2650 gold ...)" at level 53; the first Oath there "paid 0 gold".
+    if (pick && cur) h += '<div class="tk">In game, changing a sworn Oath costs gold</div>';
     h += pick ? '<div class="oath-list">' + rows + '</div>' : '<ul class="oath-list">' + rows + '</ul><div class="tk">Click to ' + (open ? 'pick an Oath' : 'see its Oaths') + '</div>';
     return h;
   }
@@ -12092,7 +12098,8 @@ window.BOStartApp = function () {
   fossil = window.BOFossil({ $, esc, gd: () => GD, chars: () => CHARS });
   // The Brewery tab (brewery.js): Brewmaw's potions; the active ones count in the damage sim.
   brewery = window.BOBrewery({ $, esc, gd: () => GD, current: () => st.ch, onChange: () => { breweryDirty = true; } });
-  scaling = window.BOScaling({ $, esc, gd: () => GD, tip: id => planner.skillTip(null, id, false, true) }); // hover tooltip on a card's title (the Build tab's skill tooltip, game data only)
+  const skillIcon = id => (window.GEM_ICONS && window.GEM_ICONS.idx[String(id).toLowerCase()] != null ? skillDot(id) : ''); // the icon only, no colour dot fallback
+  scaling = window.BOScaling({ $, esc, gd: () => GD, skillIcon, tip: id => planner.skillTip(null, id, false, true) }); // hover tooltip on a card's title (the Build tab's skill tooltip, game data only)
   // The Item Search tab (itemsearch.js): uniques, Oathwords, bases, mods, runes and jewels from the game data.
   grail = window.BOGrail({ $, esc, gd: () => GD, current: () => st.ch, icons: () => itemSearch,
     onChange: () => { if (!$('#itemSearchPane').hidden) itemSearch.render(); } });
@@ -12129,7 +12136,7 @@ window.BOStartApp = function () {
     },
     openBuild: ch => { addChars([ch], 'code', ch.id); showTab('character'); saveTip('Loaded a ladder build as a plan. Damage Analysis sims it; your own characters are unchanged.'); },
   });
-  faq = window.BOFaq({ $, esc, gd: () => GD, scaling });
+  faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon });
   character = window.BOCharacter({
     $, esc, planner, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats,
     sheet: () => st.ch && st.skill ? S.calcSkill(GD, st.ch, st.skill, opts()) : null,

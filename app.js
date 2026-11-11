@@ -4847,7 +4847,7 @@ window.BOItemSearch = function (ctx) {
     return (d.life + d.es) / Math.max(0.05, 1 - avg / 100);
   }
   const SOLO = 'Oathbound Solo'; // the game's name for solo self-found (SSF) leagues
-  const SORTS = [['rank', 'Ladder rank'], ['rupture', 'Deepest Rupture'], ['dps', 'Boss DPS'], ['ehp', 'EHP'], ['lifees', 'Life + ES'], ['level', 'Level']];
+  const SORTS = [['rank', 'Ladder rank'], ['rupture', 'Deepest Rupture'], ['sim', 'Sim DPS (est.)'], ['dps', 'Boss DPS (measured)'],['ehp', 'EHP'], ['lifees', 'Life + ES'], ['level', 'Level']];
 
   root.BOLadder = function (ctx) {
     const { $, esc } = ctx, GD = () => ctx.gd() || {};
@@ -4929,7 +4929,7 @@ window.BOItemSearch = function (ctx) {
       S.heroData = h || { gone: true };
     }
     // Life / ES / EHP and the uniques worn need the builds themselves: the worker's roster files (25 builds a file).
-    const needRoster = () => S.sort === 'ehp' || S.sort === 'lifees' || !!S.item.trim();
+    const needRoster = () => true; // Sim DPS, Life / ES / EHP and item search all read the published builds
     const rosterLoaded = new Set(); // "<league>/<Class>": read without errors
     // A worn item's searchable names: the unique's name (undiscovered ones are never named) and the base's name.
     const itemNames = it => {
@@ -4955,14 +4955,18 @@ window.BOItemSearch = function (ctx) {
         const items = (h.build.items || []).flatMap(itemNames);
         try {
           const ch = charFromApi(h), d = ctx.defence(ch);
-          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), items, find: items.join('\n').toLowerCase() };
-        } catch (e) { roster(league)[h.hero] = { life: null, es: null, ehp: null, items, find: items.join('\n').toLowerCase() }; }
-        if (++n % 15 === 0) { S.rosterBusy = 'Working out life and EHP… ' + n; paint(); await new Promise(r => setTimeout(r, 0)); }
+          // Sim the skill the ladder lists as main (the build file's own main_skill is often empty).
+          const row = (S.ladder.heroes || []).find(x => x.hero === h.hero);
+          if (row && row.main_skill && !isHidden(row.main_skill)) ch.mainSkill = row.main_skill;
+          let sim = null; try { sim = ctx.simDps ? ctx.simDps(ch, h.rupture_level || 0) : null; } catch (e) { sim = null; }
+          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), sim, simSkill: ch.mainSkill, items, find: items.join('\n').toLowerCase() };
+        } catch (e) { roster(league)[h.hero] = { life: null, es: null, ehp: null, sim: null, items, find: items.join('\n').toLowerCase() }; }
+        if (++n % 15 === 0) { S.rosterBusy = 'Running the sim on the builds… ' + n; paint(); await new Promise(r => setTimeout(r, 0)); }
       }
       // Only classes read without errors count as done; the others are tried again next time.
       for (const c of classes) if (!failed.has(c)) rosterLoaded.add(league + '/' + c);
       S.rosterBusy = '';
-      if (failed.size) S.err = 'Could not read the builds of ' + [...failed].join(', ') + ' (the ladder service did not answer), so item search, Life + ES and EHP miss them. Change a filter to try again.';
+      if (failed.size) S.err = 'Could not read the builds of ' + [...failed].join(', ') + ' (the ladder service did not answer), so Sim DPS, item search, Life + ES and EHP miss them. Change a filter to try again.';
     }
     async function refresh(fn) {
       S.loading = true; S.err = ''; paint();
@@ -4971,8 +4975,16 @@ window.BOItemSearch = function (ctx) {
     }
 
     // ---------- view ----------
+    // Sim DPS cell: the estimate, or a dash with the reason on hover.
+    const simCell = r => {
+      const x = roster()[r.hero];
+      if (!r.has_build) return '<span class="meta" title="Builds are published for the top 50 of each class">–</span>';
+      if (!x) return '<span class="meta" title="Build not read yet (build files refresh hourly)">' + (S.rosterBusy ? '…' : '–') + '</span>';
+      return x.sim > 0 ? '<span title="' + esc(skillName(x.simSkill)) + ', sim estimate">' + short(x.sim) + '</span>' : '<span class="meta" title="The sim does not cover this skill or build yet">–</span>';
+    };
     const metric = r => {
       const x = roster()[r.hero];
+      if (S.sort === 'sim') return x && x.sim > 0 ? x.sim : null;
       if (S.sort === 'ehp') return x ? x.ehp : null;
       if (S.sort === 'lifees') return x && x.life != null ? x.life + x.es : null;
       if (S.sort === 'rupture') return r.rupture_level || 0;
@@ -5074,12 +5086,13 @@ window.BOItemSearch = function (ctx) {
           '<td>' + esc(r.class || '') + (r.class_rank ? ' <small class="meta" title="Rank inside the class">#' + r.class_rank + '</small>' : '') + (r.ascendancy && r.ascendancy !== 'None' ? ' <small class="meta">' + esc(r.ascendancy) + '</small>' : '') + (hc && r.dead ? ' <span class="lad-dead">dead</span>' : '') + '</td>' +
           '<td class="lad-skill">' + (r.main_skill ? '<b>' + esc(skillName(r.main_skill)) + '</b>' : '<span class="meta">–</span>') + (sups ? '<div class="lad-sups">' + sups + '</div>' : '') + '</td>' +
           '<td class="num">' + (r.level || '') + '</td><td class="num">' + (r.rupture_level || 0) + '</td>' +
-          '<td class="num">' + (r.guardian_dps_median ? fmt(r.guardian_dps_median) : '<span class="meta">–</span>') + '</td>' + ex +
+          '<td class="num">' + (r.guardian_dps_median ? fmt(r.guardian_dps_median) : '<span class="meta">–</span>') + '</td>' +
+          '<td class="num lad-sim">' + simCell(r) + '</td>' + ex +
           '<td class="go" aria-hidden="true">' + (r.has_build && r.build ? '›' : '') + '</td></tr>';
       }).join('');
       const note = extra ? (extra === 'EHP' ? ' EHP here: (life + energy shield) against elemental hits after the hero\'s resistances (capped at ' + cap() + '%); armour, evasion and block are not counted.' : ' Life and energy shield as the Build Planner adds them up from gear and tree.') + ' Only heroes with a published build have one.' : '';
-      return '<div class="card lad-table-card"><div class="table-wrap"><table class="tbl lad-table"><thead><tr><th class="num">#</th><th title="Class, with its rank inside the class">Class</th><th>Main skill</th><th class="num">Level</th><th class="num" title="Best Rupture Level">Rupture</th><th class="num" title="The game\'s own median Guardian DPS (heroes with a build file)">Boss DPS</th>' + (extra ? '<th class="num">' + extra + '</th>' : '') + '<th aria-label="Build"></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
-        '<p class="hint">' + rows.length + ' heroes shown. Click a hero to see their build (published for the top 50 of each class). Ladder rank: best Rupture Level, then level, experience, fastest clear and who got there first. Boss DPS is the game\'s own median over its Guardian fights.' + note + '</p></div>';
+      return '<div class="card lad-table-card"><div class="table-wrap"><table class="tbl lad-table"><thead><tr><th class="num">#</th><th title="Class, with its rank inside the class">Class</th><th>Main skill</th><th class="num">Level</th><th class="num" title="Best Rupture Level">Rupture</th><th class="num" title="The game\'s own median Guardian DPS over its real fights (heroes with a build file)">Boss DPS</th><th class="num" title="Our damage sim on the published build: the main skill against a Guardian at the hero\'s Rupture Level. An estimate">Sim DPS <small class="meta">est.</small></th>' + (extra ? '<th class="num">' + extra + '</th>' : '') + '<th aria-label="Build"></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
+        '<p class="hint">' + rows.length + ' heroes shown. Click a hero to see their build (published for the top 50 of each class). Ladder rank: best Rupture Level, then level, experience, fastest clear and who got there first. Boss DPS is the game\'s own median over its Guardian fights. Sim DPS is our damage sim run on the published build (main skill against a Guardian at that Rupture Level, curses on the hotbar counted): an estimate, which can be off for skills the sim has not been checked on.' + note + '</p></div>';
     }
     function itemCard(it, classId) {
       const unique = it.unique && it.unique !== 'None';
@@ -11926,6 +11939,16 @@ window.BOStartApp = function () {
       return out;
     },
     defence: ch => heroDefence(ch), // life, ES and resistances for sorting (the Build Planner's own add-up)
+    // Sim DPS (est.): the main skill against a Guardian at the hero's Rupture Level (same setup as tools/api-check.js:
+    // monster level = Rupture Level up to MapMaxLevel, then the Deep's LadderMonsterLevels; hotbar curses on).
+    simDps: (ch, rl) => {
+      if (!ch.mainSkill) return null;
+      const D = GD.deep || {}, max = D.MapMaxLevel || 80, ml = D.LadderMonsterLevels || [];
+      const lvl = rl > 0 ? (rl <= max || !ml.length ? rl : ml[Math.min(rl - max, ml.length) - 1]) : undefined;
+      const curses = {}; for (const id of ch.hotbar || []) if (GD.curses[id]) curses[id] = { on: true, dread: 0 };
+      const r = S.calcSkill(GD, ch, ch.mainSkill, { enemyRarity: 'boss', enemyLevel: lvl, curses });
+      return r && !r.error && !r.unsupported && r.totalDps > 0 ? r.totalDps : null;
+    },
     openBuild: ch => { addChars([ch], 'code', ch.id); showTab('character'); saveTip('Loaded a ladder build as a plan. Damage Analysis sims it; your own characters are unchanged.'); },
   });
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling });

@@ -10,8 +10,10 @@
     'Gameplay/animsets.json', 'Gameplay/progression.json', 'Rifts/riftmap.json', 'Rifts/riven_atlas.json',
     'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json', 'Gameplay/monster_affixes.json', 'Gameplay/monsters.json', 'Gameplay/oath_masteries.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
+  // Read when the folder has them; an older game folder without them still loads.
+  const OPTIONAL = ['Gameplay/trap_price95.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 24; // 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 25; // 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -22,11 +24,12 @@
     const SKILL_KEYS = ['Id', 'Name', 'Kind', 'Attribute', 'Description', 'Tags', 'Delivery', 'DamageType', 'Family', 'Effectiveness',
       'EffectivenessLate', 'EffectivenessLateFrom', 'EffectivenessLateAt', 'EffectivenessEarly', 'EffectivenessEarlyHold', 'EffectivenessEarlyFull',
       'SpellMin', 'SpellMax', 'SpellGrowth', 'CastTime', 'ActionSpeed', 'ManaCost', 'Cooldown', 'CooldownLate', 'CooldownLateAt', 'MinCooldown',
-      'WeaponKinds', 'Projectiles', 'ProjectilesAtLevels', 'Chains', 'Pierce', 'Strikes', 'WaveCount', 'ConvertShare', 'LifeAsBase', 'bBothHands'];
+      'WeaponKinds', 'Projectiles', 'ProjectilesAtLevels', 'Chains', 'Pierce', 'Strikes', 'WaveCount', 'ConvertShare', 'LifeAsBase', 'bBothHands', 'bReturnFlight'];
     const skills = {};
     for (const s of skillsArr) {
       const o = pick(s, SKILL_KEYS);
-      if (s.Channel) o.Channel = pick(s.Channel, ['CostPerSec', 'Tick', 'MoveMult']);
+      if (s.Channel) o.Channel = pick(s.Channel, ['CostPerSec', 'Tick', 'MoveMult', 'bStrike', 'StrikeScale']);
+      if (s.Orb && typeof s.Orb === 'object') o.Orb = pick(s.Orb, ['Duration', 'Interval', 'Max', 'ExplodeScale']); // Winter Orb: icicle clock and the closing burst
       if (s.Minion) o.Minion = pick(s.Minion, ['MonsterId', 'Count', 'Cap', 'CountEvery', 'PerLevels', 'DamageMult', 'AttackEvery', 'Affinity', 'AffinityDamage', 'AffinityCap', 'LevelDamage', 'GolemAuras']);
       if (s.Ground) o.Ground = pick(s.Ground, ['Duration', 'Tick', 'TickScale', 'Radius']);
       if (s.Totem) o.Totem = typeof s.Totem === 'object' ? Object.assign({ on: true }, pick(s.Totem, ['Kind', 'Interval', 'Duration', 'Max', 'PerLevels', 'Effectiveness'])) : true;
@@ -223,12 +226,16 @@
     const statText = {};
     for (const t of J('Items/stat_text.json').texts) statText[t.Key] = t.Text;
 
+    // Trap / totem strike prices (trap_price95.json, in the game files since build 26595060): skill id -> share of a hand throw.
+    let trapPrice = {};
+    try { const tp = J('Gameplay/trap_price95.json'); for (const [k, v] of Object.entries((tp && tp.prices) || {})) if (v > 0) trapPrice[k.toLowerCase()] = +v; } catch (e) { /* older game files: no price table */ }
+
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
       { skills, classes, supports, nodes, masteries, oaths, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, uniques, bases, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds });
+        affixes, uniques, bases, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice });
   }
 
-  const api = { buildGameData, NEEDED, PART_FILES, SCHEMA };
+  const api = { buildGameData, NEEDED, PART_FILES, OPTIONAL, SCHEMA };
   root.BOGameData = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -6236,7 +6243,9 @@ window.BOCharacter = function (ctx) {
     'DotMulti', 'AilmentDuration', 'CurseEffect', 'Str', 'Dex', 'Int', 'Attributes', 'GrantSupport', 'SkyfallRepeat', 'OrbitCount',
     'ShockChance', 'ShockEffect', 'ShockStacks', 'ArmourMore', 'LowLifeMore', 'CullingStrike', 'Keystone', 'BrandCount', 'IntSpellMore',
     // 0.56.5
-    'EvasionMore', 'EnergyShieldMore', 'LifeMore', 'BlockMore', 'TrapCount', 'OrbitRate', 'TickRate', 'SparkRate', 'BlockToDamage']);
+    'EvasionMore', 'EnergyShieldMore', 'LifeMore', 'BlockMore', 'TrapCount', 'OrbitRate', 'TickRate', 'SparkRate', 'BlockToDamage',
+    // 11 Nov 2026 (from the game data and support texts; see each rule)
+    'LeechingMore', 'ChilledLightningMore', 'FocusVolley', 'FocusShare', 'OrbCount', 'OrbRate']);
   // Skyfall second fall: "falls again 0.4 seconds later for X% of their Damage". The game caps the sum at
   // 100% (log 1 Nov: 190% of sources -> "second fall for 100%", "SkyfallSheet68 ... on the sheet (x2.00)")
   // and the second fall strikes each enemy once per cast (one boss hit per cast in every Guardian fight).
@@ -6513,8 +6522,14 @@ window.BOCharacter = function (ctx) {
           // Patch 0.56.0 notes: "A rare with 4 or more lines at their top tier is a GREAT RARE and its rolled lines
           // count 10% more; a FLAWLESS RARE, every line at its top tier, counts 30% more." Saves keep each line's
           // tier (0 = the top one in affixes.json). NOT CHECKED: whether the save's value already has it.
-          if (rareBoost !== 1) sh *= rareBoost;
-          add(af.Mod, a.v * sh, a.v2 * sh, label + (it.rarity === 'Unique' ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : rareBoost !== 1 ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
+          // "+levels to skill gems" lines are not boosted, and every such line counts as a whole level. Glacial Shards tooltip, owner's screenshot
+          // 11 Nov 2026 (Shrimpmage, gem 12): "Plays at level 20 (+8 from gear and passives)" = Core Touched Astral Diadem +2, Emberglow Amulet +2,
+          // Core Touched Astral Codex +2 (three Flawless Rares with a +2 line: boosted they would be 2.6; the Codex also holds an Othala rune at half
+          // value, 0.5, which adds nothing), Cinderwick +1 (its Vow: 2 x 85% x half = 0.85), Stride of the First Oath +1. The sim had +10.
+          const lvlLine = !!(af.Mod && af.Mod.Stat === 'SkillLevel');
+          const boost = rareBoost !== 1 && !lvlLine;
+          if (boost) sh *= rareBoost;
+          add(af.Mod, a.v * sh, a.v2 * sh, label + (it.rarity === 'Unique' ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
         }
       }
       const weaponSlot = it.slot === 'MainHand' || it.slot === 'OffHand';
@@ -6633,7 +6648,7 @@ window.BOCharacter = function (ctx) {
   function levelBonus(sk, isGem, mods) {
     const tags = new Set([...(sk.Tags || []), sk.Delivery].map(lc)); if (isGem) tags.add('gem');
     let b = 0;
-    for (const m of mods) if (m.stat === 'SkillLevel' && m.mode === 'Flat' && (m.tags || []).every(t => tags.has(lc(t)))) b += m.v;
+    for (const m of mods) if (m.stat === 'SkillLevel' && m.mode === 'Flat' && (m.tags || []).every(t => tags.has(lc(t)))) b += Math.ceil(m.v - 0.5);
     return Math.floor(b);
   }
 
@@ -6718,6 +6733,11 @@ window.BOCharacter = function (ctx) {
       const t = lc(c);
       if (ctx.tags.has(t)) continue;
       if (t === 'dualwielding' || t === 'holdingshield' || t === 'twohanded' || t === 'wieldingstaff') { if (ctx.gear.has(t)) continue; return false; }
+      // "Melee" is the skill's own tag, never the weapon's (weapon bases carry a Melee tag too). Lightning Arrow tooltip, owner's screenshot 11 Nov 2026 (Shrimpslam, Warrior 53, gem 1, Galeheart Greataxe 151-297 with the flat added Physical,
+    // "Attack damage 315% of base"): Physical 381 to 751, Cold 48 to 96, Lightning 381 to 751, 1,741 DPS.
+      // Physical = 252.2-497.4 x 1.51 (Physical 4 + 7 + 20, Attack 8 + 12 = 51% increased); with the character's 48% increased Melee damage
+      // (idols, Earthshaker, Oath of the Brute) counted because the axe is a melee weapon, the sim gave 502-990.
+      if (t === 'melee') return false;
       if (ctx.isAttack && ctx.gear.has(t)) continue; // weapon-kind lines (Bow, Staff, TwoHand ...) on attacks
       return false;
     }
@@ -6932,7 +6952,7 @@ window.BOCharacter = function (ctx) {
     }
     // The active shape support gives the skill its tag: Death Coil with Orbit "scales with ... Orbit"
     // damage (game tooltip), so "increased Orbit damage" lines apply.
-    const SHAPE_TAG = { orbit: 'orbit', skyfall: 'skyfall', rain_support: 'rain', trap_support: 'trap', totem_support: 'totem' };
+    const SHAPE_TAG = { orbit: 'orbit', skyfall: 'skyfall', rain_support: 'rain', trap_support: 'trap', totem_support: 'totem', arrow_totem: 'totem' };
     const shapeId = res.supports.filter(s => s.ok && !(o.off && o.off.has(s.key))).map(s => lc(s.id)).find(id => SHAPE_TAG[id]) || null;
     if (shapeId) ctx.tags.add(SHAPE_TAG[shapeId]);
     // Chain Reaction: "5% less damage to the first target hit by a Chain" (Damage More -5 [FirstTarget]). Against one
@@ -7084,7 +7104,8 @@ window.BOCharacter = function (ctx) {
     let bonus = 0;
     for (const m of mods) if (m.stat === 'SkillLevel' && m.mode === 'Flat') {
       const { types, conds } = splitTags(m.tags);
-      if (condsOk(ctx, conds) && types.every(t => ctx.tags.has(lc(t)))) { bonus += m.v; use(m); }
+      // Each line counts as a whole level, a half rounding down (tooltip 11 Nov 2026 above: 0.85 shows as +1, the half-value rune's 0.5 as nothing).
+      if (condsOk(ctx, conds) && types.every(t => ctx.tags.has(lc(t)))) { bonus += Math.ceil(m.v - 0.5); use(m); }
     }
     bonus = Math.floor(bonus);
     const L = own + bonus;
@@ -7188,7 +7209,7 @@ window.BOCharacter = function (ctx) {
       const share = sk.ConvertShare != null ? (sk.ConvertShare > 1 ? sk.ConvertShare / 100 : sk.ConvertShare) : 1;
       const ph = pieces.find(p => p.type === 'Physical');
       if (ph && share > 0) {
-        pieces.push({ type: sk.DamageType, scales: new Set(['Physical', sk.DamageType]), min: ph.min * share, max: ph.max * share });
+        pieces.push({ type: sk.DamageType, scales: new Set(['Physical', sk.DamageType]), min: ph.min * share, max: ph.max * share, own: true }); // own: made by the skill's own ConvertShare
         ph.min *= 1 - share; ph.max *= 1 - share;
         if (ph.max <= 0) pieces = pieces.filter(p => p !== ph);
       }
@@ -7225,7 +7246,7 @@ window.BOCharacter = function (ctx) {
         const tot = shares.reduce((a, b) => a + b, 0);
         const scale = tot > 1 ? 1 / tot : 1;
         const kept = 1 - Math.min(1, tot);
-        if (kept > 0) out.push({ type: p.type, scales: p.scales, min: p.min * kept, max: p.max * kept });
+        if (kept > 0) out.push({ type: p.type, scales: p.scales, min: p.min * kept, max: p.max * kept, own: p.own });
         const byTo = {};
         convRules.forEach((r, i) => { if (shares[i] > 0) byTo[r.to] = (byTo[r.to] || 0) + shares[i] * scale; });
         // moreScales: "more" lines see only the element the damage came from (Storm Spark tooltips 9 Nov 2026, Flame Support +
@@ -7261,7 +7282,12 @@ window.BOCharacter = function (ctx) {
     }
     const addExtras = (rules, sources) => {
       for (const { m, to, from } of rules) {
-        for (const p of sources) if (!from || p.type === from || (p.scales.has(from) && from !== to)) extras.push({ type: to, scales: new Set([to]), min: p.min * m.v / 100, max: p.max * m.v / 100, from: p.type });
+        // The part a skill converts by itself (Lightning Arrow's half) does not gain the old type's extra lines. Lightning Arrow tooltip, owner's screenshot 11 Nov 2026 (Shrimpslam, Warrior 53, gem 1, Galeheart Greataxe 151-297 with the flat added Physical,
+    // "Attack damage 315% of base"): Physical 381 to 751, Cold 48 to 96, Lightning 381 to 751, 1,741 DPS.
+        // Cold 48-96 = 16% (the axe's "Physical as extra Cold") of the Physical left after the conversion, 252.2-497.4, x 1.20 (Attack 8 + 12%):
+        // 48.4-95.5. With the converted Lightning half counted as a source too the sim gave twice that. Parts converted by supports and gear
+        // keep the rule below (Venom Spark tooltip 5 Nov).
+        for (const p of sources) if (!from || p.type === from || (p.scales.has(from) && from !== to && !p.own)) extras.push({ type: to, scales: new Set([to]), min: p.min * m.v / 100, max: p.max * m.v / 100, from: p.type });
       }
     };
     addExtras(extraRules.filter(r => r.to !== 'Fire'), pieces);
@@ -7409,6 +7435,18 @@ window.BOCharacter = function (ctx) {
       useTime = swing + hops; usesPerSec = 1 / useTime;
       res.notes.push(sk.Name + ': one swing at your attack speed (' + swing.toFixed(2) + ' s) plus ' + (mirage.Hops - 1) + ' gaps of ' + gap + ' s between its ' + mirage.Hops + ' hops (' + hops.toFixed(2) + ' s, not sped up by attack speed): ' + useTime.toFixed(2) + ' s per use.');
     }
+    // Living Orb (a spell with Mirage hops; gem text, game data, Steam build 26595060, read 11 Nov 2026; from the data file / gem text, not yet checked against a tooltip or log): "{Flights} flights: 4, 1 more at gem level 10 and
+    // at 20, and 1 more for each Chain. The last burst hits 60% harder ... Cast speed quickens the flights". A use is one cast plus the gaps between
+    // flights (Mirage.HopTime 0.15 s, divided by cast speed). The gem's own level is used for the extra flights (gear levels not counted: not checked).
+    const flight = !isAttack && sk.Mirage && sk.Mirage.Hops > 0 && !(sk.Channel && sk.Channel.Tick) ? sk.Mirage : null;
+    let flights = 0;
+    if (flight) {
+      flights = flight.Hops + [10, 20].filter(l => own >= l).length;
+      for (const m of pickMods(mods, 'Chains', 'Flat')) if (applies(ctx, m)) { flights += m.v; use(m); }
+      const cast = useTime, gap = (flight.HopTime || 0.15) / Math.max(0.1, speedRate);
+      useTime = cast + (flights - 1) * gap; usesPerSec = 1 / useTime;
+      res.notes.push(sk.Name + ': ' + flights + ' flights a cast (4, one more at gem 10 and 20, one more per Chain): the cast (' + cast.toFixed(2) + ' s) plus ' + (flights - 1) + ' flights of ' + gap.toFixed(2) + ' s = ' + useTime.toFixed(2) + ' s per use. From the gem text; not checked in a fight.');
+    }
     // Speed cap: a clip plays at most ActionRateMax (4x) its own speed, so each skill has a shortest use
     // time; past it more speed adds nothing (game tooltip "2.86 (speed cap)"). Clip lengths are not in the
     // data files, so only floors measured in the game are known (CLIP_FLOOR).
@@ -7452,12 +7490,15 @@ window.BOCharacter = function (ctx) {
     }
     // Shape supports: a skill takes one shape, the first of these socketed (Skyfall's text). The others
     // only add their damage lines.
-    const SHAPES = ['orbit', 'skyfall', 'rain_support', 'trap_support', 'totem_support'];
+    const SHAPES = ['orbit', 'skyfall', 'rain_support', 'trap_support', 'totem_support', 'arrow_totem'];
     const activeSup = res.supports.filter(s => s.ok && !(o.off && o.off.has(s.key))).map(s => lc(s.id));
     const shape = activeSup.find(id => SHAPES.includes(id)) || null;
     res.shape = shape;
-    if (shape === 'totem_support') {
-      const t = /every ([\d.]+) seconds/i.exec(GD.supports.totem_support.Description); const every = t ? +t[1] : 0.8;
+    // Arrow Totem (support text, game data, Steam build 26595060, read 11 Nov 2026; from the data file / gem text, not yet checked against a tooltip or log): "The bow skill is no longer fired by you: firing places a totem ... (1 at a
+    // time, 8 seconds) that fires it at the nearest enemy every 0.8 seconds ... 35% less damage". Same clock as a Spell Totem; the 35% less is its own Damage line.
+    const totemShape = shape === 'totem_support' || (shape === 'arrow_totem' && isAttack);
+    if (totemShape) {
+      const t = /every ([\d.]+) seconds/i.exec((GD.supports[shape] || {}).Description || ''); const every = t ? +t[1] : 0.8;
       // Totem count set by hand (owner request, 9 Nov 2026): no game data on how many spell totems stand, so the
       // default stays one. The cap of 10 Totems is from the 0.56.2 patch notes (7 Nov).
       let tcount = Math.max(1, Math.floor(o.totemCount || 1));
@@ -7469,10 +7510,10 @@ window.BOCharacter = function (ctx) {
       const baseEvery = every, spellEvery = baseEvery / Math.max(0.1, 1 + tsInc / 100);
       usesPerSec = tcount / spellEvery; useTime = 1 / usesPerSec;
       res.totem = { count: tcount, every: spellEvery };
-      res.notes.push('Totem: ' + tcount + ' totem' + (tcount > 1 ? 's' : '') + ', each casting it every ' + spellEvery.toFixed(2) + ' s' + (tsInc ? ' (' + baseEvery + ' s with ' + Math.round(tsInc) + '% increased totem speed)' : '') + '; your cast speed only places totems faster; assumes every totem casts at this enemy.');
+      res.notes.push('Totem: ' + tcount + ' totem' + (tcount > 1 ? 's' : '') + ', each ' + (isAttack ? 'firing' : 'casting') + ' it every ' + spellEvery.toFixed(2) + ' s' + (tsInc ? ' (' + baseEvery + ' s with ' + Math.round(tsInc) + '% increased totem speed)' : '') + '; your ' + (isAttack ? 'attack' : 'cast') + ' speed only places totems faster; assumes every totem ' + (isAttack ? 'shoots' : 'casts at') + ' this enemy.');
       // 0.56.5: totems of one skill share their damage (80% each past the first, 20% past the sixth).
       if (is0565(GD) && tcount > 1) {
-        const tt = /each past the first adds (d+)% of one's damage/i.exec((GD.supports.multiple_totems || {}).Description || '');
+        const tt = /each past the first adds (\d+)% of one's damage/i.exec((GD.supports.multiple_totems || {}).Description || '');
         const tNext = is0568(GD) ? (tt ? +tt[1] / 100 : 0.5) : 0.8, tPast = is0568(GD) ? tNext : 0.2; // 0.56.8 text: 50% each, no second step
         countFactor = countShare(tcount, tNext, tPast);
         res.notes.push('Totems share their damage (patch 0.56.5): each past the first adds ' + Math.round(tNext * 100) + '% of one' + (tPast !== tNext ? ', past the sixth 20%' : '') + ' (x' + countFactor.toFixed(3) + ' on average over ' + tcount + ').');
@@ -7506,7 +7547,7 @@ window.BOCharacter = function (ctx) {
       const tx = /past the first adds (\d+)% of a Trap's damage, and each past your sixth[^.]*?adds (\d+)%/i.exec(d);
       if (is0565(GD) && traps > 1) {
         // 0.56.8 text: "each Trap past the first adds 20% of a Trap's damage" (one step, no sixth-trap step).
-        const t68 = is0568(GD) ? /each Trap past the first adds (d+)%/i.exec(d) : null;
+        const t68 = is0568(GD) ? /each Trap past the first adds (\d+)%/i.exec(d) : null;
         const a = t68 ? +t68[1] / 100 : tx ? +tx[1] / 100 : is0568(GD) ? 0.2 : 0.9, b = t68 ? a : tx ? +tx[2] / 100 : is0568(GD) ? 0.2 : is0567(GD) ? 0.25 : 0.4;
         countFactor = countShare(traps, a, b);
         res.notes.push('Traps share their damage (patch 0.56.5): each past the first adds ' + Math.round(a * 100) + '% of one, past the sixth ' + Math.round(b * 100) + '% (x' + countFactor.toFixed(3) + ' on average over ' + traps + '; other Trap skills count toward the six in game, not here).');
@@ -7517,6 +7558,7 @@ window.BOCharacter = function (ctx) {
     }
     // Deliveries that hit on their own clock (read from the skill text; cast speed only places them).
     let hitFactor = 1; const desc = sk.Description || '';
+    let shapeWeight = 1, ownClock = false; // a delivery whose hits are not all the full hit (Winter Orb's burst); ownClock: repeats add no hits
     if (sk.Delivery === 'Aura' || (sk.Ground && sk.Ground.Tick && !sk.Ground.Duration)) {
       // Toggled ground (Unholy Void): ticks every Ground.Tick s at Ground.TickScale of the shown hit.
       // Checked against the in-game tooltip: "Casts per second 2.00", 70% a tick.
@@ -7634,8 +7676,10 @@ window.BOCharacter = function (ctx) {
         // 0.56.5: each past the first adds 80% of one, past the sixth 20% (Multiple Totems text). Ancestral Host and
         // Siege Pact still say "Each Totem or Ballista past the first deals 20% less" in build 26543267: counted on top.
         const k = 1 - totemLess / 100;
-        countFactor = (1 + ((Math.min(count, 6) - 1) * 0.8 + Math.max(0, count - 6) * 0.2) * k) / count;
-        res.notes.push('Totems share their damage (patch 0.56.5): each past the first adds 80% of one, past the sixth 20%' + (totemLess ? ', and your keystone makes each past the first deal ' + totemLess + '% less' : '') + ' (x' + countFactor.toFixed(3) + ' on average over ' + count + ').');
+        // 0.56.8 (patch notes 11 Nov 2026, quoted above; Multiple Totems text: "each past the first adds 50% of one's damage"): 50% each, one step.
+        const bNext = is0568(GD) ? 0.5 : 0.8, bPast = is0568(GD) ? 0.5 : 0.2;
+        countFactor = (1 + ((Math.min(count, 6) - 1) * bNext + Math.max(0, count - 6) * bPast) * k) / count;
+        res.notes.push('Totems share their damage (patch 0.56.5): each past the first adds ' + Math.round(bNext * 100) + '% of one' + (bPast !== bNext ? ', past the sixth 20%' : '') + (totemLess ? ', and your keystone makes each past the first deal ' + totemLess + '% less' : '') + ' (x' + countFactor.toFixed(3) + ' on average over ' + count + ').');
       } else if (totemLess && count > 1) {
         countFactor = (1 + (count - 1) * (1 - totemLess / 100)) / count;
         res.notes.push('Totems: your keystone makes each one past the first deal ' + totemLess + '% less (x' + countFactor.toFixed(3) + ' on average over ' + count + ').');
@@ -7647,6 +7691,20 @@ window.BOCharacter = function (ctx) {
       // Pyre Burst (new in 0.56): each cast burns a corpse or sacrifices a minion, plus a share of the slain's life
       // as extra fire. Neither is modelled yet (no log or tooltip from a fight to check them against).
       res.notes.push(sk.Name + ': every cast needs a corpse or one of your minions; this sheet assumes one is always there and leaves out the extra fire from the corpse\'s life.');
+    } else if (sk.Delivery === 'Orb' && sk.Orb && sk.Orb.Interval > 0) {
+      // Winter Orb (skills.json Orb: Interval 0.4, Duration 6, Max 1, ExplodeScale 3.2; game data, Steam build 26595060, read 11 Nov 2026; from the data file / gem text, not yet checked against a tooltip or log): each orb throws an icicle
+      // every Interval s for Duration s, then bursts for ExplodeScale x the icicle. "+{v} to the maximum number of Winter Orbs" (OrbCount; Conjured
+      // Pair) adds orbs, "Winter Orbs throw icicles {v}% faster" (OrbRate) quickens them. One cast forms every orb you can hold (gem text), so they
+      // stand while you recast within their life. The text also says cast speed quickens the icicles: by how much is not known, so it is left out.
+      const ob = sk.Orb, dur = ob.Duration || 6;
+      let orbs = ob.Max || 1; for (const m of pickMods(mods, 'OrbCount', 'Flat')) if (applies(ctx, m)) { orbs += m.v; use(m); }
+      let orbInc = 0; for (const m of pickMods(mods, 'OrbRate', 'Inc')) if (applies(ctx, m)) { orbInc += m.v; use(m); }
+      const up = Math.min(1, usesPerSec * dur), every = ob.Interval / Math.max(0.1, 1 + orbInc / 100);
+      const icicles = orbs * up / every, bursts = orbs * up / dur, burstScale = ob.ExplodeScale || 0;
+      usesPerSec = icicles + (burstScale > 0 ? bursts : 0); useTime = 1 / usesPerSec; ownClock = true;
+      shapeWeight = (icicles + bursts * burstScale) / usesPerSec;
+      res.orb = { orbs, every, duration: dur, burstScale };
+      res.notes.push(sk.Name + ': ' + orbs + ' orb' + (orbs > 1 ? 's' : '') + (up < 1 ? ' up ' + Math.round(up * 100) + '% of the time' : '') + ', each throwing an icicle every ' + every.toFixed(2) + ' s for ' + dur + ' s, then bursting for ' + Math.round(burstScale * 100) + '% of an icicle. Cast speed only re-forms them (its speed-up of the icicles is not counted). From the game\'s skill data; not checked against the skill panel.');
     } else if (['Orb', 'Orbit', 'Ground', 'Skyfall', 'Rain', 'Totem'].includes(sk.Delivery)) {
       res.notes.push(sk.Delivery + ' skills hit on their own pattern; this sheet counts one hit per cast. Set "hits per second" by hand if you know the real rate.');
     }
@@ -7750,6 +7808,7 @@ window.BOCharacter = function (ctx) {
     // Orbit: every projectile strikes; ones sent at an enemy already struck this cast deal 60% less
     // (attacks 90% less). The game's log matches this: 4 projectiles x 2 echoes x 60% = 10.9 poisons/s.
     const orbitOn = shape === 'orbit';
+    let focusShare = 0; for (const m of pickMods(mods, 'FocusShare', 'Flat')) if (applies(ctx, m)) { focusShare = Math.max(focusShare, m.v / 100); use(m); }
     let projOnTarget = 1, projWeight = 1;
     if (projectiles && shape === 'rain_support') {
       // Rain: every enemy inside is struck twice, three times with 4 or more projectiles.
@@ -7763,6 +7822,13 @@ window.BOCharacter = function (ctx) {
       // Projectiles, "Projectiles 3"): 139 DPS = one 57-120 bolt x crit every 0.7 s, so only one bolt counts.
       projOnTarget = clamp(o.projOnTarget || 1, 1, projectiles); projWeight = projOnTarget;
       if (projectiles > 1) res.notes.push('Ballista: ' + projectiles + ' bolts a shot spread out; one strikes this enemy, as the game\'s tooltip counts it (the others hit other enemies).');
+    } else if (projectiles && focusShare > 0 && focusShare < 1 && !shape && !sk.Totem && sk.Delivery !== 'Rain') {
+      // Focused Volley (support text, game data, Steam build 26595060, read 11 Nov 2026; from the data file / gem text, not yet checked against a tooltip or log): "all its arrows fly on one line at your target, each with its own hit, so one
+      // enemy can take every arrow. Each arrow after the first deals 60% of the one before it (2 arrows: 100% + 60%; 4 arrows: 100% + 60% + 36% + 22%)
+      // ... Arrows you shoot yourself only (not a trap, totem or rain)". Its 15% less and +1 arrow are plain lines.
+      projOnTarget = clamp(o.projOnTarget || projectiles, 1, projectiles);
+      projWeight = (1 - Math.pow(focusShare, projOnTarget)) / (1 - focusShare);
+      res.notes.push('Focused Volley: all ' + projOnTarget + ' arrows strike this enemy, each after the first for ' + Math.round(focusShare * 100) + '% of the one before (worth ' + projWeight.toFixed(2) + ' full hits per use). From the support text; not checked in a fight.');
     } else if (projectiles) {
       // Orbit holds at most ORBIT_MAX_ARROWS arrows (attacks); extra projectiles fly as usual but do not circle.
       const orbitCount = orbitOn && isAttack ? Math.min(projectiles, ORBIT_MAX_ARROWS) : projectiles;
@@ -7783,7 +7849,8 @@ window.BOCharacter = function (ctx) {
     // second + ignite (91,918 vs the game's 91,880), no second fall; the log has no second-fall line for them.
     // A Trap with the granted Skyfall also falls twice (11 Nov 2026 log: one "Skyfall: second fall for 50% (1 hits)" per trap strike, 5,428 vs 5,435).
     const trapSky = shape === 'trap_support' && !totemAttack && (res.supports || []).some(x => x.ok && lc(x.id) === 'skyfall');
-    if ((sk.Delivery === 'Skyfall' || shape === 'skyfall' || trapSky) && sk.Delivery !== 'Brand') {
+    // Not on Winter Orb either: its icicles fly on the orb's own clock, and nothing shows them falling a second time (not checked).
+    if ((sk.Delivery === 'Skyfall' || shape === 'skyfall' || trapSky) && sk.Delivery !== 'Brand' && !ownClock) {
       for (const m of pickMods(mods, 'SkyfallRepeat', 'Flat')) if (applies(ctx, m)) { skyRep += m.v; use(m); }
       skyRep = Math.min(SKYFALL_REPEAT_CAP, skyRep) / 100;
       if (skyRep > 0) res.notes.push('Skyfall falls again 0.4 s later for ' + Math.round(skyRep * 100) + '% of the damage' + (skyRep >= SKYFALL_REPEAT_CAP / 100 ? ' (the game caps this at ' + SKYFALL_REPEAT_CAP + '%)' : '') + ': the target is struck a second time each cast.');
@@ -7792,19 +7859,54 @@ window.BOCharacter = function (ctx) {
     let perHitFactor = projWeight / projOnTarget * (1 + skyRep) / falls; // average share of a full hit per hit
     // A Rain struck by Cast on Crit with nothing linked drops one wave (patch notes 5 Nov).
     const rainWaves = sk.Delivery === 'Rain' && sk.Rain && sk.Rain.Waves > 0 ? (res.coc && res.coc.attack ? 1 : sk.Rain.Waves) : 0;
-    const strikes = mirage ? mirage.Hops : rainWaves || (typeof sk.Strikes === 'object' && sk.Strikes ? (sk.Strikes.Count || 1) : (+sk.Strikes || 1));
+    const hopper = mirage || flight, hops = mirage ? mirage.Hops : flights;
+    // Wheeling Axe (skills.json bReturnFlight; gem text "wheels back to your hand and cuts them again on the way"; game data, Steam build 26595060, read 11 Nov 2026; from the data file / gem text, not yet checked against a tooltip or log): two cuts a throw.
+    const returnHits = sk.bReturnFlight ? 2 : 1;
+    const strikes = (hopper ? hops : rainWaves || (typeof sk.Strikes === 'object' && sk.Strikes ? (sk.Strikes.Count || 1) : (+sk.Strikes || 1))) * returnHits;
     // Mirage: every hop cuts; the last cut deals FinalScale (x1.8), so a use is worth Hops - 1 + FinalScale hits.
-    if (mirage) {
-      const fin = mirage.FinalScale || 1;
-      perHitFactor *= (mirage.Hops - 1 + fin) / mirage.Hops;
-      res.notes.push(sk.Name + ' cuts ' + mirage.Hops + ' times per use; the last cut deals ' + Math.round(fin * 100) + '% (' + (mirage.Hops - 1 + fin).toFixed(1) + ' full hits per use).');
+    if (hopper) {
+      const fin = hopper.FinalScale || 1;
+      perHitFactor *= (hops - 1 + fin) / hops;
+      res.notes.push(sk.Name + (mirage ? ' cuts ' : ' bursts ') + hops + ' times per use; the last ' + (mirage ? 'cut' : 'burst') + ' deals ' + Math.round(fin * 100) + '% (' + (hops - 1 + fin).toFixed(1) + ' full hits per use).');
     }
-    if (strikes > 1 && !rainWaves && !mirage) res.notes.push(sk.Name + ' strikes ' + strikes + ' times per use; every strike is counted at the full hit (a stronger finisher is not modelled).');
+    // A heavier last strike (skills.json Strikes.FinalScale: Flurry 2.4, Thunderfall 2.6, Soul Rend 2.2; game data, Steam build 26595060, read 11 Nov 2026; from the data file / gem text, not yet checked against a tooltip or log),
+    // counted like Thousand Cuts' last hop (Mirage.FinalScale, log-checked 4 Nov).
+    const strikeFin = !hopper && !rainWaves && typeof sk.Strikes === 'object' && sk.Strikes && sk.Strikes.FinalScale > 0 && strikes > 1 ? sk.Strikes.FinalScale : 0;
+    if (strikeFin) {
+      perHitFactor *= (strikes - 1 + strikeFin) / strikes;
+      res.notes.push(sk.Name + ' strikes ' + strikes + ' times per use; the last strike deals ' + Math.round(strikeFin * 100) + '% (' + (strikes - 1 + strikeFin).toFixed(1) + ' full hits per use). The finisher share is from the game\'s skill data; not checked in a fight.');
+    } else if (returnHits > 1) res.notes.push(sk.Name + ' cuts the enemy twice per throw: on the way out and on the way back.');
+    else if (strikes > 1 && !rainWaves && !hopper) res.notes.push(sk.Name + ' strikes ' + strikes + ' times per use; every strike is counted at the full hit.');
     // Spell Echo on a Trap (11 Nov 2026): the repeat throws another trap, but the traps stand under one cap (log: "Echo: arc repeat 1"
     // then "Totem: arc placed (n / 8)", 600 of 712 throws at 8 / 8, never past 8), so it adds no strikes. The Training Post readouts with only
     // Trap + Chain Detonation 300-350M, + Spell Echo 330-360M (+6%); the sim had doubled the hits (+83%).
     const echoTrap = shape === 'trap_support' && !totemAttack && repeats > 0;
-    let hitsPerUse = o.hitsPerSecOverride > 0 ? 1 : (echoTrap ? 1 : 1 + repeats) * projOnTarget * strikes * falls;
+    let hitsPerUse = o.hitsPerSecOverride > 0 ? 1 : (echoTrap || ownClock ? 1 : 1 + repeats) * projOnTarget * strikes * falls;
+    // Extra hits a use lands at a share of the shown hit (game data, Steam build 26595060, read 11 Nov 2026; from the data file / gem text, not yet checked against a tooltip or log):
+    // Storm Whirl (skills.json Channel.bStrike, StrikeScale 0.45; "strikes one enemy every turn"), Iaido Thrust ("The dash cut deals the full damage
+    // shown, the sheathe cut 38% of it"), Moonfall ("every enemy you struck is cut again for half the damage"), Wind Vault ("The damage shown is a
+    // full hit: each landing arrow deals 60% of it and the gust 15%", three arrows).
+    let xh = null;
+    const mSheathe = /sheathe cut (\d+)% of it/i.exec(desc), mVault = /loosing (two|three|four) arrows[\s\S]*?each landing arrow deals (\d+)% of it and the gust (\d+)%/i.exec(desc);
+    if (sk.Channel && sk.Channel.bStrike && sk.Channel.StrikeScale > 0) xh = { n: 2, w: 1 + sk.Channel.StrikeScale, t: 'every turn also strikes one enemy for ' + Math.round(sk.Channel.StrikeScale * 100) + '% of the hit' };
+    else if (mSheathe) xh = { n: 2, w: 1 + mSheathe[1] / 100, t: 'the sheathe cut lands again for ' + mSheathe[1] + '% of the hit' };
+    else if (/cut again for half the damage/i.test(desc)) xh = { n: 2, w: 1.5, t: 'the sheathe cuts the enemy again for half the hit' };
+    else if (mVault) { const na = { two: 2, three: 3, four: 4 }[mVault[1].toLowerCase()]; xh = { n: na + 1, w: na * mVault[2] / 100 + mVault[3] / 100, t: na + ' arrows at ' + mVault[2] + '% of the shown hit each and the gust at ' + mVault[3] + '%' }; }
+    // Lightning Arrow against one enemy (gem text, Steam build 26595060, read 11 Nov 2026): "lightning leaps from it to {Chains} more enemies for 72% of
+    // the hit, a tenth less on each jump ... With no other enemy in reach, the leaps it cannot make come back into that enemy as one extra strike, so a
+    // lone boss takes about 29% more". The 29% is taken from the text as it stands (Chains 3, ChainScale 0.72 in skills.json); how more Chains change
+    // it is not in the data files, so it stays 29% whatever the Chain count. No log line seen for it yet.
+    // The game's skill panel does not count it: owner's tooltip 11 Nov 2026 (gem 1, hits 381-751 + 48-96 + 381-751 = 1,204 average, crit 6% x1.5,
+    // 1.27 attacks a second): 1,204 x 1.03 x 1.27 = 1,575, + "169 bleeding a second" = 1,744 against the panel's 1,741; with the strike it would be 2,200.
+    // The same tooltip repeats the "about 29% more" text, so the strike stays in the fight number (like a Spell Totem's echoes).
+    const mLone = /come back into that enemy as one extra strike, so a lone boss takes about (\d+)% more/i.exec(desc);
+    if (!xh && mLone) xh = { n: 2, w: 1 + mLone[1] / 100, panelOff: true, t: 'with no other enemy in reach its leaps come back into this one as an extra strike of about ' + mLone[1] + '% of the hit' };
+    if (xh && !(o.hitsPerSecOverride > 0)) {
+      hitsPerUse *= xh.n; perHitFactor *= xh.w / xh.n; res.extraHits = { hits: xh.n, weight: xh.w };
+      if (xh.panelOff) res.notes.push('The game\'s own skill panel does not count ' + sk.Name + '\'s extra strike, so its DPS reads about ' + Math.round((1 - 1 / xh.w) * 100) + '% lower than this sheet (tooltip, 11 Nov 2026).');
+      res.notes.push(sk.Name + ': ' + xh.t + ' (' + xh.w.toFixed(2) + ' full hits per use). From the game\'s skill ' + (sk.Channel && sk.Channel.bStrike ? 'data' : 'text') + '; not checked in a fight.');
+    }
+    if (ownClock && repeats > 0) res.notes.push('Repeats add no hits here: ' + sk.Name + ' strikes on its own clock.');
     if (echoTrap) res.notes.push('Spell Echo on a Trap: the repeat throws another trap, but your traps stand under one cap, so it adds no strikes (Training Post, 11 Nov 2026).');
     // Spell Echo on a Spark does not repeat the cast: it adds one more body of 3 Sparks (Ember Spark tooltip 9 Nov: "Spell
     // Echo adds one more body of 3 Sparks, so you hold 9 in all", 9 Sparks = 3 bodies x 2/s = 6.0 strikes/s, 29,024 DPS).
@@ -7841,7 +7943,16 @@ window.BOCharacter = function (ctx) {
       }
     }
     // Traps or totems past the first dealing less (patch 0.56, set with the rate above).
-    perHitFactor *= countFactor;
+    perHitFactor *= countFactor * shapeWeight;
+    // Trap / totem strike price (Data/Gameplay/trap_price95.json, Steam build 26595060, read 11 Nov 2026). The file's own note: "a trap or totem strike
+    // of a listed Attack deals Price x a hand throw at every gem level. Attacks not listed = 1 ... a listed Spell is priced the same way when a Totem
+    // casts it (judgement 0.6 = a Judgement totem strikes for 60% of your own cast)"; Totem Support's text says the same ("A Totem's Judgement strikes
+    // for 60% of your own cast"). Not yet checked against a tooltip.
+    const strikePrice = (GD.trapPrice || {})[skillId];
+    if (strikePrice > 0 && strikePrice !== 1 && (isAttack ? ((shape === 'trap_support' && !totemAttack) || shape === 'arrow_totem') : shape === 'totem_support')) {
+      hitFactor *= strikePrice; res.strikePrice = strikePrice;
+      res.notes.push('A ' + (shape === 'trap_support' ? 'trap' : 'totem') + ' strike of ' + sk.Name + ' deals ' + Math.round(strikePrice * 100) + '% of your own ' + (isAttack ? 'throw' : 'cast') + ' (the game\'s trap and totem price table).');
+    }
     const hitsPerSec = usesPerSec * hitsPerUse;
     res.hits = { repeats, projectiles, projOnTarget, projWeight, perHitFactor, orbit: orbitOn, strikes, skyfallRepeat: skyRep, afterimages, hitsPerUse, hitsPerSec, fullHitsPerSec: hitsPerSec * perHitFactor };
 
@@ -8192,6 +8303,25 @@ window.BOCharacter = function (ctx) {
     res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
     // What the in-game skill panel shows: hits + ailments to one enemy, before its resistances and curses.
     res.panelDps = res.sheetHitDps * (1 + (hit.Physical ? hit.Physical.avg / (hitAvg || 1) : 0) * maimPct / 100) +(ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * ail.ignite.burning : 0) + (ail.bleed ? ail.bleed.dps1 * ail.bleed.uptime : 0);
+    // ----- Life Leech's "more damage while leeching" and Stormfrost's Lightning against the Chilled -----
+    // Support texts (game data, Steam build 26595060, read 11 Nov 2026; from the data file / gem text, not yet checked against a tooltip or log): Life Leech "deals 15% more damage while you are leeching (below full
+    // life)"; Stormfrost "its Lightning damage is 15% more against Chilled or Frozen enemies". Life Leech is counted as on (in a fight you are rarely at
+    // full life); Stormfrost only when this skill's own hit carries Cold to chill the enemy.
+    let leechMore = 0; for (const m of pickMods(mods, 'LeechingMore', 'Flat')) if (applies(ctx, m)) { leechMore += m.v; use(m); }
+    if (leechMore) {
+      const lf = 1 + leechMore / 100;
+      for (const d of Object.keys(byType)) byType[d] *= lf;
+      hitDpsVs *= lf; res.hitDps = hitDpsVs; poisonDps *= lf; igniteDps *= lf; bleedDps *= lf;
+      res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
+      res.notes.push('Life Leech: ' + leechMore + '% more damage while you are leeching (below full life), counted as on.');
+    }
+    let chillMore = 0; for (const m of pickMods(mods, 'ChilledLightningMore', 'Flat')) if (applies(ctx, m)) { chillMore += m.v; use(m); }
+    if (chillMore && byType.Lightning > 0) {
+      if (byType.Cold > 0) {
+        const add = byType.Lightning * chillMore / 100; byType.Lightning += add; hitDpsVs += add; res.hitDps = hitDpsVs;
+        res.notes.push('Stormfrost: Lightning deals ' + chillMore + '% more against a Chilled or Frozen enemy; counted because this skill\'s own Cold chills it.');
+      } else res.notes.push('Stormfrost: its ' + chillMore + '% more Lightning against a Chilled enemy is not counted, because this skill deals no Cold to chill it.');
+    }
     // ----- Executioner (LowLifeMore, CullingStrike) -----
     // X% more damage below T% of life, and hits kill below C%. Against one enemy fought from full life this is a
     // fight average: the kill takes (1 - T) + (T - C) / (1 + X) of the plain time (Executioner: 25% / 35% / 10% =
@@ -8200,8 +8330,9 @@ window.BOCharacter = function (ctx) {
     for (const m of pickMods(mods, 'LowLifeMore', 'Flat')) if (applies(ctx, m)) { lowMore += m.v; use(m); }
     for (const m of pickMods(mods, 'CullingStrike', 'Flat')) if (applies(ctx, m)) { cull = Math.max(cull, m.v); use(m); }
     if (lowMore || cull) {
-      const tm = /below (d+)% of their life/i.exec((GD.supports.executioner || {}).Description || '');
-      const T = (tm ? +tm[1] : 35) / 100, C = Math.min(cull / 100, T);
+      // Threshold from the text: "35% more damage against enemies below half their life" (build 26595060). The old pattern never matched and fell back to 35%.
+      const tm = /below (half|(\d+)%)(?: of)? their life/i.exec((GD.supports.executioner || {}).Description || '');
+      const T = (tm ? (tm[2] ? +tm[2] : 50) : 35) / 100, C = Math.min(cull / 100, T);
       const execF = 1 / ((1 - T) + (T - C) / (1 + lowMore / 100));
       for (const d of Object.keys(byType)) byType[d] *= execF;
       hitDpsVs *= execF; res.hitDps = hitDpsVs; poisonDps *= execF; igniteDps *= execF; bleedDps *= execF;
@@ -8679,7 +8810,7 @@ window.BOCharacter = function (ctx) {
 
   // ---------- support search ----------
   // Supports that add nothing against one enemy (packs, sustain, on-kill, triggers).
-  const NO_SINGLE_TARGET = new Set(['chain', 'pierce', 'fork', 'tether', 'increased_area', 'life_leech', 'siphon', 'tithe', 'gather_fury',
+  const NO_SINGLE_TARGET = new Set(['chain', 'pierce', 'fork', 'tether', 'increased_area', 'siphon', 'tithe', 'gather_fury',
     'bloodlust_support', 'bloodbound', 'war_banner_support', 'cast_on_crit', 'cast_when_hit', 'shatter', 'contagion_flame',
     'woebringer', 'pass_sentence', 'swift_step', 'bone_guard', 'ravening_host', 'minion_damage', 'minion_life',
     'minion_speed', 'channel_conduit', 'channel_mastery', 'woe_bearer', 'cast_on_minion_death',
@@ -8711,7 +8842,7 @@ window.BOCharacter = function (ctx) {
   // Faster Casting is a Spell support (no Minion tag) but speeds up shooting minions (patch notes 7 Nov, 0.56.3).
   const castsForMinions = (sp, sk) => !!sp && lc(sp.Id) === 'faster_casting' && !!sk && isSummon(sk) && (sk.Tags || []).includes('Projectile');
   const minionCounts = (sp, sk) => castsForMinions(sp, sk) || forMinions(sp) && (sp.Mods || []).some(m => (m.Stat === 'Damage' && m.Mode === 'More') || m.Stat === 'DamageAsExtra' || m.Stat === 'MinionStrikes' || m.Stat === 'RuthlessBlow' || ((m.Stat === 'MinionSpeed' || m.Stat === 'AttackSpeed') && m.Mode === 'More'));
-  const SHAPES = ['orbit', 'skyfall', 'rain_support', 'trap_support', 'totem_support'];
+  const SHAPES = ['orbit', 'skyfall', 'rain_support', 'trap_support', 'totem_support', 'arrow_totem'];
 
   // Support gems the character has: spares + every support socketed in any skill.
   function ownedSupports(ch) {
@@ -12263,6 +12394,7 @@ window.BOStartApp = function () {
     const missing = BG.NEEDED.filter(rel => !find(rel));
     if (missing.length) throw new Error('That folder is missing ' + missing.slice(0, 3).join(', ') + (missing.length > 3 ? ' and more' : '') + '. Pick the BrokenOath\\Data folder inside the game folder.');
     for (const rel of BG.NEEDED) texts[rel] = await find(rel).f.text();
+    for (const rel of BG.OPTIONAL || []) if (find(rel)) texts[rel] = await find(rel).f.text();
     const partRe = /(?:^|\/)Gameplay\/Parts\/([^/]+)\/([^/]+\.json)$/;
     const partList = files.map(x => ({ x, m: x.p.match(partRe) })).filter(o => o.m && BG.PART_FILES.includes(o.m[2]));
     for (const o of partList) texts['Gameplay/Parts/' + o.m[1] + '/' + o.m[2]] = await o.x.f.text();

@@ -4562,14 +4562,14 @@ window.BOItemSearch = function (ctx) {
   }
 
   // League ids are "<season>-<sc|hc>-<trade|ssf>" (wb1-hc-ssf); Standard (or none, on an offline character) is Offline.
-  const MODE = { 'sc-trade': 'Softcore Trade', 'hc-trade': 'Hardcore Trade', 'sc-ssf': 'SSF', 'hc-ssf': 'HCSSF' };
-  const ORDER = ['Offline', 'Softcore Trade', 'Hardcore Trade', 'SSF', 'HCSSF'];
+  const MODE = { 'sc-trade': 'Softcore Trade', 'hc-trade': 'Hardcore Trade', 'sc-ssf': 'Softcore Oathbound Solo', 'hc-ssf': 'Hardcore Oathbound Solo' }; // the game's wording for SSF (owner, 11 Nov 2026)
+  const ORDER = ['Offline', 'Softcore Trade', 'Hardcore Trade', 'Softcore Oathbound Solo', 'Hardcore Oathbound Solo'];
   function parseLeague(id) {
     if (!id || lc(id) === 'standard') return { season: '', name: 'Offline' };
     const m = /^(.+?)-(sc|hc)-(ssf|trade)$/i.exec(id);
     return m ? { season: m[1], name: MODE[lc(m[2] + '-' + m[3])] } : { season: '', name: id };
   }
-  // With its season always: "HCSSF (wb1)", "Offline" (the build summary).
+  // With its season always: "Hardcore Oathbound Solo (wb1)", "Offline" (the build summary).
   const leagueLabel = id => { const p = parseLeague(id); return p.name + (p.season ? ' (' + p.season + ')' : ''); };
 
   // Which save files hold Grail data: characters and the current stash of each league (not backups, not wiped leagues).
@@ -4595,7 +4595,7 @@ window.BOItemSearch = function (ctx) {
     let V = { league: '', show: 'all', q: '' };
     try { const s = JSON.parse(localStorage.getItem(VIEW) || 'null'); if (s && typeof s === 'object') for (const k of Object.keys(V)) if (typeof s[k] === 'string') V[k] = s[k]; } catch (e) { /* storage off */ }
     const keepView = () => { try { localStorage.setItem(VIEW, JSON.stringify(V)); } catch (e) { /* storage off */ } };
-    // A season other than the newest save's keeps its tag ("HCSSF (eat)") so two seasons don't read the same.
+    // A season other than the newest save's keeps its tag ("Hardcore Oathbound Solo (eat)") so two seasons don't read the same.
     function currentSeason() {
       const s = all().filter(x => parseLeague(x.league).season).sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')))[0];
       return s ? parseLeague(s.league).season : '';
@@ -4794,7 +4794,8 @@ window.BOItemSearch = function (ctx) {
 //   - The API is alpha: check schema, show generated_at, ignore unknown fields.
 // Not used: build.skill_damage as DPS (it is total damage dealt per skill; only its share picks the main skill).
 //
-// app.js calls BOLadder(ctx) with { $, esc, gd, num, api, itemLines(item, classId), openBuild(ch) } and gets back
+// app.js calls BOLadder(ctx) with { $, esc, gd, num, api, itemLines(item, classId), defence(ch) -> { life, es, resParts }, openBuild(ch) }
+// and gets back
 // { render, charFromApi, openFromHash }.
 (function (root) {
   'use strict';
@@ -4836,9 +4837,29 @@ window.BOItemSearch = function (ctx) {
     return Object.keys(sd).filter(k => !isHidden(k)).sort((x, y) => sd[y] - sd[x])[0] || '';
   }
 
+  // EHP shown on the Ladder tab: (life + energy shield) / (1 - average of Fire, Cold, Lightning and Poison resistance,
+  // each capped at the game's ResistCap). An estimate for sorting heroes against elemental hits only: armour, evasion,
+  // block and the Rupture resistance penalty are not counted (the page has no defensive sim yet).
+  function ehpOf(d, cap) {
+    if (!d) return null;
+    const rs = (d.resParts || []).map(x => Math.min(cap, x[1]));
+    const avg = rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : 0;
+    return (d.life + d.es) / Math.max(0.05, 1 - avg / 100);
+  }
+  const SOLO = 'Oathbound Solo'; // the game's name for solo self-found (SSF) leagues
+  const SORTS = [['rank', 'Ladder rank'], ['rupture', 'Deepest Rupture'], ['dps', 'Boss DPS'], ['ehp', 'EHP'], ['lifees', 'Life + ES'], ['level', 'Level']];
+
   root.BOLadder = function (ctx) {
     const { $, esc } = ctx, GD = () => ctx.gd() || {};
-    const S = { leagues: null, league: null, cls: 'All', skill: '', ladder: null, hero: null, heroData: null, err: '', loading: false };
+    const S = {
+      leagues: null, season: null, hc: false, ssf: false, league: null,
+      cls: 'All', skill: '', item: '', sort: 'rank',
+      ladder: null, meta: null, metaOpen: true, version: null,
+      rosters: {}, rosterBusy: '', // rosters[league][hero id] = { life, es, ehp, uniques: [] }
+      hero: null, heroData: null, err: '', loading: false,
+    };
+    try { S.metaOpen = localStorage.getItem('bods:ladderMetaClosed') !== '1'; S.sort = localStorage.getItem('bods:ladderSort') || 'rank'; } catch (e) { /* storage off */ }
+    if (!SORTS.some(s => s[0] === S.sort)) S.sort = 'rank';
     const mem = new Map(); // path -> { at, data } (this page only; the worker does the real caching)
     async function get(path) {
       const m = mem.get(path);
@@ -4857,28 +4878,49 @@ window.BOItemSearch = function (ctx) {
       const t = (GD()[kind] || {})[id] || (GD()[kind] || {})[String(id).toLowerCase()];
       return t && t.Name ? t.Name : String(id).replace(/_/g, ' ');
     };
-    const skillName = id => name('skills', id), supportName = id => name('supports', id);
+    const skillName = id => name('skills', id), supportName = id => name('supports', id), uniqueName = id => name('uniques', id);
     const ago = iso => {
       const t = Date.parse(iso || ''); if (!t) return '';
       const m = Math.round((Date.now() - t) / 60000);
-      return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 48 * 60 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' days ago';
+      return m < 1 ? 'just now' : m < 60 ? m + 'm ago' : m < 48 * 60 ? Math.round(m / 60) + 'h ago' : Math.round(m / 1440) + ' days ago';
     };
     const fmt = x => x == null || !isFinite(x) ? '–' : Math.round(x).toLocaleString('en-US');
+    const short = x => x == null || !isFinite(x) || !x ? '–' : x >= 1e6 ? (x / 1e6).toFixed(x >= 1e7 ? 0 : 1) + 'M' : x >= 1e4 ? Math.round(x / 1e3) + 'k' : x >= 1e3 ? (x / 1e3).toFixed(1).replace(/\.0$/, '') + 'k' : Math.round(x) + '';
     const secs = s => s == null ? '–' : s < 60 ? Math.round(s) + ' s' : Math.floor(s / 60) + ' m ' + String(Math.round(s % 60)).padStart(2, '0') + ' s';
+    const roster = (lg = S.league) => S.rosters[lg] || (S.rosters[lg] = {});
+    const cap = () => ((GD().scaling || {}).Hero || {}).ResistCap || 75;
 
     // ---------- data ----------
     async function loadLeagues() {
-      const L = await get('leagues.json');
+      const [L, V] = await Promise.all([get('leagues.json'), get('version.json').catch(() => null)]);
+      S.version = V;
       const now = Date.now();
-      const list = ((L && L.leagues) || []).map(l => Object.assign({}, l, { running: Date.parse(l.starts_at) <= now && (!l.ends_at || Date.parse(l.ends_at) > now), upcoming: Date.parse(l.starts_at) > now }));
-      // Running first (trade before SSF, softcore before hardcore), then ended, upcoming last.
-      const rank = l => (l.running ? 0 : l.upcoming ? 2 : 1) * 10 + (l.hardcore ? 2 : 0) + (l.trade ? 0 : 1);
-      list.sort((a, b) => rank(a) - rank(b) || Date.parse(b.starts_at) - Date.parse(a.starts_at));
-      S.leagues = list;
-      if (!S.league || !list.some(l => l.id === S.league)) S.league = (list.find(l => l.running) || list[0] || {}).id || null;
+      S.leagues = ((L && L.leagues) || []).map(l => Object.assign({}, l, { running: Date.parse(l.starts_at) <= now && (!l.ends_at || Date.parse(l.ends_at) > now), upcoming: Date.parse(l.starts_at) > now }));
+      const cur = S.leagues.find(l => l.id === S.league);
+      if (cur) { S.season = cur.season; S.hc = !!cur.hardcore; S.ssf = !cur.trade; }
+      if (!S.season || !seasons().some(s => s.id === S.season)) S.season = (seasons()[0] || {}).id || null;
+      pickLeague();
+    }
+    // Seasons, running first, then ended (last 14 days), then upcoming; newest first inside each.
+    function seasons() {
+      const by = new Map();
+      for (const l of S.leagues || []) {
+        const s = by.get(l.season) || { id: l.season, name: l.season_name || l.name, running: false, upcoming: true, starts: l.starts_at, ends: l.ends_at };
+        s.running = s.running || l.running; s.upcoming = s.upcoming && l.upcoming; by.set(l.season, s);
+      }
+      const rank = s => s.running ? 0 : s.upcoming ? 2 : 1;
+      return [...by.values()].sort((a, b) => rank(a) - rank(b) || Date.parse(b.starts) - Date.parse(a.starts));
+    }
+    function pickLeague() {
+      const l = (S.leagues || []).find(x => x.season === S.season && !!x.hardcore === S.hc && !!x.trade === !S.ssf);
+      S.league = l ? l.id : null;
     }
     async function loadLadder() {
-      S.ladder = S.league ? await get('ladder/' + S.league + '.json') : null;
+      if (!S.league) { S.ladder = null; S.meta = null; return; }
+      const [ladder, meta] = await Promise.all([get('ladder/' + S.league + '.json'), get('meta/' + S.league + '.json').catch(() => null)]);
+      // Only heroes who have completed a Rupture (Rupture Level above 0) are listed (owner, 11 Nov 2026).
+      S.ladder = ladder ? Object.assign({}, ladder, { heroes: (ladder.heroes || []).filter(r => (r.rupture_level || 0) > 0) }) : null;
+      S.meta = meta;
     }
     async function loadHero(path) {
       S.heroData = null; S.hero = path;
@@ -4886,51 +4928,158 @@ window.BOItemSearch = function (ctx) {
       if (S.hero !== path) return; // another hero was picked meanwhile
       S.heroData = h || { gone: true };
     }
+    // Life / ES / EHP and the uniques worn need the builds themselves: the worker's roster files (25 builds a file).
+    const needRoster = () => S.sort === 'ehp' || S.sort === 'lifees' || !!S.item.trim();
+    const rosterLoaded = new Set(); // "<league>/<Class>": read without errors
+    // A worn item's searchable names: the unique's name (undiscovered ones are never named) and the base's name.
+    const itemNames = it => {
+      const out = [];
+      if (it.unique && it.unique !== 'None' && !isHidden(it.unique)) out.push(uniqueName(it.unique));
+      if (it.base && !isHidden(it.base)) out.push(name('bases', it.base));
+      return out;
+    };
+    async function loadRoster() {
+      if (!S.league || !S.ladder) return;
+      const league = S.league;
+      const classes = (S.cls === 'All' ? CLASSES : [S.cls]).filter(c => !rosterLoaded.has(league + '/' + c));
+      if (!classes.length) return;
+      const built = c => (S.ladder.heroes || []).filter(r => r.class === c && r.has_build).length;
+      const parts = classes.flatMap(c => built(c) ? (built(c) > 25 ? [[c, 0], [c, 1]] : [[c, 0]]) : []);
+      S.rosterBusy = 'Reading ' + parts.length + ' build file' + (parts.length > 1 ? 's' : '') + '…'; paint();
+      const files = await Promise.all(parts.map(([c, p]) => get('roster/' + league + '/' + c + '/' + p + '.json').then(f => [c, f], () => [c, null])));
+      if (S.league !== league) return;
+      let n = 0;
+      const failed = new Set(files.filter(([, f]) => !f).map(([c]) => c));
+      for (const [, f] of files) for (const h of (f && f.heroes) || []) {
+        if (!h || !h.build || !h.hero) continue;
+        const items = (h.build.items || []).flatMap(itemNames);
+        try {
+          const ch = charFromApi(h), d = ctx.defence(ch);
+          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), items, find: items.join('\n').toLowerCase() };
+        } catch (e) { roster(league)[h.hero] = { life: null, es: null, ehp: null, items, find: items.join('\n').toLowerCase() }; }
+        if (++n % 15 === 0) { S.rosterBusy = 'Working out life and EHP… ' + n; paint(); await new Promise(r => setTimeout(r, 0)); }
+      }
+      // Only classes read without errors count as done; the others are tried again next time.
+      for (const c of classes) if (!failed.has(c)) rosterLoaded.add(league + '/' + c);
+      S.rosterBusy = '';
+      if (failed.size) S.err = 'Could not read the builds of ' + [...failed].join(', ') + ' (the ladder service did not answer), so item search, Life + ES and EHP miss them. Change a filter to try again.';
+    }
     async function refresh(fn) {
       S.loading = true; S.err = ''; paint();
-      try { await fn(); } catch (e) { S.err = e.message || String(e); }
+      try { await fn(); if (needRoster()) await loadRoster(); } catch (e) { S.err = e.message || String(e); S.rosterBusy = ''; }
       S.loading = false; paint();
     }
 
     // ---------- view ----------
+    const metric = r => {
+      const x = roster()[r.hero];
+      if (S.sort === 'ehp') return x ? x.ehp : null;
+      if (S.sort === 'lifees') return x && x.life != null ? x.life + x.es : null;
+      if (S.sort === 'rupture') return r.rupture_level || 0;
+      if (S.sort === 'dps') return r.guardian_dps_median || null;
+      if (S.sort === 'level') return r.level || 0;
+      return null;
+    };
     function rowsShown() {
+      let rows = ((S.ladder && S.ladder.heroes) || []).filter(r => (S.cls === 'All' || r.class === S.cls) && (!S.skill || r.main_skill === S.skill));
+      // Item search: every word must be in one of the hero's worn item names (unique or base).
+      const words = S.item.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      if (words.length) rows = rows.filter(r => { const x = roster()[r.hero]; return x && words.every(w => x.find.includes(w)); });
+      if (S.sort !== 'rank') rows = rows.slice().sort((a, b) => {
+        const x = metric(a), y = metric(b);
+        if (x == null && y == null) return (a.rank || 0) - (b.rank || 0);
+        if (x == null) return 1; if (y == null) return -1;
+        return y - x || (a.rank || 0) - (b.rank || 0);
+      });
+      return rows;
+    }
+    function header() {
       const rows = (S.ladder && S.ladder.heroes) || [];
-      return rows.filter(r => (S.cls === 'All' || r.class === S.cls) && (!S.skill || r.main_skill === S.skill));
+      const deepest = rows.reduce((m, r) => Math.max(m, r.rupture_level || 0), 0);
+      const best = rows.reduce((m, r) => Math.max(m, r.guardian_dps_median || 0), 0);
+      const L = S.ladder, build = (L && L.game_build) || (S.version && S.version.game_build);
+      const fresh = L && L.generated_at && Date.now() - Date.parse(L.generated_at) < 40 * 60000;
+      const kpi = (label, value, sub) => '<div class="bs-cell"><span class="bs-label">' + label + '</span><b>' + value + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>';
+      const lg = (S.leagues || []).find(l => l.id === S.league);
+      return '<div class="lad-top"><div class="cmp-intro"><div class="eyebrow">PUBLIC LEAGUES</div><h2>Ladder</h2>' +
+        '<p>Top heroes of every class in the public leagues, from the game\'s public API. Pick a hero to read the build, or load it into the Build Planner and run the sim on it. Numbers, skills and the meta change with every patch.</p>' +
+        '<div class="lad-status"><span class="lad-dot' + (fresh ? ' on' : '') + '" aria-hidden="true"></span>' + (L && L.generated_at ? 'Ladder ' + esc(ago(L.generated_at)) : S.loading ? 'Loading…' : 'Not loaded') + (build ? ' · game build ' + esc(String(build)) : '') + '</div></div>' +
+        '<div class="build-summary lad-kpis">' +
+        kpi('League', lg ? esc((lg.hardcore ? 'Hardcore' : 'Softcore') + ' ' + (lg.trade ? 'Trade' : SOLO)) : '–', lg ? esc(lg.season_name || lg.name) : '') +
+        kpi('Heroes ranked', L ? rows.length : '–', L ? 'with a Rupture completed' : '') +
+        kpi('Deepest Rupture', L ? deepest : '–', '') +
+        kpi('Top Boss DPS', L ? short(best) : '–', L && !best ? 'none measured yet' : 'game\'s own median') +
+        '</div></div>';
     }
-    function leagueLabel(l) {
-      return l.name + ' · ' + (l.hardcore ? 'Hardcore' : 'Softcore') + ' ' + (l.trade ? 'Trade' : 'SSF') + (l.running ? '' : l.upcoming ? ' (starts ' + l.starts_at.slice(0, 10) + ')' : ' (ended)');
-    }
+    const toggle = (id, left, right, on) => '<div class="lad-switch"><span class="' + (on ? '' : 'on') + '">' + left + '</span><button type="button" role="switch" id="' + id + '" aria-checked="' + on + '" aria-label="' + left + ' or ' + right + '"><i></i></button><span class="' + (on ? 'on' : '') + '">' + right + '</span></div>';
     function controls() {
-      const ls = S.leagues || [];
-      const opt = l => '<option value="' + esc(l.id) + '"' + (l.id === S.league ? ' selected' : '') + '>' + esc(leagueLabel(l)) + '</option>';
-      const groups = [['Running', ls.filter(l => l.running)], ['Ended (last 14 days)', ls.filter(l => !l.running && !l.upcoming)], ['Upcoming', ls.filter(l => l.upcoming)]]
-        .filter(g => g[1].length).map(g => '<optgroup label="' + g[0] + '">' + g[1].map(opt).join('') + '</optgroup>').join('');
+      const ss = seasons();
+      const sOpt = s => '<option value="' + esc(s.id) + '"' + (s.id === S.season ? ' selected' : '') + '>' + esc(s.name) + (s.running ? '' : s.upcoming ? ' (starts ' + String(s.starts).slice(0, 10) + ')' : ' (ended)') + '</option>';
       const rows = (S.ladder && S.ladder.heroes) || [];
       const skills = [...new Set(rows.filter(r => S.cls === 'All' || r.class === S.cls).map(r => r.main_skill).filter(Boolean))].sort((a, b) => skillName(a).localeCompare(skillName(b)));
+      // Suggestions for the item search: the meta's uniques, then every item name worn by the builds read so far.
+      const names = new Set(((S.meta && S.meta.uniques) || []).map(u => u.id).filter(u => u && !isHidden(u)).map(uniqueName));
+      for (const x of Object.values(roster())) for (const nm of x.items) names.add(nm);
+      const filtered = S.cls !== 'All' || S.skill || S.item.trim() || S.sort !== 'rank';
       const counts = {}; for (const r of rows) counts[r.class] = (counts[r.class] || 0) + 1;
       return '<div class="lad-controls">' +
-        '<label class="field"><span>League</span><select id="ladLeague">' + groups + '</select></label>' +
-        '<label class="field"><span>Main skill</span><select id="ladSkill"><option value="">All skills</option>' + skills.map(s => '<option value="' + esc(s) + '"' + (s === S.skill ? ' selected' : '') + '>' + esc(skillName(s)) + '</option>').join('') + '</select></label>' +
-        '</div><div class="lad-classes" role="tablist" aria-label="Class">' + ['All', ...CLASSES].map(c => '<button type="button" role="tab" class="lad-class' + (S.cls === c ? ' on' : '') + '" aria-selected="' + (S.cls === c) + '" data-cls="' + c + '">' + c + (c !== 'All' && counts[c] ? ' <small>' + counts[c] + '</small>' : '') + '</button>').join('') + '</div>';
+        '<label class="field"><span>Season</span><select id="ladSeason">' + ss.map(sOpt).join('') + '</select></label>' +
+        '<div class="lad-switches">' + toggle('ladHc', 'Softcore', 'Hardcore', S.hc) + toggle('ladSsf', 'Trade', SOLO, S.ssf) + '</div>' +
+        '</div>' +
+        '<details class="card lad-meta" id="ladMeta"' + (S.metaOpen ? ' open' : '') + '><summary><b>Meta</b><span class="meta">Most played classes, skills and uniques in this league</span></summary>' + metaBody() + '</details>' +
+        '<div class="lad-classes" role="tablist" aria-label="Class">' + ['All', ...CLASSES].map(c => '<button type="button" role="tab" class="lad-class' + (S.cls === c ? ' on' : '') + '" aria-selected="' + (S.cls === c) + '" data-cls="' + c + '">' + c + (c !== 'All' && counts[c] ? ' <small>' + counts[c] + '</small>' : '') + '</button>').join('') + '</div>' +
+        '<div class="lad-filters">' +
+        '<label class="field"><span>Skill</span><select id="ladSkill"><option value="">All skills</option>' + skills.map(s => '<option value="' + esc(s) + '"' + (s === S.skill ? ' selected' : '') + '>' + esc(skillName(s)) + '</option>').join('') + '</select></label>' +
+        '<label class="field lad-item-search"><span>Item worn</span><input id="ladItem" type="search" list="ladItemList" autocomplete="off" placeholder="Unique or base, e.g. Squire\'s Promise" value="' + esc(S.item) + '"><datalist id="ladItemList">' + [...names].sort((a, b) => a.localeCompare(b)).map(nm => '<option value="' + esc(nm) + '"></option>').join('') + '</datalist></label>' +
+        '<label class="field"><span>Sort by</span><select id="ladSort">' + SORTS.map(s => '<option value="' + s[0] + '"' + (s[0] === S.sort ? ' selected' : '') + '>' + s[1] + '</option>').join('') + '</select></label>' +
+        '<button type="button" class="btn ghost lad-reset" id="ladReset"' + (filtered ? '' : ' disabled') + '>Reset filters</button>' +
+        '</div>' + (S.rosterBusy ? '<p class="hint">' + esc(S.rosterBusy) + '</p>' : '');
+    }
+    // ---------- Meta (meta/<league>.json) ----------
+    // share / max of the bar: shares are out of 100; the Rupture box is out of its deepest skill.
+    function bar(share, max) { return '<span class="lad-bar"><i style="width:' + Math.max(2, Math.min(100, (share / (max || 100)) * 100)).toFixed(1) + '%"></i></span>'; }
+    function metaBody() {
+      const M = S.meta;
+      if (!M) return '<p class="hint">' + (S.loading ? 'Loading…' : 'No meta for this league yet.') + '</p>';
+      const classes = (M.classes || []).slice(0, 6);
+      const skills = (M.main_skills || []).filter(s => !isHidden(s.skill)).slice().sort((a, b) => (b.heroes || 0) - (a.heroes || 0));
+      const topSkills = skills.slice(0, 8);
+      const uniques = (M.uniques || []).filter(u => !isHidden(u.id)).slice(0, 8);
+      const hiddenU = (M.uniques || []).filter(u => isHidden(u.id)).reduce((a, u) => a + (u.heroes || 0), 0);
+      const deep = skills.slice(0, 5).slice().sort((a, b) => (b.best_rupture_level || 0) - (a.best_rupture_level || 0)), maxD = Math.max(...deep.map(s => s.best_rupture_level || 0), 1);
+      const li = (attrs, label, sub, share, max, right) => '<li><button type="button" class="lad-meta-row" ' + attrs + '><span class="lad-meta-name">' + label + (sub ? ' <small class="meta">' + sub + '</small>' : '') + '</span>' + bar(share, max) + '<span class="lad-meta-num">' + right + '</span></button></li>';
+      const cnt = x => (x.heroes || 0) + ' <small class="meta">(' + (x.share || 0).toFixed(1) + '%)</small>';
+      const box = (title, note, body) => '<div class="lad-meta-box"><h3>' + title + '</h3>' + body + (note ? '<p class="hint">' + note + '</p>' : '') + '</div>';
+      return '<div class="lad-meta-grid">' +
+        box('Classes', (M.heroes || 0) + ' heroes active in the last ' + (M.window_days || 7) + ' days with a Rupture Level.', '<ul>' + classes.map(c => li('data-f-cls="' + esc(c.id) + '"', esc(c.id), '', c.share, 100, cnt(c))).join('') + '</ul>') +
+        box('Most played skills', 'Main skill of each active hero. Click one to filter the ladder.', '<ul>' + topSkills.map(s => li('data-f-skill="' + esc(s.skill) + '" data-f-scls="' + esc(s.class || '') + '"', esc(skillName(s.skill)), esc(s.class || ''), s.share, 100, cnt(s))).join('') + '</ul>') +
+        box('Most used uniques', 'Worn by the published builds (top 50 of each class).' + (hiddenU ? ' ' + hiddenU + ' undiscovered.' : ''), uniques.length ? '<ul>' + uniques.map(u => li('data-f-unique="' + esc(u.id) + '"', esc(uniqueName(u.id)), '', u.share, 100, cnt(u))).join('') + '</ul>' : '<p class="meta">None yet.</p>') +
+        box('Deepest Rupture by top 5 skills', 'The five most played main skills, by the deepest Rupture Level reached (median in brackets).', '<ul>' + deep.map(s => li('data-f-skill="' + esc(s.skill) + '" data-f-scls="' + esc(s.class || '') + '"', esc(skillName(s.skill)), esc(s.class || ''), s.best_rupture_level || 0, maxD, (s.best_rupture_level || 0) + ' <small class="meta">(' + (s.median_rupture_level || 0) + ')</small>')).join('') + '</ul>') +
+        '</div>' + (M.generated_at ? '<p class="hint">Meta updated ' + esc(ago(M.generated_at)) + ' (hourly).</p>' : '');
     }
     function table() {
+      if (!S.league) return '<div class="card"><p class="hint">This season has no ' + (S.hc ? 'Hardcore' : 'Softcore') + ' ' + (S.ssf ? SOLO : 'Trade') + ' league.</p></div>';
       if (!S.ladder) return '<div class="card"><p class="hint">' + (S.loading ? 'Loading the ladder…' : 'No ladder for this league.') + '</p></div>';
       const rows = rowsShown();
-      if (!rows.length) return '<div class="card"><p class="hint">' + ((S.ladder.heroes || []).length ? 'No heroes match these filters.' : 'Nobody is on this ladder yet.') + '</p></div>';
-      const hc = (S.leagues || []).some(l => l.id === S.league && l.hardcore);
+      if (!rows.length) return '<div class="card"><p class="hint">' + ((S.ladder.heroes || []).length ? (S.item.trim() && S.rosterBusy ? 'Reading builds…' : 'No heroes match these filters.') : 'Nobody in this league has completed a Rupture yet.') + '</p></div>';
+      const hc = S.hc;
+      const extra = S.sort === 'ehp' ? 'EHP' : S.sort === 'lifees' ? 'Life + ES' : '';
       const body = rows.map(r => {
-        const sup = (r.main_supports || []).map(supportName).join(', ');
+        // Supports as the site's gem chips (colour by attribute); undiscovered ones are not named.
+        const sups = (r.main_supports || []).filter(Boolean).map(id => '<span class="chip lad-sup">' + (isHidden(id) ? '' : (ctx.gemDot ? ctx.gemDot(id) : '')) + esc(supportName(id)) + '</span>').join('');
         const on = S.hero && r.build === S.hero;
+        const ex = extra ? '<td class="num">' + (metric(r) != null ? fmt(metric(r)) : '<span class="meta">–</span>') + '</td>' : '';
         return '<tr class="' + (on ? 'on' : '') + (r.dead ? ' dead' : '') + '"' + (r.has_build && r.build ? ' data-build="' + esc(r.build) + '" tabindex="0"' : '') + '>' +
-          '<td class="num">' + (r.rank || '') + '</td><td class="num">' + (r.class_rank || '') + '</td>' +
-          '<td>' + esc(r.class || '') + (r.ascendancy && r.ascendancy !== 'None' ? ' <small class="meta">' + esc(r.ascendancy) + '</small>' : '') + (hc && r.dead ? ' <span class="lad-dead">dead</span>' : '') + '</td>' +
+          '<td class="num">' + (r.rank || '') + '</td>' +
+          '<td>' + esc(r.class || '') + (r.class_rank ? ' <small class="meta" title="Rank inside the class">#' + r.class_rank + '</small>' : '') + (r.ascendancy && r.ascendancy !== 'None' ? ' <small class="meta">' + esc(r.ascendancy) + '</small>' : '') + (hc && r.dead ? ' <span class="lad-dead">dead</span>' : '') + '</td>' +
+          '<td class="lad-skill">' + (r.main_skill ? '<b>' + esc(skillName(r.main_skill)) + '</b>' : '<span class="meta">–</span>') + (sups ? '<div class="lad-sups">' + sups + '</div>' : '') + '</td>' +
           '<td class="num">' + (r.level || '') + '</td><td class="num">' + (r.rupture_level || 0) + '</td>' +
-          '<td>' + (r.main_skill ? esc(skillName(r.main_skill)) : '<span class="meta">–</span>') + (sup ? '<br><small class="meta">' + esc(sup) + '</small>' : '') + '</td>' +
-          '<td class="num">' + (r.guardian_dps_median ? fmt(r.guardian_dps_median) : '<span class="meta">–</span>') + '</td>' +
+          '<td class="num">' + (r.guardian_dps_median ? fmt(r.guardian_dps_median) : '<span class="meta">–</span>') + '</td>' + ex +
           '<td class="go" aria-hidden="true">' + (r.has_build && r.build ? '›' : '') + '</td></tr>';
       }).join('');
-      return '<div class="card lad-table-card"><div class="table-wrap"><table class="tbl lad-table"><thead><tr><th class="num">#</th><th class="num" title="Rank inside the class">Class #</th><th>Class</th><th class="num">Level</th><th class="num" title="Best Rupture Level">Rupture</th><th>Main skill</th><th class="num" title="The game\'s own median Guardian DPS (heroes with a build file)">Guardian DPS</th><th aria-label="Build"></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
-        '<p class="hint">' + rows.length + ' heroes shown. Click a hero to see their build (published for the top 50 of each class). Ranked by best Rupture Level, then level, experience, fastest clear and who got there first.</p></div>';
+      const note = extra ? (extra === 'EHP' ? ' EHP here: (life + energy shield) against elemental hits after the hero\'s resistances (capped at ' + cap() + '%); armour, evasion and block are not counted.' : ' Life and energy shield as the Build Planner adds them up from gear and tree.') + ' Only heroes with a published build have one.' : '';
+      return '<div class="card lad-table-card"><div class="table-wrap"><table class="tbl lad-table"><thead><tr><th class="num">#</th><th title="Class, with its rank inside the class">Class</th><th>Main skill</th><th class="num">Level</th><th class="num" title="Best Rupture Level">Rupture</th><th class="num" title="The game\'s own median Guardian DPS (heroes with a build file)">Boss DPS</th>' + (extra ? '<th class="num">' + extra + '</th>' : '') + '<th aria-label="Build"></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
+        '<p class="hint">' + rows.length + ' heroes shown. Click a hero to see their build (published for the top 50 of each class). Ladder rank: best Rupture Level, then level, experience, fastest clear and who got there first. Boss DPS is the game\'s own median over its Guardian fights.' + note + '</p></div>';
     }
     function itemCard(it, classId) {
       const unique = it.unique && it.unique !== 'None';
@@ -4946,16 +5095,16 @@ window.BOItemSearch = function (ctx) {
         '<ul>' + [...lines, ...runes].map(l => '<li>' + esc(l) + '</li>').join('') + (hiddenAffixes ? '<li class="meta">' + hiddenAffixes + ' undiscovered line' + (hiddenAffixes > 1 ? 's' : '') + '</li>' : '') + '</ul></div>';
     }
     function heroPanel() {
-      if (!S.hero) return '<div class="card lad-hero lad-empty"><p class="hint">Pick a hero with a build (View) to see their gear, skills and passives, and open it in the Build Planner to sim it.</p></div>';
+      if (!S.hero) return '<div class="card lad-hero lad-empty"><p class="hint">Click a hero (rows with ›) to see their gear, skills and passives, and open it in the Build Planner to sim it.</p></div>';
       const h = S.heroData;
       if (!h) return '<div class="card lad-hero"><p class="hint">Loading the build…</p></div>';
       if (h.gone) return '<div class="card lad-hero"><p class="hint">This build is no longer published (the hero left the top 50, or its player hid it).</p></div>';
       const b = h.build || {}, m = h.measured || {}, main = mainSkillOf(h);
       const skills = (b.skills || []).filter(s => s.skill).map(s => {
         const lv = (b.gem_levels || {})[s.skill];
-        const sup = (s.supports || []).filter(Boolean).map(x => supportName(x) + ((b.gem_levels || {})[x] ? ' ' + b.gem_levels[x] : ''));
-        return '<li' + (s.skill === main ? ' class="main"' : '') + '><b>' + esc(skillName(s.skill)) + '</b>' + (lv ? ' <small class="meta">gem ' + lv + '</small>' : '') + (s.skill === main ? ' <span class="lad-tag">main</span>' : '') +
-          (sup.length ? '<br><small>' + esc(sup.join(' · ')) + '</small>' : '') + (s.conduit_link ? '<br><small class="meta">Conduit: ' + esc(skillName(s.conduit_link)) + '</small>' : '') + '</li>';
+        const sup = (s.supports || []).filter(Boolean).map(x => '<span class="chip lad-sup">' + (isHidden(x) || !ctx.gemDot ? '' : ctx.gemDot(x)) + esc(supportName(x)) + ((b.gem_levels || {})[x] ? ' <small class="meta">' + b.gem_levels[x] + '</small>' : '') + '</span>');
+        return '<li' + (s.skill === main ? ' class="main"' : '') + '><b>' + (ctx.skillDot && !isHidden(s.skill) ? ctx.skillDot(s.skill) : '') + esc(skillName(s.skill)) + '</b>' + (lv ? ' <small class="meta">gem ' + lv + '</small>' : '') + (s.skill === main ? ' <span class="lad-tag">main</span>' : '') +
+          (sup.length ? '<div class="lad-sups">' + sup.join('') + '</div>' : '') + (s.conduit_link ? '<br><small class="meta">Conduit: ' + esc(skillName(s.conduit_link)) + '</small>' : '') + '</li>';
       }).join('');
       const nodes = (b.passive_nodes || []);
       const hiddenNodes = nodes.filter(isHidden).length;
@@ -4981,26 +5130,58 @@ window.BOItemSearch = function (ctx) {
     }
     function paint() {
       const el = $('#ladderPane'); if (!el) return;
-      const L = S.ladder;
-      const fresh = L && L.generated_at ? 'Ladder updated ' + ago(L.generated_at) + ' (refreshed every 15 minutes, builds hourly)' : '';
-      el.innerHTML = '<div class="cmp-intro"><div class="eyebrow">PUBLIC LEAGUES</div><h2>Ladder</h2><p>The top heroes of each class and the builds of the top 50, as the game publishes them. Numbers, skills and the meta change with every patch.</p></div>' +
-        controls() +
+      // The pane is redrawn whole: keep the typing caret in the item search across redraws.
+      const a = document.activeElement, focusId = a && el.contains(a) ? a.id : '', caret = focusId === 'ladItem' ? [a.selectionStart, a.selectionEnd] : null;
+      el.innerHTML = header() + controls() +
         (S.err ? '<div class="card"><p class="hint bad">' + esc(S.err) + '</p></div>' : '') +
         '<div class="lad-grid">' + table() + heroPanel() + '</div>' +
-        '<p class="hint lad-credit">' + esc(fresh) + (fresh ? ' · ' : '') + 'Data: <a href="https://store.steampowered.com/app/5452900/Broken_Oath/" target="_blank" rel="noopener noreferrer">Broken Oath public API</a>. Heroes are shown by an anonymous id only. This page is a fan-made tool, not an official one.</p>';
+        '<p class="hint lad-credit">Data: <a href="https://store.steampowered.com/app/5452900/Broken_Oath/" target="_blank" rel="noopener noreferrer">Broken Oath public API</a>. Heroes are shown by an anonymous id only. A fan-made tool, not an official one.</p>';
+      const f = focusId && document.getElementById(focusId);
+      if (f) { f.focus(); if (caret) try { f.setSelectionRange(caret[0], caret[1]); } catch (e) { /* not a text box */ } }
     }
     // ---------- events ----------
     let bound = false;
     function bind() {
       if (bound) return; bound = true;
       const el = $('#ladderPane');
+      const leagueChanged = () => { pickLeague(); S.skill = ''; S.item = ''; S.hero = null; S.heroData = null; refresh(loadLadder); };
       el.addEventListener('change', e => {
-        if (e.target.id === 'ladLeague') { S.league = e.target.value; S.skill = ''; S.hero = null; S.heroData = null; refresh(loadLadder); }
-        if (e.target.id === 'ladSkill') { S.skill = e.target.value; paint(); }
+        const id = e.target.id;
+        if (id === 'ladSeason') { S.season = e.target.value; leagueChanged(); }
+        else if (id === 'ladSkill') { S.skill = e.target.value; paint(); }
+        else if (id === 'ladSort') { S.sort = e.target.value; try { localStorage.setItem('bods:ladderSort', S.sort); } catch (err) { /* storage off */ } refresh(async () => {}); }
       });
+      // Item search: filter as you type (the builds are read once, the first time it is used).
+      let typing = null;
+      el.addEventListener('input', e => {
+        if (e.target.id !== 'ladItem') return;
+        S.item = e.target.value;
+        clearTimeout(typing); typing = setTimeout(() => refresh(async () => {}), 250);
+      });
+      el.addEventListener('toggle', e => {
+        if (e.target.id !== 'ladMeta') return;
+        S.metaOpen = e.target.open; try { localStorage.setItem('bods:ladderMetaClosed', S.metaOpen ? '0' : '1'); } catch (err) { /* storage off */ }
+      }, true);
       const pick = path => { if (!path) return; refresh(() => loadHero(path)); setTimeout(() => { const p = el.querySelector('.lad-hero'); if (p && window.innerWidth < 1100) p.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); };
       el.addEventListener('click', async e => {
-        const c = e.target.closest('[data-cls]'); if (c) { S.cls = c.dataset.cls; S.skill = ''; paint(); return; }
+        const sw = e.target.closest('#ladHc, #ladSsf');
+        if (sw) { if (sw.id === 'ladHc') S.hc = !S.hc; else S.ssf = !S.ssf; leagueChanged(); return; }
+        if (e.target.closest('#ladReset')) {
+          S.cls = 'All'; S.skill = ''; S.item = ''; S.sort = 'rank';
+          try { localStorage.setItem('bods:ladderSort', 'rank'); } catch (err) { /* storage off */ }
+          refresh(async () => {}); return;
+        }
+        const c = e.target.closest('[data-cls]'); if (c) { S.cls = c.dataset.cls; S.skill = ''; refresh(async () => {}); return; }
+        // Meta rows: filter the ladder by that class, skill or unique.
+        const f = e.target.closest('.lad-meta-row');
+        if (f) {
+          if (f.dataset.fCls) { S.cls = f.dataset.fCls; S.skill = ''; }
+          if (f.dataset.fSkill) { S.skill = f.dataset.fSkill; S.cls = f.dataset.fScls && CLASSES.includes(f.dataset.fScls) ? f.dataset.fScls : 'All'; }
+          if (f.dataset.fUnique) S.item = uniqueName(f.dataset.fUnique);
+          refresh(async () => {});
+          setTimeout(() => { const t = el.querySelector('.lad-classes'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+          return;
+        }
         if (e.target.closest('#ladOpen') && S.heroData && S.heroData.build) { ctx.openBuild(charFromApi(S.heroData)); return; }
         if (e.target.closest('#ladLink') && S.hero) {
           const url = location.origin + location.pathname + '#hero=' + S.hero.replace(/^builds\//, '').replace(/\.json$/, '');
@@ -5021,7 +5202,7 @@ window.BOItemSearch = function (ctx) {
     const HASH = /^#hero=([a-z0-9-]{1,40})\/([A-Za-z]{2,20})\/([A-Za-z0-9]{8,32})$/;
     function openFromHash(hash) {
       const m = HASH.exec(hash || ''); if (!m) return false;
-      S.league = m[1]; S.cls = m[2];
+      S.league = m[1]; S.cls = CLASSES.includes(m[2]) ? m[2] : 'All';
       const path = 'builds/' + m[1] + '/' + m[2] + '/' + m[3] + '.json';
       started = true;
       refresh(async () => { await loadLeagues(); S.league = m[1]; await loadLadder(); await loadHero(path); });
@@ -5030,7 +5211,7 @@ window.BOItemSearch = function (ctx) {
     return { render, charFromApi, openFromHash };
   };
   root.BOLadderChar = charFromApi;
-  if (typeof module !== 'undefined') module.exports = { charFromApi };
+  if (typeof module !== 'undefined') module.exports = { charFromApi, ehpOf };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 ;
@@ -9107,30 +9288,47 @@ window.BOStartApp = function () {
     if (r && st.ch) {
       try {
         const mods = S.collectMods(GD, st.ch, opts()).mods.filter(m => !S.splitTags(m.tags).conds.length);
-        life = num(Math.floor(S.heroMaxLife(GD, st.ch, mods, r.attr || {})), 0); // the game rounds down: 467.5 shows as 467
-        let f = 0, inc = 0; const rs = { Fire: 0, Cold: 0, Lightning: 0, Poison: 0 }; let all = 0;
-        const loc = {}; // per item: local ES flat and local "% increased defences"
-        for (const m of mods) {
-          if (m.local && (m.stat === 'EnergyShield' || m.stat === 'Defences')) { const o = loc[m.key] || (loc[m.key] = { es: 0, def: 0 }); if (m.stat === 'EnergyShield' && m.mode === 'Flat') o.es += m.v; else if (m.stat === 'Defences' && m.mode === 'Inc') o.def += m.v; }
-          else if (m.stat === 'EnergyShield') { if (m.mode === 'Flat') f += m.v; else if (m.mode === 'Inc') inc += m.v; }
-          else if (m.stat === 'Resist' && m.mode === 'Flat') { const t = (m.tags || [])[0]; if (t === 'Elemental') all += m.v; else if (t in rs) rs[t] += m.v; }
-        }
-        // Energy shield: each item's base ES plus its local ES lines, times its own "% increased defences"; then the global
-        // flat lines, 0.5 per Int, and the tree's % ES with 4% per 10 Int. Checked 8 Nov against the in-game sheet: Shrimpslam
-        // (Warrior 52, Int 64) game 111; (Warrior 53, Int 65) game 112, here the same both times; Shrimpage (Mage 20) game 339, here 323 (the save's attributes run 1-6 under the
-        // sheet's, so a 2-5% gap remains). "Defences" lines are local to their item (they are not a global ES bonus).
-        const H = GD.scaling.Hero || {}, int = (r.attr || {}).Int || 0;
-        for (const it of st.ch.items || []) {
-          const bs = GD.bases[String(it.base || '').toLowerCase()] || {}, o = loc['item:' + it.slot] || { es: 0, def: 0 };
-          f += ((bs.EnergyShield || 0) + o.es) * (1 + o.def / 100);
-        }
-        es = num((f + (H.EsPerInt79 || 0) * int) * (1 + (inc + (H.IntEsPctPer10 || 0) * int / 10) / 100), 0); // Int is not rounded: Int 65 gives +26% (not +24%), the sheet's tooltip 8 Nov
-        resParts = [['Fire', Math.round(rs.Fire + all)], ['Cold', Math.round(rs.Cold + all)], ['Lightning', Math.round(rs.Lightning + all)], ['Poison', Math.round(rs.Poison)]];
+        const d = defenceCore(st.ch, mods, r.attr || {});
+        life = num(d.life, 0); es = num(d.es, 0); resParts = d.resParts;
         res = resParts.map(x => x[1]).join(' / ');
         resTip = 'Fire / Cold / Lightning / Poison resistance, added up from gear and tree lines (all-elemental counted in each). Not capped.';
       } catch (e) { /* leave the dashes */ }
     }
     return { life, es, res, resTip, resParts, attr: r && r.attr };
+  }
+  // A ladder hero's life, energy shield and resistances, the same way (Ladder tab sorting). No skill sheet is run, so
+  // the attributes are added up here as sim.js does (class base + per level, then flat and % lines).
+  function heroDefence(ch) {
+    const mods = S.collectMods(GD, ch, {}).mods.filter(m => !S.splitTags(m.tags).conds.length);
+    const cls = GD.classes[String(ch.classId || '').toLowerCase()] || {}, attr = {};
+    for (const a of ['Str', 'Dex', 'Int']) {
+      let flat = (cls[a] || 0) + (cls[a + 'PerLevel'] || 0) * Math.max(0, ch.level - 1), inc = 0;
+      for (const m of mods) if (m.stat === a || m.stat === 'Attributes') { if (m.mode === 'Flat') flat += m.v; else if (m.mode === 'Inc') inc += m.v; }
+      attr[a] = Math.floor(flat * (1 + inc / 100));
+    }
+    return Object.assign(defenceCore(ch, mods, attr), { attr });
+  }
+  function defenceCore(ch, mods, attr) {
+    const life = Math.floor(S.heroMaxLife(GD, ch, mods, attr)); // the game rounds down: 467.5 shows as 467
+    let f = 0, inc = 0; const rs = { Fire: 0, Cold: 0, Lightning: 0, Poison: 0 }; let all = 0;
+    const loc = {}; // per item: local ES flat and local "% increased defences"
+    for (const m of mods) {
+      if (m.local && (m.stat === 'EnergyShield' || m.stat === 'Defences')) { const o = loc[m.key] || (loc[m.key] = { es: 0, def: 0 }); if (m.stat === 'EnergyShield' && m.mode === 'Flat') o.es += m.v; else if (m.stat === 'Defences' && m.mode === 'Inc') o.def += m.v; }
+      else if (m.stat === 'EnergyShield') { if (m.mode === 'Flat') f += m.v; else if (m.mode === 'Inc') inc += m.v; }
+      else if (m.stat === 'Resist' && m.mode === 'Flat') { const t = (m.tags || [])[0]; if (t === 'Elemental') all += m.v; else if (t in rs) rs[t] += m.v; }
+    }
+    // Energy shield: each item's base ES plus its local ES lines, times its own "% increased defences"; then the global
+    // flat lines, 0.5 per Int, and the tree's % ES with 4% per 10 Int. Checked 8 Nov against the in-game sheet: Shrimpslam
+    // (Warrior 52, Int 64) game 111; (Warrior 53, Int 65) game 112, here the same both times; Shrimpage (Mage 20) game 339, here 323 (the save's attributes run 1-6 under the
+    // sheet's, so a 2-5% gap remains). "Defences" lines are local to their item (they are not a global ES bonus).
+    const H = GD.scaling.Hero || {}, int = (attr || {}).Int || 0;
+    for (const it of ch.items || []) {
+      const bs = GD.bases[String(it.base || '').toLowerCase()] || {}, o = loc['item:' + it.slot] || { es: 0, def: 0 };
+      f += ((bs.EnergyShield || 0) + o.es) * (1 + o.def / 100);
+    }
+    const es = (f + (H.EsPerInt79 || 0) * int) * (1 + (inc + (H.IntEsPctPer10 || 0) * int / 10) / 100); // Int is not rounded: Int 65 gives +26% (not +24%), the sheet's tooltip 8 Nov
+    const resParts = [['Fire', Math.round(rs.Fire + all)], ['Cold', Math.round(rs.Cold + all)], ['Lightning', Math.round(rs.Lightning + all)], ['Poison', Math.round(rs.Poison)]];
+    return { life, es, resParts };
   }
   function renderSummaryStrip() {
     const el = $('#buildSummary'); if (!el) return;
@@ -9140,7 +9338,7 @@ window.BOStartApp = function () {
     if (st.ch && st.skill) { try { r = S.calcSkill(GD, st.ch, st.skill, opts()); } catch (e) { r = null; } }
     const ok = r && !r.error && !r.unsupported;
     $('#bsClass').textContent = st.ch ? st.ch.name : '–';
-    // League with its season ("HCSSF (wb1)", "Offline") for characters read from a save; plans and codes have none.
+    // League with its season ("Hardcore Oathbound Solo (wb1)", "Offline") for characters read from a save; plans and codes have none.
     const fromSave = st.ch && !st.ch.plan && (st.ch.file || st.ch.from === 'folder' || st.ch.from === 'file');
     $('#bsSpell').textContent = st.ch ? st.ch.classId + ' · level ' + st.ch.level + (fromSave && window.BOGrail ? ' · ' + window.BOGrail.leagueLabel(st.ch.league) : '') + (ok && r.skill ? ' · ' + r.skill.Name : '') : '';
     $('#bsDps').textContent = ok ? num(r.totalDps) : '–';
@@ -11520,6 +11718,7 @@ window.BOStartApp = function () {
     document.body.classList.toggle('code-page', tab === 'code');
     document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'faq' || tab === 'skillscaling' || tab === 'character');
     document.body.classList.toggle('character-page', tab === 'character');
+    document.body.classList.toggle('ladder-page', tab === 'ladder'); // no character strip on the Ladder tab
     document.body.classList.toggle('creator-page', tab === 'creator'); // the Save Creator has no use for the build views
     if (tab === 'supports') {
       showConfigTab('supports', false);
@@ -11709,7 +11908,7 @@ window.BOStartApp = function () {
   itemSearch = window.BOItemSearch({ $, esc, gd: () => GD, owned: () => grail });
   // The Ladder tab (ladder.js): public ladders and top builds from the Broken Oath public API, read only through the
   // share worker's cache (/api/). ?ladderapi=local points it at `wrangler dev` on port 8787 for testing.
-  ladder = window.BOLadder({ $, esc, gd: () => GD, num,
+  ladder = window.BOLadder({ $, esc, gd: () => GD, num, gemDot, skillDot,
     api: (new URLSearchParams(location.search).get('ladderapi') === 'local' ? 'http://localhost:8787' : SHARE_API) + '/api/',
     // An item's lines as text: base numbers (weapon damage or defences) then its own lines, added up by stat (as Item Simulator).
     itemLines: (item, classId) => {
@@ -11726,6 +11925,7 @@ window.BOStartApp = function () {
       for (const x of m.values()) out.push(lineText(x));
       return out;
     },
+    defence: ch => heroDefence(ch), // life, ES and resistances for sorting (the Build Planner's own add-up)
     openBuild: ch => { addChars([ch], 'code', ch.id); showTab('character'); saveTip('Loaded a ladder build as a plan. Damage Analysis sims it; your own characters are unchanged.'); },
   });
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling });

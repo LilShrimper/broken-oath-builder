@@ -1680,17 +1680,70 @@ body.support-page #configEnemy .hint { margin: 2px 0 6px; }
 .faq-minion-grid .faq-list { margin: 4px 0 0; padding-left: 16px; font-size: 12px; }
 
 /* ---------- Ladder tab (ladder.js): public ladders and top builds, Broken Oath public API ---------- */
-.ladder-pane .lad-controls { display: flex; flex-wrap: wrap; gap: 12px; margin: 14px 0 10px; }
-.ladder-pane .lad-controls .field { display: flex; flex-direction: column; gap: 4px; min-width: 220px; flex: 0 1 340px; }
-.ladder-pane .lad-controls .field span { color: var(--muted); font-size: 11.5px; }
-.ladder-pane .lad-controls select { width: 100%; }
-.lad-classes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.lad-class { padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+body.ladder-page #buildSummary { display: none !important; } /* the character strip has nothing to do with the ladder */
+.ladder-pane .lad-controls, .ladder-pane .lad-filters { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; margin: 14px 0 10px; }
+.ladder-pane .lad-filters { margin: 0 0 12px; }
+.ladder-pane .lad-controls .field, .ladder-pane .lad-filters .field { display: flex; flex-direction: column; gap: 4px; min-width: 180px; flex: 0 1 260px; }
+.ladder-pane .lad-controls .field span, .ladder-pane .lad-filters .field span { color: var(--muted); font-size: 11.5px; }
+.ladder-pane .lad-controls select, .ladder-pane .lad-filters select { width: 100%; }
+/* Header: the site's intro (eyebrow + serif title), a live line, and a stat strip like the Build Planner's summary. */
+.lad-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 24px; align-items: end; }
+.lad-top .cmp-intro p { max-width: 640px; }
+.lad-status { margin-top: 8px; color: var(--faint); font-size: 12px; }
+.lad-dot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: var(--faint); vertical-align: 1px; }
+.lad-dot.on { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 22%, transparent); }
+.build-summary.lad-kpis { grid-template-columns: repeat(4, minmax(104px, auto)); margin-top: 0; }
+.lad-kpis .bs-cell { padding: 10px 16px; }
+.lad-kpis .bs-cell b { white-space: normal; overflow-wrap: anywhere; } /* "Softcore Oathbound Solo" wraps instead of being cut */
+@media (max-width: 1100px) { .lad-top { grid-template-columns: minmax(0, 1fr); } .build-summary.lad-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .build-summary.lad-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .lad-kpis .bs-cell { padding: 8px 12px; } }
+.lad-filters .lad-reset { align-self: flex-end; min-height: 38px; }
+.lad-filters .lad-reset:disabled { opacity: .45; cursor: default; }
+.ladder-pane .lad-filters input[type=search] { width: 100%; box-sizing: border-box; height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 14px; }
+.ladder-pane .lad-filters input[type=search]::placeholder { color: var(--faint); }
+.ladder-pane .lad-filters input[type=search]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ladder-pane .lad-filters .lad-item-search { flex-basis: 300px; }
+/* Softcore / Hardcore and Trade / Oathbound Solo switches. */
+.lad-switches { display: flex; flex-wrap: wrap; gap: 10px 18px; padding-bottom: 6px; }
+.lad-switch { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--faint); font-weight: 600; }
+.lad-switch span.on { color: var(--text); }
+.lad-switch button { position: relative; width: 42px; height: 24px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; padding: 0; flex: none; }
+.lad-switch button i { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--dashboard-gold); transition: transform .15s; }
+.lad-switch button[aria-checked="true"] i { transform: translateX(18px); }
+.lad-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Meta dropdown. */
+.lad-meta { margin: 0 0 12px; padding: 0; }
+.lad-meta > summary { display: flex; align-items: baseline; gap: 10px; padding: 12px 16px; cursor: pointer; list-style: none; flex-wrap: wrap; }
+.lad-meta > summary::-webkit-details-marker { display: none; }
+.lad-meta > summary::before { content: '▸'; color: var(--dashboard-gold); transition: transform .15s; display: inline-block; }
+.lad-meta[open] > summary::before { transform: rotate(90deg); }
+.lad-meta > summary b { font-size: 14px; }
+.lad-meta > summary .meta { font-size: 12px; }
+.lad-meta > .lad-meta-grid, .lad-meta > p { padding: 0 16px; }
+.lad-meta > p.hint { padding-bottom: 12px; }
+.lad-meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.lad-meta-box { min-width: 0; }
+.lad-meta-box h3 { margin-top: 4px; }
+.lad-meta-box ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.lad-meta-row { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(28px, .8fr) auto; align-items: center; gap: 8px; width: 100%; padding: 4px 6px; border: 0; border-radius: 7px; background: none; color: var(--text); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.lad-meta-row:hover { background: var(--panel-2); }
+.lad-meta-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lad-meta-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lad-meta-num { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; min-width: 44px; }
+.lad-bar { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--line) 70%, transparent); overflow: hidden; }
+.lad-bar i { display: block; height: 100%; border-radius: inherit; background: var(--dashboard-gold); }
+:root[data-theme="light"] .lad-bar i, :root[data-theme="light"] .lad-switch button i { background: #9a6b00; }
+
+/* Class picker: one panel holding every class, like the site's segmented controls (.cmp-modes). */
+.lad-classes { display: flex; flex-wrap: wrap; gap: 4px; width: fit-content; max-width: 100%; margin: 0 0 12px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-sizing: border-box; }
+.lad-class { padding: 7px 14px; border: 0; border-radius: 9px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .lad-class small { color: var(--faint); font-weight: 400; margin-left: 3px; }
-.lad-class:hover { color: var(--text); }
-.lad-class.on { color: var(--dashboard-gold); border-color: color-mix(in srgb, var(--dashboard-gold) 55%, var(--line)); background: color-mix(in srgb, var(--dashboard-gold) 10%, var(--panel)); }
+.lad-class:hover { color: var(--text); background: var(--panel-2); }
+.lad-class.on { color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 12%, var(--panel)); box-shadow: inset 3px 0 0 var(--dashboard-gold); }
+@media (max-width: 520px) { .lad-classes { width: 100%; } .lad-class { flex: 1 1 auto; padding: 7px 10px; } }
 .lad-class:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.lad-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.lad-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr); gap: 14px; align-items: start; }
+.lad-table-card { padding: 12px; }
 @media (max-width: 1100px) { .lad-grid { grid-template-columns: minmax(0, 1fr); } }
 .lad-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .lad-table th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
@@ -1705,6 +1758,10 @@ body.support-page #configEnemy .hint { margin: 2px 0 6px; }
 .lad-table tr[data-build]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .lad-table tr.on td { background: color-mix(in srgb, var(--dashboard-gold) 10%, var(--panel)); }
 .lad-table tr.dead td { opacity: .7; }
+.lad-table td.lad-skill { min-width: 190px; }
+.lad-table td.lad-skill > b { font-weight: 600; }
+.lad-sups { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.lad-sups .chip.lad-sup { padding: 2px 9px; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
 .lad-dead { color: var(--bad); font-size: 11px; font-weight: 600; }
 .lad-hero { position: sticky; top: 12px; }
 @media (max-width: 1100px) { .lad-hero { position: static; } }
@@ -1740,5 +1797,4 @@ body.support-page #configEnemy .hint { margin: 2px 0 6px; }
   .lad-stats { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .lad-table { font-size: 12px; }
   .lad-table th, .lad-table td { padding: 5px 5px; }
-  .lad-table th:nth-child(2), .lad-table td:nth-child(2) { display: none; } /* Class #: the class filter shows it */
 }

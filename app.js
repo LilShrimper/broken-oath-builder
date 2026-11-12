@@ -13124,7 +13124,7 @@ window.BOStartApp = function () {
       const o = id === st.skill ? main : other;
       const a = S.calcSkill(GD, chA, id, o), b = S.calcSkill(GD, chB, id, o);
       const okA = !a.error && !a.unsupported && isFinite(a.totalDps), okB = !b.error && !b.unsupported && isFinite(b.totalDps);
-      return { id, name: (a.skill || b.skill || {}).Name || id, a: okA ? a.totalDps : null, b: okB ? b.totalDps : null, why: okB ? '' : b.error || b.unsupported || '' };
+      return { id, name: (a.skill || b.skill || {}).Name || id, a: okA ? a.totalDps : null, b: okB ? b.totalDps : null, ra: okA ? a : null, rb: okB ? b : null, why: okB ? '' : b.error || b.unsupported || '' };
     });
     return rows;
   }
@@ -13135,9 +13135,16 @@ window.BOStartApp = function () {
     const W = { [st.skill]: 1 }; for (const g of more) W[g.id] = g.w;
     const use = rows.filter(x => W[x.id] && (x.a != null || x.b != null));
     if (use.length < 2) return null;
+    // Legion of One: only one kind of minion stands, so on each side only the strongest of the counted summons counts.
+    const lostA = S.oneKindLost(use.map(x => x.ra)), lostB = S.oneKindLost(use.map(x => x.rb));
     let a = 0, b = 0, ws = 0, wg = 0;
-    for (const x of use) { a += x.a || 0; b += x.b || 0; if (x.a > 0 && x.b != null) { ws += W[x.id]; wg += W[x.id] * (x.b / x.a - 1); } }
-    return { a, b, gain: ws ? wg / ws : 0, names: use.map(x => x.name), W };
+    use.forEach((x, i) => {
+      const xa = lostA[i] ? 0 : x.a, xb = lostB[i] ? 0 : x.b;
+      a += xa || 0; b += xb || 0;
+      if (xa > 0 && xb != null) { ws += W[x.id]; wg += W[x.id] * (xb / xa - 1); }
+    });
+    const oneKind = lostA.some(Boolean) || lostB.some(Boolean);
+    return { a, b, gain: ws ? wg / ws : 0, names: use.filter((x, i) => !(lostA[i] && lostB[i])).map(x => x.name), W, oneKind };
   }
   function cmpResults(ia, ib, rows, verdict) {
     const r0 = rows[0], both = r0.a != null && r0.b != null, cb = cmpCombined(rows);
@@ -13145,7 +13152,7 @@ window.BOStartApp = function () {
     let h = (verdict ? '<div class="card cmp-result"><h2>Recommendation <span class="hint">' + gsPrioText(GS.set.prio) + '</span></h2>' + cmpVerdictHtml(verdict) + '</div>' : '') +
       '<div class="card cmp-result"><h2>Damage <span class="hint">vs the configured enemy</span></h2>';
     if (cb) {
-      const label = esc(cb.names.join(' + '));
+      const label = esc(cb.names.join(' + ')) + (cb.oneKind ? ' (Legion of One: only the strongest summon stands)' : '');
       h += '<div class="headline small">' +
         stat('With your item', num(cb.a), '', '', label + ', total DPS added up') +
         stat(ib ? 'With the new item' : 'With the slot empty', num(cb.b), '', ib ? 'main' : '', label + ', total DPS added up' + (ib ? '' : ': what your item is worth')) +

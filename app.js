@@ -6881,7 +6881,7 @@ window.BOCharacter = function (ctx) {
 
   // Stats that only matter for defence, economy or utility: never shown as "not modelled".
   const NON_DAMAGE = new Set(['Life', 'Mana', 'EnergyShield', 'Armour', 'Evasion', 'Defences', 'Block', 'Resist', 'MaxResist',
-    'LifeRegen', 'LifeRegenPct', 'ManaRegen', 'LifeLeech', 'ManaLeech', 'LifeOnKill', 'ManaOnKill', 'ManaOnHit', 'LifeOnBlock',
+    'LifeRegen', 'LifeRegenPct', 'ManaRegen', 'LifeLeech', 'ManaLeech', 'LifeOnKill', 'LifeOnKillPct', 'ManaOnKill', 'ManaOnHit', 'LifeOnBlock',
     'MoveSpeed', 'GoldFind', 'ItemRarity', 'EsRecharge', 'EsRechargeDelay', 'DamageTaken', 'PhysTakenAsElemental', 'ManaCost',
     'Reservation', 'StunKnockback', 'Str', 'Dex', 'Int', 'Attributes', 'MinionLife', 'TotemLife', 'ChannelCostLess', 'Area',
     'Chains', 'Pierce', 'Fork', 'ChillEffect', 'FreezeDuration', 'SkillDuration', 'CurseLimit', 'MinionCap', 'MinionSpeed',
@@ -7725,6 +7725,7 @@ window.BOCharacter = function (ctx) {
       for (const m of mods.filter(m => DEF_ENGINE[m.stat] && m.mode === 'Flat' && !m.local)) {
         if (!applies(ctx, m)) continue;
         const [s, knee] = DEF_ENGINE[m.stat], t = get(s);
+        if (s === 'Evasion' && noEvasion(mods) && !res.notes.some(n => n.startsWith('Glass Cannon:'))) res.notes.push('Glass Cannon: your Evasion is 0, so lines that pay more damage per 1,000 Evasion give nothing (game panel and log, 12 Nov 2026).');
         const units = s === 'Block' ? t : (is0568(GD) ? t : Math.min(t, knee) + Math.max(0, t - knee) / 4) / 1000; // 0.56.8: no knee
         use(m, s === 'Block' ? 'more per 1% block' : 'more per 1,000 ' + label[s]);
         engine.push({ def: true, v: m.v * units, types: splitTags(m.tags).types, src: m.src + ' (' + Math.round(t).toLocaleString('en-US') + (s === 'Block' ? '' : ' ') + label[s] + ', estimated)' });
@@ -9489,9 +9490,15 @@ window.BOCharacter = function (ctx) {
   // increases + the attribute's 4% per 10: Str armour, Dex evasion, Int ES) x "more" lines. Block: the shield's base block
   // + flat Block lines, capped at Hero.BlockMax (75 in 0.56.5). Same method as the 0.56.4 Hammer of Judgement estimate;
   // Armour checked against the game log 11 Nov 2026 (below); Evasion, ES and Block follow the same method.
+  const noEvasion = mods => mods.some(m => m.stat === 'Keystone' && m.mode === 'Flag' && (m.tags || []).includes('NoEvasion'));
   function defenceTotal(GD, ch, mods, attr, stat) {
     const H = GD.scaling.Hero || {};
     const plain = m => !splitTags(m.tags).conds.length;
+    // Glass Cannon (Keystone flag NoEvasion) sets Evasion to 0, so "more damage per 1,000 Evasion" lines pay nothing with it.
+    // Owner's test, 12 Nov 2026 (Rangtest, an offline test build with Wind Dancer 0.3% per 1,000): character panel Evasion
+    // 34,186 without Glass Cannon and 0 with it; with it the panel DPS is 12,124 whether Wind Dancer is taken or not. Log:
+    // "TreeEng85: EvasionMore 0.30 x 34.2 = 10.3% more" without it, "TrustFix91: engine now evasion_n0 EvasionMore 0.3 x 0.00" with it.
+    if (stat === 'Evasion' && noEvasion(mods)) return 0;
     if (stat === 'Life') return heroMaxLife(GD, ch, mods, attr);
     if (stat === 'Block') {
       let b = 0;

@@ -11,9 +11,9 @@
     'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json', 'Gameplay/monster_affixes.json', 'Gameplay/monsters.json', 'Gameplay/oath_masteries.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Read when the folder has them; an older game folder without them still loads.
-  const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json'];
+  const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 26; // 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 27; // 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -92,6 +92,23 @@
 
     const affixes = {};
     for (const a of J('Items/affixes.json').affixes) affixes[a.Id.toLowerCase()] = Object.assign(pick(a, ['Id', 'Type', 'Group', 'Mod', 'BaseTags', 'ExcludeTags']), { Tiers: (a.Tiers || []).map(t => pick(t, ['ILvl', 'Min', 'Max', 'Min2', 'Max2', 'Name'])) });
+    // Riven mods (affixes_riven95.json, 54 lines at item level 84) and Mythic lines (mythic_lines.json, 12): the same
+    // shape as an affix, read into the same table with a Kind. Public API game data, build 70 (12 Nov 2026): every Riven
+    // mod is "riven95_" + a normal affix's id with the same Type, Group and Mod and one tier above that affix's best
+    // (Life 146-167 over 120-139), and its only BaseTag is "Riven95", which no item base carries. A ladder build that day
+    // (ts1-sc-trade Mage) wears them on ordinary rare bases of the twin's kind (riven95_int_flat on a belt,
+    // riven95_cold_res on gloves), so a Riven mod is offered wherever its twin rolls: an inference from those two facts.
+    // Mythic lines keep their own tag (Mythic85, no base has it): read so a build that carries one counts it, not offered.
+    const AFFIX_KEYS = ['Id', 'Type', 'Group', 'Mod', 'BaseTags', 'ExcludeTags'], TIER_KEYS = ['ILvl', 'Min', 'Max', 'Min2', 'Max2', 'Name'];
+    const extraAffixes = (rel, list, kind) => {
+      let rows = []; try { rows = (J(rel) || {})[list] || []; } catch (e) { /* older game files: none */ }
+      for (const a of rows) {
+        const twin = kind === 'Riven' ? affixes[a.Id.toLowerCase().replace(/^riven95_/, '')] : null;
+        affixes[a.Id.toLowerCase()] = Object.assign(pick(a, AFFIX_KEYS), { Tiers: (a.Tiers || []).map(t => pick(t, TIER_KEYS)), Kind: kind }, twin ? { BaseTags: twin.BaseTags, ExcludeTags: twin.ExcludeTags } : {});
+      }
+    };
+    extraAffixes('Items/affixes_riven95.json', 'affixes', 'Riven');
+    extraAffixes('Items/mythic_lines.json', 'lines', 'Mythic');
 
     const uniques = {};
     for (const u of J('Items/uniques.json').uniques) uniques[u.Id.toLowerCase()] = Object.assign({ Id: u.Id, Name: u.Name, BaseId: u.BaseId, Mods: u.Mods.map(m => pick(m, ['Mod', 'Text', 'Min', 'Max', 'Min2', 'Max2'])) },
@@ -176,6 +193,10 @@
     // whether a pet is scaled from them is not known, so the page labels them as such.
     const MON = J('Gameplay/monsters.json').monsters || [];
     const monList = Array.isArray(MON) ? MON : Object.values(MON);
+    // Each Guardian's own strong and weak element (guardian_resist95.json, public API game data build 70): +20 to one,
+    // -20 to another, e.g. Anubis Poison +20, Fire -20. Display only (FAQ tab): the sim does not use it yet (how it adds to
+    // the colour variant and level resistance is not checked in a fight; resistance changes wait for the owner's tests).
+    try { const gr = (J('Gameplay/guardian_resist95.json') || {}).guardians || {}; for (const [k, v] of Object.entries(gr)) { const g = guardians[k.replace(/^g_/, '')]; if (g) g.identity = v; } } catch (e) { /* older game files: none */ }
     const minionMonsters = {};
     for (const s of Object.values(skills)) {
       const id = s.Minion && s.Minion.MonsterId, m = id && monList.find(x => x.Id === id);
@@ -2148,7 +2169,7 @@ window.BOPlanner = function (ctx) {
     if (!af) return '<div class="pl-affix"><span class="meta bad">Unknown affix ' + esc(a.id) + '</span>' + x + '</div>';
     const t = af.Tiers[a.tier] || af.Tiers[0], two = t && t.Min2 != null;
     return '<div class="pl-affix" data-ai="' + ai + '"><span class="pl-type" title="' + (tag ? tag + ' · ' : '') + af.Type + '">' + (tag ? tag[0] : af.Type[0]) + '</span>' +
-      '<select data-f="tier"' + dis + '>' + af.Tiers.map((y, ti) => opt(ti, 'T' + (ti + 1) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')', ti === a.tier)).join('') + '</select>' +
+      '<select data-f="tier"' + dis + '>' + af.Tiers.map((y, ti) => opt(ti, (af.Kind || 'T' + (ti + 1)) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')', ti === a.tier)).join('') + '</select>' +
       '<input class="mini" type="number" step="any" data-f="v" value="' + a.v + '"' + dis + '>' + (two ? '<input class="mini" type="number" step="any" data-f="v2" value="' + a.v2 + '"' + dis + '>' : '') +
       '<span class="pl-text">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(modLine(af.Mod, a.v, a.v2)) + (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') + '</span>' + x + '</div>';
   }
@@ -2223,7 +2244,7 @@ window.BOPlanner = function (ctx) {
       if (u && edit && nVows < VOW_MAX) {
         const all = isIdol ? Object.values(GD.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length) : affixesFor(base);
         const used = new Set(it.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
-        const grp = t => all.filter(a => a.Type === t && !used.has(a.Group)).sort((x, y) => x.Id.localeCompare(y.Id)).map(a => opt(a.Id, modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2) + ' (' + a.Id + ')')).join('');
+        const grp = t => all.filter(a => a.Type === t && !used.has(a.Group)).sort((x, y) => x.Id.localeCompare(y.Id)).map(a => opt(a.Id, modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2) + (a.Kind ? ' · ' + a.Kind : '') + ' (' + a.Id + ')')).join('');
         h += '<label class="field"><span>Add a Vow <span class="meta">an affix from a rare, bound to this unique at the cube</span></span><select data-f="addaffix"><option value="">Pick an affix…</option>' +
           '<optgroup label="Prefixes">' + grp('Prefix') + '</optgroup><optgroup label="Suffixes">' + grp('Suffix') + '</optgroup></select></label>';
       }
@@ -2236,7 +2257,7 @@ window.BOPlanner = function (ctx) {
       if (over.length) h += '<p class="hint bad">' + it.rarity + ' items hold ' + lim + ' prefix' + (lim > 1 ? 'es' : '') + ' and ' + lim + ' suffix' + (lim > 1 ? 'es' : '') + '.</p>';
       if (edit) {
         const grp = t => all.filter(a => a.Type === t && !used.has(a.Group)).sort((x, y) => x.Id.localeCompare(y.Id))
-          .map(a => opt(a.Id, modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2) + ' (' + a.Id + ')')).join('');
+          .map(a => opt(a.Id, modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2) + (a.Kind ? ' · ' + a.Kind : '') + ' (' + a.Id + ')')).join('');
         h += '<label class="field"><span>Add an affix <span class="meta">' + count('Prefix') + '/' + lim + ' prefixes, ' + count('Suffix') + '/' + lim + ' suffixes; added at the top tier your item level allows</span></span><select data-f="addaffix"><option value="">Pick an affix…</option>' +
           '<optgroup label="Prefixes">' + grp('Prefix') + '</optgroup><optgroup label="Suffixes">' + grp('Suffix') + '</optgroup></select></label>';
       }
@@ -2302,7 +2323,7 @@ window.BOPlanner = function (ctx) {
       } else {
         const af = GD.affixes[lc(a.id)];
         if (!af) { other.push(li('Unknown affix ' + a.id, 'bad')); continue; }
-        (u ? vows : af.Type === 'Prefix' ? pre : af.Type === 'Suffix' ? suf : other).push(roll((u ? vowTag(vi++) + ' ' : '') + 'T' + ((a.tier || 0) + 1), modLine(af.Mod, a.v, a.v2), af.Tiers[a.tier] || af.Tiers[0]));
+        (u ? vows : af.Type === 'Prefix' ? pre : af.Type === 'Suffix' ? suf : other).push(roll((u ? vowTag(vi++) + ' ' : '') + (af.Kind || 'T' + ((a.tier || 0) + 1)), modLine(af.Mod, a.v, a.v2), af.Tiers[a.tier] || af.Tiers[0]));
       }
     }
     if (!u && it.rarity !== 'Normal') {
@@ -4502,8 +4523,8 @@ window.BOItemSearch = function (ctx) {
       const lo = tiers[tiers.length - 1], hi = tiers[0];
       const line = rangeText(GD, a.Mod, Math.min(lo.Min, hi.Min), Math.max(lo.Max, hi.Max), lo.Min2 != null ? Math.min(lo.Min2, hi.Min2) : null, hi.Max2 != null ? Math.max(lo.Max2, hi.Max2) : null);
       ALL.push({ cat: 'mod', id: a.Id, name: line, level: Math.min(...tiers.map(t => t.ILvl || 1)), slots: uniqSorted(bs.map(b => slotName(b.Slot)), SLOT_ORDER), types: uniqSorted(bs.map(baseType)),
-        tiers: tiers.map((_, i) => 'T' + (i + 1)), tierSort: 0, icon: 'mod', a, affixType: a.Type,
-        text: [line, a.Type, a.Group, ...tiers.map(t => t.Name)].join(' ') });
+        tiers: a.Kind ? [a.Kind] : tiers.map((_, i) => 'T' + (i + 1)), tierSort: 0, icon: 'mod', a, affixType: a.Type,
+        text: [line, a.Type, a.Group, a.Kind || '', ...tiers.map(t => t.Name)].join(' ') }); // Kind: Riven mod or Mythic line (gamedata.js)
     }
     for (const r of Object.values(GD.runes || {})) {
       const jewel = r.Kind === 'jewel' || /^jw_/.test(r.Id);
@@ -4644,11 +4665,11 @@ window.BOItemSearch = function (ctx) {
     } else if (e.cat === 'mod') {
       const a = e.a, on = F.tier && e.tiers.includes(F.tier) ? +F.tier.slice(1) - 1 : -1;
       ico = icon('mod', lc(a.Type));
-      sub = a.Type;
-      body = '<p class="is-into">Rolls on: ' + esc(e.slots.join(', ') || 'nothing') + '</p>' +
+      sub = a.Kind === 'Riven' ? 'Riven ' + lc(a.Type) : a.Kind === 'Mythic' ? 'Mythic line' : a.Type;
+      body = '<p class="is-into">' + (a.Kind === 'Mythic' ? 'A Mythic line. The game data does not say which items it rolls on.' : 'Rolls on: ' + esc(e.slots.join(', ') || 'nothing') + (a.Kind === 'Riven' ? '. A Riven mod: one tier above the normal mod of the same kind.' : '')) + '</p>' +
         '<table class="is-tiers"><thead><tr><th>Tier</th><th>Name</th><th>Item level</th><th>Roll</th></tr></thead><tbody>' +
-        a.Tiers.map((t, i) => '<tr' + (i === on ? ' class="on"' : '') + '><td>T' + (i + 1) + '</td><td>' + esc(t.Name || '') + '</td><td>' + (t.ILvl || 1) + '</td><td>' + rng(t.Min, t.Max) + (t.Min2 != null ? ' / ' + rng(t.Min2, t.Max2) : '') + '</td></tr>').join('') + '</tbody></table>';
-      badges.push(badge(a.Tiers.length + ' tiers', 'muted'));
+        a.Tiers.map((t, i) => '<tr' + (i === on ? ' class="on"' : '') + '><td>' + (a.Kind || 'T' + (i + 1)) + '</td><td>' + esc(t.Name || '') + '</td><td>' + (t.ILvl || 1) + '</td><td>' + rng(t.Min, t.Max) + (t.Min2 != null ? ' / ' + rng(t.Min2, t.Max2) : '') + '</td></tr>').join('') + '</tbody></table>';
+      badges.push(a.Kind ? badge(a.Kind, 'tier ' + lc(a.Kind)) : badge(a.Tiers.length + ' tiers', 'muted'));
     } else {
       const r = e.r;
       ico = glyphIcon(r);
@@ -5923,12 +5944,14 @@ window.BOFaq = function (ctx) {
     ]));
     const W = GD.ward || [], AFX = n => (GD.monsterAffixes || []).find(a => a.Name === n) || {};
     const arm = AFX('Armoured'), ew = AFX('Elemental Ward');
+    const gs0 = Object.values(GD.guardians || {});
     h += card('Guardians resist more', list([
       'A Guardian spawns as a colour variant with one element and resists that element more (usually 30–40%, Elysia 50%). The list is in <b>Monster Affixes</b>.',
       W.length ? 'From some Rupture levels it also has <b>Ward</b>: ' + W.map(w => '+' + w.resist + '% from Rupture ' + w.fromRL + ' (Gates from ' + w.gateFromRL + ')').join(', ') + ', to its own element only.' : '',
       'These add to the level resistance. The sim caps the total at ' + (H.ResistHardCap || 85) + '% (an assumption: the game files give monsters no cap).',
       arm.LessTakenPct ? 'The <b>Armoured</b> mod makes a Guardian take ' + arm.LessTakenPct + '% less damage.' : '',
       ew.ElementalLessTakenPct ? 'The <b>Elemental Ward</b> mod makes it take ' + ew.ElementalLessTakenPct + '% less elemental damage' + (ew.AilmentLessPct ? ', and ailments on it are ' + ew.AilmentLessPct + '% weaker' : '') + '.' : '',
+      gs0.some(g => g.identity) ? 'Each Guardian also has its own strong and weak element (+20% and -20% in the game data), whatever its colour. The table is in <b>Monster Affixes</b>. The sim does not count this yet.' : '',
       'Best answer: use a second element, or one the Guardian does not resist.',
     ]));
     h += card('Lowering resistance', list([
@@ -6017,6 +6040,10 @@ window.BOFaq = function (ctx) {
     const gs = Object.values(GD.guardians || {});
     if (gs.length) h += card('Guardian colour variants', hint('A Guardian spawns as a colour with one element and extra resistance to it' + ((GD.ward || []).length ? '. On top of that, Ward adds resistance to that element: ' + GD.ward.map(w => w.resist + '% from Rupture ' + w.fromRL).join(', ') : '') + '.') +
       table(['Guardian', 'Variants (element, resistance)'], gs.map(g => ['<b>' + esc(g.name) + '</b>', g.variants.map(v => esc(v.name) + ' (' + esc(v.element) + ' ' + v.resist + '%)').join(' · ')])), 'the sim uses these');
+    // Each Guardian's own strong / weak element (GD.guardians[id].identity, guardian_resist95.json). Display only.
+    const idn = gs.filter(g => g.identity), side = (g, f) => Object.entries(g.identity).filter(([, v]) => f(v)).map(([el, v]) => esc(el) + ' ' + (v > 0 ? '+' : '') + v + '%').join(', ') || 'none';
+    if (idn.length) h += card('Guardian strong and weak elements', hint('Every Guardian resists one element more and another less, whatever colour it spawns as. From the game data; how it adds to the colour and level resistance has not been checked in a fight, so the sim does not count it yet.') +
+      table(['Guardian', 'Resists more', 'Resists less (use this)'], idn.slice().sort((a, b) => a.name.localeCompare(b.name)).map(g => ['<b>' + esc(g.name) + '</b>', side(g, v => v > 0), side(g, v => v < 0)])), 'not in the sim yet');
     return h;
   }
 

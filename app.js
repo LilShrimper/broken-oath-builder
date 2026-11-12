@@ -1238,10 +1238,9 @@
     const deadline = t0 + (cfg.seconds > 0 ? cfg.seconds : 80) * 1000;
     const lvOk = lv => cfg.ignoreLevel || !lv || lv <= (ch.level || 1);
     const useRunes = cfg.runes !== false, useLimited = cfg.limited !== false;
-    // Limits the owner can set (12 Nov 2026): at most cfg.maxVows Vows on a red item and cfg.maxLines rolled lines on a rare.
-    // Not set: 6 of each, as before (a rare still takes at most 3 prefixes and 3 suffixes).
+    // A limit the owner can set (12 Nov 2026): at most cfg.maxVows Vows on a red item. Not set: 6, as before.
     const lim = (v, max) => v == null || v === '' || !isFinite(+v) ? max : Math.max(0, Math.min(max, Math.round(+v)));
-    const vowMax = lim(cfg.maxVows, VOW_MAX), lineMax = lim(cfg.maxLines, LIMIT * 2);
+    const vowMax = lim(cfg.maxVows, VOW_MAX);
     const useVows = cfg.vows !== false && vowMax > 0;
     let calcs = 0, lastYield = 0, curPhase = 'Starting', curP = 0, rush = false;
     const late = () => Date.now() > deadline;
@@ -1334,10 +1333,10 @@
       let v = V(put(items, slot, cur));
       const used = () => new Set(cur.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
       const count = t => cur.affixes.filter(a => (GD.affixes[lc(a.id)] || {}).Type === t).length;
-      const room = c => vow ? cur.affixes.filter(a => !a.id.startsWith('unique:')).length < vowMax : count(c.type) < LIMIT && cur.affixes.length < lineMax;
+      const room = c => vow ? cur.affixes.filter(a => !a.id.startsWith('unique:')).length < vowMax : count(c.type) < LIMIT;
       const gains = new Map();
       let listed = null;
-      for (let step = 0; step < (vow ? vowMax : lineMax) && !late(); step++) {
+      for (let step = 0; step < (vow ? vowMax : LIMIT * 2) && !late(); step++) {
         const u = used();
         let best = null, bv = v;
         for (const c of listed || pool) {
@@ -1520,7 +1519,7 @@
       out.push({ slot, item: it, was, worth, changed, gain: changed ? value / (V(put(items, slot, was)) || value) - 1 : 0 });
     }
     const skills = goals.map(gl => { const v = dpsOf(gl, items); return { id: gl.id, w: gl.w, base: gl.base, value: v, gain: gl.base > 0 ? v / gl.base - 1 : 0 }; });
-    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, lineMax, skills, dropped, multi: multi && goals.length > 1,
+    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, skills, dropped, multi: multi && goals.length > 1,
       scored, defWeight: defW, maxRes: wantRes, resTarget, def: scored ? { before: def0, after: cfg.defence(items) } : null };
   }
 
@@ -13160,7 +13159,8 @@ window.BOStartApp = function () {
   // ---------- Gear Set Sim (the second sub-tab of Item Compare) ----------
   // Searches every unique, Oathword and rare (best prefixes and damage suffixes) for the best gear for the selected
   // skill, with the tree, skills, supports and idols as they are (gearopt.js, run in slices so the page stays usable).
-  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxLines: '', maxVows: '', layers: { es: true, armour: true, evasion: true, block: true } }, store.get('gearSim', {})) };
+  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxVows: '', layers: { es: true, armour: true, evasion: true, block: true } }, store.get('gearSim', {})) };
+  delete GS.set.maxLines; // a box that was on the page for one version (v255)
   GS.set.layers = Object.assign({ es: true, armour: true, evasion: true, block: true }, GS.set.layers || {});
   // Defence for the DPS / Defense slider and "Reach max resistances" (owner, 12 Nov 2026): an estimate, not a defensive sim.
   // EHP = (life + energy shield) / share of a hit taken, against an assumed enemy (ours, not the game's): a hit of ArmourBigHitRef
@@ -13340,7 +13340,7 @@ window.BOStartApp = function () {
         return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(gsSlotName(s.slot)) + '</td><td' + (s.was ? ' class="gs-hov" data-gs-tip="was:' + si + '"' : '') + '>' + gsItemLabel(s.was) + '</td><td' + (s.item ? ' class="gs-hov" data-gs-tip="item:' + si + '"' : '') + '>' + (s.changed ? '' : '<span class="meta">kept: </span>') + gsItemLabel(s.item) + tip + '</td><td>' +
           (s.changed ? '<span class="' + (s.gain >= 0 ? 'up' : 'down') + '">' + pct(s.gain) + '</span>' : '<span class="meta">–</span>') + '</td><td>' + (s.item ? num(s.worth * 100, 1) + '%' : '–') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
-    h += '<p class="hint">Every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best, so this is the most the gear can give, not a drop you will see soon. Rares carry the prefixes and suffixes that add the most' + (r.scored ? '' : ' DPS') + (r.lineMax < 6 ? ' (at most ' + r.lineMax + ' a rare, as set)' : '') + ' and the best runes in their sockets' + (r.vowMax < 6 ? '; uniques carry at most ' + r.vowMax + ' Vow' + (r.vowMax === 1 ? '' : 's') + ', as set' : '') + '; a rare with every line at its top tier counts as a Flawless Rare in the sim. ' + (r.scored ? gsDefNote() + ' Attribute requirements,' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); attribute requirements,') + ' rune and item prices and drop chances are ignored. Idols, the tree and the supports stay as they are.</p>';
+    h += '<p class="hint">Every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best, so this is the most the gear can give, not a drop you will see soon. Rares carry the prefixes and suffixes that add the most' + (r.scored ? '' : ' DPS') + ' and the best runes in their sockets' + (r.vowMax < 6 ? '; uniques carry at most ' + r.vowMax + ' Vow' + (r.vowMax === 1 ? '' : 's') + ', as set' : '') + '; a rare with every line at its top tier counts as a Flawless Rare in the sim. ' + (r.scored ? gsDefNote() + ' Attribute requirements,' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); attribute requirements,') + ' rune and item prices and drop chances are ignored. Idols, the tree and the supports stay as they are.</p>';
     return h + '</div>';
   }
   // Result headline when the search weighed defence: DPS, the EHP estimate and the resistances, before and after.
@@ -13369,7 +13369,6 @@ window.BOStartApp = function () {
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
       chk('vows', 'Vows on uniques', 'A red item takes up to 6 lines from rares at the cube; the best ones are added') +
       chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') +
-      '<label class="field inline" title="The most rolled lines (prefixes and suffixes) a rare item may carry. Empty: 6 (3 prefixes and 3 suffixes)"><span>Max lines on rares</span><input type="number" min="0" max="6" id="gsMaxLines" placeholder="6" value="' + (S_.maxLines === '' || S_.maxLines == null ? '' : S_.maxLines) + '"' + (GS.running ? ' disabled' : '') + '></label>' +
       '<label class="field inline" title="The most Vows a unique (red) item may carry. Empty: 6"><span>Max Vows on uniques</span><input type="number" min="0" max="6" id="gsMaxVows" placeholder="6" value="' + (S_.maxVows === '' || S_.maxVows == null ? '' : S_.maxVows) + '"' + (GS.running || !S_.vows ? ' disabled' : '') + '></label>' + '</div>' +
       '<div class="gs-controls gs-goal">' + gsPrioHtml(GS.running) + gsLayersHtml(GS.running) +
       chk('maxRes', 'Reach max resistances', 'Brings Fire, Cold and Lightning resistance to the target with the lines, runes and uniques that cost the least, then follows the slider with what is left. Nothing is spent on resistance past the target') +
@@ -13452,7 +13451,7 @@ window.BOStartApp = function () {
       if (t.dataset.gsSet) { GS.set[t.dataset.gsSet] = t.checked; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsPrio') { GS.set.prio = Math.max(0, Math.min(100, Math.round(+t.value / 10) * 10 || 0)); store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) clearOpt(); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsResTarget') { const v = Math.max(1, Math.min(200, Math.round(+t.value) || 0)); GS.set.resTarget = v === gsResCap() ? 0 : v; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
-      if (t.id === 'gsMaxLines' || t.id === 'gsMaxVows') { const v = String(t.value).trim(); GS.set[t.id === 'gsMaxLines' ? 'maxLines' : 'maxVows'] = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(6, Math.round(+v))); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsMaxVows') { const v = String(t.value).trim(); GS.set.maxVows = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(6, Math.round(+v))); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsIlvl') { GS.set.ilvl = Math.max(1, Math.min(100, Math.round(+t.value) || 84)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'cmpFile') { if (t.files[0]) cmpReadImage(t.files[0]); return; }
       const s = side(t); if (!s || !t.dataset.f) return;

@@ -7043,7 +7043,7 @@ window.BOCharacter = function (ctx) {
     return {
       id: S.ID, name: S.Name, classId: S.ClassId, level: S.Level, league: S.League, lastZone: S.LastZone,
       items: (R.Items || []).filter(i => i.EquippedSlot && i.EquippedSlot !== 'None').map(i => ({
-        slot: i.EquippedSlot, base: i.BaseID, rarity: i.Rarity, unique: i.UniqueID, name: i.Name, level: i.ItemLevel, quality: i.Quality || 0,
+        slot: i.EquippedSlot, base: i.BaseID, rarity: i.Rarity, unique: i.UniqueID, name: i.Name, level: i.ItemLevel, quality: i.Quality || 0, grade: i.BaseGrade95 || 0,
         affixes: (i.Affixes || []).map(a => ({ id: a.AffixId, tier: a.Tier, v: a.Value, v2: a.Value2 })), runes: i.Runes || [],
       })),
       passives: R.PassiveNodeIds || [], bonusPoints: R.BonusPassivePoints || 0, gems: R.Gems || [], gemLevels: R.GemLevels || {},
@@ -9494,6 +9494,12 @@ window.BOCharacter = function (ctx) {
   // increases + the attribute's 4% per 10: Str armour, Dex evasion, Int ES) x "more" lines. Block: the shield's base block
   // + flat Block lines, capped at Hero.BlockMax (75 in 0.56.5). Same method as the 0.56.4 Hammer of Judgement estimate;
   // Armour checked against the game log 11 Nov 2026 (below); Evasion, ES and Block follow the same method.
+  // Base Grade (saves: BaseGrade95, 1-100; 0 or missing = an item from before grades, plain base). The game shows it as
+  // "Base Grade: 45, 97% of the base" and it scales the item's base Armour / Evasion / Energy Shield before its own lines.
+  // Not in the data files: 0.85 + 0.40 x (grade / 100)^1.5 fits every reading so far. Tooltips, 11 Nov 2026: grade 9 = 86%
+  // (86.1), 45 = 97% (97.1), 80 = 114% (113.6); Rangtest's Evasion hover, 12 Nov 2026: four grade-77 pieces add up to
+  // 4,258 = 112.0% of their bases (112.0). Only checked on armour pieces; weapons are left alone.
+  const gradeMult = g => g > 0 ? 0.85 + 0.40 * Math.pow(Math.min(100, g) / 100, 1.5) : 1;
   const noEvasion = mods => mods.some(m => m.stat === 'Keystone' && m.mode === 'Flag' && (m.tags || []).includes('NoEvasion'));
   function defenceTotal(GD, ch, mods, attr, stat) {
     const H = GD.scaling.Hero || {};
@@ -9516,12 +9522,17 @@ window.BOCharacter = function (ctx) {
     // (Shrimpmage, Int 652): Energy Shield 6,138 without Vow of Warding, 7,549 with it (x1.23 = its 23% more at gem 7). Without
     // this line the sim had 4,387 / 5,396; with it 6,122 / 7,532 (within 0.3%).
     if (stat === 'EnergyShield') flat += (H.EsPerInt79 || 0) * (attr.Int || 0);
+    // Evasion also has flat parts the items do not carry: Hero.EvasionPerDex79 (2 per Dexterity) and a base that grows with
+    // level. Owner's Evasion hover, 12 Nov 2026 (Rangtest, level 100, Dex 807): "Base at level 100: 312, pieces 4,258,
+    // increased (passives) +130%, increased (Dexterity) +323%", total 34,186 = (312 + 4,258 + 2 x 807) x (1 + 1.30 + 3.228)
+    // = 34,185. The hover does not list the 2 per Dexterity. The base is known at level 100 only: taken as 3.12 a level.
+    if (stat === 'Evasion') flat += (H.EvasionPerDex79 || 0) * (attr.Dex || 0) + 3.12 * (ch.level || 0);
     for (const it of ch.items || []) {
       const b = GD.bases[lc(it.base)]; if (!b || !b[stat]) continue;
       const key = 'item:' + it.slot, loc = mods.filter(m => m.local && m.key === key);
       const lf = loc.filter(m => m.stat === stat && m.mode === 'Flat').reduce((x, m) => x + m.v, 0);
       const li = loc.filter(m => m.mode === 'Inc' && (m.stat === stat || m.stat === 'Defences')).reduce((x, m) => x + m.v, 0);
-      flat += (b[stat] + lf) * (1 + li / 100);
+      flat += (b[stat] * gradeMult(it.grade) + lf) * (1 + li / 100);
     }
     // Every increase ADDS together (items, passives, the attribute's 4% per 10, the Dragonling's aspect), then "more" lines
     // multiply. Game log 11 Nov 2026 (Shrimpskelemage, level 47, Str 112): items 582.2 (gloves 300.04 + boots 124.18 +

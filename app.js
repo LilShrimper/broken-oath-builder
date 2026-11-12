@@ -1197,7 +1197,13 @@
 // The slot's own current item stays a candidate, so the result is never worse than what the character wears.
 // Slots are optimized in rounds (a few passes) because gear lines scale each other; weapons are chosen as a set
 // (two-hander, or one-hander + off hand, or bow + quiver).
-// Not counted: defences (life, resistances, armour), attribute requirements, what the items cost or how rare they are.
+// Defences count only when asked (owner, 12 Nov 2026). cfg.defence(items) -> { ehp, miss } comes from the page (app.js gsDefence):
+//   cfg.defWeight 0..1 (the DPS / Defense slider): a set scores (DPS / DPS now)^(1 - w) x (EHP / EHP now)^w, so 0 is DPS only
+//     (the old search, untouched) and 1 is defence only (the skill must still deal damage).
+//   cfg.maxRes: miss = resistance points still short of the target, added up; the score is divided by 1 + 4 x miss / target,
+//     so a line that closes the gap beats any damage line, and resistance past the target is worth nothing (no overcapping).
+//     Slots are re-filled every pass, so resistance moves to the slots where it costs the least damage.
+// Not counted: armour, evasion, block, attribute requirements, what the items cost or how rare they are.
 // Same item rules as planner.js (affixesFor, oathwordBases, rollUnique, topTier); keep them in step.
 (function (root) {
   'use strict';
@@ -1239,10 +1245,22 @@
     goals = goals.filter(gl => gl.base > 0 || gl.id === mainSkill);
     const wSum = goals.reduce((a, gl) => a + gl.w, 0);
     // One skill: plain DPS (as before). Several: weighted mean of DPS / DPS with the gear worn now.
-    const V = items => {
+    const dpsV = items => {
       if (!multi || goals.length === 1) return dpsOf(goals[0], items);
       let v = 0; for (const gl of goals) if (gl.base > 0) v += gl.w * dpsOf(gl, items) / gl.base;
       return v / wSum;
+    };
+    // With the Defense slider or "max resistances" on, the value is a score (see the top of the file), not DPS.
+    const defW = typeof cfg.defence === 'function' ? Math.max(0, Math.min(1, +cfg.defWeight || 0)) : 0;
+    const wantRes = typeof cfg.defence === 'function' && !!cfg.maxRes, resTarget = Math.max(1, +cfg.resTarget || 75);
+    const scored = defW > 0 || wantRes;
+    const def0 = scored ? cfg.defence(ch.items || []) : null, dps0 = scored ? dpsV(ch.items || []) : 0;
+    const V = !scored ? dpsV : items => {
+      const d = dpsV(items); if (!(d > 0) || !(dps0 > 0)) return 0;
+      const D = cfg.defence(items);
+      let s = defW > 0 ? Math.pow(d / dps0, 1 - defW) * Math.pow(Math.max(1, D.ehp) / Math.max(1, def0.ehp), defW) : d / dps0;
+      if (wantRes) s /= 1 + 4 * Math.max(0, D.miss) / resTarget;
+      return s;
     };
     // Replace (or, with null, remove) the item in a slot key; the item keeps its place in the list.
     const put = (items, key, it) => {
@@ -1485,7 +1503,8 @@
       out.push({ slot, item: it, was, worth, changed, gain: changed ? value / (V(put(items, slot, was)) || value) - 1 : 0 });
     }
     const skills = goals.map(gl => { const v = dpsOf(gl, items); return { id: gl.id, w: gl.w, base: gl.base, value: v, gain: gl.base > 0 ? v / gl.base - 1 : 0 }; });
-    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, skills, dropped, multi: multi && goals.length > 1 };
+    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, skills, dropped, multi: multi && goals.length > 1,
+      scored, defWeight: defW, maxRes: wantRes, resTarget, def: scored ? { before: def0, after: cfg.defence(items) } : null };
   }
 
   const api = { optimize };
@@ -1959,10 +1978,10 @@ window.BOPlanner = function (ctx) {
   // ---------- view ----------
   let status = '';
   const pane = () => $('#buildPane');
-  // Gear / Skills sub-tab, remembered in this browser.
-  let subTab = 'gear';
-  try { if (localStorage.getItem('bods:buildTab') === 'skills') subTab = 'skills'; } catch (e) { /* storage off */ }
-  // The Gear / Skills buttons sit in the top bar, under the main tabs (shown on this tab only).
+  // The build pane holds the Skills view only: gear is picked and edited on the Character tab (click a slot), which
+  // replaced the old Gear sub-tab (owner, 12 Nov 2026).
+  const subTab = 'skills';
+  // The Skills button sits in the top bar, under the main tabs.
   function syncSubTabs(show) {
     const bar = $('#buildSubtabs'); if (!bar) return;
     bar.hidden = !show;
@@ -1970,8 +1989,6 @@ window.BOPlanner = function (ctx) {
   }
   if ($('#buildSubtabs')) $('#buildSubtabs').addEventListener('click', e => {
     const b = e.target.closest('[data-sub]'); if (!b) return;
-    subTab = b.dataset.sub === 'skills' ? 'skills' : 'gear';
-    try { localStorage.setItem('bods:buildTab', subTab); } catch (err) { /* storage off */ }
     render();
   });
   function render() {
@@ -1984,7 +2001,7 @@ window.BOPlanner = function (ctx) {
     hideItemTip();
     let h = '<div class="card"><h2>' + (plan ? 'Build Planner Setup' : 'Build Planner') + '</h2>';
     if (!ch || !plan) {
-      h += '<p class="hint">' + (ch ? 'Edit the skills and gear below to see what they do to your damage. Changes stay in this page until you leave it; use <b>Save as plan</b> to keep them. Your save is never changed.' : 'Load a character to see its current setup, or use <b>Plan a new build</b> to start from scratch.') + '</p>';
+      h += '<p class="hint">' + (ch ? 'Edit the skills below to see what they do to your damage; gear is edited on the Character tab (click a slot). Changes stay in this page until you leave it; use <b>Save as plan</b> to keep them. Your save is never changed.' : 'Load a character to see its current setup, or use <b>Plan a new build</b> to start from scratch.') + '</p>';
       if (ch) h += '<div class="pl-row"><button class="btn small" type="button" id="buildSavePlan" title="Keeps a copy of this build, edits included, as a plan in this browser. The save is not changed.">Save as plan</button>' +
         (ctx.isEdited() ? '<button class="btn small ghost" type="button" id="buildResetSave">Reset to save</button>' : '') + '</div>';
     } else {
@@ -2005,7 +2022,7 @@ window.BOPlanner = function (ctx) {
     h += '<div class="pl-row pl-import"><label class="field inline grow"><span>Open a code or link</span><input type="text" id="plCode" placeholder="Paste a plan code, share link, planner link or build code" autocomplete="off" spellcheck="false" value="' + esc(codeDraft) + '"></label>' +
       '<button class="btn small" type="button" data-act="importcode"' + (importing ? ' disabled' : '') + '>' + (importing ? 'Opening…' : 'Open') + '</button></div>';
     h += '</div>';
-    if (ch) h += subTab === 'skills' ? skillsCard(ch, edit, dis) : gearCard(ch, edit, dis); // the Dragonling tree is on the Skill tree tab (dragon button)
+    if (ch) h += skillsCard(ch, edit, dis); // the Dragonling tree is on the Skill tree tab (dragon button)
     el.innerHTML = h;
   }
   let codeDraft = '', importing = false;
@@ -2526,18 +2543,6 @@ window.BOPlanner = function (ctx) {
     document.addEventListener('mousedown', pick.out, true); document.addEventListener('keydown', pick.key, true); window.addEventListener('scroll', pick.out, true);
     search.focus({ preventScroll: true });
   }
-  function gearCard(ch, edit, dis) {
-    let h = '<div class="card"><h2>Gear</h2><p class="hint">Pick a base, then affixes and their tier. Untick pieces on the Damage tab to see what each is worth.</p>';
-    h += '<div class="pl-gear-grid">';
-    for (const slot of SLOTS) h += itemEditor(ch.items.find(i => i.slot === slot), slot, ch.items.findIndex(i => i.slot === slot), edit, dis);
-    h += '</div>';
-    const idols = ch.items.map((it, i) => ({ it, i })).filter(x => x.it.slot === 'Idol');
-    h += '<h3>Idols <small>' + idols.length + '</small></h3>';
-    if (idols.length) h += '<div class="pl-gear-grid">' + idols.map(x => itemEditor(x.it, 'Idol', x.i, edit, dis)).join('') + '</div>';
-    if (edit) h += '<button class="btn small ghost" type="button" data-act="addidol">Add an idol</button>';
-    return h + '</div>' + (ctx.beltCard ? ctx.beltCard() : ''); // Brewmaw's potions (Brewery tab), read-only here
-  }
-
   // ---------- edits ----------
   function itemOf(ch, el) {
     const box = el.closest('[data-item]'); if (!box) return {};
@@ -2605,7 +2610,7 @@ window.BOPlanner = function (ctx) {
         else { ensureSocket(ch, skill); ch.hotbar = ch.hotbar.filter(h => h !== skill); }
         status = ''; return done({ skills: true });
       case 'main': ch.mainSkill = skill; return done({ select: skill });
-      case 'addsup': if (v && GD.skills[lc(skill)] && !S.supportChoices(GD, ch, skill, { conduit: (ch.sockets.find(x => x.skill === skill) || {}).conduit }).some(c => c.id === lc(v))) { status = ((GD.supports[lc(v)] || {}).Name || v) + ' cannot go into ' + GD.skills[lc(skill)].Name + '.'; return render(); } if (v) { const s = ensureSocket(ch, skill); if (!s.supports.some(x => lc(x) === lc(v))) s.supports.push(v); } return done({ skills: true });
+      case 'addsup': if (v && GD.skills[lc(skill)] && !S.supportChoices(GD, ch, skill, { conduit: (ch.sockets.find(x => x.skill === skill) || {}).conduit }).some(c => c.id === lc(v))) { status = ((GD.supports[lc(v)] || {}).Name || v) + ' cannot go into ' + GD.skills[lc(skill)].Name + (S.noFitWhy(GD.supports[lc(v)], GD.skills[lc(skill)]) ? ': ' + S.noFitWhy(GD.supports[lc(v)], GD.skills[lc(skill)]) + '.' : '.'); return render(); } if (v) { const s = ensureSocket(ch, skill); if (!s.supports.some(x => lc(x) === lc(v))) s.supports.push(v); } return done({ skills: true });
       case 'conduit': {
         const s = ensureSocket(ch, skill);
         if (v && GD.skills[lc(skill)]) {
@@ -2750,7 +2755,7 @@ window.BOPlanner = function (ctx) {
       const SHAPES = ['orbit', 'rain_support', 'trap_support', 'totem_support'];
       const swap = SHAPES.includes(id) ? s.supports.find(x => SHAPES.includes(lc(x))) : null;
       const slots = S.socketsFor(GD, ch, skill, ch.gemLevels[skill] || 1);
-      if (GD.skills[lc(skill)] && !S.supportChoices(GD, ch, skill, { conduit: s.conduit }).some(c => c.id === id)) { status = (sd.Name || id) + ' cannot go into ' + (GD.skills[lc(skill)].Name) + (S.dealsNoHits(GD.skills[lc(skill)]) ? ': ' + GD.skills[lc(skill)].Name + ' deals no hits.' : '.'); return render(); }
+      if (GD.skills[lc(skill)] && !S.supportChoices(GD, ch, skill, { conduit: s.conduit }).some(c => c.id === id)) { status = (sd.Name || id) + ' cannot go into ' + (GD.skills[lc(skill)].Name) + (S.noFitWhy(sd, GD.skills[lc(skill)]) ? ': ' + S.noFitWhy(sd, GD.skills[lc(skill)]) + '.' : '.'); return render(); }
       if (swap) { s.supports = s.supports.filter(x => x !== swap); status = (sd.Name || id) + ' replaces ' + (GD.supports[lc(swap)] || { Name: swap }).Name + ': only one shape support counts.'; }
       else if (s.supports.length >= slots) { status = 'All ' + slots + ' sockets are used: take a support out first (a higher gem level opens more).'; return render(); }
       else status = '';
@@ -2898,7 +2903,7 @@ window.BOPlanner = function (ctx) {
   const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, affixesFor,
     // for the Character tab's item overlay (character.js)
     oathwordsFor, oathwordBases, rollUnique, topTier, runeSlots, runeList, modLine, LIMIT, VOW_MAX };
-  return { itemTip, skillTip, supTip, oathwordForItem, slotName: SLOT_NAME, rows, render, fromCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: s => { subTab = s === 'skills' ? 'skills' : 'gear'; try { localStorage.setItem('bods:buildTab', subTab); } catch (err) { /* storage off */ } }, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
+  return { itemTip, skillTip, supTip, oathwordForItem, slotName: SLOT_NAME, rows, render, fromCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
 };
 
 ;
@@ -9986,7 +9991,51 @@ window.BOCharacter = function (ctx) {
   // So every Vow, Herald, Woe and Sentence (all Curse-tagged or Vow-tagged) deals no hits.
   const dealsNoHits = sk => !!sk && (sk.Tags || []).some(t => t === 'Curse' || t === 'Vow' || t === 'Woe' || t === 'Sentence');
   const noHitMiss = (sp, sk) => !!sp && NO_HIT_SKILL_MISS.has(lc(sp.Id)) && dealsNoHits(sk);
-  const noFit = (sp, sk) => meleeOnlyMiss(sp, sk) || brandTrapMiss(sp, sk) || noHitMiss(sp, sk);
+  // Shape supports and the skills they cannot shape. The tags alone (RequiresAnyTag / ExcludeTags) let these in; the developer's own
+  // support texts in the public API game data (game build 70, read 12 Nov 2026) rule them out. Owner, 12 Nov 2026: the support search
+  // offered Spell Totem and Orbit for Winter Orb and neither can be socketed in it; the rest follow the same texts and are not
+  // tooltip-checked one by one.
+  //   Orbit:       "Not on a skill that already circles you, such as Orbiting Hammers or Winter Orb (each keeps its own ring), and not
+  //                 on Crescent Slash's wave."
+  //   Rain:        "Not on Winter Orb, Orbiting Hammers or Crescent Slash's wave: they cannot rain."
+  //   Trap:        "Not on Winter Orb, Orbiting Hammers, Crescent Slash, Living Orb (you fly it yourself) or the Storm, Rime and Venom
+  //                 Sparks: they cannot be thrown." (the Sparks: brandTrapMiss above; Living Orb: its Movement tag)
+  //   Spell Totem: "Only Projectile, Chain, Nova and Skyfall spells can become a totem (not Winter Orb, Orbiting Hammers, Living Orb
+  //                 (you fly it yourself) or any Spark)." Its tags ask for Spell only, which let in every Woe, Sentence, cry, banner,
+  //                 Spark, Grave Call, Pyre Burst, Hammerstorm and Consecrated Ground.
+  //   Skyfall:     "Only Projectile, Chain, Brand and Nova spells (every Spark), projectile attacks (not Crescent Slash's wave) and the
+  //                 Ballista's volley can fall ... Winter Orb and Orbiting Hammers keep circling, and Living Orb (you fly it yourself)
+  //                 never falls." The sim gave these a few % from the Skyfall tag; nothing shows the game does.
+  //   Focused Volley: "Arrows you shoot yourself only (not a trap, totem or rain)." Not in the Ballista or Rain of Arrows.
+  // Winter Orb is Delivery Orb, Orbiting Hammers and Blade Vortex Delivery Orbit, Crescent Slash the one Melee skill with the
+  // Projectile tag (its wave), Living Orb (thousand_sparks) the spell with Mirage hops, a Spark any Delivery Brand.
+  const ownRing = sk => sk.Delivery === 'Orb' || sk.Delivery === 'Orbit';
+  const meleeWave = sk => sk.Delivery === 'Melee' && (sk.Tags || []).includes('Projectile');
+  const flownOrb = sk => !!(sk.Mirage && sk.Mirage.Hops > 0) && (sk.Tags || []).includes('Spell');
+  const TOTEM_SPELL_KINDS = ['Projectile', 'Chain', 'Nova', 'Skyfall'];
+  function shapeMissWhy(sp, sk) {
+    if (!sp || !sk) return '';
+    const id = lc(sp.Id);
+    if (['orbit', 'totem_support', 'rain_support', 'trap_support', 'skyfall'].includes(id)) {
+      if (ownRing(sk)) return sk.Name + ' keeps its own ring';
+      if (flownOrb(sk)) return 'you fly ' + sk.Name + ' yourself';
+    }
+    if (['orbit', 'rain_support', 'trap_support', 'skyfall'].includes(id) && meleeWave(sk)) return sk.Name + '\'s wave cannot take a shape';
+    if (id === 'totem_support') {
+      if (sk.Delivery === 'Brand') return 'a Spark cannot become a totem';
+      if (!TOTEM_SPELL_KINDS.some(t => (sk.Tags || []).includes(t) || sk.Delivery === t)) return 'only Projectile, Chain, Nova and Skyfall spells can become a totem';
+    }
+    if (id === 'focused_volley' && (sk.Delivery === 'Totem' || sk.Delivery === 'Rain')) return 'it only works on arrows you shoot yourself';
+    return '';
+  }
+  // Why a support cannot go into a skill although its tags fit ('' when it can): for the page's "cannot go into" messages.
+  function noFitWhy(sp, sk) {
+    if (meleeOnlyMiss(sp, sk)) return 'shooting minions cannot use it';
+    if (brandTrapMiss(sp, sk)) return 'a Spark cannot be thrown as a trap';
+    if (noHitMiss(sp, sk)) return sk.Name + ' deals no hits';
+    return shapeMissWhy(sp, sk);
+  }
+  const noFit = (sp, sk) => !!noFitWhy(sp, sk);
   // Faster Casting is a Spell support (no Minion tag) but speeds up shooting minions (patch notes 7 Nov, 0.56.3).
   const castsForMinions = (sp, sk) => !!sp && lc(sp.Id) === 'faster_casting' && !!sk && isSummon(sk) && (sk.Tags || []).includes('Projectile');
   const minionCounts = (sp, sk) => castsForMinions(sp, sk) || forMinions(sp) && (sp.Mods || []).some(m => (m.Stat === 'Damage' && m.Mode === 'More') || m.Stat === 'DamageAsExtra' || m.Stat === 'MinionStrikes' || m.Stat === 'RuthlessBlow' || ((m.Stat === 'MinionSpeed' || m.Stat === 'AttackSpeed') && m.Mode === 'More'));
@@ -10033,6 +10082,10 @@ window.BOCharacter = function (ctx) {
     return tags;
   }
 
+  // A support's ExcludeTags for a skill: the Ballista takes Trap and Skyfall although both exclude Totem (tooltip and log 5 Nov, see
+  // calcSkill; Trap's text: "It also fits a bow Ballista", Skyfall's: "the Ballista's volley can fall"). The picker and the search
+  // left the two out for it until 12 Nov 2026, though the sim counted them when socketed.
+  const exTagsFor = (sp, sk) => (sp.ExcludeTags || []).filter(t => !(sk && sk.Totem && sk.Totem.Interval > 0 && (sk.Tags || []).includes('Attack') && lc(t) === 'totem' && ['trap_support', 'skyfall'].includes(lc(sp.Id))));
   // Every support that can go in this skill's sockets (or, for a Conduit spell, the channel's), for the page's picker.
   // packOnly: adds nothing against one enemy; shape: only one shape gem counts (Orbit, Skyfall, Rain, Trap, Totem).
   function supportChoices(GD, ch, skillId, o) {
@@ -10040,7 +10093,7 @@ window.BOCharacter = function (ctx) {
     const host = conduitHost(GD, ch, skillId, collectMods(GD, ch, o || {}).mods, (o || {}).conduit);
     const base = host ? GD.skills[lc(host.skill)] || sk : sk;
     const tags = socketTags(base);
-    const fits = sp => (!(sp.RequiresAnyTag || []).length || sp.RequiresAnyTag.some(t => tags.has(lc(t)))) && !(sp.ExcludeTags || []).some(t => tags.has(lc(t))) && !noFit(sp, base);
+    const fits = sp => (!(sp.RequiresAnyTag || []).length || sp.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(sp, base).some(t => tags.has(lc(t))) && !noFit(sp, base);
     return Object.values(GD.supports).filter(fits).map(sp => ({ id: lc(sp.Id), name: sp.Name, desc: sp.Description || '', packOnly: isSummon(sk) ? !minionCounts(sp, sk) : NO_SINGLE_TARGET.has(lc(sp.Id)) && !['cast_on_crit', 'channel_conduit', 'tithe', 'siphon'].includes(lc(sp.Id)), shape: SHAPES.includes(lc(sp.Id)) }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -10054,7 +10107,7 @@ window.BOCharacter = function (ctx) {
     const host = conduitHost(GD, ch, skillId, collectMods(GD, ch, o).mods, o.conduit);
     const tagSets = [socketTags(sk)];
     if (host) tagSets.push(socketTags(GD.skills[lc(host.skill)]));
-    const fitsTags = (s, tags) => (!(s.RequiresAnyTag || []).length || s.RequiresAnyTag.some(t => tags.has(lc(t)))) && !(s.ExcludeTags || []).some(t => tags.has(lc(t))) && !noFit(s, host ? GD.skills[lc(host.skill)] : sk);
+    const fitsTags = (s, tags) => (!(s.RequiresAnyTag || []).length || s.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(s, host ? GD.skills[lc(host.skill)] : sk).some(t => tags.has(lc(t))) && !noFit(s, host ? GD.skills[lc(host.skill)] : sk);
     const owned = ownedSupports(ch);
     // A Conduit spell's supports sit in the channel's sockets, so they must fit the channel.
     const fits = Object.values(GD.supports).filter(s => host ? fitsTags(s, tagSets[1]) : fitsTags(s, tagSets[0]));
@@ -10170,7 +10223,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  const api = { noFitWhy, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -10698,7 +10751,7 @@ window.BOStartApp = function () {
     if (inSet.includes(id)) {
       st.supports = st.supports.filter(s => s.toLowerCase() !== id); st.keepSup.delete(id); st.off.delete('support:' + id);
     } else {
-      if (!S.supportChoices(GD, st.ch, st.skill, opts()).some(c => c.id === id)) { const sk = GD.skills[st.skill] || {}; st.supMsg = (sd.Name || id) + ' cannot go into ' + (sk.Name || 'this skill') + (S.dealsNoHits(sk) ? ': ' + sk.Name + ' deals no hits.' : '.'); renderSupportPicker(st.last || S.calcSkill(GD, st.ch, st.skill, opts())); return; }
+      if (!S.supportChoices(GD, st.ch, st.skill, opts()).some(c => c.id === id)) { const sk = GD.skills[st.skill] || {}; st.supMsg = (sd.Name || id) + ' cannot go into ' + (sk.Name || 'this skill') + (S.noFitWhy(sd, sk) ? ': ' + S.noFitWhy(sd, sk) + '.' : '.'); renderSupportPicker(st.last || S.calcSkill(GD, st.ch, st.skill, opts())); return; }
       const SHAPES = ['orbit', 'rain_support', 'trap_support', 'totem_support'];
       const swap = SHAPES.includes(id) ? st.supports.find(s => SHAPES.includes(s.toLowerCase())) : null;
       if (swap) { st.supports = st.supports.filter(s => s !== swap); st.keepSup.delete(swap.toLowerCase()); st.supMsg = sd.Name + ' replaces ' + (GD.supports[swap.toLowerCase()] || { Name: swap }).Name + ': only one shape support counts.'; }
@@ -10914,7 +10967,7 @@ window.BOStartApp = function () {
       '<li>Runeword power lines count twice on a two-handed weapon. All increased lines of a kind add up; each more line multiplies. Converted damage keeps its old type\'s modifiers and gains the new type\'s. An item line "X% … converted to Physical" with a skill tag converts that kind of skill\'s damage. Extra damage (Heralds) comes from the unscaled hit.</li>' +
       '<li>Crit: attacks use the weapon\'s chance; spells 6%, or a staff\'s own chance when you hold one; capped at 95%; base multiplier 150%.</li>' +
       '<li>Dragonling Ascendancy: on your chosen path some nodes are replaced by their Ascended version (Plague Wyrm becomes Virulence, Slow Death becomes Contagion of the Oath). Virulence makes poisons last 25% shorter in combat, which the game\'s tooltip leaves out, and lets Rares and Guardians hold 60 stacks.</li>' +
-      '<li>Orbit: every projectile strikes; each one after the first on the same enemy deals 60% less (attacks 90% less), and its poison counts as part of a stack.</li>' +
+      '<li>Orbit: every projectile strikes; each one after the first on the same enemy deals 75% less (attacks 90% less), and its poison counts as part of a stack.</li>' +
       '<li>Poison: each stack deals 20% of the whole hit per second for 2 s × (1 + ailment duration + 1% per 10 Intelligence), as the skill tooltip shows; raised by increased poison damage and the damage over time multiplier; up to 40 stacks. Ticks are not reduced by resistance; curses\' general damage taken raises them. The skill panel uses that tooltip duration; DPS against an enemy uses the combat duration (shorter with Virulence).</li>' +
       '<li>Curses: a curse\'s damage taken and its element taken add up (its element part counts on hits); increased curse effect raises both, Intelligence does not. Different curses multiply; an enemy holds one Sentence and up to two Woes at a time, Guardians too. Woes build Dread to +30% by themselves on Rares and Guardians.</li>' +
       '<li>Enemy: resistance = monster level × 0.36 (max 25%) for elements and poison; armour = level × 1.5 against physical hits (armour / (armour + 5 × hit), max 80%). The DPS assumes you cast nonstop; on bosses the log shows about 90–95% of that.</li>' +
@@ -13010,10 +13063,11 @@ window.BOStartApp = function () {
     for (const x of use) { a += x.a || 0; b += x.b || 0; if (x.a > 0 && x.b != null) { ws += W[x.id]; wg += W[x.id] * (x.b / x.a - 1); } }
     return { a, b, gain: ws ? wg / ws : 0, names: use.map(x => x.name), W };
   }
-  function cmpResults(ia, ib, rows) {
+  function cmpResults(ia, ib, rows, verdict) {
     const r0 = rows[0], both = r0.a != null && r0.b != null, cb = cmpCombined(rows);
     const change = (a, b) => a == null || b == null ? '<span class="meta">–</span>' : '<span class="' + (b >= a ? 'up' : 'down') + '">' + pct(a ? b / a - 1 : 0) + '</span>';
-    let h = '<div class="card cmp-result"><h2>Damage <span class="hint">vs the configured enemy</span></h2>';
+    let h = (verdict ? '<div class="card cmp-result"><h2>Recommendation <span class="hint">' + gsPrioText(GS.set.prio) + '</span></h2>' + cmpVerdictHtml(verdict) + '</div>' : '') +
+      '<div class="card cmp-result"><h2>Damage <span class="hint">vs the configured enemy</span></h2>';
     if (cb) {
       const label = esc(cb.names.join(' + '));
       h += '<div class="headline small">' +
@@ -13074,7 +13128,57 @@ window.BOStartApp = function () {
   // ---------- Gear Set Sim (the second sub-tab of Item Compare) ----------
   // Searches every unique, Oathword and rare (best prefixes and damage suffixes) for the best gear for the selected
   // skill, with the tree, skills, supports and idols as they are (gearopt.js, run in slices so the page stays usable).
-  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true }, store.get('gearSim', {})) };
+  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false }, store.get('gearSim', {})) };
+  // Defence for the Gear Set Sim's DPS / Defense slider and "Reach max resistances" (owner, 12 Nov 2026). The same display
+  // estimate as the Ladder tab's EHP: (life + energy shield) / (1 - average of Fire, Cold, Lightning and Poison resistance, each
+  // capped at ResistCap). Armour, evasion, block and the resistance penalty are not counted (the page has no defensive sim).
+  // miss: resistance points still short of the target, added up over the resistances asked for.
+  const gsResCap = () => (GD.scaling.Hero || {}).ResistCap || 75;
+  const gsResTarget = () => GS.set.resTarget > 0 ? GS.set.resTarget : gsResCap();
+  function gsDefence(items) {
+    const d = heroDefence(Array.isArray(items) ? Object.assign({}, st.ch, { items }) : items), cap = gsResCap(), target = gsResTarget();
+    const res = {}; for (const [k, v] of d.resParts) res[k] = v;
+    const avg = d.resParts.reduce((a, x) => a + Math.min(cap, x[1]), 0) / d.resParts.length;
+    let miss = 0; for (const k of ['Fire', 'Cold', 'Lightning'].concat(GS.set.resPoison ? ['Poison'] : [])) miss += Math.max(0, target - (res[k] || 0));
+    return { life: d.life, es: d.es, res, ehp: (d.life + d.es) / Math.max(0.05, 1 - avg / 100), miss };
+  }
+  // The DPS / Defense slider: one setting for Item Compare and Gear Set Sim.
+  const gsPrioHtml = off => '<label class="field gs-prio" title="What counts when items are weighed. Defence is an estimate: life + energy shield against elemental hits, resistances capped at ' + gsResCap() + '%"><span>Prioritize <b id="gsPrioText">' + gsPrioText(GS.set.prio) + '</b></span>' +
+    '<span class="gs-prio-row"><span>DPS</span><input type="range" id="gsPrio" min="0" max="100" step="10" value="' + GS.set.prio + '" aria-label="Prioritize DPS or defense"' + (off ? ' disabled' : '') + '><span>Defense</span></span></label>';
+  // Item Compare's verdict (owner, 12 Nov 2026): the two items weighed as the slider says, score = (DPS new / DPS yours)^(1 - w)
+  // x (EHP new / EHP yours)^w, the same score the Gear Set Sim searches with. dr: the DPS ratio (weighted over Also count).
+  function cmpVerdict(ia, ib, rows, cb) {
+    if (!ib || !rows) return null;
+    const r0 = rows[0], w = GS.set.prio / 100;
+    const A = gsDefence(cmpWith(st.ch, ia)), B = gsDefence(cmpWith(st.ch, ib)), er = A.ehp > 0 ? B.ehp / A.ehp : 1;
+    const dr = cb ? 1 + cb.gain : r0.a > 0 && r0.b != null ? r0.b / r0.a : null;
+    const v = { A, B, w, dr, er, win: '', by: 0, score: null, broke: r0.b == null && r0.a != null ? r0.why || 'the skill does not work with it' : '' };
+    if (v.broke) { v.win = 'a'; return v; }
+    if (dr == null && w < 1) return v;
+    v.score = w >= 1 ? er : w <= 0 ? dr : dr > 0 ? Math.pow(dr, 1 - w) * Math.pow(er, w) : 0;
+    if (Math.abs(v.score - 1) >= 0.0005) { v.win = v.score > 1 ? 'b' : 'a'; v.by = v.win === 'b' ? v.score - 1 : (v.score > 0 ? 1 / v.score - 1 : 1); }
+    return v;
+  }
+  function cmpVerdictHtml(v) {
+    if (!v) return '';
+    const sp = x => '<span class="' + (x >= 0 ? 'up' : 'down') + '">' + pct(x) + '</span>';
+    const resLine = d => ['Fire', 'Cold', 'Lightning', 'Poison'].map(k => '<span style="color:' + typeColor(k) + '">' + d.res[k] + '</span>').join(' / ');
+    const parts = (v.dr != null ? 'DPS ' + sp(v.dr - 1) + ', ' : '') + 'defence ' + sp(v.er - 1);
+    const how = gsPrioText(GS.set.prio);
+    let say;
+    if (v.broke) say = '<b>Keep your item.</b> The new item breaks the selected skill: ' + esc(v.broke) + '.';
+    else if (v.score == null) say = 'No recommendation: the selected skill has no DPS to compare.';
+    else if (!v.win) say = '<b>No real difference</b> at ' + how + ' (' + parts + ').';
+    else say = '<b>' + (v.win === 'b' ? 'Equip the new item.' : 'Keep your item.') + '</b> Weighed as ' + how + ', the new item scores ' + sp(v.score - 1) + ' (' + parts + ').';
+    // The other end of the slider disagrees: say so, it is the usual reason to move it.
+    if (v.score != null && v.dr != null && (v.dr - 1) * (v.er - 1) < 0 && Math.abs(v.dr - 1) >= 0.0005 && Math.abs(v.er - 1) >= 0.0005)
+      say += ' ' + (v.dr > 1 ? 'It deals more but is less tough' : 'It is tougher but deals less') + ': the slider decides which matters.';
+    return '<div class="cmp-reco' + (v.win === 'b' ? ' yes' : v.win === 'a' ? ' no' : '') + '"><p>' + say + '</p>' +
+      '<div class="headline small">' + stat('Life + energy shield', num(v.A.life + v.A.es) + ' → ' + num(v.B.life + v.B.es), '', '', 'life ' + num(v.A.life) + ' → ' + num(v.B.life) + ', energy shield ' + num(v.A.es) + ' → ' + num(v.B.es)) +
+      stat('Defence (EHP est.)', num(v.A.ehp) + ' → ' + num(v.B.ehp), '<div class="delta ' + (v.er >= 1 ? 'up' : 'down') + '">' + pct(v.er - 1) + '</div>', '', 'life + energy shield against elemental hits, resistances capped at ' + gsResCap() + '%') +
+      stat('Resistances', resLine(v.B), '<div class="delta">was ' + resLine(v.A) + '</div>', '', 'Fire / Cold / Lightning / Poison, not capped') + '</div></div>';
+  }
+  const gsPrioText = p => p <= 0 ? 'DPS only' : p >= 100 ? 'Defense only' : (100 - p) + '% DPS · ' + p + '% defense';
   const cmpModesHtml = () => '<div class="cmp-modes" role="tablist" aria-label="Item Simulator tools">' +
     [['item', 'Item Compare', 'M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4'], ['gear', 'Gear Set Sim', 'M12 3 4 6v6c0 4.5 3.4 7.8 8 9 4.6-1.2 8-4.5 8-9V6z']].map(([k, n, d]) => '<button type="button" class="cmp-mode' + (CMP.mode === k ? ' on' : '') + '" role="tab" aria-selected="' + (CMP.mode === k) + '" data-cmpmode="' + k + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '"/></svg><span>' + n + '</span></button>').join('') + '</div>';
   // Anything that changes the answer: the character's gear, tree and supports, the enemy settings, this tab's settings.
@@ -13110,7 +13214,7 @@ window.BOStartApp = function () {
     // Skills ticked under "Also count" count too (their own supports), weighted as in the tree optimizer.
     const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
     const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
-    const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: more.length ? 80 + 40 * Math.min(3, more.length) : 80 }, GS.set));
+    const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: (more.length ? 80 + 40 * Math.min(3, more.length) : 80) + (GS.set.prio > 0 || GS.set.maxRes ? 40 : 0) }, GS.set, { defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget() }));
     renderCompare();
     const step = () => {
       if (job !== GS.job) return;
@@ -13137,7 +13241,8 @@ window.BOStartApp = function () {
     const skillName = (GD.skills[lc(r.skill)] || {}).Name || r.skill, g = planner.gear;
     const names = r.multi ? r.skills.map(x => (GD.skills[lc(x.id)] || {}).Name || x.id) : [skillName];
     let h = '<div class="card cmp-result"><h2>Best gear <span class="hint">' + esc(names.join(' + ')) + ', vs the configured enemy</span></h2>';
-    if (r.multi) {
+    if (r.scored) h += gsScoredHtml(r, names);
+    else if (r.multi) {
       const sa = r.skills.reduce((a, x) => a + x.base, 0), sb = r.skills.reduce((a, x) => a + x.value, 0), label = esc(names.join(' + '));
       h += '<div class="headline small">' + stat('Your gear', num(sa), '', '', label + ', total DPS added up') +
         stat('Best gear', num(sb), '', 'main', label + ', total DPS added up') +
@@ -13149,15 +13254,28 @@ window.BOStartApp = function () {
       stat('Best gear', num(r.value), '', 'main', esc(skillName) + ', total DPS') +
       stat('Change', (r.gain >= 0 ? '+' : '') + num(r.value - r.base) + ' DPS', '<div class="delta ' + (r.gain >= 0 ? 'up' : 'down') + '">' + pct(r.gain) + '</div>', '', 'found in ' + (r.ms / 1000).toFixed(1) + ' s' + (r.timedOut ? ' (stopped at the time limit)' : '')) + '</div>';
     h += '<div class="cmp-actions"><button class="btn" type="button" data-gs="equip">Equip the best set</button><span class="hint">Puts every changed slot on ' + esc(st.ch.name) + ' in this page; idols and the tree stay.' + (st.ch.plan ? '' : ' Your save is never changed.') + '</span></div>';
-    h += '<div class="table-wrap"><table class="tbl gs-table"><thead><tr><th>Slot</th><th>Your item</th><th>Best item</th><th title="DPS this slot\'s pick adds over your current item, with the rest of the best set in place">Adds</th><th title="DPS lost if this slot were left empty in the best set">Slot worth</th></tr></thead><tbody>' +
+    h += '<div class="table-wrap"><table class="tbl gs-table"><thead><tr><th>Slot</th><th>Your item</th><th>Best item</th><th title="' + (r.scored ? 'Score (DPS and defence, weighed as set)' : 'DPS') + ' this slot\'s pick adds over your current item, with the rest of the best set in place">Adds</th><th title="' + (r.scored ? 'Score' : 'DPS') + ' lost if this slot were left empty in the best set">Slot worth</th></tr></thead><tbody>' +
       r.slots.map(s => {
         const tip = s.item ? '<details class="gs-lines"><summary>Lines</summary><div class="cmp-tip pl-tip">' + g.tip(s.item, s.item.slot) + '</div></details>' : '';
         const si = r.slots.indexOf(s);
         return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(gsSlotName(s.slot)) + '</td><td' + (s.was ? ' class="gs-hov" data-gs-tip="was:' + si + '"' : '') + '>' + gsItemLabel(s.was) + '</td><td' + (s.item ? ' class="gs-hov" data-gs-tip="item:' + si + '"' : '') + '>' + (s.changed ? '' : '<span class="meta">kept: </span>') + gsItemLabel(s.item) + tip + '</td><td>' +
           (s.changed ? '<span class="' + (s.gain >= 0 ? 'up' : 'down') + '">' + pct(s.gain) + '</span>' : '<span class="meta">–</span>') + '</td><td>' + (s.item ? num(s.worth * 100, 1) + '%' : '–') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
-    h += '<p class="hint">Every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best, so this is the most the gear can give, not a drop you will see soon. Rares carry the prefixes and suffixes that add the most DPS and the best runes in their sockets; a rare with every line at its top tier counts as a Flawless Rare in the sim. Life, resistances and other defences are only counted where the sim counts them for damage; attribute requirements, rune and item prices and drop chances are ignored. Idols, the tree and the supports stay as they are.</p>';
+    h += '<p class="hint">Every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best, so this is the most the gear can give, not a drop you will see soon. Rares carry the prefixes and suffixes that add the most DPS and the best runes in their sockets; a rare with every line at its top tier counts as a Flawless Rare in the sim. ' + (r.scored ? 'Defence here is life + energy shield against elemental hits with resistances capped at ' + gsResCap() + '% (the Ladder tab\'s EHP estimate): armour, evasion, block and the resistance penalty are not counted. Attribute requirements,' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); attribute requirements,') + ' rune and item prices and drop chances are ignored. Idols, the tree and the supports stay as they are.</p>';
     return h + '</div>';
+  }
+  // Result headline when the search weighed defence: DPS, the EHP estimate and the resistances, before and after.
+  function gsScoredHtml(r, names) {
+    const sa = r.skills.reduce((a, x) => a + x.base, 0), sb = r.skills.reduce((a, x) => a + x.value, 0), label = esc(names.join(' + ')), A = r.def.before, B = r.def.after;
+    const dp = sa ? sb / sa - 1 : 0, ep = A.ehp ? B.ehp / A.ehp - 1 : 0, delta = v => '<div class="delta ' + (v >= 0 ? 'up' : 'down') + '">' + pct(v) + '</div>';
+    const resLine = d => ['Fire', 'Cold', 'Lightning', 'Poison'].map(k => '<span style="color:' + typeColor(k) + '">' + d.res[k] + '</span>').join(' / ');
+    let h = '<div class="headline small">' + stat('DPS', num(sa) + ' → ' + num(sb), delta(dp), 'main', label + ', total DPS' + (r.skills.length > 1 ? ' added up' : '')) +
+      stat('Defence (EHP est.)', num(A.ehp) + ' → ' + num(B.ehp), delta(ep), '', 'life + energy shield ' + num(A.life + A.es) + ' → ' + num(B.life + B.es)) +
+      stat('Resistances', resLine(B), '<div class="delta">was ' + resLine(A) + '</div>', '', 'Fire / Cold / Lightning / Poison, not capped · found in ' + (r.ms / 1000).toFixed(1) + ' s' + (r.timedOut ? ' (stopped at the time limit)' : '')) + '</div>';
+    h += '<p class="hint">Weighed as ' + gsPrioText(Math.round(r.defWeight * 100)) + (r.maxRes ? ', with ' + (GS.set.resPoison ? 'Fire, Cold, Lightning and Poison' : 'Fire, Cold and Lightning') + ' resistance brought to ' + r.resTarget + '% first' : '') + '.</p>';
+    if (r.maxRes) h += B.miss > 0 ? '<p class="hint bad">The target was not reached: ' + Math.round(B.miss) + ' resistance point' + (Math.round(B.miss) === 1 ? '' : 's') + ' still missing' + (r.timedOut ? ' when the time ran out. Equip the set and search again to continue' : ' with the items this search may use') + '.</p>' : '<p class="hint good">Every resistance asked for is at ' + r.resTarget + '% or more.</p>';
+    if (r.skills.length > 1) h += '<ul class="opt-skills">' + r.skills.map((x, i) => '<li><span>' + skillDot(x.id) + esc(names[i]) + ' <span class="c">weight ' + x.w + '</span></span><span class="v">' + num(x.base) + ' → ' + num(x.value) + ' DPS (' + pct(x.gain) + ')</span></li>').join('') + '</ul>';
+    return h;
   }
   function gsHtml() {
     const S_ = GS.set, key = gsKey();
@@ -13165,15 +13283,19 @@ window.BOStartApp = function () {
     if (GS.res && GS.res.key !== key) GS.res = null;
     const chk = (f, label, tip) => '<label class="check-row" title="' + esc(tip) + '"><input type="checkbox" data-gs-set="' + f + '"' + (S_[f] ? ' checked' : '') + (GS.running ? ' disabled' : '') + '><span>' + label + '</span></label>';
     let h = '<div class="card gs-card"><div class="cmp-pick-head"><h2>Gear Set Sim</h2><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + (GS.running ? ' disabled' : '') + '>' + cmpSkillOptions() + '</select></label>' + (GS.running ? '' : cmpMultiHtml() + enemyBtn()) + '</span></div>' +
-      '<p class="hint">Finds the best gear for the selected skill' + (optExtra().length ? ' and the ' + optExtra().length + ' ticked under Also count (weighted)' : '') + ': every unique (with Vows), every Oathword, and rare items with the best prefixes and damage suffixes. Your passive tree, skills, supports and idols stay as they are.</p>' +
+      '<p class="hint">Finds the best gear for the selected skill' + (optExtra().length ? ' and the ' + optExtra().length + ' ticked under Also count (weighted)' : '') + ': every unique (with Vows), every Oathword, and rare items with the best prefixes and suffixes. Your passive tree, skills, supports and idols stay as they are.</p>' +
       '<div class="gs-controls"><label class="field inline" title="Item level of the rares: 84 and up gives the top tier of every line"><span>Item level</span><input type="number" min="1" max="100" id="gsIlvl" value="' + S_.ilvl + '"' + (GS.running ? ' disabled' : '') + '></label>' +
       chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
       chk('vows', 'Vows on uniques', 'A red item takes up to 6 lines from rares at the cube; the best ones are added') +
       chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') + '</div>' +
+      '<div class="gs-controls gs-goal">' + gsPrioHtml(GS.running) +
+      chk('maxRes', 'Reach max resistances', 'Brings Fire, Cold and Lightning resistance to the target with the lines, runes and uniques that cost the least, then follows the slider with what is left. Nothing is spent on resistance past the target') +
+      (S_.maxRes ? '<label class="field inline" title="Resistance to reach on each element. The game caps resistances at ' + gsResCap() + '%; set it higher to cover a resistance penalty"><span>Target %</span><input type="number" min="1" max="200" id="gsResTarget" value="' + gsResTarget() + '"' + (GS.running ? ' disabled' : '') + '></label>' +
+        chk('resPoison', 'Poison too', 'Bring Poison resistance to the target as well') : '') + '</div>' +
       '<div class="cmp-actions">' + (GS.running ? '<button class="btn ghost" type="button" data-gs="cancel">Stop</button>' :
         '<button class="btn" type="button" data-gs="run"' + (st.skill ? '' : ' disabled') + '>' + (GS.res ? 'Search again' : 'Find the best gear') + '</button>') +
-      '<span class="hint">' + (st.skill ? (optExtra().length ? 'Takes a few minutes with several skills; the page stays usable.' : 'Takes under two minutes; the page stays usable.') : 'This plan has no damage skill yet: add one on the Build tab.') + '</span></div>' +
+      '<span class="hint">' + (st.skill ? (optExtra().length || S_.prio > 0 || S_.maxRes ? 'Takes a few minutes; the page stays usable.' : 'Takes under two minutes; the page stays usable.') : 'This plan has no damage skill yet: add one on the Build tab.') + '</span></div>' +
       (GS.running ? '<div class="gs-prog" role="progressbar" aria-label="Search progress"><div class="gs-bar"><div id="gsBar" style="width:' + Math.max(2, Math.round(GS.p * 100)) + '%"></div></div><div class="hint" id="gsPhase">' + esc(GS.phase) + '</div></div>' : '') +
       (GS.msg ? '<p class="hint pl-status">' + esc(GS.msg) + '</p>' : '') + '</div>';
     if (GS.res) h += gsResultHtml(GS.res);
@@ -13182,20 +13304,22 @@ window.BOStartApp = function () {
   const cmpItemMode = () => cmpVisible() && CMP.mode !== 'gear';
   function renderCompare() {
     const el = $('#comparePane'); if (!el || el.hidden) return;
-    let h = cmpModesHtml() + '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Item Simulator</h2><p>' + (CMP.mode === 'gear' ? 'Find the best gear for a skill from every unique, Oathword and rare, and see what it would do to your damage.' : 'Pick one of your items, then fill in the item you found or paste a screenshot of it, to see what swapping does to your damage.') + '</p></div>';
+    let h = cmpModesHtml() + '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Item Simulator</h2><p>' + (CMP.mode === 'gear' ? 'Find the best gear for a skill from every unique, Oathword and rare, for damage, defence or both, and see what it would do.' : 'Pick one of your items, then fill in the item you found or paste a screenshot of it, to see what swapping does to your damage and defence, and which one to wear.') + '</p></div>';
     if (!st.ch) { el.innerHTML = h + '<div class="empty">Load a character or start a plan first.</div>'; return; }
     if (CMP.mode === 'gear') { el.innerHTML = h + gsHtml(); return; }
     cmpSync();
     const g = planner.gear, slot = cmpSlot(), ia = CMP.a.items[0] || null, ib = CMP.b.items[0] || null;
     h += '<div class="card cmp-pick"><div class="cmp-pick-head"><h2>Item slot</h2>' +
       '<span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill">' + cmpSkillOptions() + '</select></label>' + cmpMultiHtml() + enemyBtn() + '</span></div>' +
-      cmpSlotButtons() + (CMP.msg ? '<p class="hint pl-status">' + esc(CMP.msg) + '</p>' : '') + '</div>';
+      cmpSlotButtons() + '<div class="gs-controls gs-goal">' + gsPrioHtml(false) + '<span class="hint">The recommendation and the green mark follow this.</span></div>' + (CMP.msg ? '<p class="hint pl-status">' + esc(CMP.msg) + '</p>' : '') + '</div>';
     // The item that deals more with the selected skill is marked green, with how much more.
     const rows = st.skill ? cmpRows(ia, ib) : null, r0 = rows && rows[0], cb = rows && cmpCombined(rows);
     let win = '', by = 0;
-    if (cb) { if (ib && Math.abs(cb.gain) >= 0.0005) { win = cb.gain > 0 ? 'b' : 'a'; by = Math.abs(cb.gain); } }
+    const verdict = cmpVerdict(ia, ib, rows, cb), weighed = GS.set.prio > 0;
+    if (weighed) { if (verdict && verdict.score != null) { win = verdict.win; by = verdict.by; } }
+    else if (cb) { if (ib && Math.abs(cb.gain) >= 0.0005) { win = cb.gain > 0 ? 'b' : 'a'; by = Math.abs(cb.gain); } }
     else if (ib && r0 && r0.a > 0 && r0.b > 0 && Math.abs(r0.b / r0.a - 1) >= 0.0005) { win = r0.b > r0.a ? 'b' : 'a'; by = win === 'b' ? r0.b / r0.a - 1 : r0.a / r0.b - 1; }
-    const badge = s => win === s ? '<span class="cmp-badge" title="' + (cb ? 'Better for ' + esc(cb.names.join(' + ')) + ' (weighted % change)' : 'More ' + esc(r0.name) + ' DPS than the other item') + '; the damage comparison is further down">' + pct(by) + (cb ? ' weighted' : ' DPS') + '</span>' : '';
+    const badge = s => win === s ? '<span class="cmp-badge" title="' + (weighed ? 'Better at ' + gsPrioText(GS.set.prio) + ' (DPS and defence weighed)' : cb ? 'Better for ' + esc(cb.names.join(' + ')) + ' (weighted % change)' : 'More ' + esc(r0.name) + ' DPS than the other item') + '; the damage comparison is further down">' + pct(by) + (weighed ? ' score' : cb ? ' weighted' : ' DPS') + '</span>' : '';
     h += '<div class="cmp-grid">';
     h += '<div class="card cmp-side' + (win === 'a' ? ' cmp-win' : '') + '" data-side="a"><h2>Your item ' + badge('a') + (CMP.aEdited ? '<span class="hint">edited here</span> <button class="btn small ghost" type="button" data-cmp="reset-a">Back to equipped</button>' : '<span class="hint">' + (ia ? 'equipped' : 'slot empty') + '</span>') + '</h2>' +
       (ia ? '<div class="cmp-tip pl-tip">' + g.tip(ia, slot) + '</div>' : '') +
@@ -13205,7 +13329,7 @@ window.BOStartApp = function () {
       (ib ? '<div class="cmp-tip pl-tip">' + g.tip(ib, slot) + '</div>' : '') +
       '<div class="pl-gear-grid">' + g.editor(ib, slot, ib ? 0 : -1, true, '', CMP.kb) + '</div>' + cmpEquipHtml(ib) + '</div>';
     h += '</div>';
-    h += rows ? cmpResults(ia, ib, rows) : '<div class="card"><p class="hint">This plan has no damage skill yet: add one on the Build tab.</p></div>';
+    h += rows ? cmpResults(ia, ib, rows, verdict) : '<div class="card"><p class="hint">This plan has no damage skill yet: add one on the Build tab.</p></div>';
     el.innerHTML = h;
   }
   // A screenshot or item text goes into the new item (in the slot being compared).
@@ -13243,12 +13367,15 @@ window.BOStartApp = function () {
       const t = e.target;
       if (t.id === 'cmpSkill') return selectSkill(t.value);
       if (t.dataset.gsSet) { GS.set[t.dataset.gsSet] = t.checked; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsPrio') { GS.set.prio = Math.max(0, Math.min(100, Math.round(+t.value / 10) * 10 || 0)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsResTarget') { const v = Math.max(1, Math.min(200, Math.round(+t.value) || 0)); GS.set.resTarget = v === gsResCap() ? 0 : v; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsIlvl') { GS.set.ilvl = Math.max(1, Math.min(100, Math.round(+t.value) || 84)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'cmpFile') { if (t.files[0]) cmpReadImage(t.files[0]); return; }
       const s = side(t); if (!s || !t.dataset.f) return;
       CMP.msg = '';
       planner.gear.change(s === 'a' ? CMP.a : CMP.b, t, s === 'a' ? CMP.ka : CMP.kb, () => { if (s === 'a') CMP.aEdited = true; renderCompare(); }, renderCompare);
     });
+    el.addEventListener('input', e => { if (e.target.id === 'gsPrio') { const x = $('#gsPrioText'); if (x) x.textContent = gsPrioText(+e.target.value); } });
     el.addEventListener('click', e => {
       const mb = e.target.closest('[data-cmpmode]');
       if (mb) { if (mb.dataset.cmpmode !== CMP.mode) { CMP.mode = mb.dataset.cmpmode; store.set('cmpMode', CMP.mode); renderCompare(); } return; }
@@ -13311,10 +13438,10 @@ window.BOStartApp = function () {
   // app.js and style.css; showTab() pushes the address, and back / forward and direct links open the tab.
   // Share codes (#b=, #s=) stay in the hash. window.SITE_BASE is the way up to the site root ('' on the root page);
   // the local DamageSim.html doesn't set it (opened from a file it can't use addresses).
-  const ROUTES = { character: 'build/character', tree: 'build/tree', 'build:skills': 'build/skills', 'build:gear': 'build/gear', damage: 'build/damage',
+  const ROUTES = { character: 'build/character', tree: 'build/tree', 'build:skills': 'build/skills', damage: 'build/damage',
     compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', faq: 'faq',
     skillscaling: 'skills', minions: 'skills/minions', creator: 'creator', plan: 'plan', code: 'code' };
-  const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', 'build:skills': 'Skills', 'build:gear': 'Gear', damage: 'Damage Analysis',
+  const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', 'build:skills': 'Skills', damage: 'Damage Analysis',
     compare: 'Item Simulator', items: 'Item Search', grail: 'Grail', ladder: 'Ladder', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery",
     faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code' };
   // The Skills tab holds two views: Skill Scaling (scaling.js) and Minion Scaling (faq.js's minions section).
@@ -13336,6 +13463,7 @@ window.BOStartApp = function () {
     if (!ROUTING) return null;
     let p = location.pathname; try { p = decodeURIComponent(p); } catch (e) { /* keep as is */ }
     const rel = p.slice(siteRoot().length).toLowerCase().replace(/\/+$/, '');
+    if (rel === 'build/gear') return 'character'; // the old Gear sub-tab: gear is edited on the Character tab now
     return Object.keys(ROUTES).find(k => ROUTES[k] === rel) || null;
   }
   // A route key as a tab id: 'build:skills' picks the Skills view of the build pane first.
@@ -13357,10 +13485,10 @@ window.BOStartApp = function () {
     noPush = true;
     try { showTab(openRoute(key)); } finally { noPush = false; }
   });
-  // Gear <-> Skills inside the build pane changes the address too (planner.js's own click handler is added later, so wait a tick).
+  // Skills inside the build pane sets the address too (planner.js's own click handler is added later, so wait a tick).
   $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && document.body.classList.contains('build-page')) setTimeout(() => syncUrl('build'), 0); });
 
-  // The Build Planner views are Character, Passive tree, Skills and Gear (both 'build', planner.js keeps which) and Damage Analysis.
+  // The Build Planner views are Character (gear too: click a slot), Passive tree, Skills ('build') and Damage Analysis.
   const lastBuildView = () => { const v = store.get('buildView', 'character'); return ['character', 'tree', 'damage', 'build'].includes(v) ? v : 'character'; };
   function showTab(tab) {
     T.visible = tab === 'tree';
@@ -13414,7 +13542,7 @@ window.BOStartApp = function () {
     else showTab(b.dataset.tab);
   }));
 
-  // Gear / Skills from the Skill tree sub-tab go back to the build pane (planner.js picks which one).
+  // Skills from the other Build Planner views goes back to the build pane.
   $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && (document.body.classList.contains('tree-page') || document.body.classList.contains('dashboard-view') || document.body.classList.contains('character-page'))) showTab('build'); });
 
   // Pan, zoom, hover, click.

@@ -565,6 +565,7 @@ tr.cmp-counted td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .pl-item input[type=range] { width: 160px; accent-color: var(--accent); }
 .kv .good { color: var(--good); }
 .kv .bad, .hint.bad { color: var(--bad); }
+.hint.good { color: var(--good); }
 /* Support picker (Supports card) */
 .sup-picker { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
 .sup-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
@@ -1201,6 +1202,15 @@ body.compare-page #controls { display: none; }
 .gs-card .hint { margin: 0 0 10px; }
 .gs-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 18px; margin-bottom: 4px; }
 .gs-controls .field input[type=number] { width: 84px; }
+.gs-goal { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.gs-prio { min-width: 260px; }
+.cmp-reco > p { margin: 0 0 12px; font-size: 14.5px; }
+.cmp-reco.yes > p b { color: var(--good); }
+.cmp-reco.no > p b { color: var(--bad); }
+.cmp-reco .headline { margin-bottom: 0; }
+.gs-prio b { color: var(--accent); font-weight: 600; margin-left: 6px; }
+.gs-prio-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+.gs-prio-row input[type=range] { flex: 1; min-width: 120px; max-width: 280px; accent-color: var(--accent); }
 .gs-prog { margin-top: 12px; }
 .gs-bar { height: 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
 .gs-bar > div { height: 100%; background: var(--dashboard-gold); transition: width .25s; }

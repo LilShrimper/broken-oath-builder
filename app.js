@@ -2198,7 +2198,7 @@ window.BOPlanner = function (ctx) {
         '<label class="check-row"><input type="checkbox" data-f="bar"' + (bar.includes(r.skill) ? ' checked' : '') + dis + '><span>On bar</span></label>' +
         '<label class="check-row" title="The skill the Damage tab opens on"><input type="radio" name="plMain" data-f="main"' + (ch.mainSkill === r.skill ? ' checked' : '') + dis + '><span>Main</span></label>' +
         countBox(r.skill) +
-        (edit ? '<button class="x" type="button" title="Remove this skill" data-act="rmskill">×</button>' : '') + '</div>' +
+        (edit ? '<button class="x" type="button" aria-label="Remove this skill" data-act="rmskill">×</button>' : '') + '</div>' +
         (sk ? '' : '<p class="hint bad">Unknown skill ' + esc(r.skill) + '</p>') +
         supChips(ch, r, sups, slots, lvl, edit) +
         (edit && sk && !S.dealsNoHits(sk) ? '<div class="pl-row pl-simbest"><button class="btn small" type="button" data-act="simbest" title="Tries the support combinations for this skill at its gem level, against the enemy set on the Damage tab, and sockets the best one">Sim best supports</button></div>' : '') +
@@ -2406,6 +2406,21 @@ window.BOPlanner = function (ctx) {
   // Skills view: a skill gem's tooltip (its data, plus the sim's numbers for this character).
   const fmt = (v, d = 0) => (+v || 0).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: 0 });
   const tagList = t => (t || []).join(', ');
+  // The game's skill text has placeholders it fills in itself ({OrbitCount}, {Projectiles}, "{X}|plural(one=..,other=..)").
+  // Fill them from the skill's own data at the gem level (display only; the sim reads the same fields on its own).
+  function skillDesc(sk, lvl) {
+    const L = +lvl || 1, n = (base, at) => (+base || 0) + (at || []).filter(x => L >= x).length, o = sk.Orbit || {}, b = sk.Brand || {};
+    const fl = /\{Flights\} flights: (\d+), 1 more at gem level (\d+) and at (\d+)/.exec(sk.Description || '');
+    const V = {
+      Chains: sk.Chains, BrandChains: b.Chains, BrandLife: b.Duration, Pierce: sk.Pierce,
+      Projectiles: sk.Projectiles != null ? n(sk.Projectiles, sk.ProjectilesAtLevels) : null,
+      OrbitCount: o.Count != null ? n(o.Count, o.CountPerLevels) : null, OrbitMax: o.Max,
+      Flights: fl ? n(fl[1], [+fl[2], +fl[3]]) : null,
+    };
+    return String(sk.Description || '')
+      .replace(/\{(\w+)\}\|plural\(one=([^,]+),other=([^)]+)\)/g, (m, k, one, many) => V[k] == null ? m : (+V[k] === 1 ? one : many))
+      .replace(/\{(\w+)\}/g, (m, k) => V[k] == null ? m : V[k]);
+  }
   // own: true when the skill is already on the character (adds the sim's numbers); false for the picker (game data only).
   const ATTR_NAME = { Str: 'Strength (red)', Dex: 'Dexterity (green)', Int: 'Intelligence (blue)' };
   // noScaling: the Skill Scaling tab's hover leaves out the level rows and the Scaling list (the card shows them).
@@ -2416,7 +2431,7 @@ window.BOPlanner = function (ctx) {
     const lvl = (ok && r.gem) ? r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus + ' from gear' : '') : ((ch && ch.gemLevels[id]) || 1);
     let h = '<b>' + esc(sk.Name) + '</b><span class="pl-tip-sub">' + esc((sk.Kind === 'Gem' ? 'Skill gem' : sk.Kind === 'Weapon' ? 'Weapon skill' : sk.Kind === 'Basic' ? 'Basic attack' : 'Skill') + (own ? ' · level ' + lvl : '') + (sk.Attribute ? ' · ' + (own ? sk.Attribute : ATTR_NAME[sk.Attribute] || sk.Attribute) : '')) + '</span>';
     if (sk.Tags && sk.Tags.length) h += '<span class="pl-tip-tags">' + sk.Tags.concat(sk.DamageType && sk.DamageType !== 'Physical' ? [sk.DamageType] : [], sk.DamageType === 'Physical' ? ['Physical'] : []).map(x => '<i>' + esc(x) + '</i>').join('') + '</span>';
-    if (sk.Description) h += '<span class="pl-tip-desc">' + esc(sk.Description) + '</span>';
+    if (sk.Description) h += '<span class="pl-tip-desc">' + esc(skillDesc(sk, (ok && r.gem) ? r.gem.own : (ch && ch.gemLevels[id]) || 1)) + '</span>';
     const lv = ctx.levels && !noScaling ? ctx.levels(id) : { rows: [] };
     if (lv.rows.length) h += '<div class="pl-tip-lv">' + lv.rows.map(x => '<span><small>LV ' + x[0] + '</small>' + esc(x[1]) + '</span>').join('') + '</div>' + (lv.unit ? '<span class="pl-tip-sub">' + esc(lv.unit + '; LV 30 and 40 count gear levels') + '</span>' : '');
     const lines = [];
@@ -2614,8 +2629,9 @@ window.BOPlanner = function (ctx) {
         if (!v || rows(ch).some(r => r.skill === v)) return render();
         ensureSocket(ch, v); if (!ch.gemLevels[v]) ch.gemLevels[v] = Math.max(1, ...Object.values(ch.gemLevels).filter(x => x > 0), 1);
         if (onBar(ch).length < BAR) ch.hotbar.push(v);
-        if (!ch.mainSkill) ch.mainSkill = v;
-        return done({ skills: true, select: v });
+        // Only becomes the sim skill when there was no main skill; otherwise the Main radio and the sim skill stay put.
+        const first = !ch.mainSkill; if (first) ch.mainSkill = v;
+        return done(first ? { skills: true, select: v } : { skills: true });
       }
       case 'skill': {
         if (!v || v === skill || rows(ch).some(r => r.skill === v)) return render();
@@ -2764,12 +2780,7 @@ window.BOPlanner = function (ctx) {
     }
     if (act === 'dup' && ch.plan) { const p = planFrom(ch); status = 'Duplicated.'; ctx.add(p, ch); return render(); }
     if (act === 'del' && ch.plan) { if (!window.confirm('Delete the plan "' + ch.name + '"? This cannot be undone (copy its plan code first to keep it).')) return; status = ''; ctx.remove(ch); return render(); }
-    if (act === 'rmskill') {
-      ch.sockets = ch.sockets.filter(s => s.skill !== skill); ch.hotbar = ch.hotbar.filter(h => h !== skill);
-      for (const s of ch.sockets) if (s.conduit === skill) s.conduit = '';
-      if (ch.mainSkill === skill) ch.mainSkill = (rows(ch)[0] || {}).skill || '';
-      return done({ skills: true });
-    }
+    if (act === 'rmskill') { removeSkill(ch, skill); return done({ skills: true }); }
     if (act === 'togsup') {
       // Same rules as the Damage tab's picker: one shape support at a time, no more than the sockets allow.
       const id = lc(b.dataset.sup), sd = GD.supports[id] || {}, s = ensureSocket(ch, skill);
@@ -2925,7 +2936,21 @@ window.BOPlanner = function (ctx) {
   const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, affixesFor,
     // for the Character tab's item overlay (character.js)
     oathwordsFor, oathwordBases, rollUnique, topTier, runeSlots, runeList, modLine, LIMIT, VOW_MAX };
-  return { itemTip, skillTip, supTip, oathwordForItem, slotName: SLOT_NAME, rows, render, fromCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
+  // Take a skill, its supports and its bar slot out of a character (Build tab ×, Character tab ×).
+  function removeSkill(ch, skill) {
+    ch.sockets = ch.sockets.filter(s => s.skill !== skill); ch.hotbar = ch.hotbar.filter(h => h !== skill);
+    for (const s of ch.sockets) if (s.conduit === skill) s.conduit = '';
+    if (ch.mainSkill === skill) ch.mainSkill = (rows(ch)[0] || {}).skill || '';
+  }
+  // Add a skill to a character (the Character tab's "Add skill"): same steps as the Build tab's "Add a skill"; false if not added.
+  function addSkill(ch, v) {
+    if (!v || rows(ch).some(r => r.skill === v)) return false;
+    ensureSocket(ch, v); if (!ch.gemLevels[v]) ch.gemLevels[v] = Math.max(1, ...Object.values(ch.gemLevels).filter(x => x > 0), 1);
+    if (onBar(ch).length < BAR) ch.hotbar.push(v);
+    if (!ch.mainSkill) ch.mainSkill = v;
+    return true;
+  }
+  return { skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, supTip, oathwordForItem, slotName: SLOT_NAME, rows, render, fromCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
 };
 
 ;
@@ -6633,12 +6658,15 @@ window.BOCharacter = function (ctx) {
 
   function skillsCard(ch) {
     const gd = ctx.gd(), rs = planner.rows(ch), bar = new Set(ch.hotbar.filter(x => x && x !== 'move'));
-    let h = '<div class="card ch-skills"><h2>Skills</h2>';
+    let h = '<div class="card ch-skills"><div class="ch-skills-head"><h2>Skills</h2>' +
+      '<button class="btn small" type="button" id="chAddSkillBtn">Add skill</button>' +
+      '<select id="chAddSkill" class="ch-addskill-sel" aria-hidden="true" tabindex="-1">' + planner.skillOpts('') + '</select></div>';
     if (!rs.length) h += '<p class="hint">No skills.</p>';
     for (const r of rs) {
       const sk = gd.skills[lc(r.skill)], sups = r.sock ? r.sock.supports : [];
       h += '<div class="ch-skill' + (ch.mainSkill === r.skill ? ' main' : '') + '"><div class="ch-skill-name" data-tip="skill" data-id="' + esc(r.skill) + '" tabindex="0">' + ctx.skillDot(r.skill) + '<b>' + esc(sk ? sk.Name : r.skill) + '</b>' +
-        '<span class="meta">level ' + (ch.gemLevels[r.skill] || 1) + (bar.has(r.skill) ? '' : ' · off the bar') + '</span></div>' +
+        '<span class="meta">level ' + (ch.gemLevels[r.skill] || 1) + (bar.has(r.skill) ? '' : ' · off the bar') + '</span>' +
+        '<button class="x ch-skill-x" type="button" data-rmskill="' + esc(r.skill) + '" aria-label="Remove ' + esc(sk ? sk.Name : r.skill) + '">×</button></div>' +
         sups.map(id => '<div class="ch-sup" data-tip="sup" data-id="' + esc(id) + '" tabindex="0">' + ctx.gemDot(id) + esc((gd.supports[lc(id)] || { Name: id }).Name) + '</div>').join('') + '</div>';
     }
     return h + '</div>';
@@ -6700,7 +6728,21 @@ window.BOCharacter = function (ctx) {
   function bind(el) {
     if (el.dataset.bound) return; el.dataset.bound = '1';
     el.addEventListener('input', e => { if (e.target && e.target.id === 'chNotes') ctx.notes.set(e.target.value); });
-    el.addEventListener('click', e => { const s = e.target.closest && e.target.closest('[data-open]'); if (s) openItem(s); });
+    el.addEventListener('click', e => {
+      if (e.target.closest && e.target.closest('#chAddSkillBtn')) { hide(); const s = $('#chAddSkill'); if (s && ctx.current()) planner.openPicker(s); return; }
+      const rm = e.target.closest && e.target.closest('[data-rmskill]');
+      if (rm) {
+        const ch0 = ctx.current(), id = rm.dataset.rmskill, sk = ctx.gd().skills[lc(id)], nm = sk ? sk.Name : id; if (!ch0) return;
+        if (!window.confirm('Remove ' + nm + ' from the planner?\n\nThis also removes its supports and takes it off the skill bar. You will need to add it back in (and socket its supports again) to see its damage in the sim.')) return;
+        hide(); const ch = ctx.editable(); if (!ch) return;
+        planner.removeSkill(ch, id); ctx.commit(ch); render(); return;
+      }
+      const s = e.target.closest && e.target.closest('[data-open]'); if (s) openItem(s);
+    });
+    el.addEventListener('change', e => {
+      if (!e.target || e.target.id !== 'chAddSkill') return;
+      const ch = ctx.editable(); if (ch && planner.addSkill(ch, e.target.value)) { ctx.commit(ch); render(); } else render();
+    });
     el.addEventListener('keydown', e => { const s = e.target.closest && e.target.closest('.ch-slot[data-open]'); if (s && s === e.target && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openItem(s); } });
     el.addEventListener('mouseover', show); el.addEventListener('focusin', show);
     el.addEventListener('mouseleave', hide); el.addEventListener('focusout', hide);
@@ -10524,7 +10566,7 @@ window.BOStartApp = function () {
     $('#skillSelect').value = id; $('#optSkill').value = id; renderOptMulti(); $('#skillGem').innerHTML = skillDot(id); $('#gemLevel').value = ''; $('#hpsOverride').value = ''; st.ingame = null;
     if (st.ch) store.set('skill:' + st.ch.id, id);
     const sk = GD.skills[String(id).toLowerCase()];
-    $('#skillDesc').textContent = sk ? sk.Description.replace(/\{[^}]+\}\|plural\([^)]*\)/g, '').replace(/\{(\w+)\}/g, '$1') : '';
+    $('#skillDesc').textContent = sk ? planner.skillDesc(sk, (st.ch && st.ch.gemLevels[st.skill]) || 1) : '';
     st.conduit = null; // auto: follow the save's Conduit link
     st.coc = undefined; // auto: Cast on Crit as socketed in the save
     resetSupports();

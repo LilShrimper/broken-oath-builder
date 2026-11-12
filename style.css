@@ -2024,3 +2024,9 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 .enemy-dialog .card p.hint { margin: 4px 0 8px; }
 .enemy-dialog #curseList { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0 8px; }
 @media (max-width: 540px) { .enemy-dialog-content { padding: 14px; } }
+.ch-skills-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; } .ch-skills-head h2 { margin: 0; }
+.ch-skills-head { position: relative; }
+.ch-addskill-sel { position: absolute; left: 0; right: 0; bottom: 0; height: 1px; opacity: 0; pointer-events: none; }
+.ch-skill-x { margin-left: auto; flex: none; }
+.ch-skill-x { background: none; border: 1px solid transparent; border-radius: 6px; color: var(--faint); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 7px; }
+.ch-skill-x:hover, .ch-skill-x:focus-visible { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }

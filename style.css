@@ -1360,6 +1360,22 @@ body.compare-page #controls { display: none; }
 .bw-prices > div { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--line); }
 .bw-prices dt { color: var(--muted); } .bw-prices dd { margin: 0; text-align: right; }
 .bw-potion .kv small { color: var(--faint); }
+/* belt card on the Character tab and the Gear view (brewery.js beltCard) */
+.bw-belt h2 { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.bw-belt h2 small { color: var(--faint); font-weight: 400; }
+.bw-belt-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); margin-bottom: 10px; }
+.bw-belt-slot { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.bw-belt-slot.empty { opacity: .7; }
+.bw-belt-slot[data-bw-slot] { cursor: pointer; }
+.bw-belt-slot[data-bw-slot]:hover, .bw-belt-slot[data-bw-slot]:focus-visible { border-color: var(--dashboard-gold); outline: none; }
+.bw-tip { max-width: 340px; } .bw-tip p { margin: 4px 0; }
+.bw-tiptiers { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px; color: var(--muted); }
+.bw-tiptiers li.on { color: var(--dashboard-gold); }
+.bw-win { width: min(560px, 100%); height: auto; max-height: 100%; }
+@media (max-width: 760px) { .bw-win { height: 100%; max-height: none; } }
+.bw-belt-slot > div { display: grid; gap: 2px; min-width: 0; }
+.bw-belt-slot .bw-name { margin: 0; font-size: 14px; }
+.bw-belt-line { font-size: 12px; color: var(--muted); }
 
 /* Skill Scaling tab (scaling.js): a square per skill, coloured like its gem */
 .sc-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin: 14px 0; }

@@ -2419,7 +2419,7 @@ window.BOPlanner = function (ctx) {
     h += '<h3>Idols <small>' + idols.length + '</small></h3>';
     if (idols.length) h += '<div class="pl-gear-grid">' + idols.map(x => itemEditor(x.it, 'Idol', x.i, edit, dis)).join('') + '</div>';
     if (edit) h += '<button class="btn small ghost" type="button" data-act="addidol">Add an idol</button>';
-    return h + '</div>';
+    return h + '</div>' + (ctx.beltCard ? ctx.beltCard() : ''); // Brewmaw's potions (Brewery tab), read-only here
   }
 
   // ---------- edits ----------
@@ -4032,14 +4032,20 @@ window.BOBrewery = function (ctx) {
   }
 
   // ---------- view ----------
-  const opt = (v, label, sel, dis) => '<option value="' + esc(v) + '"' + (sel ? ' selected' : '') + (dis ? ' disabled' : '') + '>' + esc(label) + '</option>';
+  const opt = (v, label, sel, dis, title) => '<option value="' + esc(v) + '"' + (sel ? ' selected' : '') + (dis ? ' disabled' : '') + (title ? ' title="' + esc(title) + '"' : '') + '>' + esc(label) + '</option>';
+  // A mod's line with its whole roll range: "Recover {v}% more" becomes "Recover 10-25% more" (tiers this build allows).
+  function rangeText(m) {
+    const ts = tiersOk(m); if (!ts.length) return fill(m.Text, 0, 0);
+    const rg = k => { const v = ts.map(t => t[k]).filter(x => x != null); if (!v.length) return ''; const lo = Math.min(...v), hi = Math.max(...v); return lo === hi ? fmt(lo) : fmt(lo) + '-' + fmt(hi); };
+    return String(m.Text || '').replace(/\{v\}/g, rg('Value')).replace(/\{v2\}/g, rg('Value2'));
+  }
   const field = (label, inner, cls) => '<label class="field' + (cls ? ' ' + cls : '') + '"><span>' + label + '</span>' + inner + '</label>';
 
   function modRow(i, f, k, kind, pick, role, used) {
     const list = modsFor(role, kind);
     const m = pick && modById(pick.id);
     let h = '<div class="bw-mod"><select data-slot="' + i + '" data-f="' + f + '" data-k="' + k + '" aria-label="' + kind + ' ' + (k + 1) + '">' + opt('', 'No ' + kind.toLowerCase() + ' line', !pick) +
-      list.map(x => opt(x.Id, x.Name + (x.Recipe ? ' (recipe)' : '') + ' · ' + fill(x.Text, (x.Tiers[0] || {}).Value, (x.Tiers[0] || {}).Value2).replace(/\d+(\.\d+)?/g, '#'), pick && pick.id === x.Id, used.has(x.Id) && !(pick && pick.id === x.Id))).join('') + '</select>';
+      list.map(x => opt(x.Id, x.Name + (x.Recipe ? ' (recipe)' : '') + ' · ' + fill(x.Text, (x.Tiers[0] || {}).Value, (x.Tiers[0] || {}).Value2).replace(/\d+(\.\d+)?/g, '#'), pick && pick.id === x.Id, used.has(x.Id) && !(pick && pick.id === x.Id), x.Name + ': ' + rangeText(x))).join('') + '</select>';
     if (m) h += '<select class="bw-tier" data-slot="' + i + '" data-f="' + f + 't" data-k="' + k + '" aria-label="Tier">' + tiersOk(m).map(t => opt(t.Tier, 'Tier ' + t.Tier + ' · ' + fmt(t.Value) + (t.Value2 != null ? ' / ' + fmt(t.Value2) : ''), t.Tier === pick.tier)).join('') + '</select>';
     return h + '</div>';
   }
@@ -4052,8 +4058,8 @@ window.BOBrewery = function (ctx) {
     if (!open) return h + '<p class="hint">Opens at Rupture Level ' + slotOpenAt(i) + '.</p></div>';
     const types = p.Types.filter(t => t.Role === role), uniq = p.Uniques.filter(u => !u.Later && (typeById(u.Type) || {}).Role === role);
     h += '<div class="bw-row">';
-    if (types.length > 1 || !s.unique) h += field('Potion', '<select data-slot="' + i + '" data-f="type"' + (s.unique ? ' disabled' : '') + '>' + (role === 'Utility' ? opt('', 'Empty', !s.type) : '') + types.map(t => opt(t.Id, t.Name, (s.unique ? uniqueById(s.unique).Type : s.type) === t.Id)).join('') + '</select>', 'grow');
-    if (uniq.length) h += field('Unique', '<select data-slot="' + i + '" data-f="unique">' + opt('', 'None', !s.unique) + uniq.map(u => opt(u.Id, u.Name + ' (' + u.Source + ')', s.unique === u.Id)).join('') + '</select>', 'grow');
+    if (types.length > 1 || !s.unique) h += field('Potion', '<select data-slot="' + i + '" data-f="type"' + (s.unique ? ' disabled' : '') + '>' + (role === 'Utility' ? opt('', 'Empty', !s.type) : '') + types.map(t => opt(t.Id, t.Name, (s.unique ? uniqueById(s.unique).Type : s.type) === t.Id, false, t.Name + ': ' + fill(t.Text))).join('') + '</select>', 'grow');
+    if (uniq.length) h += field('Unique', '<select data-slot="' + i + '" data-f="unique">' + opt('', 'None', !s.unique) + uniq.map(u => opt(u.Id, u.Name + ' (' + u.Source + ')', s.unique === u.Id, false, u.Name + ': ' + fill(u.Text))).join('') + '</select>', 'grow');
     h += '</div>';
     if (!s.unique && (s.type || role !== 'Utility')) {
       const ves = p.Vessels.filter(v => gate(v.MinRL) <= B.rl);
@@ -4103,7 +4109,10 @@ window.BOBrewery = function (ctx) {
 
   function bind() {
     const el = $('#breweryPane'); if (!el || el.dataset.bound) return; el.dataset.bound = '1';
-    el.addEventListener('change', e => {
+    el.addEventListener('change', onChange);
+  }
+  function onChange(e) {
+    {
       use();
       const t = e.target;
       if (t.id === 'bwRl') { B.rl = Math.max(0, Math.min(999, Math.round(+t.value || 0))); return done(); }
@@ -4119,9 +4128,74 @@ window.BOBrewery = function (ctx) {
       else if (f === 'oath' || f === 'core') s[f] = t.value ? { id: t.value, tier: 99 } : null;
       else if (f === 'oatht' || f === 'coret') s[f.slice(0, 4)].tier = +t.value;
       done();
-    });
+    }
   }
-  function done() { use(); B.slots.forEach((_, i) => { if (P()) tidy(i); }); keep(); render(); if (ctx.onChange) ctx.onChange(); }
+  function done() { use(); B.slots.forEach((_, i) => { if (P()) tidy(i); }); keep(); render(); renderOv(); if (ctx.onChange) ctx.onChange(); if (ctx.redraw) ctx.redraw(); }
+
+  // ---------- slot overlay: click a belt slot on the Character tab or Gear view to edit it (same editor as the Brewery tab) ----------
+  let ov = null, ovSlot = -1;
+  function renderOv() {
+    if (!ov || ov.hidden) return;
+    use(); if (!Bid || !P() || !P().Types) return closeOv();
+    ov.innerHTML = '<div class="io-win bw-win"><div class="io-head"><span class="io-slotname">Potion slot ' + (ovSlot + 1) + '</span><button class="io-x" type="button" data-bw-close="1" aria-label="Close">×</button></div>' +
+      '<div class="io-body">' + slotCard(ovSlot) + '<p class="hint io-foot">Changes count in Damage Analysis straight away. More options (Rupture Level, prices) are on the Brewery tab.</p></div></div>';
+  }
+  function openSlot(i) {
+    if (!P() || !P().Types || !(i >= 0 && i < 4)) return;
+    use(); if (!Bid) return;
+    if (!ov) {
+      ov = document.createElement('div'); ov.className = 'io-back'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Potion');
+      ov.addEventListener('mousedown', e => { if (e.target === ov) closeOv(); });
+      ov.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-bw-close]')) closeOv(); });
+      ov.addEventListener('change', onChange);
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && ov && !ov.hidden) { e.preventDefault(); closeOv(); } });
+      document.body.appendChild(ov);
+    }
+    ovSlot = i; ov.hidden = false; document.body.classList.add('io-open');
+    renderOv();
+    const x = ov.querySelector('.io-x'); if (x) x.focus({ preventScroll: true });
+  }
+  function closeOv() { if (ov) ov.hidden = true; document.body.classList.remove('io-open'); }
+
+  // ---------- hover tooltip on the dropdowns: what the chosen option is, without opening the list ----------
+  function selTip(sel) {
+    const i = +sel.dataset.slot, f = sel.dataset.f, k = +sel.dataset.k || 0, v = sel.value, p = P(), s = B && B.slots[i];
+    if (!p || !s || !f) return '';
+    const head = (name, cls) => '<b class="bw-name' + (cls ? ' ' + cls : '') + '">' + esc(name) + '</b>';
+    const none = '<span class="meta">Nothing chosen.</span>';
+    if (f === 'type') { const t = typeById(v); return t ? head(t.Name) + '<p>' + esc(fill(t.Text)) + '</p>' : none; }
+    if (f === 'unique') { const u = uniqueById(v); return u ? head(u.Name, 'unique') + '<p>' + esc(fill(u.Text)) + '</p><span class="meta">' + esc(u.Source || '') + '</span>' : none; }
+    if (f === 'vessel') {
+      const ve = vesselById(v); if (!ve) return none;
+      return head(ve.Name) + '<p>' + esc([ve.Prefixes + ' prefix' + (ve.Prefixes === 1 ? '' : 'es'), ve.Suffixes + ' suffix' + (ve.Suffixes === 1 ? '' : 'es')].concat(ve.Oath ? ['Oath line'] : [], ve.Core ? ['Core line'] : []).join(', ')) + '</p>' + (ve.CoreOnly ? '<span class="meta">Core drops only</span>' : '');
+    }
+    if (f === 'pour') { const x = (p.Pour || []).find(y => y.Id === v); return x ? head(cap(x.name)) : '<span class="meta">You drink it yourself.</span>'; }
+    // A line (prefix, suffix, Oath, Core) or its tier box: the line's name, its range, and the tier picked.
+    const slotKey = f.replace(/t$/, ''), isTier = ['pret', 'suft', 'oatht', 'coret'].includes(f);
+    const pick = isTier ? (['pre', 'suf'].includes(slotKey) ? s[slotKey][k] : s[slotKey]) : null;
+    const m = modById(isTier ? pick && pick.id : v); if (!m) return none;
+    const ts = tiersOk(m), cur = isTier ? ts.find(t => String(t.Tier) === v) : null;
+    let h = head(m.Name) + '<p>' + esc(cur ? fill(m.Text, cur.Value, cur.Value2) : rangeText(m)) + '</p>';
+    h += '<span class="meta">' + esc(m.Kind) + (m.Material ? ' · needs ' + esc(matName(m.Material)) : '') + (m.Recipe ? ' · recipe' : '') + '</span>';
+    if (ts.length > 1) h += '<ul class="bw-tiptiers">' + ts.map(t => '<li' + (cur && t.Tier === cur.Tier ? ' class="on"' : '') + '>T' + t.Tier + ': ' + esc(fill(m.Text, t.Value, t.Value2)) + '</li>').join('') + '</ul>';
+    return h;
+  }
+  let tipEl = null;
+  const hideTip = () => { if (tipEl) tipEl.hidden = true; };
+  function showTip(e) {
+    const sel = e.target.closest && e.target.closest('.bw-slot select, .bw-top select');
+    if (!sel || sel.matches(':focus')) return hideTip();
+    let html = ''; try { use(); html = selTip(sel); } catch (err) { html = ''; }
+    if (!html) return hideTip();
+    if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'pl-tip bw-tip'; tipEl.setAttribute('role', 'tooltip'); tipEl.style.zIndex = 1000; tipEl.style.pointerEvents = 'none'; document.body.appendChild(tipEl); }
+    tipEl.innerHTML = html; tipEl.hidden = false;
+    const r = sel.getBoundingClientRect(), w = tipEl.offsetWidth, hg = tipEl.offsetHeight;
+    let y = r.bottom + 6; if (y + hg > innerHeight - 8) y = Math.max(8, r.top - hg - 6);
+    tipEl.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px'; tipEl.style.top = y + 'px';
+  }
+  document.addEventListener('mouseover', showTip);
+  document.addEventListener('mousedown', hideTip, true);
+  document.addEventListener('scroll', hideTip, { passive: true, capture: true });
 
   // For the sim: one source per open slot with a potion that has stat lines.
   function simPotions() {
@@ -4142,7 +4216,25 @@ window.BOBrewery = function (ctx) {
   function setBelt(id, b) { const c = cleanBelt(b); if (!id || !c) return; write(id, c); if (id === Bid) { B = c; Bstored = true; } }
   const copyBelt = (from, to) => { const b = belt(from); if (b) setBelt(to, b); };
 
-  return { render: () => { bind(); render(); }, simPotions, belt, setBelt, copyBelt };
+  // For the Character tab and the Build tab's Gear card: the four belt slots as a read-only card. Editing stays on the
+  // Brewery tab (the button goes there). '' when there is no character or the game data has no potions.
+  function beltCard() {
+    const p = P(); if (!p || !p.Types) return '';
+    use(); if (!Bid) return '';
+    let h = '<div class="card bw-belt"><h2>Potions <small>belt</small></h2><div class="bw-belt-grid">';
+    for (let i = 0; i < 4; i++) {
+      tidy(i);
+      const open = isOpen(i), po = open ? potion(i) : null;
+      h += '<div class="bw-belt-slot' + (po ? '' : ' empty') + '"' + (open ? ' data-bw-slot="' + i + '" tabindex="0" role="button" aria-label="Edit potion slot ' + (i + 1) + '"' : '') + '><span class="bw-swatch" style="--liq:' + esc(po ? p.Liquid[po.type.Id] || 'var(--faint)' : 'var(--line)') + '" aria-hidden="true"></span><div>' +
+        '<span class="meta">Slot ' + (i + 1) + ' · ' + ROLE_NAME[roleOf(i)] + '</span>' +
+        (!open ? '<span class="meta">Opens at Rupture Level ' + slotOpenAt(i) + '</span>'
+          : po ? '<b class="bw-name' + (po.unique ? ' unique' : '') + '">' + esc(po.name) + '</b>' + po.lines.slice(1).map(l => '<span class="bw-belt-line">' + esc(l.text) + '</span>').join('')
+          : '<span class="meta">Empty · click to add</span>') + '</div></div>';
+    }
+    return h + '</div><button class="btn small ghost" type="button" data-goto-brewery="1">Edit potions in the Brewery</button></div>';
+  }
+
+  return { render: () => { bind(); render(); }, simPotions, belt, setBelt, copyBelt, beltCard, openSlot };
 };
 
 ;
@@ -6217,7 +6309,7 @@ window.BOCharacter = function (ctx) {
     const ch = ctx.current();
     let h = '<div class="cmp-intro"><div class="eyebrow">BUILD OVERVIEW</div><h2>Character</h2><p>The loaded character at a glance: gear by slot, skills with their supports and the notable passives. Click a gear slot to pick or edit an item; hover an item or gem for its details.</p></div>';
     if (!ch) { el.innerHTML = h + '<div class="card"><p class="hint">No character loaded. Load a save, a build code or start a plan first.</p></div>'; return; }
-    el.innerHTML = h + '<div class="ch-cols"><div class="ch-col">' + gearCard(ch) + notesCard() + '</div><div class="ch-col">' + skillsCard(ch) + passivesCard(ch) + '</div></div>';
+    el.innerHTML = h + '<div class="ch-cols"><div class="ch-col">' + gearCard(ch) + (ctx.beltCard ? ctx.beltCard() : '') + notesCard() + '</div><div class="ch-col">' + skillsCard(ch) + passivesCard(ch) + '</div></div>';
   }
 
   // Tooltips: the same item, skill and support text the Build tab shows.
@@ -8840,7 +8932,16 @@ window.BOCharacter = function (ctx) {
     // A line counts when its non-element tags all name the minion skill ("Minion lines that also name Spell,
     // Physical ..."); element tags pick the damage type it scales.
     const fit = m => { const { types, conds } = splitTags(m.tags); return conds.every(c => tags.has(lc(c))) ? types : null; };
-    const fromSupport = m => { const k = String(m.key || ''); return k.startsWith('support:') && forMinions(GD.supports[k.slice(8)]); };
+    // A support a keystone grants to minions counts like a socketed one. Choir of Bones: "Your Minions' Projectile skills are
+    // supported by Chain (the gem's own price: 5% less Damage ...)". Game log 11 Nov 2026 (PetSheet68, Skeletal Mage, gem 15+2):
+    // spec avg 77 without the engine = 6 x 1.19^16 x 0.48 Multistrike x 1.12 Ravening Host x 1.55 (see specInc below) x 0.95 = 76.8;
+    // without Chain's 5% less it would be 80.8.
+    const grantedToMinions = new Set();
+    for (const m of mods) if (m.stat === 'GrantSupport') {
+      const sid = (m.tags || []).find(t => GD.supports[lc(t)]);
+      if (sid && (m.tags || []).some(t => lc(t) === 'minion') && (m.tags || []).every(t => lc(t) === lc(sid) || tags.has(lc(t)))) grantedToMinions.add(lc(sid));
+    }
+    const fromSupport = m => { const k = String(m.key || ''); return k.startsWith('support:') && (forMinions(GD.supports[k.slice(8)]) || grantedToMinions.has(lc(k.slice(8)))); };
     // Gear levels past +5 grow minion skills x1.08 each (patch notes 5 Nov: "Minion skills: 8% a level"; was x1.04);
     // the 0.56 curve with its data (minionFade).
     const growth = res.gem ? spellLevelGrowth(G.DamageGrowth || 1.19, res.gem.own, res.gem.bonus, minionFade(GD)) :Math.pow(G.DamageGrowth || 1.19, L - 1);
@@ -8902,7 +9003,19 @@ window.BOCharacter = function (ctx) {
     const near = o.minionNear === false ? 1 : 1 + MINION_NEAR / 100;
     const zoneLevel = o.enemyLevel || ch.level;
     const lvlK = mi.LevelDamage ? 1 + mi.LevelDamage * MINION_LEVEL_K * Math.pow(Math.max(1, zoneLevel), MINION_LEVEL_P) : 1;
-    const base = (mi.DamageMult || 1) * aff * near * minionMore * kind * lvlK;
+    // The summon skill's own "increased damage" lines (its supports' and lines that name Minion skills) are a group of their
+    // own: they add to each other and multiply the "increased Minion Damage" group. Ravening Host "25% increased damage" +
+    // Bone Sovereign "30% increased damage" = x1.55. Game log 11 Nov 2026, PetSheet68 "spec avg" at gem 15+2 (the game's
+    // number before DamageMult, affinity, near, level and Minion Damage):
+    //   Skeletons 120 = 6.875 x 1.19^16 x 0.48 x 1.12 x 1.30 Added Fire x 1.55 = 120.4; with Bone Armour's engine 3.0% -> 124
+    //   Skeletal Mage 77 (76.8, above) and 79-80 with the engine;  Grave Golem 137 = 9.775 x 1.19^16 x 0.48 x 1.12 x 1.55 x 1.041
+    // Without the x1.55 all three ran 35% under. The same lines also show the game's skill panel is exactly 3 x the PetSheet68
+    // dps with Multistrike (20:27:54 "DPS 115292" = 3 x 38431; owner's panel 136,210 / 334,564 = 3 x 45,403 / 111,521).
+    let specInc = 0;
+    for (const m of mods) if (m.stat === 'Damage' && m.mode === 'Inc' && !m.local && (fromSupport(m) || splitTags(m.tags).conds.some(c => lc(c) === 'minion'))) {
+      const t = fit(m); if (t && !t.length) { specInc += m.v; use(m, 'minion, the summon skill increased'); }
+    }
+    const base = (mi.DamageMult || 1) * aff * near * minionMore * kind * lvlK * (1 + specInc / 100);
     const hit = {}; let avg = 0;
     for (const d of DT) {
       if (!(scaled[d][1] > 0)) continue;
@@ -9001,7 +9114,7 @@ window.BOCharacter = function (ctx) {
     res.minionCurseK = curseK;
     res.sheetHitDps = res.panelDps = dps;
     res.hitDps = res.totalDps = dps * curseK;
-    res.minion = { monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.stat === 'MinionDamage' ? 1 + golem.v / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth };
+    res.minion = { specInc, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.stat === 'MinionDamage' ? 1 + golem.v / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth };
     res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
     if (near > 1) res.notes.push('Counted at your side: minions deal ' + MINION_NEAR + '% more within 7 m of you (fading to none at 12 m), as the game\'s panel counts it.');
     if (mi.LevelDamage) res.notes.push(sk.Name + ' also grows with the level of the zone it fights in (the Monster level box): x' + lvlK.toFixed(3) + ' at level ' + zoneLevel + '. Fitted to the game\'s log and panel at zone levels 6-26 (x1.23 at Rupture 26); deeper Ruptures carry the same curve on, not yet checked.');
@@ -12669,7 +12782,14 @@ window.BOStartApp = function () {
   }); }
 
   // The Build tab (planner.js).
+  // The belt card on the Character and Gear views: a slot opens its editor, the button goes to the Brewery tab.
+  document.addEventListener('click', e => {
+    const t = e.target.closest && e.target.closest('[data-goto-brewery], [data-bw-slot]'); if (!t) return;
+    if (t.dataset.bwSlot != null) brewery.openSlot(+t.dataset.bwSlot); else showTab('brewery');
+  });
+  document.addEventListener('keydown', e => { const t = e.target; if ((e.key === 'Enter' || e.key === ' ') && t && t.dataset && t.dataset.bwSlot != null) { e.preventDefault(); brewery.openSlot(+t.dataset.bwSlot); } });
   planner = window.BOPlanner({
+    beltCard: () => brewery ? brewery.beltCard() : '',
     GD, S, $, esc, gemDot, skillDot, confirm: confirmInPage, importCode: text => importAnyCode(text), bestSupports: bestSupportsFor,
     // A plan code carries the plan's tree tabs too (when it has more than one).
     withTabs: ch => {
@@ -12705,7 +12825,8 @@ window.BOStartApp = function () {
   // The Fossil Planner tab (fossil.js): idol layouts for the Fossil grid.
   fossil = window.BOFossil({ $, esc, gd: () => GD, chars: () => CHARS });
   // The Brewery tab (brewery.js): Brewmaw's potions; the active ones count in the damage sim.
-  brewery = window.BOBrewery({ $, esc, gd: () => GD, current: () => st.ch, onChange: () => { breweryDirty = true; } });
+  brewery = window.BOBrewery({ $, esc, gd: () => GD, current: () => st.ch, onChange: () => { breweryDirty = true; },
+    redraw: () => { if (character) character.render(); if (planner) planner.render(); } }); // the belt cards behind the slot overlay
   const skillIcon = id => (window.GEM_ICONS && window.GEM_ICONS.idx[String(id).toLowerCase()] != null ? skillDot(id) : ''); // the icon only, no colour dot fallback
   scaling = window.BOScaling({ $, esc, gd: () => GD, skillIcon, tip: id => planner.skillTip(null, id, false, true) }); // hover tooltip on a card's title (the Build tab's skill tooltip, game data only)
   // The Item Search tab (itemsearch.js): uniques, Oathwords, bases, mods, runes and jewels from the game data.
@@ -12746,6 +12867,7 @@ window.BOStartApp = function () {
   });
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon });
   character = window.BOCharacter({
+    beltCard: () => brewery ? brewery.beltCard() : '',
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats,
     // Item overlay: edits go to a plan itself, or to a copy of a loaded character (as on the Build tab); the save file is never written.
     editable: buildEditable, commit: ch => { if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {}); planner.render(); }, // the caller redraws the Character tab

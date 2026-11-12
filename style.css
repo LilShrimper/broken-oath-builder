@@ -1941,3 +1941,15 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
   .lad-table { font-size: 12px; }
   .lad-table th, .lad-table td { padding: 5px 5px; }
 }
+/* "What changed" at the bottom of the out-of-date pop-up (version.json changes) */
+.update-changes { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line, rgba(255, 255, 255, .12)); text-align: left; }
+.update-changes h3 { margin: 0 0 6px; font-size: 14px; color: var(--dashboard-gold); }
+:root[data-theme="light"] .update-changes h3 { color: #8a6a1c; }
+.update-changes .update-ver { margin: 8px 0 2px; font-size: 12px; opacity: .75; }
+.update-changes ul { margin: 0; padding-left: 18px; }
+.update-changes li { margin: 0 0 4px; font-size: 13px; line-height: 1.45; }
+/* Unique names on the FAQ tab: hover or focus shows the item's lines (.pl-tip) */
+.faq-item { color: var(--dashboard-gold); border-bottom: 1px dotted currentColor; cursor: help; }
+:root[data-theme="light"] .faq-item { color: #8a6a1c; }
+.faq-item:focus-visible { outline: 2px solid var(--dashboard-gold); outline-offset: 2px; border-radius: 2px; }
+.pl-tip-flavour { margin-top: 6px; color: var(--faint); font-style: italic; }

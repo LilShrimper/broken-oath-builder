@@ -11,9 +11,9 @@
     'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json', 'Gameplay/monster_affixes.json', 'Gameplay/monsters.json', 'Gameplay/oath_masteries.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Read when the folder has them; an older game folder without them still loads.
-  const OPTIONAL = ['Gameplay/trap_price95.json'];
+  const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 25; // 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 26; // 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -230,9 +230,21 @@
     let trapPrice = {};
     try { const tp = J('Gameplay/trap_price95.json'); for (const [k, v] of Object.entries((tp && tp.prices) || {})) if (v > 0) trapPrice[k.toLowerCase()] = +v; } catch (e) { /* older game files: no price table */ }
 
+    // The Tundra Desert wave arena (deep_wound93.json, in the game files since 0.56.8): display only, FAQ tab. Its reward rule
+    // (1 + the week's 2 Oaths + at each break taken deeper DeepenReward + the picked Oath) was read off a run on 12 Nov 2026:
+    // x1.55 (week Crowd + Horde, "reward +55%"), then +0.50, +0.50, +0.60, +0.60 after +25%, +25%, +35%, +35% Oaths.
+    let tundra = null;
+    try {
+      const T = J('Rifts/deep_wound93.json');
+      if (T && T.Pace) tundra = { name: T.Name, intro: T.Intro, pace: pick(T.Pace, ['BreakSeconds', 'LifePerWave', 'DamagePerWave', 'DeepenReward', 'RollsPer5Waves',
+        'MaxAlive', 'BreakEvery', 'GuardianEvery', 'WardenEvery', 'RareEvery', 'BossWave', 'WeeklyOaths', 'OwnRedChance', 'OwnRedPerGuardian']),
+        oaths: (T.Oaths || []).map(o => pick(o, ['Name', 'Life', 'Damage', 'Crowd', 'Reward', 'Text'])),
+        boss: T.Oathbreaker ? pick(T.Oathbreaker, ['Id', 'Life', 'PhaseAt', 'AddsPerGate']) : null, ownReds: T.OwnReds95 || [] };
+    } catch (e) { /* older game files: no Tundra Desert */ }
+
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
       { skills, classes, supports, nodes, masteries, oaths, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, uniques, bases, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice });
+        affixes, uniques, bases, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, OPTIONAL, SCHEMA };
@@ -4524,10 +4536,13 @@ window.BOItemSearch = function (ctx) {
       body = implicits(GD, b) + '<ul class="is-lines unique">' + e.lines.map(t => li(t)).join('') + '</ul>' + (u.Flavour ? '<p class="is-flavour">' + esc(u.Flavour) + '</p>' : '');
       // Where it drops (grail.js dropText: Guardian chase / signature, the Core, or any item level).
       const og = ctx.owned && ctx.owned();
-      if (og && og.dropText) body += '<p class="is-into">Drops from: ' + esc(og.dropText(u).join(' · ')) + '</p>';
+      const from = og && og.dropText ? og.dropText(u) : [];
+      if (from.length) body += '<p class="is-into">Drops from: ' + esc(from.join(' · ')) + '</p>';
       if (e.tiers[0] !== 'Standard') badges.push(badge(e.tiers[0], 'tier ' + lc(e.tiers[0])));
       if (u.Limited) badges.push(badge('Limited', 'muted'));
-      if (u.DropWeight === 0) badges.push(badge('Does not drop', 'muted'));
+      // DropWeight 0 = never a random drop; most of these still come from one place (a Guardian, the Core, the Tundra Desert ...).
+      const sourced = from.length && !/not in the game files/.test(from[0]);
+      if (u.DropWeight === 0) badges.push(badge(sourced ? 'No random drops' : 'Does not drop', 'muted'));
     } else if (e.cat === 'oathword') {
       const w = e.w, hide = e.secret && !F.secrets;
       ico = icon('oathword', 'oathword');
@@ -4680,7 +4695,18 @@ window.BOItemSearch = function (ctx) {
 
   // For the Grail tab: the same icons.
   const forGrail = { sprite, uniqueIcon: u => icon(baseIcon(ctx.gd().bases[lc(u.BaseId)]), 'unique'), wordIcon: () => icon('oathword', 'oathword') };
-  return Object.assign({ render: () => { bind(); render(); } }, forGrail);
+  // Hover tooltip for a unique anywhere on the page (FAQ tab): the Item Search card's lines in the .pl-tip look.
+  function uniqueTip(id) {
+    const GD = ctx.gd(), u = GD && GD.uniques[lc(id)]; if (!u) return '';
+    const b = GD.bases[lc(u.BaseId)], li = t => '<li>' + esc(t) + '</li>';
+    let h = '<b>' + esc(u.Name) + '</b><span class="pl-tip-sub">' + esc('Unique · ' + (b ? b.Name + ' · ' + baseType(b) : u.BaseId) + (u.Level ? ' · level ' + u.Level : '')) + '</span>';
+    const imp = (b && b.Implicits) || [];
+    if (imp.length) h += '<ul class="pl-tip-imp">' + imp.map(m => li(plain(GD, m))).join('') + '</ul>';
+    h += '<ul class="pl-tip-base">' + (u.Mods || []).map(m => li(uniqueLine(GD, m))).join('') + '</ul>';
+    if (u.Flavour) h += '<span class="pl-tip-desc pl-tip-flavour">' + esc(u.Flavour) + '</span>';
+    return h;
+  }
+  return Object.assign({ render: () => { bind(); render(); }, uniqueTip }, forGrail);
 };
 
 ;
@@ -4834,6 +4860,12 @@ window.BOItemSearch = function (ctx) {
       community.sort(byLevel);
       return { reds: redGroups, chase, community };
     }
+    // uniques.json "Core" names the content a red drops in, not only the Core (checked 12 Nov 2026, build 26617933):
+    // tundra95 = deep_wound93.json OwnReds95 and the Atlas card's "Drops only here"; ancient_catacombs = "its 5 own uniques"
+    // (11 Nov notes); gnome_realms = "Gnome Guardians drop a Gnome red" (11 Nov notes); pinnacle91 = the Pinnacle bosses
+    // (unlocks.json); sundered_sky = "the Sundered Sky (Core land)" (audio file note); oathborn = "Oathborn chase items from RL 100" (11 Nov notes).
+    const CORE_SOURCE = { tundra95: 'The Tundra Desert (only here)', ancient_catacombs: 'The Catacombs', gnome_realms: 'Gnome Realms',
+      pinnacle91: 'The Pinnacle', sundered_sky: 'The Core (Sundered Sky)', oathborn: 'Oathborn chase, from Rupture 100' };
     // Where a unique comes from (bosses.json Guardian lists, uniques.json Primal / DwarvenSockets / Core / DropWeight).
     function dropText(u) {
       const g = GD(), out = [], gs = Object.values(g.guardians || {});
@@ -4842,7 +4874,7 @@ window.BOItemSearch = function (ctx) {
       if (sig.length) out.push('Signature drop: ' + sig.join(', '));
       if (u.Primal) out.push("The Core's jackpot (Primal)");
       else if (u.DwarvenSockets) out.push("The Core's jackpot (Deep-forged)");
-      else if (u.Core) out.push('The Core' + (typeof u.Core === 'string' ? ' (' + nice(u.Core) + ')' : ''));
+      else if (u.Core) out.push(CORE_SOURCE[u.Core] || 'The Core' + (typeof u.Core === 'string' ? ' (' + nice(u.Core) + ')' : ''));
       const slot = (g.bases[lc(u.BaseId)] || {}).Slot;
       if (!out.length && slot === 'DwarvenRune' && u.DropWeight === 0) out.push("The Core's jackpot (red Dwarven Rune)");
       if (!out.length && /^community_/.test(u.Id)) out.push("The Core's jackpot (community red)");
@@ -5612,7 +5644,7 @@ window.BOFaq = function (ctx) {
   const { $, esc } = ctx;
   const GROUPS = [
     ['Game mechanics', [['ailments', 'Ailments'], ['multipliers', 'Damage Multipliers'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
-      ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep']]],
+      ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep'], ['tundra', 'Tundra Desert']]],
     ['About this site', [['sim', 'Sim vs the Game Panel'], ['data', 'Game Data & Patches'], ['privacy', 'Privacy']]],
   ];
   const ALL = GROUPS.flatMap(g => g[1]);
@@ -6078,6 +6110,42 @@ window.BOFaq = function (ctx) {
     return h;
   }
 
+  // ---------- The Tundra Desert ----------
+  // Pace, Oaths and own reds from deep_wound93.json (GD.tundra). The reward rule is not in the files: it was read off a run on
+  // 12 Nov 2026 (RL 150): x1.55 from the week's Crowd + Horde ("reward +55%" banner), then +0.50, +0.50, +0.60, +0.60 at breaks taken
+  // deeper with +25%, +25%, +35%, +35% Oaths = DeepenReward 0.25 + the Oath. XP x1.5 / Gold x2.5 from RL 150: Atlas card and patch notes (11 Nov).
+  function tundra(GD) {
+    const T = GD.tundra;
+    let h = intro('Tundra Desert', 'The wave arena on the Atlas from Rupture 100: how its waves run and how its reward grows.');
+    if (!T || !T.pace) return needData(h);
+    const P = T.pace, d = P.DeepenReward || 0;
+    const sign = x => (x >= 0 ? '+' : '') + pct(x) + '%';
+    h += card('How a run goes', list([
+      T.intro ? esc(T.intro) : '',
+      'A rare wave every <b>' + P.RareEvery + '</b> waves, a Warden every <b>' + P.WardenEvery + '</b>, a Guardian every <b>' + P.GuardianEvery + '</b> (each Guardian wave drops a sure red). Wave <b>' + P.BossWave + '</b> is the Oathbreaker' + (T.boss && T.boss.Life ? ' (' + T.boss.Life + '× life)' : '') + '.',
+      'Every <b>' + P.BreakEvery + '</b> waves is a <b>' + P.BreakSeconds + ' s</b> break: stand in the gold ring to leave with your reward, or in the red ring to go deeper and swear one more Oath.',
+      'Monsters gain about <b>' + pct(P.LifePerWave) + '%</b> life and <b>' + pct(P.DamagePerWave) + '%</b> damage every wave (game data; not checked in play).',
+      'From Rupture 150: <b>×1.5</b> experience and <b>×2.5</b> gold.',
+    ]));
+    h += card('The reward', list([
+      'Reward = <b>1</b> + this week\'s ' + (P.WeeklyOaths || 2) + ' Oaths + at every break you go deeper: <b>' + pct(d) + '%</b> + the Oath you pick there.',
+      'All of it adds up; nothing multiplies. The reward does not grow between breaks, only when you go deeper.',
+      'So a +35% Oath gives 10 points more than a +25% one, at any break.',
+    ]) + table(['Waves', 'What changed', 'Reward'], (() => {
+      const week = 0.2 + 0.35, picks = [0.25, 0.25, 0.35, 0.35]; let r = 1 + week; const rows = [['1–' + P.BreakEvery, 'week\'s Oaths +' + pct(week) + '%', '×' + r.toFixed(2)]];
+      picks.forEach((o, i) => { r += d + o; rows.push([(i + 1) * P.BreakEvery + 1 + '–' + (i + 2) * P.BreakEvery, 'deeper ' + sign(d) + ', Oath ' + sign(o), '×' + r.toFixed(2)]); });
+      return rows; })()) + hint('A real run at Rupture 150, 12 Nov 2026 (the week\'s Oaths were Crowd and Horde). The game showed the same numbers.'));
+    h += card('Oaths', table(['Oath', 'Monsters', 'Reward'], (T.oaths || []).map(o => [esc(o.Name), esc(o.Text.replace(/,?\s*reward [+\d%]+$/i, '')), sign(o.Reward)])) +
+      hint('Two Oaths are sworn for the whole week (shown on the Atlas card and at the start of a run); you pick one more at every break you go deeper.'));
+    // Each red's name shows its lines on hover or focus (Item Search's uniqueTip, owner 12 Nov 2026).
+    const reds = (T.ownReds || []).map(id => '<span class="faq-item" data-uniq="' + esc(id) + '" tabindex="0">' + esc((GD.uniques && GD.uniques[id] && GD.uniques[id].Name) || id) + '</span>');
+    if (reds.length) h += card('Drops only here', list([
+      reds.join(', ') + '.',
+      P.OwnRedChance ? 'Game data: a ' + pct(P.OwnRedChance) + '% chance at one of these' + (P.OwnRedPerGuardian ? ', +' + pct(P.OwnRedPerGuardian) + '% for each Guardian wave you pass' : '') + ' (not checked in play).' : '',
+    ]));
+    return h;
+  }
+
   // ---------- About this site ----------
   function sim() {
     let h = intro('Sim vs the Game Panel', 'Why the numbers on the Damage tab can differ from the in-game skill panel, and from your real kills.');
@@ -6136,7 +6204,7 @@ window.BOFaq = function (ctx) {
     return h;
   }
 
-  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, sim, data, privacy };
+  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, tundra, sim, data, privacy };
   function show() {
     const nav = $('#faqNav'), GD = ctx.gd() || {};
     nav.innerHTML = GROUPS.map(g => '<div class="faq-group"><span class="faq-group-label">' + g[0] + '</span><div class="sc-chips">' +
@@ -6147,6 +6215,25 @@ window.BOFaq = function (ctx) {
   // Puts a section's html in a pane and wires its skill filter box (the Minions tab has one).
   function fill(pane, html) {
     pane.innerHTML = html;
+    // Unique names (data-uniq) show the item's lines in a .pl-tip on hover or keyboard focus.
+    if (!pane.dataset.uniqTips) {
+      pane.dataset.uniqTips = '1';
+      let tip = null;
+      const hide = () => { if (tip) tip.hidden = true; };
+      const show = e => {
+        const t = e.target.closest && e.target.closest('[data-uniq]'); if (!t) return hide();
+        const html = ctx.uniqueTip ? ctx.uniqueTip(t.dataset.uniq) : ''; if (!html) return hide();
+        if (!tip) { tip = document.createElement('div'); tip.className = 'pl-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
+        tip.innerHTML = html; tip.hidden = false; tip.style.left = '0px'; tip.style.top = '0px'; // measure at full width
+        const r = t.getBoundingClientRect(), w = tip.offsetWidth, hg = tip.offsetHeight;
+        let y = r.bottom + 6; if (y + hg > innerHeight - 8) y = Math.max(8, r.top - hg - 6);
+        tip.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px'; tip.style.top = y + 'px';
+      };
+      pane.addEventListener('mouseover', show); pane.addEventListener('focusin', show);
+      pane.addEventListener('mouseleave', hide); pane.addEventListener('focusout', hide);
+      pane.addEventListener('click', show);
+      window.addEventListener('scroll', hide, { passive: true });
+    }
     const f = pane.querySelector('#skillFilter');
     if (f) f.oninput = () => { const q = f.value.trim().toLowerCase(); pane.querySelectorAll('#skillFilter ~ .table-wrap tbody tr').forEach(r => { r.hidden = !!q && !r.textContent.toLowerCase().includes(q); }); };
     const controls = pane.querySelector('.faq-xp-controls');
@@ -9795,7 +9882,7 @@ window.BOStartApp = function () {
   if (SV.v && /^https?:$/.test(location.protocol)) {
     const checkVersion = () => fetch((window.SITE_BASE || '') + 'version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(live => {
       if (!live || !live.v) return;
-      if (live.v > SV.v) { $('#siteVersion').innerHTML = 'Version ' + SV.v + ' · <a href="" class="bad">version ' + live.v + ' is live: refresh</a>'; showUpdate(live.v); }
+      if (live.v > SV.v) { $('#siteVersion').innerHTML = 'Version ' + SV.v + ' · <a href="" class="bad">version ' + live.v + ' is live: refresh</a>'; showUpdate(live.v, live.changes); }
       else if (live.v === SV.v) $('#siteVersion').textContent = 'Version ' + SV.v + ' · ' + svWhen + ' (latest)';
     }).catch(() => { /* offline: just the number */ });
     checkVersion();
@@ -9805,8 +9892,12 @@ window.BOStartApp = function () {
   // Out of date: a pop-up over the page (owner, 9 Nov 2026: a banner was too easy to ignore). "Remind me later"
   // closes it for 5 minutes, leaves a thin banner on top, and the pop-up comes back at the next check.
   let updSnooze = 0;
-  function showUpdate(v) {
+  function showUpdate(v, changes) {
     if (Date.now() < updSnooze) return;
+    // What changed since this copy (version.json "changes", from changes.json): every entry newer than the open page.
+    const missed = (Array.isArray(changes) ? changes : []).filter(c => c && c.v > SV.v && c.v <= v && Array.isArray(c.lines) && c.lines.length);
+    const changed = missed.length ? '<div class="update-changes"><h3>What changed</h3>' + missed.map(c => (missed.length > 1 ? '<p class="update-ver">Version ' + c.v + (c.date ? ' · ' + esc(c.date) : '') + '</p>' : '') +
+      '<ul>' + c.lines.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>').join('') + '</div>' : '';
     let m = $('#updateModal');
     if (!m) {
       m = document.createElement('div'); m.id = 'updateModal'; m.className = 'update-modal';
@@ -9832,7 +9923,7 @@ window.BOStartApp = function () {
       '<h2 id="updTitle">This page is out of date</h2>' +
       '<p>A newer version is live (version ' + v + ', you are on ' + SV.v + '). Numbers, game data and fixes in the old version may be wrong. Refresh to get the new one.</p>' +
       '<p class="update-warn">A Save Creator edit you have not downloaded yet is lost on refresh. Download it first.</p>' +
-      '<div class="update-btns"><button class="btn" type="button" data-upd="go">Refresh now</button><button class="btn small ghost" type="button" data-upd="later">Remind me in 5 minutes</button></div></div>';
+      '<div class="update-btns"><button class="btn" type="button" data-upd="go">Refresh now</button><button class="btn small ghost" type="button" data-upd="later">Remind me in 5 minutes</button></div>' + changed + '</div>';
     const go = m.querySelector('[data-upd="go"]'); if (go) go.focus();
   }
   // Gem colour next to a gem's name. Skill gems show their icon where the sheet has one (GEM_ICONS), else the colour
@@ -12995,7 +13086,7 @@ window.BOStartApp = function () {
     },
     openBuild: ch => { addChars([ch], 'code', ch.id); showTab('character'); saveTip('Loaded a ladder build as a plan. Damage Analysis sims it; your own characters are unchanged.'); },
   });
-  faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon });
+  faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '' });
   character = window.BOCharacter({
     beltCard: () => brewery ? brewery.beltCard() : '',
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats,

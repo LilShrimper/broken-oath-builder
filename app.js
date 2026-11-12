@@ -4451,13 +4451,15 @@ window.BOItemSearch = function (ctx) {
   let cacheFor = null, ALL = [], NEWEST = 0, ADDED_DAY = {};
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const dayText = build => { const m = /^\d{4}-(\d\d)-(\d\d)/.exec(ADDED_DAY[build] || ''); return m ? +m[2] + ' ' + MONTHS[+m[1] - 1] : ''; };
+  // A build number of GD.itemAdded in words: a Steam build, or (100,000,000 and up, tools/item-added.js) the public API's game build.
+  const buildName = n => n >= 1e8 ? 'game build ' + Math.floor((n - 1e8) / 100) + ((n - 1e8) % 100 ? ' hotfix ' + (n - 1e8) % 100 : '') : 'Steam build ' + n;
   // "New this patch" on an entry of the newest build; with the New sort on, older ones say when they came.
   function addedBadge(e, tag) {
     if (!e.added) return '';
-    const day = dayText(e.added), title = ' title="Added in Steam build ' + e.added + (day ? ' (' + day + ')' : '') + '"';
+    const day = dayText(e.added), title = ' title="Added in ' + buildName(e.added) + (day ? ' (' + day + ')' : '') + '"';
     if (tag) return e.added === NEWEST ? '<span class="is-tag new"' + title + '>New</span>' : '';
     if (e.added === NEWEST) return '<span class="is-badge new"' + title + '>New this patch</span>';
-    return F.sort === 'new' ? '<span class="is-badge muted"' + title + '>Added ' + esc(day || 'build ' + e.added) + '</span>' : '';
+    return F.sort === 'new' ? '<span class="is-badge muted"' + title + '>Added ' + esc(day || buildName(e.added)) + '</span>' : '';
   }
   function entries() {
     const GD = ctx.gd();
@@ -4717,7 +4719,7 @@ window.BOItemSearch = function (ctx) {
   function results() {
     const list = sorted(pick());
     const head = '<p class="is-count">' + list.length + ' result' + (list.length === 1 ? '' : 's') + (F.cat === 'mod' && F.tier ? ' · item level shown for ' + F.tier : '') +
-      (F.sort === 'new' && NEWEST ? ' · ' + list.filter(e => e.added === NEWEST).length + ' new this patch (Steam build ' + NEWEST + (dayText(NEWEST) ? ', ' + dayText(NEWEST) : '') + ')' : '') + '</p>';
+      (F.sort === 'new' && NEWEST ? ' · ' + list.filter(e => e.added === NEWEST).length + ' new this patch (' + buildName(NEWEST) + (dayText(NEWEST) ? ', ' + dayText(NEWEST) : '') + ')' : '') + '</p>';
     if (!list.length) return head + '<div class="card"><p class="hint">Nothing matches. Clear a filter or try other words.</p></div>';
     const n = F.cat === 'mod' ? shown * 3 : shown, page = list.slice(0, n);
     let body;
@@ -6246,7 +6248,7 @@ window.BOFaq = function (ctx) {
     return h;
   }
   function data(GD) {
-    const built = GD && (GD.steamBuild ? 'Steam build ' + GD.steamBuild : '') + (GD && (GD.filesAt || GD.builtAt) ? ' (' + String(GD.filesAt || GD.builtAt).slice(0, 10) + ')' : '');
+    const built = GD && (GD.apiBuild ? 'game build ' + GD.apiBuild : GD.steamBuild ? 'Steam build ' + GD.steamBuild : '') + (GD && (GD.filesAt || GD.builtAt) ? ' (' + String(GD.filesAt || GD.builtAt).slice(0, 10) + ')' : '');
     let h = intro('Game Data & Patches', 'Where the numbers come from and how fast the site follows a game patch.');
     h += card('Where the numbers come from', list([
       'Skills, supports, items, the passive tree and monster rules are read from the game\'s own Data folder (Steam).',
@@ -10060,8 +10062,10 @@ window.BOStartApp = function () {
   let brewery = null, breweryDirty = false; // the Brewery tab (brewery.js); dirty: potions changed since the last damage render
 
   // ---------- setup ----------
+  // What the game data was built from: the public API's game build (tools/api-source.js), or a Steam build for data built from the game folder.
+  const GD_BUILD = GD.apiBuild ? 'game build ' + GD.apiBuild + (GD.apiHotfix ? ' hotfix ' + GD.apiHotfix : '') : GD.steamBuild ? 'Steam build ' + GD.steamBuild : '';
   const gdDay = new Date(GD.filesAt || GD.builtAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  $('#builtInfo').textContent = 'Game data: ' + (GD.steamBuild ? 'Steam build ' + GD.steamBuild + ' (' + gdDay + ')' : 'game files from ' + gdDay) + (GD.source === 'picked' ? ', your own files' : '') + ' · ' + Object.keys(GD.skills).length + ' skills';
+  $('#builtInfo').textContent = 'Game data: ' + (GD_BUILD ? GD_BUILD + ' (' + gdDay + ')' : 'game files from ' + gdDay) + (GD.source === 'picked' ? ', your own files' : '') + ' · ' + Object.keys(GD.skills).length + ' skills';
   // Page version (sidebar, under Reset): the site's push number, and whether a newer one is live.
   const SV = window.SITE_VERSION || {};
   const svWhen = SV.at ? new Date(SV.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
@@ -11287,7 +11291,7 @@ window.BOStartApp = function () {
     const panel = st.log && st.log.panel && st.log.panel[st.skill];
     const fights = c.fights.filter(f => !f.gear);
     const lines = [
-      'Anonymous check report from Broken Oath Builder (game data ' + (GD.steamBuild ? 'Steam build ' + GD.steamBuild + ', ' : '') + String(GD.filesAt || GD.builtAt).slice(0, 10) + ').', '',
+      'Anonymous check report from Broken Oath Builder (game data ' + (GD_BUILD ? GD_BUILD + ', ' : '') + String(GD.filesAt || GD.builtAt).slice(0, 10) + ').', '',
       '- Class / level: ' + st.ch.classId + ' ' + st.ch.level + (r.attr ? ' (Str ' + r.attr.Str + ', Dex ' + r.attr.Dex + ', Int ' + r.attr.Int + ')' : ''),
       '- Skill: ' + st.skill + ' gem ' + (r.gem ? r.gem.own + '+' + r.gem.bonus : '?') + (r.conduit ? ', cast by ' + r.conduit.host + ' Channel Conduit (' + num(r.speed.usesPerSec, 2) + '/s, tick ' + Math.round(r.conduit.tick * 1000) + ' ms, interval ' + Math.round(r.conduit.interval * 1000) + ' ms)' : '') + (r.coc ? ', Cast on Crit from ' + r.coc.source + ' (' + f2(r.coc.rate) + '/s)' : ''),
       '- Supports: ' + (sup.join(', ') || 'none'),
@@ -11370,7 +11374,7 @@ window.BOStartApp = function () {
         if (!build) { say('Could not attach the build (share-link service unreachable). Untick it, or try again.', 'bad'); btn.disabled = false; return; }
       }
       const tab = (document.querySelector('.tab[aria-selected="true"]') || {}).dataset;
-      const page = (tab && tab.tab || 'damage') + ' tab, game data ' + (GD.steamBuild ? 'build ' + GD.steamBuild : String(GD.filesAt || GD.builtAt).slice(0, 10)) + (/^https?:$/.test(location.protocol) && location.hostname === 'lilshrimper.github.io' ? '' : ', local copy');
+      const page = (tab && tab.tab || 'damage') + ' tab, game data ' + (GD_BUILD || String(GD.filesAt || GD.builtAt).slice(0, 10)) + (/^https?:$/.test(location.protocol) && location.hostname === 'lilshrimper.github.io' ? '' : ', local copy');
       const text = check ? (note ? 'Note: ' + note + '\n\n' : '') + lastCheckReport : note;
       const ex = $('#reportLog').checked ? logExcerpt() : null; // the same lines the player saw in the preview
       const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 10000);

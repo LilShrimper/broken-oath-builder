@@ -934,7 +934,7 @@
     let goals = (multi ? skill : [{ id: skill, w: 1 }]).filter(g => g && g.id && g.w > 0).map(g => ({ id: g.id, w: +g.w, opt: g.opt || simOpt }));
     const dpsOf = (g, list) => {
       calcs++;
-      const r = S.calcSkill(GD, Object.assign({}, ch, { passives: list }), g.id, g.opt);
+      const r = g.r = S.calcSkill(GD, Object.assign({}, ch, { passives: list }), g.id, g.opt);
       let v = r && r.totalDps > 0 ? r.totalDps : 0;
         // Channel Conduit: a channel tick within cfg.conduitMargin of the interval is treated as past it
         // (casts every 2nd tick): the game's tick can run a little faster than the sheet's (Cyclone
@@ -959,7 +959,11 @@
       let v = cache.get(key);
       if (v === undefined) {
         if (goals.length === 1 && !multi && !scored) v = dpsOf(goals[0], list);
-        else { v = 0; for (const g of goals) v += g.w * dpsOf(g, list) / g.base; v /= wSum; }
+        else {
+          // Legion of One on this tree: only one kind of minion stands, so of the counted summons only the strongest deals damage.
+          const d = goals.map(g => dpsOf(g, list)), lost = S.oneKindLost ? S.oneKindLost(goals.map(g => g.r)) : [];
+          v = 0; goals.forEach((g, i) => { if (!lost[i]) v += g.w * d[i] / g.base; }); v /= wSum;
+        }
         // The skill must still deal damage, even at "defence only".
         if (scored && v > 0) v = Math.pow(v, 1 - defW) * Math.pow(Math.max(1, cfg.defence(list).ehp) / Math.max(1, def0.ehp), defW);
         cache.set(key, v);
@@ -1253,7 +1257,7 @@
     const mainSkill = (goals[0] || {}).id;
     const dpsOf = (gl, items) => {
       calcs++;
-      const r = S.calcSkill(GD, Object.assign({}, ch, { items }), gl.id, gl.opt);
+      const r = gl.r = S.calcSkill(GD, Object.assign({}, ch, { items }), gl.id, gl.opt);
       return r && !r.error && !r.unsupported && isFinite(r.totalDps) && r.totalDps > 0 ? r.totalDps : 0;
     };
     for (const gl of goals) gl.base = dpsOf(gl, ch.items || []);
@@ -1263,7 +1267,9 @@
     // One skill: plain DPS (as before). Several: weighted mean of DPS / DPS with the gear worn now.
     const dpsV = items => {
       if (!multi || goals.length === 1) return dpsOf(goals[0], items);
-      let v = 0; for (const gl of goals) if (gl.base > 0) v += gl.w * dpsOf(gl, items) / gl.base;
+      // Legion of One: only one kind of minion stands, so of the counted summons only the strongest deals damage.
+      const d = goals.map(gl => gl.base > 0 ? dpsOf(gl, items) : 0), lost = S.oneKindLost ? S.oneKindLost(goals.map(gl => gl.base > 0 ? gl.r : null)) : [];
+      let v = 0; goals.forEach((gl, i) => { if (gl.base > 0 && !lost[i]) v += gl.w * d[i] / gl.base; });
       return v / wSum;
     };
     // With the Defence slider or "max resistances" on, the value is a score (see the top of the file), not DPS.
@@ -7041,7 +7047,7 @@ window.BOCharacter = function (ctx) {
     'AuraDrainLess', 'PoisonSpreadOnKill', 'HeraldKillRadius',
     'DexLife']); // Wind Dancer: "+{v} to maximum Life for every 10 Dexterity" (statText)
   // Stats this model uses.
-  const HANDLED = new Set(['StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
+  const HANDLED = new Set(['MinionOneKind', 'StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
     'Cooldown', 'Repeats', 'Projectiles', 'Penetration', 'SkillLevel', 'PoisonChance', 'PoisonDamage', 'IgniteChance', 'IgniteDamage', 'BleedChance', 'BleedDamage',
     'DotMulti', 'AilmentDuration', 'CurseEffect', 'Str', 'Dex', 'Int', 'Attributes', 'GrantSupport', 'SkyfallRepeat', 'OrbitCount',
     'ShockChance', 'ShockEffect', 'ShockStacks', 'ArmourMore', 'LowLifeMore', 'CullingStrike', 'Keystone', 'BrandCount', 'IntSpellMore',
@@ -9549,14 +9555,29 @@ window.BOCharacter = function (ctx) {
     };
     let minionMore = 1;
     for (const m of pickMods(mods, 'MinionDamage', 'More')) if (fit(m)) { minionMore *= 1 + m.v / 100; use(m, 'minion'); }
+    // Legion of One (MinionOneKind): "You can command only one kind of Minion: raising a kind dismisses the others. Its maximum
+    // number is doubled (at least +2) and each raise brings twice as many, and your Minions deal 30% less Damage".
+    // Game log 12 Nov 2026 (build 71, owner's Necromancer, node taken at 16:40:39):
+    //   "LegionOne91: Legion of One - the army keeps its largest kind summon_skeletons (8), 13 minion(s) of 3 other kind(s) fall apart"
+    //   "PetLegion: summon_zombie raises under Legion of One - cap 14, 8 minions of other kinds dismissed"
+    //   caps: Skeletons PetSheet68 cap 9 (16:40:31) -> 18; Zombie and Skeletal Mage 14 (7 x 2); "summon_bone_golem ... cap 3" (1 + 2)
+    //   "PetHarmony: summon_zombie - 1 kinds standing, minions deal x0.73" (0.7 x Harmony's 1.05 for one kind; without the node
+    //   the same line reads "4 kinds standing, minions deal x1.20"); Skeletons hitmult 11.62 -> 7.07 = x0.608 (0.735 / 1.20 = 0.6125)
+    //   Golem: PetSheet68 "hit 14674 | cap 3 pace 0.317 s | dps 138956" = 3 golems (14674 x 3 / 0.317), and PetHit68 dmgmult 4.77
+    //   as before the node, so the lone golem's 30% more per unused +1 (soloK below) stays.
+    // The one kind standing is the skill this sheet is for: no other kind in the army, Harmony counts 1 kind, and the Grave Golem
+    // blesses only when it is that kind (the others "fall apart", the golem with them).
+    const legion = pickMods(mods, 'MinionOneKind', 'Flat');
+    const oneKind = legion.length > 0;
+    if (oneKind) { minionMore *= 0.7; legion.forEach(m => use(m, 'minion, one kind: 30% less, twice as many')); }
     // Harmony: "X% more Damage for each different kind of Minion you command (up to 4 kinds)". Kinds = the summon gems
     // on your bar (each raised); the 2 Nov Skeletons panel with all four out fits 1 + 5% x 4.
-    const kinds = Math.max(1, Math.min(4, o.minionKinds || new Set(ch.hotbar.filter(id => { const k = GD.skills[lc(id)]; return isSummon(k) && k.Minion && k.Minion.MonsterId; })).size));
+    const kinds = oneKind ? 1 : Math.max(1, Math.min(4, o.minionKinds || new Set(ch.hotbar.filter(id => { const k = GD.skills[lc(id)]; return isSummon(k) && k.Minion && k.Minion.MonsterId; })).size));
     let kind = 1;
     for (const m of pickMods(mods, 'MinionKindMore', 'Flat')) { kind *= 1 + m.v / 100 * kinds; use(m, 'minion, ' + kinds + ' kinds'); }
     // A Grave Golem on your bar blesses every minion near it by its supports' element, itself included: flame (fire
     // supports) 12.5% more damage, storm (lightning) 15% faster. The game's panel counts it (2 Nov Skeletons and Golem).
-    const golem = golemBlessing(GD, ch, sk, o);
+    const golem = oneKind && !mi.GolemAuras ? null : golemBlessing(GD, ch, sk, o);
     if (golem && golem.stat === 'MinionDamage') minionMore *= 1 + golem.v / 100;
     if (o.graveCall) minionMore *= 1.3; // Grave Call: 30% more damage (speed is added below)
     const aff = mi.Affinity && mi.AffinityDamage ? 1 + Math.min(mi.AffinityCap || 50, (attr[mi.Affinity] || 0) * mi.AffinityDamage) / 100 : 1;
@@ -9602,13 +9623,16 @@ window.BOCharacter = function (ctx) {
       if (soloK !== 1) { for (const d of Object.keys(hit)) { hit[d].min *= soloK; hit[d].max *= soloK; hit[d].avg *= soloK; } avg *= soloK; }
     }
     else for (const m of pickMods(mods, 'MinionCap', 'Flat')) if (fit(m)) { alive += m.v; use(m, 'minion'); }
+    // Legion of One: the maximum is doubled, at least +2 (log 12 Nov 2026, above: 9 -> 18, 7 -> 14, the golem 1 -> 3).
+    const aliveBefore = alive;
+    if (oneKind) alive = Math.max(alive * 2, alive + 2);
     // One army across all your summon skills. Game log 6 Nov (build 26474163): "ArmyBack81: ON - army 40 in all,
     // past 27 each body adds 0.50 of a body (a full army: each blow x0.837, 33.5 bodies of damage)" and
     // "army 3 standing (total 40) -> each blow x1.000 = 3.0 bodies of damage"; patch notes 4 Nov ("the total is back
     // to 40 (was 27), and each minion past 27 adds a little less"). ArmyEngaged82 (patch 0.54) counts only bodies
     // that struck in the last 2.5 s: the sheet assumes the whole army is fighting.
     // Past 40 "your oldest one goes": which skill loses them depends on summon order, so each kind keeps its share.
-    const army = o.armyProbe ? null : armyCount(GD, ch, sk, alive, o);
+    const army = o.armyProbe ? null : oneKind ? { total: alive, parts: [{ name: sk.Name, n: alive }] } : armyCount(GD, ch, sk, alive, o);
     let armyK = 1;
     if (army) {
       if (army.total > ARMY_TOTAL && !oneOnly) alive = Math.max(1, Math.round(alive * ARMY_TOTAL / army.total));
@@ -9687,8 +9711,9 @@ window.BOCharacter = function (ctx) {
     res.sheetHitDps = res.panelDps = dps;
     res.hitDps = res.totalDps = dps * curseK;
     // specAvg: the summon gem's own hit before the minion's multipliers, the game's "spec avg" (PetSheet68) and the avg_hit of a summon in Copy stats.
-    res.minion = { specAvg: DT.reduce((a, d) => a + (scaled[d][0] + scaled[d][1]) / 2, 0) * (1 + specInc / 100), specInc, soloK, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.stat === 'MinionDamage' ? 1 + golem.v / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth };
+    res.minion = { specAvg: DT.reduce((a, d) => a + (scaled[d][0] + scaled[d][1]) / 2, 0) * (1 + specInc / 100), specInc, soloK, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.stat === 'MinionDamage' ? 1 + golem.v / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth, oneKind };
     res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
+    if (oneKind) res.notes.push('Legion of One: only one kind of minion stands, counted here as ' + sk.Name + ' alone: ' + alive + ' at once (' + aliveBefore + ' doubled, at least +2), dealing 30% less. Your other summons are dismissed when you raise these' + (mi.GolemAuras ? '' : ', the Grave Golem and its blessing with them') + ' (game log, 12 Nov 2026).');
     if (near > 1) res.notes.push('Counted at your side: minions deal ' + MINION_NEAR + '% more within 7 m of you (fading to none at 12 m), as the game\'s panel counts it.');
     if (mi.LevelDamage) res.notes.push(sk.Name + ' also grows with the level of the zone it fights in (the Monster level box): x' + lvlK.toFixed(3) + ' at level ' + zoneLevel + ' with the gem at level ' + minionGem + '. It makes up for the gap between the monsters there (taken halfway to your own level) and the gem, so a higher gem level gets less of it. Set the Monster level box to the Rupture you run: the game shows this number for where you stand (in the hub, your own level). The game\'s own rule (developer\'s formulas file), checked against the game log in the hub and Ruptures 31 to 69 (11 Nov 2026).');
     if (specInc) res.notes.push('Increased damage of the summon skill itself: ' + Math.round(specInc) + '% (its supports and lines that name Minion skills). It multiplies the increased Minion Damage (game log, 11 Nov 2026).');
@@ -10223,6 +10248,15 @@ window.BOCharacter = function (ctx) {
     return job;
   }
 
+  // Legion of One: only one kind of minion stands, so of several summon skills counted together (the tree's "Also count",
+  // totals) only one deals damage. Takes calcSkill results, returns which are dismissed: every Legion of One summon but the
+  // one with the most DPS (the kind a player would keep). Game log 12 Nov 2026: "PetLegion: summon_zombie raises under
+  // Legion of One - cap 14, 8 minions of other kinds dismissed".
+  function oneKindLost(results) {
+    const idx = []; results.forEach((r, i) => { if (r && r.minion && r.minion.oneKind) idx.push(i); });
+    let keep = idx[0]; for (const i of idx) if ((results[i].totalDps || 0) > (results[keep].totalDps || 0)) keep = i;
+    return results.map((r, i) => idx.length > 1 && idx.includes(i) && i !== keep);
+  }
   // Is this stat part of the DPS math (or deliberately non-damage)? Used to flag lines the sheet cannot count.
   const counted = stat => HANDLED.has(stat) || NON_DAMAGE.has(stat);
   // Passive points the character has not spent: PassivePointsPerLevel for each level after the first plus
@@ -10239,7 +10273,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { noFitWhy, defenceTotal, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  const api = { oneKindLost, noFitWhy, defenceTotal, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -10872,10 +10906,12 @@ window.BOStartApp = function () {
     const name = esc(r.skill ? r.skill.Name : st.skill);
     // Skills ticked under "Also count" on the tree: Total DPS adds their DPS (each with its own saved supports).
     const co = comboOpts(), more = optExtra().map(g => ({ id: g.id, r: S.calcSkill(GD, st.ch, g.id, co) })).filter(x => x.r && !x.r.error && !x.r.unsupported && isFinite(x.r.totalDps));
-    const total = r.totalDps + more.reduce((a, x) => a + x.r.totalDps, 0);
+    // Legion of One: only one kind of minion stands, so the total takes the strongest of the counted summons.
+    const lost = S.oneKindLost([r].concat(more.map(x => x.r))), anyLost = lost.some(Boolean);
+    const total = (lost[0] ? 0 : r.totalDps) + more.reduce((a, x, i) => a + (lost[i + 1] ? 0 : x.r.totalDps), 0);
     el.innerHTML =
       (more.length
-        ? stat('Total DPS', num(total), '', 'main', [name + ' ' + num(r.totalDps)].concat(more.map(x => esc(sName(x.id)) + ' ' + num(x.r.totalDps))).join(' + ') + '<br>Main skill plus the skills ticked under Also count, vs the enemy set on the Damage tab')
+        ? stat('Total DPS', num(total), '', 'main', [name + ' ' + num(r.totalDps)].concat(more.map(x => esc(sName(x.id)) + ' ' + num(x.r.totalDps))).filter((x, i) => !lost[i]).join(' + ') + (anyLost ? '<br>Legion of One: one kind of minion at a time, so only the strongest summon is counted' : '') + '<br>Main skill plus the skills ticked under Also count, vs the enemy set on the Damage tab')
         : stat('Total DPS', num(r.totalDps), '', 'main', name + (r.minion ? ': all its minions, before the enemy' : ' vs the enemy set on the Damage tab'))) +
       stat('Tooltip DPS', num(r.panelDps), '', '', 'The number the game\'s skill panel shows') +
       stat('Average hit', num(r.hitAvg), '', '', 'With crits ' + num(r.hitAvgCrit)) +
@@ -12767,6 +12803,7 @@ window.BOStartApp = function () {
       else if (s.swapped) h += '<div class="gain ' + cls + '">Swap for ' + esc(GD.nodes[s.swapped].Name) + ' (one choice per altar): ' + pct(s.d) + ' ' + esc(skillName) + ' DPS' + (s.cost > 0 ? ' · ' + s.cost + ' more point' + (s.cost > 1 ? 's' : '') : '') + '</div>';
       else h += '<div class="gain ' + cls + '">Take: ' + pct(s.cost > 1 ? s.d / s.cost : s.d) + ' ' + esc(skillName) + ' DPS' + (s.cost > 1 ? ' per point · ' + s.cost + ' points (' + pct(s.d) + ' total)' : ' · ' + s.cost + ' point') + '</div>';
     } else h += '<div class="tk">' + (on ? 'Click to refund' : 'Click to take') + ' · scoring…</div>';
+    if ((n.Mods || []).some(m => m.Stat === 'MinionOneKind') && optExtra().length) h += '<div class="tk" style="margin-top:5px">Only one kind of minion stands with this node: of the summon skills you count, only the strongest is counted, the others as 0.</div>';
     const unc = [n, s && s.swapped ? GD.nodes[s.swapped] : null].filter(Boolean).flatMap(uncounted);
     if (unc.length) h += '<div class="tk" style="margin-top:5px">Not in the DPS number: ' + esc(unc.join(' · ')) + '</div>';
     h += '<div class="tk tk-ban">Right-click: never take</div>';
@@ -12785,7 +12822,15 @@ window.BOStartApp = function () {
     const co = comboOpts(), more = optExtra().map(g => ({ id: g.id, w: g.w, b: S.calcSkill(GD, st.ch, g.id, co).totalDps })).filter(g => g.b > 0);
     const wSum = 1 + more.reduce((a, g) => a + g.w, 0);
     const b = base.totalDps, have = allocSet();
-    const rel = list => { const c = Object.assign({}, st.ch, { passives: list }); let v = S.calcSkill(GD, c, st.skill, o).totalDps / b; for (const g of more) v += g.w * S.calcSkill(GD, c, g.id, co).totalDps / g.b; return (more.length ? v / wSum : v) - 1; };
+    // Legion of One on the tree being valued: only one kind of minion stands, so of the counted summons only the strongest counts.
+    const rel = list => {
+      const c = Object.assign({}, st.ch, { passives: list }), r0 = S.calcSkill(GD, c, st.skill, o);
+      if (!more.length) return r0.totalDps / b - 1;
+      const rs = [r0].concat(more.map(g => S.calcSkill(GD, c, g.id, co))), lost = S.oneKindLost(rs);
+      let v = lost[0] ? 0 : r0.totalDps / b;
+      more.forEach((g, i) => { if (!lost[i + 1]) v += g.w * rs[i + 1].totalDps / g.b; });
+      return v / wSum - 1;
+    };
     const ids = Object.keys(GD.nodes).filter(id => !blocked(id) && !banned(id) && GD.nodes[id].Kind !== 'Start');
     let i = 0;
     const step = () => {

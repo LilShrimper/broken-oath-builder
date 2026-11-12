@@ -7391,7 +7391,7 @@ window.BOCharacter = function (ctx) {
         const [s, knee] = DEF_ENGINE[m.stat], t = get(s);
         const units = s === 'Block' ? t : (is0568(GD) ? t : Math.min(t, knee) + Math.max(0, t - knee) / 4) / 1000; // 0.56.8: no knee
         use(m, s === 'Block' ? 'more per 1% block' : 'more per 1,000 ' + label[s]);
-        engine.push({ v: m.v * units, types: splitTags(m.tags).types, src: m.src + ' (' + Math.round(t).toLocaleString('en-US') + (s === 'Block' ? '' : ' ') + label[s] + ', estimated)' });
+        engine.push({ def: true, v: m.v * units, types: splitTags(m.tags).types, src: m.src + ' (' + Math.round(t).toLocaleString('en-US') + (s === 'Block' ? '' : ' ') + label[s] + ', estimated)' });
       }
       // Rampart Strike support (0.56.5): "The linked Shield attack deals {v}% more Damage for each 1% chance to Block". Its
       // text does not put it in the engine, so it is its own more multiplier.
@@ -7464,7 +7464,22 @@ window.BOCharacter = function (ctx) {
     bonus = Math.floor(bonus);
     const L = own + bonus;
     res.gem = { own, bonus, total: L };
-    if (isSummon(sk)) return minionSheet(GD, ch, sk, res, mods, use, attr, L, o);
+    if (isSummon(sk)) {
+      // Defence engine on minions. Game's skill panel 11 Nov 2026 (Bone Armour 1.8% per 1,000 armour, Vow of Iron toggled): armour
+      // 2,904 -> 3,666 moved Skeletal Mage 136,210 -> 137,606, Raise Zombie 334,564 -> 337,993 and Vampire Dash 476 -> 481, all
+      // x1.0103: the minions' panel DPS takes the same defence-engine lines as your own hits. Only the defence lines (armour,
+      // evasion, ES, life, block) go over; mana and attack-speed lines were not part of that test. The ratio is the engine's
+      // own: log sheet armour 1,676 -> 2,262, (1 + 1.8% x 2.262) / (1 + 1.8% x 1.676) = 1.01025.
+      const dEng = engine.filter(e => e.def);
+      if (dEng.length) {
+        const U = sum(dEng.filter(e => !e.types.length).map(e => e.v)), byType = {};
+        for (const e of dEng) for (const t of e.types) byType[t] = (byType[t] || 0) + e.v;
+        if (U) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: U, v2: 0, local: false, src: 'Damage engine (defences, added together, patch 0.56.5)', key: 'engine' });
+        for (const [t, S] of Object.entries(byType)) mods.push({ stat: 'Damage', mode: 'More', tags: [t], v: ((1 + (U + S) / 100) / (1 + U / 100) - 1) * 100, v2: 0, local: false, src: 'Damage engine, ' + t + ' only', key: 'engine' });
+        res.notes.push('Damage engine on minions: ' + dEng.map(e => e.src.replace(/^[^·]*·\s*/, '') + ' +' + e.v.toFixed(1) + '%').join(', ') + ' (game panel and log, 11 Nov 2026).');
+      }
+      return minionSheet(GD, ch, sk, res, mods, use, attr, L, o);
+    }
     if (sk.Minion) res.notes.push(sk.Name + ': enemies it kills rise as minions that fight for you; they are not counted here (only this skill\'s own hits).');
 
     // Effectiveness ramps: Early (low gem levels) and Late (from -> at), linear, read at the gem's OWN
@@ -8847,7 +8862,7 @@ window.BOCharacter = function (ctx) {
     const moreFor = d => {
       let k = 1;
       for (const m of mods) {
-        if (!fromSupport(m) || m.mode !== 'More' || isRuthless(m)) continue;
+        if (!(fromSupport(m) || m.key === 'engine') || m.mode !== 'More' || isRuthless(m)) continue;
         const t = fit(m); if (!t || (t.length && !t.includes(d))) continue;
         if (m.stat === 'Damage') { k *= 1 + m.v / 100; use(m, 'minion'); }
       }
@@ -9086,7 +9101,7 @@ window.BOCharacter = function (ctx) {
   // each item's base value + its local flat, x its local increases (the stat or Defences), plus global flat, x (global
   // increases + the attribute's 4% per 10: Str armour, Dex evasion, Int ES) x "more" lines. Block: the shield's base block
   // + flat Block lines, capped at Hero.BlockMax (75 in 0.56.5). Same method as the 0.56.4 Hammer of Judgement estimate;
-  // NOT CHECKED against the game's character panel.
+  // Armour checked against the game log 11 Nov 2026 (below); Evasion, ES and Block follow the same method.
   function defenceTotal(GD, ch, mods, attr, stat) {
     const H = GD.scaling.Hero || {};
     const plain = m => !splitTags(m.tags).conds.length;
@@ -9110,6 +9125,14 @@ window.BOCharacter = function (ctx) {
       const li = loc.filter(m => m.mode === 'Inc' && (m.stat === stat || m.stat === 'Defences')).reduce((x, m) => x + m.v, 0);
       flat += (b[stat] + lf) * (1 + li / 100);
     }
+    // Every increase ADDS together (items, passives, the attribute's 4% per 10, the Dragonling's aspect), then "more" lines
+    // multiply. Game log 11 Nov 2026 (Shrimpskelemage, level 47, Str 112): items 582.2 (gloves 300.04 + boots 124.18 +
+    // chest 158) x (1 + 0.81 Aegis + 0.448 Str + 0.20 Dragonling Iron Aspect) = 1,431 = "ArmHead91: ... (sheet items 1431)";
+    // with Bone Armour +0.40 and the idol +0.02: 1,676 = "sheet 1676"; with Vow of Iron x1.35: 2,262 = "sheet 2262".
+    // The engine reads this sheet number: "TrustFix91: engine now bone_n1 ArmourMore 1.8 x 1.43" (1,431) and "x 2.26" (2,262).
+    // The character panel's bigger Armour (2,598 / 2,916 / 3,666) adds defence-only parts that do NOT feed the engine:
+    // Bone Guard support "30% more armour plus 10 armour per level" (log "Bone Guard on (armour 1676 -> 2648)" = x1.3 + 470
+    // at level 47) and "EsArmour59: 50% of maximum energy shield counts as armour" (+268 from 536).
     const gi = mods.filter(m => !m.local && m.mode === 'Inc' && (m.stat === stat || m.stat === 'Defences') && plain(m)).reduce((x, m) => x + m.v, 0) + attrInc;
     const more = mods.filter(m => !m.local && m.mode === 'More' && m.stat === stat && plain(m)).reduce((x, m) => x * (1 + m.v / 100), 1);
     return Math.max(0, flat * (1 + gi / 100) * more);

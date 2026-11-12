@@ -5358,14 +5358,13 @@ window.BOItemSearch = function (ctx) {
       const hc = S.hc;
       const extra = S.sort === 'ehp' ? 'EHP' : S.sort === 'lifees' ? 'Life + ES' : '';
       const body = rows.map(r => {
-        // Supports as the site's gem chips (colour by attribute); undiscovered ones are not named.
-        const sups = (r.main_supports || []).filter(Boolean).map(id => '<span class="chip lad-sup">' + (isHidden(id) ? '' : (ctx.gemDot ? ctx.gemDot(id) : '')) + esc(supportName(id)) + '</span>').join('');
+        // The list shows the main skill only (owner, 12 Nov 2026); its supports are in the hero's build view.
         const on = S.hero && r.build === S.hero, x = roster()[r.hero];
         const ex = extra ? '<td class="num">' + (metric(r) != null ? fmt(metric(r)) : '<span class="meta">–</span>') + '</td>' : '';
         return '<tr class="' + (on ? 'on' : '') + (r.dead ? ' dead' : '') + '"' + (r.has_build && r.build ? ' data-build="' + esc(r.build) + '" tabindex="0"' : '') + '>' +
           '<td class="num">' + (r.rank || '') + '</td>' +
           '<td class="lad-cls">' + clsIco(r.class) + esc(r.class || '') + (r.class_rank ? ' <small class="meta" title="Rank inside the class">#' + r.class_rank + '</small>' : '') + (r.ascendancy && r.ascendancy !== 'None' ? ' <small class="meta">' + esc(r.ascendancy) + '</small>' : '') + (hc && r.dead ? ' <span class="lad-dead">dead</span>' : '') + '</td>' +
-          '<td class="lad-skill">' + (r.main_skill ? '<b>' + (ctx.skillDot && !isHidden(r.main_skill) ? ctx.skillDot(r.main_skill) : '') + esc(skillName(r.main_skill)) + '</b>' : '<span class="meta">–</span>') + (sups ? '<div class="lad-sups">' + sups + '</div>' : '') + '</td>' +
+          '<td class="lad-skill">' + (r.main_skill ? '<b>' + (ctx.skillDot && !isHidden(r.main_skill) ? ctx.skillDot(r.main_skill) : '') + esc(skillName(r.main_skill)) + '</b>' : '<span class="meta">–</span>') + '</td>' +
           '<td class="num">' + (r.level || '') + '</td><td class="num">' + (r.rupture_level || 0) + '</td>' +
           '<td class="num">' + (r.guardian_dps_median ? fmt(r.guardian_dps_median) : '<span class="meta">–</span>') + '</td>' +
           '<td class="num lad-sim">' + simCell(r) + '</td>' + ex +
@@ -10001,7 +10000,7 @@ window.BOStartApp = function () {
 
   const st = {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0 },
-    enemyLevel: null, rarity: 'rare', gElem: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: false, enemyLife: null, graveCall: false, flashfire: false, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
+    enemyLevel: null, rarity: 'boss', gElem: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: false, enemyLife: null, graveCall: false, flashfire: false, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
     penFloor: false, opt: null, optJob: null, last: null,
     keepSup: new Set(), blockSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
   };
@@ -10565,7 +10564,8 @@ window.BOStartApp = function () {
         ? stat('Total DPS', num(total), '', 'main', [name + ' ' + num(r.totalDps)].concat(more.map(x => esc(sName(x.id)) + ' ' + num(x.r.totalDps))).join(' + ') + '<br>Main skill plus the skills ticked under Also count, vs the enemy set on the Damage tab')
         : stat('Total DPS', num(r.totalDps), '', 'main', name + (r.minion ? ': all its minions, before the enemy' : ' vs the enemy set on the Damage tab'))) +
       stat('Tooltip DPS', num(r.panelDps), '', '', 'The number the game\'s skill panel shows') +
-      stat('Average hit', num(r.hitAvg), '', '', 'With crits ' + num(r.hitAvgCrit));
+      stat('Average hit', num(r.hitAvg), '', '', 'With crits ' + num(r.hitAvgCrit)) +
+      '<div class="enemy-cfg-row"><span class="hint">Against a ' + esc(enemyLabel()) + '</span>' + enemyBtn() + '</div>';
     el.hidden = false;
   }
   function renderMain() {
@@ -10701,9 +10701,12 @@ window.BOStartApp = function () {
       '</dl></section>';
   }
 
+  // The enemy the sim runs against, in a few words (button tooltips).
+  const enemyLabel = () => 'level ' + (st.enemyLevel || (st.ch ? st.ch.level : '')) + ' ' + ({ normal: 'Normal monster', magic: 'Magic monster', rare: 'Rare', boss: 'Guardian' + (st.gElem ? ' (' + st.gElem + ')' : '') }[st.rarity] || 'enemy');
+  const enemyBtn = cls => '<button class="btn small ghost enemy-cfg' + (cls ? ' ' + cls : '') + '" type="button" data-enemy-cfg title="Now: ' + esc(enemyLabel()) + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9.5 11.5h.01M14.5 11.5h.01M10 19v2M14 19v2"/></svg>Configure Enemy</button>';
   function resultsHeading(r) {
     return '<div class="results-heading"><div><div class="eyebrow">BUILD RESULTS</div><h2>Damage Analysis</h2>' +
-      '<p>' + esc(st.ch.name) + ' · ' + esc(r.skill.Name) + ' · performance against a level ' + ((r.enemy && r.enemy.level) || st.enemyLevel || st.ch.level) + ' ' + ({ normal: 'normal monster', magic: 'Magic monster', rare: 'Rare', boss: 'Guardian' }[st.rarity] || 'enemy') + '</p></div></div>';
+      '<p>' + esc(st.ch.name) + ' · ' + esc(r.skill.Name) + ' · performance against a level ' + ((r.enemy && r.enemy.level) || st.enemyLevel || st.ch.level) + ' ' + ({ normal: 'normal monster', magic: 'Magic monster', rare: 'Rare', boss: 'Guardian' }[st.rarity] || 'enemy') + '</p></div>' + enemyBtn() + '</div>';
   }
 
   function damageMixCard(r) {
@@ -11466,7 +11469,7 @@ window.BOStartApp = function () {
   $('#penNeg').addEventListener('change', e => { st.penFloor = !e.target.checked; render(); });
   resGrid.addEventListener('input', e => { const d = e.target.dataset.res; if (d) { st.res[d] = e.target.value; render(); } });
   document.querySelectorAll('[data-charge]').forEach(el => el.addEventListener('input', e => { st.charges[e.target.dataset.charge] = Math.max(0, +e.target.value || 0); render(); }));
-  $('#controls').addEventListener('change', e => {
+  const controlsChange = e => {
     const t = e.target;
     if (t.dataset.src) { if (t.checked) st.off.delete(t.dataset.src); else st.off.add(t.dataset.src); render(); }
     else if (t.dataset.tryherald) { if (t.checked) st.tryHeralds[t.dataset.tryherald] = st.tryHeralds[t.dataset.tryherald] || 20; else delete st.tryHeralds[t.dataset.tryherald]; render(); }
@@ -11474,7 +11477,23 @@ window.BOStartApp = function () {
     else if (t.dataset.vowbreak) { if (t.checked) st.vowbreak.add(t.dataset.vowbreak); else st.vowbreak.delete(t.dataset.vowbreak); render(); }
     else if (t.dataset.curse) { st.curses[t.dataset.curse] = Object.assign(st.curses[t.dataset.curse] || { dread: 0 }, { on: t.checked }); render(); }
     else if (t.dataset.dread) { st.curses[t.dataset.dread] = Object.assign(st.curses[t.dataset.dread] || { on: true }, { dread: Math.max(0, +t.value || 0) }); render(); }
-  });
+    // The curse list is drawn again on every change: keep the keyboard on the box just used.
+    if ((t.dataset.curse || t.dataset.dread) && !t.isConnected) { const again = document.querySelector(t.dataset.curse ? '[data-curse="' + CSS.escape(t.dataset.curse) + '"]' : '[data-dread="' + CSS.escape(t.dataset.dread) + '"]'); if (again) again.focus(); }
+  };
+  $('#controls').addEventListener('change', controlsChange);
+  // "Configure Enemy" (owner, 12 Nov 2026): the Enemy card opens in a dialog from every page that runs the sim, so the
+  // target can be changed without leaving the page. The card itself moves into the dialog and back (one set of inputs).
+  const enemyDialog = $('#enemyDialog');
+  enemyDialog.addEventListener('change', controlsChange);
+  function openEnemyDialog() {
+    if (!st.ch || enemyDialog.open) return;
+    const card = document.querySelector('#configEnemy > .card'); if (card) $('#enemyDialogBody').appendChild(card);
+    enemyDialog.showModal();
+  }
+  enemyDialog.addEventListener('close', () => { const card = $('#enemyDialogBody').firstElementChild; if (card) $('#configEnemy').appendChild(card); });
+  enemyDialog.addEventListener('click', e => { if (e.target === enemyDialog) enemyDialog.close(); }); // a click on the backdrop
+  $('#enemyDialogClose').addEventListener('click', () => enemyDialog.close());
+  document.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-enemy-cfg]')) openEnemyDialog(); });
 
   // Loading saves: one file, or the whole SaveGames folder (picker or drag and drop). A web page cannot
   // open a folder by itself, and Chrome/Edge will not let it remember one inside AppData, so "Reload
@@ -12901,7 +12920,7 @@ window.BOStartApp = function () {
     if (GS.running && GS.key !== key) { GS.job++; GS.running = false; GS.msg = 'The character or a setting changed, so the search was stopped.'; }
     if (GS.res && GS.res.key !== key) GS.res = null;
     const chk = (f, label, tip) => '<label class="check-row" title="' + esc(tip) + '"><input type="checkbox" data-gs-set="' + f + '"' + (S_[f] ? ' checked' : '') + (GS.running ? ' disabled' : '') + '><span>' + label + '</span></label>';
-    let h = '<div class="card gs-card"><div class="cmp-pick-head"><h2>Gear Set Sim</h2><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + (GS.running ? ' disabled' : '') + '>' + cmpSkillOptions() + '</select></label>' + (GS.running ? '' : cmpMultiHtml()) + '</span></div>' +
+    let h = '<div class="card gs-card"><div class="cmp-pick-head"><h2>Gear Set Sim</h2><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + (GS.running ? ' disabled' : '') + '>' + cmpSkillOptions() + '</select></label>' + (GS.running ? '' : cmpMultiHtml() + enemyBtn()) + '</span></div>' +
       '<p class="hint">Finds the best gear for the selected skill' + (optExtra().length ? ' and the ' + optExtra().length + ' ticked under Also count (weighted)' : '') + ': every unique (with Vows), every Oathword, and rare items with the best prefixes and damage suffixes. Your passive tree, skills, supports and idols stay as they are.</p>' +
       '<div class="gs-controls"><label class="field inline" title="Item level of the rares: 84 and up gives the top tier of every line"><span>Item level</span><input type="number" min="1" max="100" id="gsIlvl" value="' + S_.ilvl + '"' + (GS.running ? ' disabled' : '') + '></label>' +
       chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
@@ -12925,7 +12944,7 @@ window.BOStartApp = function () {
     cmpSync();
     const g = planner.gear, slot = cmpSlot(), ia = CMP.a.items[0] || null, ib = CMP.b.items[0] || null;
     h += '<div class="card cmp-pick"><div class="cmp-pick-head"><h2>Item slot</h2>' +
-      '<span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill">' + cmpSkillOptions() + '</select></label>' + cmpMultiHtml() + '</span></div>' +
+      '<span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill">' + cmpSkillOptions() + '</select></label>' + cmpMultiHtml() + enemyBtn() + '</span></div>' +
       cmpSlotButtons() + (CMP.msg ? '<p class="hint pl-status">' + esc(CMP.msg) + '</p>' : '') + '</div>';
     // The item that deals more with the selected skill is marked green, with how much more.
     const rows = st.skill ? cmpRows(ia, ib) : null, r0 = rows && rows[0], cb = rows && cmpCombined(rows);

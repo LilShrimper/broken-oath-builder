@@ -1989,3 +1989,19 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 :root[data-theme="light"] .faq-item { color: #8a6a1c; }
 .faq-item:focus-visible { outline: 2px solid var(--dashboard-gold); outline-offset: 2px; border-radius: 2px; }
 .pl-tip-flavour { margin-top: 6px; color: var(--faint); font-style: italic; }
+
+/* Configure Enemy: the Enemy card in a dialog, opened from every page that runs the sim */
+.enemy-cfg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.enemy-cfg svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.results-heading { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 16px; }
+.build-stats .enemy-cfg-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 12px; }
+.build-stats .enemy-cfg-row .hint { margin: 0; }
+.enemy-dialog { width: min(640px, calc(100% - 24px)); max-height: calc(100dvh - 24px); overflow: auto; }
+.enemy-dialog-content { padding: 20px; }
+.enemy-dialog-content > .hint { margin: 0 0 12px; }
+.enemy-dialog .card { background: none; border: 0; box-shadow: none; padding: 0; }
+.enemy-dialog .card > h2 { display: none; }
+.enemy-dialog .card h3 { font-size: 13px; margin: 12px 0 4px; }
+.enemy-dialog .card p.hint { margin: 4px 0 8px; }
+.enemy-dialog #curseList { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0 8px; }
+@media (max-width: 540px) { .enemy-dialog-content { padding: 14px; } }

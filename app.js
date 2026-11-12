@@ -845,7 +845,11 @@
 // Passive tree optimizer: keeps the same number of points and moves them where the chosen skill
 // gains the most DPS. Works in the browser (run in small slices) and in Node (tests).
 //   steps = BOTreeOpt.optimize(GD, S, ch, skillId, simOpts, cfg)  -> generator
+//   Several skills: pass [{ id, w, opt }] instead of skillId (opt defaults to simOpts). Each tree is then scored
+//   as the weighted mean of every skill's DPS relative to its DPS on the starting tree, so a 200k skill counts
+//   as much per % as a 2M one. Search only: the damage model is untouched.
 //   each next() does a little work; the last one returns the result (see the end of optimize).
+//   Yields with a phase also carry q: rough overall progress 0..1 (for the page's progress bar).
 // Steps:
 //   1. What each taken node is worth on its own. Nodes worth little are path nodes.
 //   2. Re-route: rebuild the shortest tree that reaches every node worth keeping.
@@ -877,24 +881,38 @@
 
     // ---- values ----
     const cache = new Map(); let calcs = 0, tries = 0;
-    const V = set => {
-      const list = [...set].sort(); const key = list.join(',');
-      let v = cache.get(key);
-      if (v === undefined) {
-        calcs++;
-        const r = S.calcSkill(GD, Object.assign({}, ch, { passives: list }), skill, simOpt);
-        v = r && r.totalDps > 0 ? r.totalDps : 0;
+    const multi = Array.isArray(skill);
+    let goals = (multi ? skill : [{ id: skill, w: 1 }]).filter(g => g && g.id && g.w > 0).map(g => ({ id: g.id, w: +g.w, opt: g.opt || simOpt }));
+    const dpsOf = (g, list) => {
+      calcs++;
+      const r = S.calcSkill(GD, Object.assign({}, ch, { passives: list }), g.id, g.opt);
+      let v = r && r.totalDps > 0 ? r.totalDps : 0;
         // Channel Conduit: a channel tick within cfg.conduitMargin of the interval is treated as past it
         // (casts every 2nd tick): the game's tick can run a little faster than the sheet's (Cyclone
         // tooltip 5.30 uses/s vs sheet 5.27), and crossing it halves the linked spell's casts.
         const c = r && r.conduit;
         if (c && cfg.conduitMargin > 0 && c.ticks === 1 && c.tick < c.interval * (1 + cfg.conduitMargin)) v *= 0.5;
-        cache.set(key, v);
-      }
       return v;
     };
     const have = new Set((ch.passives || []).map(realId).filter(id => walkable(id)));
     const budget = have.size + Math.max(0, cfg.extraPoints | 0); // cfg.extraPoints: unspent points to plan too
+    const haveList = [...have].sort();
+    for (const g of goals) g.base = dpsOf(g, haveList);
+    const dropped = goals.filter(g => !(g.base > 0)).map(g => g.id);
+    goals = goals.filter(g => g.base > 0);
+    const wSum = goals.reduce((a, g) => a + g.w, 0);
+    // One skill: plain DPS (as before). Several: weighted mean of DPS / starting DPS (1 = the starting tree).
+    const V = set => {
+      const list = [...set].sort(); const key = list.join(',');
+      let v = cache.get(key);
+      if (v === undefined) {
+        if (goals.length === 1 && !multi) v = dpsOf(goals[0], list);
+        else { v = 0; for (const g of goals) v += g.w * dpsOf(g, list) / g.base; v /= wSum; }
+        cache.set(key, v);
+      }
+      return v;
+    };
+    if (!goals.length) return { error: multi && skill.length > 1 ? 'None of these skills has DPS to optimize.' : 'This skill has no DPS to optimize.' };
     const base = V(have);
     if (!(base > 0)) return { error: 'This skill has no DPS to optimize.' };
 
@@ -936,10 +954,12 @@
     // ---- 1. what each taken node is worth on its own ----
     const own = {};
     let k = 0;
+    // Overall progress: valuing 0-30% (add-only 0-40%), spending 30-60% (add-only 40-100%), swaps 60-100%.
+    const qVal = cfg.addOnly ? 0.4 : 0.3;
     for (const id of have) {
       const s = new Set(have); s.delete(id);
       own[id] = 1 - V(s) / base;
-      if (++k % 8 === 0) yield { phase: 'Valuing your nodes', p: k / have.size };
+      if (++k % 8 === 0) yield { phase: 'Valuing your nodes', p: k / have.size, q: qVal * k / have.size };
     }
     const targets = [...have].filter(id => kept.has(id) || own[id] >= OWN_KEEP);
 
@@ -958,7 +978,7 @@
     for (const id of useful) { const c = clusterOf(id); if (c && !altarOf(id)) (clusters.get(c) || clusters.set(c, []).get(c)).push(id); }
     // steps (optional): records each pick in order, for "plan my next points".
     function* spend(start, points, steps) {
-      const tree = new Set(start); let cur = V(tree);
+      const tree = new Set(start); let cur = V(tree); const total = points;
       while (points > 0) {
         const avoidAltar = set => v => !!otherAtAltar(set, v);
         const b = bfs(tree, avoidAltar(tree));
@@ -1008,7 +1028,7 @@
         for (const x of [...tree]) if (!best.list.has(x)) tree.delete(x);
         for (const x of best.list) tree.add(x);
         points -= best.cost; cur = V(tree);
-        if (steps) steps.push({ nodes: best.path, cost: best.cost, gain: best.g, swapped: best.swapped });
+        if (steps) { steps.push({ nodes: best.path, cost: best.cost, gain: best.g, swapped: best.swapped }); yield { phase: 'Planning points', p: 1 - points / total, q: qVal + (1 - qVal) * (1 - points / total) }; }
       }
       return tree;
     }
@@ -1043,7 +1063,7 @@
       return s;
     };
 
-    yield { phase: 'Re-routing', p: 0 };
+    yield { phase: cfg.addOnly ? 'Planning points' : 'Re-routing', p: 0, q: qVal };
     const starts = [];
     if (budget > have.size) starts.push(new Set(have)); // free points: spend them on the tree as it is
     if (!cfg.addOnly) {
@@ -1054,15 +1074,16 @@
     // Add-only (plan my next points): keep every taken node, spend the free points in order.
     const steps = [];
     if (cfg.addOnly) { best = yield* drain(spend(have, budget - have.size, steps)); bestV = V(best); starts.length = 0; }
-    for (const st of starts) {
-      const t = yield* drain(spend(st, budget - st.size));
+    for (let i = 0; i < starts.length; i++) {
+      const t = yield* drain(spend(starts[i], budget - starts[i].size));
       const v = V(t);
       if (v > bestV) { best = t; bestV = v; }
+      yield { phase: 'Re-routing', p: (i + 1) / starts.length, q: 0.3 + 0.3 * (i + 1) / starts.length };
     }
 
     // ---- 4. swap weak branches for better ones ----
     for (let iter = 0; iter < (cfg.addOnly ? 0 : 14); iter++) {
-      yield { phase: 'Trying swaps', p: iter / 14 };
+      yield { phase: 'Trying swaps', p: iter / 14, q: 0.6 + 0.4 * iter / 14 };
       const cur = bestV, seen = new Set(), branches = [];
       for (const id of best) {
         if (kept.has(id)) continue;
@@ -1090,6 +1111,8 @@
     // ---- result ----
     const finalSet = connected(best);
     const value = V(finalSet);
+    const finalList = [...finalSet].sort();
+    const skills = goals.map(g => { const v = dpsOf(g, finalList); return { id: g.id, w: g.w, base: g.base, value: v, gain: v / g.base - 1 }; });
     const add = [...finalSet].filter(id => !have.has(id)), remove = [...have].filter(id => !finalSet.has(id));
     const worth = (set, id) => { const s = new Set(set); s.delete(id); return 1 - V(s) / V(set); };
     const attrs = set => { const a = { Str: 0, Dex: 0, Int: 0 }; for (const id of set) for (const m of nodes[id].Mods || []) if (m.Mode === 'Flat') { if (m.Stat === 'Attributes') { a.Str += m.Value || 0; a.Dex += m.Value || 0; a.Int += m.Value || 0; } else if (m.Stat in a) a[m.Stat] += m.Value || 0; } return a; };
@@ -1101,6 +1124,7 @@
       add: add.map(id => ({ id, d: worth(finalSet, id) })).sort((a, b) => b.d - a.d),
       remove: remove.map(id => ({ id, d: own[id] })).sort((a, b) => b.d - a.d),
       kept: [...kept].map(id => ({ id, why: why[id] })), steps, addOnly: !!cfg.addOnly,
+      skills, dropped, multi: multi && goals.length > 1,
       attrs: { Str: a1.Str - a0.Str, Dex: a1.Dex - a0.Dex, Int: a1.Int - a0.Int },
       calcs, ms: Date.now() - t0,
     };
@@ -1116,6 +1140,9 @@
 // passive tree, skills, supports and idols left as they are. Works in the browser (run in small slices) and in Node.
 //   gen = BOGearOpt.optimize(GD, S, ch, skillId, simOpts, cfg)   (a generator: each next() does a little work)
 //   each next() returns { value: { phase, p } } until the last one, which returns the result (see the end).
+//   Several skills: pass [{ id, w, opt }] instead of skillId (opt defaults to simOpts; the first is the main skill,
+//   whose weapon kinds rule the weapon). A set is then scored as the weighted mean of every skill's DPS relative to
+//   its DPS with the gear worn now, as in treeopt.js. Search only: the damage model is untouched.
 // What it tries for each slot, in the context of the other slots' current picks:
 //   - every unique for the slot (rolled at its best; a red item then gets up to 6 Vows, chosen like affixes),
 //   - every Oathword on every base it fits (plain item, runes in order),
@@ -1153,10 +1180,23 @@
     const due = () => calcs - lastYield >= 12 && (lastYield = calcs, true);
 
     // ---- value of a set of items ----
-    const V = items => {
+    const multi = Array.isArray(skill);
+    let goals = (multi ? skill : [{ id: skill, w: 1 }]).filter(x => x && x.id && x.w > 0).map(x => ({ id: x.id, w: +x.w, opt: x.opt || simOpt }));
+    const mainSkill = (goals[0] || {}).id;
+    const dpsOf = (gl, items) => {
       calcs++;
-      const r = S.calcSkill(GD, Object.assign({}, ch, { items }), skill, simOpt);
+      const r = S.calcSkill(GD, Object.assign({}, ch, { items }), gl.id, gl.opt);
       return r && !r.error && !r.unsupported && isFinite(r.totalDps) && r.totalDps > 0 ? r.totalDps : 0;
+    };
+    for (const gl of goals) gl.base = dpsOf(gl, ch.items || []);
+    const dropped = goals.filter(gl => !(gl.base > 0) && gl.id !== mainSkill).map(gl => gl.id);
+    goals = goals.filter(gl => gl.base > 0 || gl.id === mainSkill);
+    const wSum = goals.reduce((a, gl) => a + gl.w, 0);
+    // One skill: plain DPS (as before). Several: weighted mean of DPS / DPS with the gear worn now.
+    const V = items => {
+      if (!multi || goals.length === 1) return dpsOf(goals[0], items);
+      let v = 0; for (const gl of goals) if (gl.base > 0) v += gl.w * dpsOf(gl, items) / gl.base;
+      return v / wSum;
     };
     // Replace (or, with null, remove) the item in a slot key; the item keeps its place in the list.
     const put = (items, key, it) => {
@@ -1167,7 +1207,7 @@
     };
     const at = (items, key) => items.filter(i => i.slot === realSlot(key))[key === 'DwarvenRune2' ? 1 : 0] || null;
     // A weapon skill only works with the weapon kinds it lists (skills.json WeaponKinds).
-    const kinds = ((GD.skills[lc(skill)] || {}).WeaponKinds || []).map(lc);
+    const kinds = ((GD.skills[lc(mainSkill)] || {}).WeaponKinds || []).map(lc);
     const mainOk = b => !kinds.length || kinds.includes(lc(b.Class));
     const wordOk = w => !w.Class || lc(w.Class) === lc(ch.classId); // some Oathwords belong to one class
 
@@ -1338,7 +1378,7 @@
     // ---- passes ----
     let items = (ch.items || []).map(i => i);
     const base0 = V(items);
-    if (!(base0 > 0)) return { error: 'This skill has no DPS to optimize.' };
+    if (!goals.length || !(goals[0].base > 0) || !(base0 > 0)) return { error: 'This skill has no DPS to optimize.' };
     const SLOTS = SINGLE.concat(items.filter(i => i.slot === 'DwarvenRune').length > 1 ? ['DwarvenRune2'] : []);
     const total = 1 + SLOTS.length;
     let done = 0;
@@ -1398,7 +1438,8 @@
       // gain: what this slot's pick adds over the item you wear now, with the rest of the set as found
       out.push({ slot, item: it, was, worth, changed, gain: changed ? value / (V(put(items, slot, was)) || value) - 1 : 0 });
     }
-    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl };
+    const skills = goals.map(gl => { const v = dpsOf(gl, items); return { id: gl.id, w: gl.w, base: gl.base, value: v, gain: gl.base > 0 ? v / gl.base - 1 : 0 }; });
+    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, skills, dropped, multi: multi && goals.length > 1 };
   }
 
   const api = { optimize };
@@ -2047,9 +2088,18 @@ window.BOPlanner = function (ctx) {
       '</div>';
   }
 
+  // "Include in simulations" (the page's Also count): the tree optimizer, Plan, node values, Item Compare and
+  // Gear Set Sim weigh these skills too. A page setting, not a build edit, so it works on saves without editing them.
+  function countBox(skill) {
+    if (!ctx.countable || !ctx.countable(skill)) return '';
+    const main = ctx.simSkill && ctx.simSkill() === skill, w = (ctx.optWeights ? ctx.optWeights() : {})[skill], on = main || w > 0;
+    return '<span class="pl-count' + (on ? ' on' : '') + '"><label class="check-row" title="' + (main ? 'The selected skill always counts, at weight 1' : 'The tree optimizer, Plan, node values, Item Compare and Gear Set Sim weigh this skill too (Also count)') + '"><input type="checkbox" data-f="count"' + (on ? ' checked' : '') + (main ? ' disabled' : '') + '><span>Include in simulations</span></label>' +
+      (on ? '<label class="field inline pl-count-w" title="Weight: 1 = as much as the main skill, 0.5 = half"><span>Weight</span><input type="number" min="0.05" max="10" step="0.05" data-f="countw" value="' + (main ? 1 : w) + '"' + (main ? ' disabled' : '') + '></label>' : '') + '</span>';
+  }
   function skillsCard(ch, edit, dis) {
     const rs = rows(ch), bar = onBar(ch);
-    let h = '<div class="card"><h2>Skills <small>' + bar.length + '/' + BAR + ' on the bar</small></h2><p class="hint">Vows, Heralds and curses only count while on the skill bar. A spell triggered by Cast on Crit or a Channel Conduit can stay off the bar.</p><div class="pl-skills">';
+    let h = '<div class="card"><h2>Skills <small>' + bar.length + '/' + BAR + ' on the bar</small></h2><p class="hint">Vows, Heralds and curses only count while on the skill bar. A spell triggered by Cast on Crit or a Channel Conduit can stay off the bar.</p>' +
+      (ctx.countable ? '<p class="opt-slow">Include in simulations: the tree optimizer, Plan, node values, Item Compare and Gear Set Sim weigh that skill too. Each skill is simmed for every option tried, so the tree optimizer, Plan, node values and Gear Set Sim get slower: about one more full run per skill.</p>' : '') + '<div class="pl-skills">';
     for (const r of rs) {
       const sk = GD.skills[lc(r.skill)], lvl = ch.gemLevels[r.skill] || 1;
       const sups = r.sock ? r.sock.supports : [], slots = S.socketsFor(GD, ch, r.skill, lvl);
@@ -2059,6 +2109,7 @@ window.BOPlanner = function (ctx) {
         '<label class="field inline"><span>Gem level</span><input type="number" min="1" max="40" data-f="glevel" value="' + lvl + '"' + dis + '></label>' +
         '<label class="check-row"><input type="checkbox" data-f="bar"' + (bar.includes(r.skill) ? ' checked' : '') + dis + '><span>On bar</span></label>' +
         '<label class="check-row" title="The skill the Damage tab opens on"><input type="radio" name="plMain" data-f="main"' + (ch.mainSkill === r.skill ? ' checked' : '') + dis + '><span>Main</span></label>' +
+        countBox(r.skill) +
         (edit ? '<button class="x" type="button" title="Remove this skill" data-act="rmskill">×</button>' : '') + '</div>' +
         (sk ? '' : '<p class="hint bad">Unknown skill ' + esc(r.skill) + '</p>') +
         supChips(ch, r, sups, slots, lvl, edit) +
@@ -2452,6 +2503,12 @@ window.BOPlanner = function (ctx) {
   function onChange(e) {
     const t = e.target, f = t.dataset.f;
     if (!ctx.current() || !f) return;
+    if (f === 'count' || f === 'countw') {
+      const sk = (t.closest('[data-skill]') || {}).dataset.skill; if (!sk || !ctx.setOptWeight) return;
+      if (f === 'count') ctx.setOptWeight(sk, t.checked ? 1 : 0);
+      else ctx.setOptWeight(sk, Math.max(0.05, Math.min(10, +t.value || 1)));
+      return render();
+    }
     const ch = ctx.editable();
     const row = t.closest('[data-skill]'), skill = row && row.dataset.skill;
     const v = t.value;
@@ -6123,20 +6180,20 @@ window.BOFaq = function (ctx) {
     h += card('How a run goes', list([
       T.intro ? esc(T.intro) : '',
       'A rare wave every <b>' + P.RareEvery + '</b> waves, a Warden every <b>' + P.WardenEvery + '</b>, a Guardian every <b>' + P.GuardianEvery + '</b> (each Guardian wave drops a sure red). Wave <b>' + P.BossWave + '</b> is the Oathbreaker' + (T.boss && T.boss.Life ? ' (' + T.boss.Life + '× life)' : '') + '.',
-      'Every <b>' + P.BreakEvery + '</b> waves is a <b>' + P.BreakSeconds + ' s</b> break: stand in the gold ring to leave with your reward, or in the red ring to go deeper and swear one more Oath.',
+      'Every <b>' + P.BreakEvery + '</b> waves is a <b>' + P.BreakSeconds + ' s</b> break with a choice to click: <b>Stitch</b> to leave with your reward, or one of the Oaths on offer to swear it and keep going.',
       'Monsters gain about <b>' + pct(P.LifePerWave) + '%</b> life and <b>' + pct(P.DamagePerWave) + '%</b> damage every wave (game data; not checked in play).',
       'From Rupture 150: <b>×1.5</b> experience and <b>×2.5</b> gold.',
     ]));
     h += card('The reward', list([
-      'Reward = <b>1</b> + this week\'s ' + (P.WeeklyOaths || 2) + ' Oaths + at every break you go deeper: <b>' + pct(d) + '%</b> + the Oath you pick there.',
-      'All of it adds up; nothing multiplies. The reward does not grow between breaks, only when you go deeper.',
+      'Reward = <b>1</b> + this week\'s ' + (P.WeeklyOaths || 2) + ' Oaths + for every Oath you pick at a break: <b>' + pct(d) + '%</b> + that Oath\'s reward.',
+      'All of it adds up; nothing multiplies. The reward does not grow between breaks, only when you pick an Oath.',
       'So a +35% Oath gives 10 points more than a +25% one, at any break.',
     ]) + table(['Waves', 'What changed', 'Reward'], (() => {
       const week = 0.2 + 0.35, picks = [0.25, 0.25, 0.35, 0.35]; let r = 1 + week; const rows = [['1–' + P.BreakEvery, 'week\'s Oaths +' + pct(week) + '%', '×' + r.toFixed(2)]];
-      picks.forEach((o, i) => { r += d + o; rows.push([(i + 1) * P.BreakEvery + 1 + '–' + (i + 2) * P.BreakEvery, 'deeper ' + sign(d) + ', Oath ' + sign(o), '×' + r.toFixed(2)]); });
+      picks.forEach((o, i) => { r += d + o; rows.push([(i + 1) * P.BreakEvery + 1 + '–' + (i + 2) * P.BreakEvery, 'break ' + sign(d) + ', Oath ' + sign(o), '×' + r.toFixed(2)]); });
       return rows; })()) + hint('A real run at Rupture 150, 12 Nov 2026 (the week\'s Oaths were Crowd and Horde). The game showed the same numbers.'));
     h += card('Oaths', table(['Oath', 'Monsters', 'Reward'], (T.oaths || []).map(o => [esc(o.Name), esc(o.Text.replace(/,?\s*reward [+\d%]+$/i, '')), sign(o.Reward)])) +
-      hint('Two Oaths are sworn for the whole week (shown on the Atlas card and at the start of a run); you pick one more at every break you go deeper.'));
+      hint('Two Oaths are sworn for the whole week (shown on the Atlas card and at the start of a run); you pick one more at every break unless you Stitch.'));
     // Each red's name shows its lines on hover or focus (Item Search's uniqueTip, owner 12 Nov 2026).
     const reds = (T.ownReds || []).map(id => '<span class="faq-item" data-uniq="' + esc(id) + '" tabindex="0">' + esc((GD.uniques && GD.uniques[id] && GD.uniques[id].Name) || id) + '</span>');
     if (reds.length) h += card('Drops only here', list([
@@ -10000,6 +10057,7 @@ window.BOStartApp = function () {
     for (const c of Object.values(GD.curses)) st.curses[c.Id] = { on: ch.hotbar.includes(c.Skill), dread: 0 };
     st.enemyLevel = null; $('#enemyLevel').value = ''; $('#enemyLevel').placeholder = ch.level;
     st.combo = store.get('combo:' + ch.id, []) || [];
+    st.optW = store.get('optw:' + ch.id, {}) || {};
     $('#treeReset').hidden = !!ch.plan; // a plan's tree is the plan itself
     const { skills, pickable } = fillSkills(ch);
     const remembered = store.get('skill:' + ch.id, null);
@@ -10016,12 +10074,13 @@ window.BOStartApp = function () {
     st.pickable = pickable;
     $('#optSkill').innerHTML = pickable.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('');
     if (st.skill) { $('#skillSelect').value = st.skill; $('#optSkill').value = st.skill; }
+    renderOptMulti();
     return { skills, pickable };
   }
 
   function selectSkill(id) {
     st.skill = id; st.gemLevel = null; st.supports = null; st.keepSup = new Set(); st.supMsg = ''; st.pinned = null; st.hps = null; st.cps = null; st.totemCount = null; stopSearch(); st.opt = null;
-    $('#skillSelect').value = id; $('#optSkill').value = id; $('#skillGem').innerHTML = skillDot(id); $('#gemLevel').value = ''; $('#hpsOverride').value = ''; st.ingame = null;
+    $('#skillSelect').value = id; $('#optSkill').value = id; renderOptMulti(); $('#skillGem').innerHTML = skillDot(id); $('#gemLevel').value = ''; $('#hpsOverride').value = ''; st.ingame = null;
     if (st.ch) store.set('skill:' + st.ch.id, id);
     const sk = GD.skills[String(id).toLowerCase()];
     $('#skillDesc').textContent = sk ? sk.Description.replace(/\{[^}]+\}\|plural\([^)]*\)/g, '').replace(/\{(\w+)\}/g, '$1') : '';
@@ -10063,6 +10122,48 @@ window.BOStartApp = function () {
     o.off = new Set([...st.off].filter(k => !/^support:/.test(k)));
     return o;
   }
+  // Tree optimizer goals: the main skill (weight 1) plus the skills ticked under "Also count", each with its
+  // own saved supports (comboOpts). One skill: the plain skill id, so everything works as before.
+  const optExtra = () => Object.entries(st.optW || {}).filter(([id, w]) => w > 0 && id !== st.skill && (st.pickable || []).some(s => s.id === id)).map(([id, w]) => ({ id, w: +w }));
+  const sName = id => (GD.skills[String(id).toLowerCase()] || {}).Name || id;
+  function optGoals(extra) {
+    const more = optExtra();
+    if (!more.length) return st.skill;
+    return [{ id: st.skill, w: 1, opt: opts(extra) }].concat(more.map(g => ({ id: g.id, w: g.w, opt: comboOpts(extra) })));
+  }
+  const optLabel = () => { const more = optExtra(); return more.length ? [st.skill, ...more.map(g => g.id)].map(sName).join(' + ') : sName(st.skill); };
+  // "Also count" picker rows (the tree tab and the Item Simulator share one setting per character).
+  const optMultiList = () => { const w = st.optW || {}; return (st.pickable || []).filter(s => s.id !== st.skill && (s.where !== 'Owned gem' || w[s.id] > 0)); };
+  const optMultiSum = () => { const n = optExtra().length; return n ? 'Also count: ' + n + ' skill' + (n > 1 ? 's' : '') : 'Also count…'; };
+  function optMultiRows(boxName) {
+    const w = st.optW || {}, list = optMultiList();
+    const main = (st.pickable || []).find(s => s.id === st.skill);
+    return (main ? '<div class="opt-multi-row main" title="The main skill always counts, at weight 1. Change it in the ' + boxName + ' box."><label class="check-row"><input type="checkbox" checked disabled><span>' + skillDot(main.id) + esc(main.name) + ' <span class="c">main</span></span></label><input type="number" value="1" disabled title="Weight"></div>' : '') + list.map(s => { const on = w[s.id] > 0;
+      return '<div class="opt-multi-row"><label class="check-row"><input type="checkbox" data-ow="' + esc(s.id) + '"' + (on ? ' checked' : '') + '><span>' + skillDot(s.id) + esc(s.name) + '</span></label>' +
+        '<input type="number" min="0.05" max="10" step="0.05" data-oww="' + esc(s.id) + '" value="' + (on ? w[s.id] : 1) + '" title="Weight"' + (on ? '' : ' disabled') + '></div>'; }).join('');
+  }
+  function renderOptMulti() {
+    const box = $('#optMulti'); if (!box) return;
+    box.hidden = !st.ch || !optMultiList().length;
+    $('#optMultiSum').textContent = optMultiSum();
+    box.classList.toggle('on', !!optExtra().length);
+    $('#optMultiList').innerHTML = optMultiRows('Main damage skill');
+  }
+  function setOptWeight(id, w) {
+    const all = Object.assign({}, st.optW || {});
+    if (w > 0) all[id] = w; else delete all[id];
+    st.optW = all; if (st.ch) store.set('optw:' + st.ch.id, all);
+    renderOptMulti(); render();
+  }
+  document.addEventListener('change', e => {
+    const t = e.target; if (!t.closest || !t.closest('.opt-multi-list, #optMultiList')) return;
+    const w = Object.assign({}, st.optW || {});
+    if (t.dataset.ow) { const box = t.closest('.opt-multi-list, #optMultiList').querySelector('[data-oww="' + CSS.escape(t.dataset.ow) + '"]'); if (t.checked) w[t.dataset.ow] = Math.max(0.05, +box.value || 1); else delete w[t.dataset.ow]; }
+    else if (t.dataset.oww) { if (!(w[t.dataset.oww] > 0)) return; w[t.dataset.oww] = Math.max(0.05, Math.min(10, +t.value || 1)); }
+    else return;
+    st.optW = w; if (st.ch) store.set('optw:' + st.ch.id, w);
+    renderOptMulti(); render(); if (planner && !$('#buildPane').hidden) planner.render();
+  });
   const comboIds = () => (st.combo || []).filter(id => id !== st.skill && (st.pickable || []).some(s => s.id === id));
   function comboRuns(extra) {
     return comboIds().map(id => ({ id, r: S.calcSkill(GD, st.ch, id, comboOpts(extra)) })).filter(x => !x.r.error && !x.r.unsupported && isFinite(x.r.totalDps));
@@ -10366,8 +10467,13 @@ window.BOStartApp = function () {
     if (on && st.ch && st.skill) { try { r = S.calcSkill(GD, st.ch, st.skill, opts()); } catch (e) { r = null; } }
     if (!r || r.error || r.unsupported) { el.hidden = true; el.innerHTML = ''; return; }
     const name = esc(r.skill ? r.skill.Name : st.skill);
+    // Skills ticked under "Also count" on the tree: Total DPS adds their DPS (each with its own saved supports).
+    const co = comboOpts(), more = optExtra().map(g => ({ id: g.id, r: S.calcSkill(GD, st.ch, g.id, co) })).filter(x => x.r && !x.r.error && !x.r.unsupported && isFinite(x.r.totalDps));
+    const total = r.totalDps + more.reduce((a, x) => a + x.r.totalDps, 0);
     el.innerHTML =
-      stat('Total DPS', num(r.totalDps), '', 'main', name + (r.minion ? ': all its minions, before the enemy' : ' vs the enemy set on the Damage tab')) +
+      (more.length
+        ? stat('Total DPS', num(total), '', 'main', [name + ' ' + num(r.totalDps)].concat(more.map(x => esc(sName(x.id)) + ' ' + num(x.r.totalDps))).join(' + ') + '<br>Main skill plus the skills ticked under Also count, vs the enemy set on the Damage tab')
+        : stat('Total DPS', num(r.totalDps), '', 'main', name + (r.minion ? ': all its minions, before the enemy' : ' vs the enemy set on the Damage tab'))) +
       stat('Tooltip DPS', num(r.panelDps), '', '', 'The number the game\'s skill panel shows') +
       stat('Average hit', num(r.hitAvg), '', '', 'With crits ' + num(r.hitAvgCrit));
     el.hidden = false;
@@ -12203,7 +12309,7 @@ window.BOStartApp = function () {
     if (n.Price) h += '<div class="gain down">' + esc(n.Price) + '</div>';
     if (n.Kind === 'Start') return h;
     const s = T.scores.get(id);
-    const skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
+    const skillName = optLabel() + (optExtra().length ? ' weighted' : '');
     if (s) {
       const cls = s.d > 0.0005 ? 'up' : s.d < -0.0005 ? 'down' : '';
       if (on) h += '<div class="gain ' + cls + '">Refund: ' + pct(s.d) + ' ' + esc(skillName) + ' DPS' + (s.cost < -1 ? ' (' + (-s.cost) + ' nodes go with it)' : '') + '</div>';
@@ -12221,9 +12327,13 @@ window.BOStartApp = function () {
     if (!st.ch || !st.skill) return;
     const o = opts();
     const base = S.calcSkill(GD, st.ch, st.skill, o);
-    const skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
+    const skillName = optLabel();
     if (base.error || base.unsupported || !(base.totalDps > 0)) { $('#treeStatus').textContent = 'Node DPS values need a damage skill: pick one in the Skill box.'; paintTree(); bestList(); return; }
+    // Several skills (Also count): a node's value is the weighted mean of each skill's % change.
+    const co = comboOpts(), more = optExtra().map(g => ({ id: g.id, w: g.w, b: S.calcSkill(GD, st.ch, g.id, co).totalDps })).filter(g => g.b > 0);
+    const wSum = 1 + more.reduce((a, g) => a + g.w, 0);
     const b = base.totalDps, have = allocSet();
+    const rel = list => { const c = Object.assign({}, st.ch, { passives: list }); let v = S.calcSkill(GD, c, st.skill, o).totalDps / b; for (const g of more) v += g.w * S.calcSkill(GD, c, g.id, co).totalDps / g.b; return (more.length ? v / wSum : v) - 1; };
     const ids = Object.keys(GD.nodes).filter(id => !blocked(id) && GD.nodes[id].Kind !== 'Start');
     let i = 0;
     const step = () => {
@@ -12234,11 +12344,10 @@ window.BOStartApp = function () {
         let swapped = null;
         if (have.has(id)) { const rem = refundList(have, id); const r = new Set(rem); list = [...have].filter(x => !r.has(x)); cost = -rem.length; }
         else { const pl = planTake(have, id); if (!pl) continue; list = pl.list; cost = pl.cost; swapped = pl.swapped; }
-        const v = S.calcSkill(GD, Object.assign({}, st.ch, { passives: list }), st.skill, o).totalDps;
-        T.scores.set(id, { d: v / b - 1, cost, swapped });
+        T.scores.set(id, { d: rel(list), cost, swapped });
       }
       if (i < ids.length) { $('#treeStatus').textContent = 'Scoring nodes for ' + skillName + '… ' + Math.round(i / ids.length * 100) + '%'; if (i % 200 < 30) paintTree(); setTimeout(step, 0); }
-      else { $('#treeStatus').textContent = 'Node values: ' + skillName + ' vs a ' + (st.rarity || 'rare') + ' (level ' + (st.enemyLevel || st.ch.level) + '), with the supports and settings on the left. Base ' + num(b) + ' DPS.'; paintTree(); bestList(); }
+      else { $('#treeStatus').textContent = 'Node values: ' + skillName + ' vs a ' + (st.rarity || 'rare') + ' (level ' + (st.enemyLevel || st.ch.level) + '), with the supports and settings on the left. Base ' + num(b) + ' DPS' + (more.length ? ' (' + sName(st.skill) + '); values are the weighted mean % of ' + (more.length + 1) + ' skills' : '') + '.'; paintTree(); bestList(); }
     };
     step();
   }
@@ -12269,12 +12378,13 @@ window.BOStartApp = function () {
   // ---------- Optimize tree ----------
   // Same points, moved to where the chosen skill gains the most (src/treeopt.js). Shown as a proposal
   // (green = take, red = refund) until applied or dismissed; changing the tree or a setting clears it.
-  const optKey = () => st.skill + '|' + [...allocSet()].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
+  const optKey = () => st.skill + '|' + JSON.stringify(optExtra()) + '|' + [...allocSet()].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
   function clearOpt() {
     T.optJob = (T.optJob || 0) + 1; T.opt = null; $('#treeOpt').hidden = true;
     const b = $('#treeOptimize'); b.disabled = false; b.textContent = 'Optimize tree';
     const p = $('#treePlan'); p.disabled = false; p.textContent = 'Plan next points';
     const pa = $('#treePlanAll'); pa.disabled = false; pa.textContent = 'Plan tree';
+    for (const x of [b, p, pa]) { x.classList.remove('opt-busy'); x.removeAttribute('aria-busy'); }
   }
   // plan = "plan my next points": keep every taken node and spend N more points in order.
   // all = "Plan tree": spend every unspent point (level + bonus points - taken), not the number in the Points box.
@@ -12290,21 +12400,26 @@ window.BOStartApp = function () {
     }
     const label = all ? 'Plan tree' : plan ? 'Plan next points' : 'Optimize tree';
     const job = T.optJob, key = optKey();
-    const skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
+    const skillName = optLabel();
     const btn = $(all ? '#treePlanAll' : plan ? '#treePlan' : '#treeOptimize'), card = $('#treeOpt');
     $('#treePlan').disabled = true; $('#treePlanAll').disabled = true; $('#treeOptimize').disabled = true;
     card.hidden = false; card.innerHTML = '<p class="hint">' + (plan ? 'Planning your next ' + extra + ' point' + (extra > 1 ? 's' : '') : 'Optimizing the tree') + ' for ' + esc(skillName) + '…</p>';
     // conduitMargin: keep a Conduit channel's tick 1% above the interval (the game's tick runs a hair faster).
-    const gen = BOTreeOpt.optimize(GD, S, st.ch, st.skill, opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra });
-    let phase = 'Starting';
+    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra });
+    // Progress bar inside the running button (q = overall progress from treeopt), so it is clear it is still going.
+    let phase = 'Starting', q = 0;
+    const busy = on => { btn.classList.toggle('opt-busy', on); btn.style.setProperty('--q', on ? q : 0); btn.setAttribute('aria-busy', on ? 'true' : 'false'); };
+    const showProgress = () => { btn.innerHTML = '<span class="opt-busy-text">' + esc(phase) + ' · ' + Math.round(q * 100) + '%</span>'; btn.style.setProperty('--q', q); btn.title = phase + ': ' + Math.round(q * 100) + '% done'; };
+    busy(true); showProgress();
     const step = () => {
-      if (job !== T.optJob) return;
+      if (job !== T.optJob) { busy(false); return; }
       const t0 = performance.now(); let r;
       try {
-        do { r = gen.next(); if (r.value && r.value.phase) phase = r.value.phase + (r.value.p ? ' ' + Math.round(r.value.p * 100) + '%' : ''); }
+        do { r = gen.next(); if (r.value && r.value.phase) { phase = r.value.phase; if (r.value.q > q) q = Math.min(1, r.value.q); } }
         while (!r.done && performance.now() - t0 < 30);
-      } catch (err) { clearOpt(); card.hidden = false; card.innerHTML = '<p class="hint">The optimizer failed: ' + esc(err.message) + '</p>'; return; }
-      if (!r.done) { btn.textContent = phase + '…'; setTimeout(step, 0); return; }
+      } catch (err) { busy(false); clearOpt(); card.hidden = false; card.innerHTML = '<p class="hint">The optimizer failed: ' + esc(err.message) + '</p>'; return; }
+      if (!r.done) { showProgress(); setTimeout(step, 0); return; }
+      busy(false); btn.title = '';
       $('#treePlan').disabled = false; $('#treePlanAll').disabled = false; $('#treeOptimize').disabled = false; btn.textContent = label;
       const res = r.value;
       if (res.error) { card.innerHTML = '<p class="hint">' + esc(res.error) + '</p>'; return; }
@@ -12338,7 +12453,7 @@ window.BOStartApp = function () {
         '<div class="opt-actions"><button class="btn small ghost" type="button" id="optDismiss">Close</button></div>';
     } else {
       const at = Object.entries(o.attrs).filter(([, v]) => v).map(([k, v]) => k + ' ' + (v > 0 ? '+' : '−') + Math.abs(v));
-      card.innerHTML = '<h2>Optimized for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' DPS</span> <span class="hint">same ' + o.points + ' points · ' + num(o.base) + ' → ' + num(o.value) + '</span></h2>' +
+      card.innerHTML = '<h2>Optimized for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.multi ? 'weighted DPS' : 'DPS') + '</span> <span class="hint">same ' + o.points + ' points' + (o.multi ? '' : ' · ' + num(o.base) + ' → ' + num(o.value)) + '</span></h2>' + optSkillRows(o) +
         '<div class="opt-cols"><div><h3 class="rem">Refund (red on the tree)</h3><ul>' + optRows(o.remove, -1) + '</ul></div>' +
         '<div><h3 class="add">Take (green on the tree)</h3><ul>' + optRows(o.add, 1) + '</ul></div></div>' +
         (at.length ? '<p class="hint">Attributes from the tree: ' + esc(at.join(', ')) + '. Check your gear and gem requirements still fit.</p>' : '') + kept +
@@ -12349,6 +12464,13 @@ window.BOStartApp = function () {
     $('#optDismiss').onclick = () => { clearOpt(); paintTree(); };
     card.querySelectorAll('[data-focus]').forEach(li => li.onclick = () => focusNode(li.dataset.focus));
   }
+  // Several skills: each one's own DPS before → after, and skills left out for having no DPS.
+  function optSkillRows(o) {
+    let h = '';
+    if (o.multi) h += '<ul class="opt-skills">' + o.skills.map(s => '<li><span>' + esc(sName(s.id)) + ' <span class="c">weight ' + s.w + '</span></span><span class="v">' + num(s.base) + ' → ' + num(s.value) + ' DPS (' + pct(s.gain) + ')</span></li>').join('') + '</ul>';
+    if (o.dropped && o.dropped.length) h += '<p class="hint">Left out (no DPS with these settings): ' + esc(o.dropped.map(sName).join(', ')) + '.</p>';
+    return h;
+  }
   // Plan my next points: the picks in the order to take them, each with its path.
   function showPlan(o, card) {
     const tip = id => GD.nodes[id].Kind === 'Notable' || GD.nodes[id].Kind === 'Choice' || GD.nodes[id].Kind === 'Socket' ? '<b>' + esc(GD.nodes[id].Name) + '</b>' : esc(GD.nodes[id].Name);
@@ -12357,7 +12479,7 @@ window.BOStartApp = function () {
       return '<li data-focus="' + esc(s.nodes[s.nodes.length - 1]) + '"><span><span class="c">' + (s.cost > 1 ? 'Points ' + from + '–' + n : 'Point ' + from) + '</span> ' + s.nodes.map(tip).join(' › ') + '</span><span class="v">' + pct(s.gain) + '</span></li>'; }).join('');
     const at = Object.entries(o.attrs).filter(([, v]) => v).map(([k, v]) => k + ' ' + (v > 0 ? '+' : '−') + Math.abs(v));
     const left = o.points - o.used;
-    card.innerHTML = '<h2>Next ' + (o.points - o.base0) + ' points for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' DPS</span> <span class="hint">' + num(o.base) + ' → ' + num(o.value) + '</span></h2>' +
+    card.innerHTML = '<h2>Next ' + (o.points - o.base0) + ' points for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.multi ? 'weighted DPS' : 'DPS') + '</span>' + (o.multi ? '' : ' <span class="hint">' + num(o.base) + ' → ' + num(o.value) + '</span>') + '</h2>' + optSkillRows(o) +
       (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">No node within reach adds DPS to this skill.</p>') +
       (left > 0 && rows ? '<p class="hint">' + left + ' point' + (left > 1 ? 's' : '') + ' left over: nothing else within reach adds DPS.</p>' : '') +
       (at.length ? '<p class="hint">Attributes from these picks: ' + esc(at.join(', ')) + '.</p>' : '') +
@@ -12484,7 +12606,8 @@ window.BOStartApp = function () {
     const keep = s => new Set([...s].filter(k => k !== 'item:' + cmpSlot()));
     const main = opts({ off: keep(st.off) }), other = comboOpts({}); other.off = keep(other.off);
     const on = new Set(st.combo || []);
-    const list = [st.skill, ...(st.pickable || []).filter(s => s.id !== st.skill && (on.has(s.id) || s.where !== 'Owned gem')).map(s => s.id)];
+    const ow = st.optW || {};
+    const list = [st.skill, ...(st.pickable || []).filter(s => s.id !== st.skill && (on.has(s.id) || ow[s.id] > 0 || s.where !== 'Owned gem')).map(s => s.id)];
     const rows = list.map(id => {
       const o = id === st.skill ? main : other;
       const a = S.calcSkill(GD, chA, id, o), b = S.calcSkill(GD, chB, id, o);
@@ -12493,17 +12616,36 @@ window.BOStartApp = function () {
     });
     return rows;
   }
+  // Skills ticked under "Also count": DPS added up, and the weighted % change (each skill's own %, by its
+  // weight, as the tree optimizer counts it). null when only the main skill counts.
+  function cmpCombined(rows) {
+    const more = optExtra(); if (!more.length) return null;
+    const W = { [st.skill]: 1 }; for (const g of more) W[g.id] = g.w;
+    const use = rows.filter(x => W[x.id] && (x.a != null || x.b != null));
+    if (use.length < 2) return null;
+    let a = 0, b = 0, ws = 0, wg = 0;
+    for (const x of use) { a += x.a || 0; b += x.b || 0; if (x.a > 0 && x.b != null) { ws += W[x.id]; wg += W[x.id] * (x.b / x.a - 1); } }
+    return { a, b, gain: ws ? wg / ws : 0, names: use.map(x => x.name), W };
+  }
   function cmpResults(ia, ib, rows) {
-    const r0 = rows[0], both = r0.a != null && r0.b != null;
+    const r0 = rows[0], both = r0.a != null && r0.b != null, cb = cmpCombined(rows);
     const change = (a, b) => a == null || b == null ? '<span class="meta">–</span>' : '<span class="' + (b >= a ? 'up' : 'down') + '">' + pct(a ? b / a - 1 : 0) + '</span>';
     let h = '<div class="card cmp-result"><h2>Damage <span class="hint">vs the configured enemy</span></h2>';
+    if (cb) {
+      const label = esc(cb.names.join(' + '));
+      h += '<div class="headline small">' +
+        stat('With your item', num(cb.a), '', '', label + ', total DPS added up') +
+        stat(ib ? 'With the new item' : 'With the slot empty', num(cb.b), '', ib ? 'main' : '', label + ', total DPS added up' + (ib ? '' : ': what your item is worth')) +
+        stat('Change', (cb.b >= cb.a ? '+' : '') + num(cb.b - cb.a) + ' DPS', '<div class="delta ' + (cb.gain >= 0 ? 'up' : 'down') + '">' + pct(cb.gain) + ' weighted</div>', '', 'Each skill\'s own % change, by its weight under Also count (as the tree optimizer counts it). The added-up DPS changes ' + pct(cb.a ? cb.b / cb.a - 1 : 0) + '.') +
+        '</div>';
+    } else
     h += '<div class="headline small">' +
       stat('With your item', r0.a == null ? '–' : num(r0.a), '', '', esc(r0.name) + ', total DPS') +
       stat(ib ? 'With the new item' : 'With the slot empty', r0.b == null ? '–' : num(r0.b), '', ib ? 'main' : '', r0.why ? esc(r0.why) : esc(r0.name) + ', total DPS' + (ib ? '' : ': what your item is worth')) +
       stat('Change', both ? (r0.b >= r0.a ? '+' : '') + num(r0.b - r0.a) + ' DPS' : '–', both && r0.a ? '<div class="delta ' + (r0.b >= r0.a ? 'up' : 'down') + '">' + pct(r0.b / r0.a - 1) + '</div>' : '', '', '') +
       '</div>';
     if (rows.length > 1) h += '<div class="table-wrap"><table class="tbl"><thead><tr><th>Skill</th><th>Your item</th><th>' + (ib ? 'New item' : 'Slot empty') + '</th><th>Change</th></tr></thead><tbody>' +
-      rows.map(x => '<tr><td>' + skillDot(x.id) + esc(x.name) + (x.id === st.skill ? ' <span class="hint">(selected)</span>' : '') + '</td><td>' + (x.a == null ? '–' : num(x.a)) + '</td><td' + (x.why ? ' title="' + esc(x.why) + '"' : '') + '>' + (x.b == null ? '–' : num(x.b)) + '</td><td>' + change(x.a, x.b) + '</td></tr>').join('') + '</tbody></table></div>' +
+      rows.map(x => '<tr' + (cb && cb.W[x.id] ? ' class="cmp-counted"' : '') + '><td>' + skillDot(x.id) + esc(x.name) + (x.id === st.skill ? ' <span class="hint">(selected)</span>' : cb && cb.W[x.id] ? ' <span class="hint">(counted, weight ' + cb.W[x.id] + ')</span>' : '') + '</td><td>' + (x.a == null ? '–' : num(x.a)) + '</td><td' + (x.why ? ' title="' + esc(x.why) + '"' : '') + '>' + (x.b == null ? '–' : num(x.b)) + '</td><td>' + change(x.a, x.b) + '</td></tr>').join('') + '</tbody></table></div>' +
       '<p class="hint">The selected skill uses the supports set on the Damage tab; the others use their own from the build.</p>';
     h += cmpLinesTable(ia, ib);
     return h + '</div>';
@@ -12534,6 +12676,11 @@ window.BOStartApp = function () {
     const o = s => '<option value="' + esc(s.id) + '"' + (s.id === st.skill ? ' selected' : '') + '>' + esc(s.name) + '</option>';
     return mine.map(o).join('') + (mine.length && rest.length ? '<option disabled>──────────</option>' : '') + rest.map(o).join('');
   }
+  function cmpMultiHtml() {
+    if (!optMultiList().length) return '';
+    const open = !!(($('#comparePane') || document).querySelector('.opt-multi') || {}).open;
+    return '<details class="opt-multi' + (optExtra().length ? ' on' : '') + '"' + (open ? ' open' : '') + '><summary>' + optMultiSum() + '</summary><div class="opt-multi-body right"><p class="hint">Tick other skills to judge gear on them too: the damage adds them up, and which item or set is better uses each skill\'s % change by its weight. Same setting as on the Skill tree tab.</p><div class="opt-multi-list">' + optMultiRows('Skill') + '</div><p class="opt-slow">Each skill added here is simmed for every option tried, so the tree optimizer, Plan, node values and Gear Set Sim get slower: about one more full run per skill.</p></div></details>';
+  }
   function cmpSlotButtons() {
     const btn = s => '<button type="button" class="cmp-slot' + (s.key === CMP.key ? ' on' : '') + (s.it ? '' : ' empty') + (s.it && s.it.rarity === 'Unique' ? ' unique' : '') + '" data-slot="' + esc(s.key) + '" aria-pressed="' + (s.key === CMP.key) + '">' +
       '<span class="cmp-slot-name">' + esc(s.name) + '</span><span class="cmp-slot-item">' + esc(s.it ? itemName(s.it) : s.key === 'idol:new' ? 'add one' : 'empty') + '</span></button>';
@@ -12550,7 +12697,7 @@ window.BOStartApp = function () {
   // Anything that changes the answer: the character's gear, tree and supports, the enemy settings, this tab's settings.
   function gsKey() {
     if (!st.ch) return '';
-    const s = JSON.stringify([st.ch.id || st.ch.name, st.skill, st.ch.items, st.ch.passives, st.ch.level, st.supports, st.rarity, st.enemyLevel, st.res, st.curses, st.charges, [...st.off], GS.set]);
+    const s = JSON.stringify([st.ch.id || st.ch.name, st.skill, optExtra(), st.ch.items, st.ch.passives, st.ch.level, st.supports, st.rarity, st.enemyLevel, st.res, st.curses, st.charges, [...st.off], GS.set]);
     let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
     return s.length + ':' + h;
   }
@@ -12577,7 +12724,10 @@ window.BOStartApp = function () {
     Object.assign(GS, { running: true, res: null, msg: '', phase: 'Starting', p: 0, t0: performance.now(), key });
     // Gear ticked off on the Damage tab still counts here: this search chooses the gear.
     const o = opts({ off: new Set([...st.off].filter(k => !/^item:/.test(k))) });
-    const gen = BOGearOpt.optimize(GD, S, st.ch, st.skill, o, Object.assign({ seconds: 80 }, GS.set));
+    // Skills ticked under "Also count" count too (their own supports), weighted as in the tree optimizer.
+    const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
+    const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
+    const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: more.length ? 80 + 40 * Math.min(3, more.length) : 80 }, GS.set));
     renderCompare();
     const step = () => {
       if (job !== GS.job) return;
@@ -12602,7 +12752,16 @@ window.BOStartApp = function () {
   }
   function gsResultHtml(r) {
     const skillName = (GD.skills[lc(r.skill)] || {}).Name || r.skill, g = planner.gear;
-    let h = '<div class="card cmp-result"><h2>Best gear <span class="hint">' + esc(skillName) + ', vs the configured enemy</span></h2>';
+    const names = r.multi ? r.skills.map(x => (GD.skills[lc(x.id)] || {}).Name || x.id) : [skillName];
+    let h = '<div class="card cmp-result"><h2>Best gear <span class="hint">' + esc(names.join(' + ')) + ', vs the configured enemy</span></h2>';
+    if (r.multi) {
+      const sa = r.skills.reduce((a, x) => a + x.base, 0), sb = r.skills.reduce((a, x) => a + x.value, 0), label = esc(names.join(' + '));
+      h += '<div class="headline small">' + stat('Your gear', num(sa), '', '', label + ', total DPS added up') +
+        stat('Best gear', num(sb), '', 'main', label + ', total DPS added up') +
+        stat('Change', (sb >= sa ? '+' : '') + num(sb - sa) + ' DPS', '<div class="delta ' + (r.gain >= 0 ? 'up' : 'down') + '">' + pct(r.gain) + ' weighted</div>', '', 'found in ' + (r.ms / 1000).toFixed(1) + ' s' + (r.timedOut ? ' (stopped at the time limit)' : '') + '; the added-up DPS changes ' + pct(sa ? sb / sa - 1 : 0)) + '</div>' +
+        '<ul class="opt-skills">' + r.skills.map((x, i) => '<li><span>' + skillDot(x.id) + esc(names[i]) + ' <span class="c">weight ' + x.w + '</span></span><span class="v">' + num(x.base) + ' → ' + num(x.value) + ' DPS (' + pct(x.gain) + ')</span></li>').join('') + '</ul>' +
+        (r.dropped && r.dropped.length ? '<p class="hint">Left out (no DPS with these settings): ' + esc(r.dropped.map(sName).join(', ')) + '.</p>' : '');
+    } else
     h += '<div class="headline small">' + stat('Your gear', num(r.base), '', '', esc(skillName) + ', total DPS') +
       stat('Best gear', num(r.value), '', 'main', esc(skillName) + ', total DPS') +
       stat('Change', (r.gain >= 0 ? '+' : '') + num(r.value - r.base) + ' DPS', '<div class="delta ' + (r.gain >= 0 ? 'up' : 'down') + '">' + pct(r.gain) + '</div>', '', 'found in ' + (r.ms / 1000).toFixed(1) + ' s' + (r.timedOut ? ' (stopped at the time limit)' : '')) + '</div>';
@@ -12622,8 +12781,8 @@ window.BOStartApp = function () {
     if (GS.running && GS.key !== key) { GS.job++; GS.running = false; GS.msg = 'The character or a setting changed, so the search was stopped.'; }
     if (GS.res && GS.res.key !== key) GS.res = null;
     const chk = (f, label, tip) => '<label class="check-row" title="' + esc(tip) + '"><input type="checkbox" data-gs-set="' + f + '"' + (S_[f] ? ' checked' : '') + (GS.running ? ' disabled' : '') + '><span>' + label + '</span></label>';
-    let h = '<div class="card gs-card"><div class="cmp-pick-head"><h2>Gear Set Sim</h2><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + (GS.running ? ' disabled' : '') + '>' + cmpSkillOptions() + '</select></label></div>' +
-      '<p class="hint">Finds the best gear for the selected skill: every unique (with Vows), every Oathword, and rare items with the best prefixes and damage suffixes. Your passive tree, skills, supports and idols stay as they are.</p>' +
+    let h = '<div class="card gs-card"><div class="cmp-pick-head"><h2>Gear Set Sim</h2><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + (GS.running ? ' disabled' : '') + '>' + cmpSkillOptions() + '</select></label>' + (GS.running ? '' : cmpMultiHtml()) + '</span></div>' +
+      '<p class="hint">Finds the best gear for the selected skill' + (optExtra().length ? ' and the ' + optExtra().length + ' ticked under Also count (weighted)' : '') + ': every unique (with Vows), every Oathword, and rare items with the best prefixes and damage suffixes. Your passive tree, skills, supports and idols stay as they are.</p>' +
       '<div class="gs-controls"><label class="field inline" title="Item level of the rares: 84 and up gives the top tier of every line"><span>Item level</span><input type="number" min="1" max="100" id="gsIlvl" value="' + S_.ilvl + '"' + (GS.running ? ' disabled' : '') + '></label>' +
       chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
@@ -12631,7 +12790,7 @@ window.BOStartApp = function () {
       chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') + '</div>' +
       '<div class="cmp-actions">' + (GS.running ? '<button class="btn ghost" type="button" data-gs="cancel">Stop</button>' :
         '<button class="btn" type="button" data-gs="run"' + (st.skill ? '' : ' disabled') + '>' + (GS.res ? 'Search again' : 'Find the best gear') + '</button>') +
-      '<span class="hint">' + (st.skill ? 'Takes under two minutes; the page stays usable.' : 'This plan has no damage skill yet: add one on the Build tab.') + '</span></div>' +
+      '<span class="hint">' + (st.skill ? (optExtra().length ? 'Takes a few minutes with several skills; the page stays usable.' : 'Takes under two minutes; the page stays usable.') : 'This plan has no damage skill yet: add one on the Build tab.') + '</span></div>' +
       (GS.running ? '<div class="gs-prog" role="progressbar" aria-label="Search progress"><div class="gs-bar"><div id="gsBar" style="width:' + Math.max(2, Math.round(GS.p * 100)) + '%"></div></div><div class="hint" id="gsPhase">' + esc(GS.phase) + '</div></div>' : '') +
       (GS.msg ? '<p class="hint pl-status">' + esc(GS.msg) + '</p>' : '') + '</div>';
     if (GS.res) h += gsResultHtml(GS.res);
@@ -12646,13 +12805,14 @@ window.BOStartApp = function () {
     cmpSync();
     const g = planner.gear, slot = cmpSlot(), ia = CMP.a.items[0] || null, ib = CMP.b.items[0] || null;
     h += '<div class="card cmp-pick"><div class="cmp-pick-head"><h2>Item slot</h2>' +
-      '<label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill">' + cmpSkillOptions() + '</select></label></div>' +
+      '<span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill">' + cmpSkillOptions() + '</select></label>' + cmpMultiHtml() + '</span></div>' +
       cmpSlotButtons() + (CMP.msg ? '<p class="hint pl-status">' + esc(CMP.msg) + '</p>' : '') + '</div>';
     // The item that deals more with the selected skill is marked green, with how much more.
-    const rows = st.skill ? cmpRows(ia, ib) : null, r0 = rows && rows[0];
+    const rows = st.skill ? cmpRows(ia, ib) : null, r0 = rows && rows[0], cb = rows && cmpCombined(rows);
     let win = '', by = 0;
-    if (ib && r0 && r0.a > 0 && r0.b > 0 && Math.abs(r0.b / r0.a - 1) >= 0.0005) { win = r0.b > r0.a ? 'b' : 'a'; by = win === 'b' ? r0.b / r0.a - 1 : r0.a / r0.b - 1; }
-    const badge = s => win === s ? '<span class="cmp-badge" title="More ' + esc(r0.name) + ' DPS than the other item; the damage comparison is further down">' + pct(by) + ' DPS</span>' : '';
+    if (cb) { if (ib && Math.abs(cb.gain) >= 0.0005) { win = cb.gain > 0 ? 'b' : 'a'; by = Math.abs(cb.gain); } }
+    else if (ib && r0 && r0.a > 0 && r0.b > 0 && Math.abs(r0.b / r0.a - 1) >= 0.0005) { win = r0.b > r0.a ? 'b' : 'a'; by = win === 'b' ? r0.b / r0.a - 1 : r0.a / r0.b - 1; }
+    const badge = s => win === s ? '<span class="cmp-badge" title="' + (cb ? 'Better for ' + esc(cb.names.join(' + ')) + ' (weighted % change)' : 'More ' + esc(r0.name) + ' DPS than the other item') + '; the damage comparison is further down">' + pct(by) + (cb ? ' weighted' : ' DPS') + '</span>' : '';
     h += '<div class="cmp-grid">';
     h += '<div class="card cmp-side' + (win === 'a' ? ' cmp-win' : '') + '" data-side="a"><h2>Your item ' + badge('a') + (CMP.aEdited ? '<span class="hint">edited here</span> <button class="btn small ghost" type="button" data-cmp="reset-a">Back to equipped</button>' : '<span class="hint">' + (ia ? 'equipped' : 'slot empty') + '</span>') + '</h2>' +
       (ia ? '<div class="cmp-tip pl-tip">' + g.tip(ia, slot) + '</div>' : '') +
@@ -13022,6 +13182,9 @@ window.BOStartApp = function () {
       return Object.assign({}, ch, { trees: { active: t.active, sets: t.sets.map(s => ({ name: s.name, passives: s.passives.slice() })) } });
     },
     current: () => st.ch, workingCopy: () => st.ch,
+    // "Include in simulations" on the Skills view = the Also count weights (st.optW).
+    countable: id => (st.pickable || []).some(s => s.id === id), simSkill: () => st.skill,
+    optWeights: () => st.optW || {}, setOptWeight: (id, w) => setOptWeight(id, w),
     extras: id => scaling ? scaling.extras(id) : [], // extra scaling lines (life share), for the hover tooltips
     levels: id => scaling ? scaling.levels(id) : { unit: '', rows: [] }, // skill hit by gem level, for the hover tooltips
     sheet: id => { try { return st.ch ? S.calcSkill(GD, st.ch, id, opts()) : null; } catch (e) { return null; } }, // the Skills view's gem tooltips

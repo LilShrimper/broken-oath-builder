@@ -1204,6 +1204,12 @@ body.compare-page #controls { display: none; }
 .gs-controls .field input[type=number] { width: 84px; }
 .gs-goal { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .gs-prio { min-width: 260px; }
+.opt-prio { min-width: 220px; margin: 0; }
+.gs-layers { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 13px; }
+.gs-layers > .meta { color: var(--muted); }
+.gs-layers.off { opacity: .55; }
+.gs-controls .gs-layers { flex-basis: 100%; }
+.opt-prio .gs-prio-row input[type=range] { max-width: 160px; }
 .cmp-reco > p { margin: 0 0 12px; font-size: 14.5px; }
 .cmp-reco.yes > p b { color: var(--good); }
 .cmp-reco.no > p b { color: var(--bad); }

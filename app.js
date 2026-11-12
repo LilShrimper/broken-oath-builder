@@ -897,6 +897,10 @@
 //   2. Re-route: rebuild the shortest tree that reaches every node worth keeping.
 //   3. Spend the points this frees on the best DPS per point (path included).
 //   4. Swap: refund the weakest branches and spend them again while that gains DPS.
+// Defence counts only when asked (owner, 12 Nov 2026; the same slider as the Item Simulator, see gearopt.js): with
+// cfg.defence(list) -> { ehp } from the page and cfg.defWeight 0..1, a tree scores (DPS / DPS now)^(1 - w) x (EHP / EHP now)^w
+// and nodes with a defence line the estimate reads (cfg.defStats: life, resistance and the ticked ones of energy shield,
+// armour, evasion, block) become picks too. At 0 the search is the old one. Search only.
 // Kept no matter what: keystones, jewel sockets, nodes with lines the sim does not count (triggers,
 // minion, bleed, shock ...), and with cfg.keepDefence the notables that add no damage (life etc.).
 (function (root) {
@@ -948,12 +952,16 @@
     goals = goals.filter(g => g.base > 0);
     const wSum = goals.reduce((a, g) => a + g.w, 0);
     // One skill: plain DPS (as before). Several: weighted mean of DPS / starting DPS (1 = the starting tree).
+    const defW = typeof cfg.defence === 'function' ? Math.max(0, Math.min(1, +cfg.defWeight || 0)) : 0, scored = defW > 0;
+    const def0 = scored ? cfg.defence(haveList) : null;
     const V = set => {
       const list = [...set].sort(); const key = list.join(',');
       let v = cache.get(key);
       if (v === undefined) {
-        if (goals.length === 1 && !multi) v = dpsOf(goals[0], list);
+        if (goals.length === 1 && !multi && !scored) v = dpsOf(goals[0], list);
         else { v = 0; for (const g of goals) v += g.w * dpsOf(g, list) / g.base; v /= wSum; }
+        // The skill must still deal damage, even at "defence only".
+        if (scored && v > 0) v = Math.pow(v, 1 - defW) * Math.pow(Math.max(1, cfg.defence(list).ehp) / Math.max(1, def0.ehp), defW);
         cache.set(key, v);
       }
       return v;
@@ -1014,7 +1022,10 @@
     // New keystones and skill-changing nodes (granted supports, triggers) only when asked: their price
     // (no evasion, more damage taken ...) and what they do to how the skill plays are not in the DPS number.
     const changesPlay = n => n.Kind === 'Keystone' || (n.Mods || []).some(m => m.Mode === 'Trigger' || m.Mode === 'Flag');
-    const useful = Object.keys(nodes).filter(id => walkable(id) && (nodes[id].Mods || []).some(dmgish) && (cfg.allowKeystones || !changesPlay(nodes[id]) || have.has(id)));
+    // With defence weighed, nodes with a plain line of a defence the estimate reads are picks too (cfg.defStats from the page).
+    const DEF_STATS = new Set(cfg.defStats || ['Life', 'EnergyShield', 'Resist']);
+    const defish = m => scored && m.Mode !== 'Trigger' && m.Mode !== 'Flag' && DEF_STATS.has(m.Stat);
+    const useful = Object.keys(nodes).filter(id => walkable(id) && (nodes[id].Mods || []).some(m => dmgish(m) || defish(m)) && (cfg.allowKeystones || !changesPlay(nodes[id]) || have.has(id)));
     // Clusters (node Group in a Region; roads, hubs, waygates and keystones are not clusters) and their damage nodes.
     // Search and order only, not the damage model: picking one node at a time missed nodes that pay off together
     // (a notable and the smalls around it). Before/after on the five local characters, 5 Nov 2026: see bundles below.
@@ -1171,6 +1182,7 @@
       remove: remove.map(id => ({ id, d: own[id] })).sort((a, b) => b.d - a.d),
       kept: [...kept].map(id => ({ id, why: why[id] })), steps, addOnly: !!cfg.addOnly,
       skills, dropped, multi: multi && goals.length > 1,
+      scored, defWeight: defW, def: scored ? { before: def0, after: cfg.defence(finalList) } : null,
       attrs: { Str: a1.Str - a0.Str, Dex: a1.Dex - a0.Dex, Int: a1.Int - a0.Int },
       calcs, ms: Date.now() - t0,
     };
@@ -1225,7 +1237,12 @@
     const ilvl = Math.max(1, Math.min(100, +cfg.ilvl || 84));
     const deadline = t0 + (cfg.seconds > 0 ? cfg.seconds : 80) * 1000;
     const lvOk = lv => cfg.ignoreLevel || !lv || lv <= (ch.level || 1);
-    const useVows = cfg.vows !== false, useRunes = cfg.runes !== false, useLimited = cfg.limited !== false;
+    const useRunes = cfg.runes !== false, useLimited = cfg.limited !== false;
+    // Limits the owner can set (12 Nov 2026): at most cfg.maxVows Vows on a red item and cfg.maxLines rolled lines on a rare.
+    // Not set: 6 of each, as before (a rare still takes at most 3 prefixes and 3 suffixes).
+    const lim = (v, max) => v == null || v === '' || !isFinite(+v) ? max : Math.max(0, Math.min(max, Math.round(+v)));
+    const vowMax = lim(cfg.maxVows, VOW_MAX), lineMax = lim(cfg.maxLines, LIMIT * 2);
+    const useVows = cfg.vows !== false && vowMax > 0;
     let calcs = 0, lastYield = 0, curPhase = 'Starting', curP = 0, rush = false;
     const late = () => Date.now() > deadline;
     const prog = () => ({ phase: curPhase, p: curP });
@@ -1317,10 +1334,10 @@
       let v = V(put(items, slot, cur));
       const used = () => new Set(cur.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
       const count = t => cur.affixes.filter(a => (GD.affixes[lc(a.id)] || {}).Type === t).length;
-      const room = c => vow ? cur.affixes.filter(a => !a.id.startsWith('unique:')).length < VOW_MAX : count(c.type) < LIMIT;
+      const room = c => vow ? cur.affixes.filter(a => !a.id.startsWith('unique:')).length < vowMax : count(c.type) < LIMIT && cur.affixes.length < lineMax;
       const gains = new Map();
       let listed = null;
-      for (let step = 0; step < (vow ? VOW_MAX : LIMIT * 2) && !late(); step++) {
+      for (let step = 0; step < (vow ? vowMax : lineMax) && !late(); step++) {
         const u = used();
         let best = null, bv = v;
         for (const c of listed || pool) {
@@ -1503,7 +1520,7 @@
       out.push({ slot, item: it, was, worth, changed, gain: changed ? value / (V(put(items, slot, was)) || value) - 1 : 0 });
     }
     const skills = goals.map(gl => { const v = dpsOf(gl, items); return { id: gl.id, w: gl.w, base: gl.base, value: v, gain: gl.base > 0 ? v / gl.base - 1 : 0 }; });
-    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, skills, dropped, multi: multi && goals.length > 1,
+    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, lineMax, skills, dropped, multi: multi && goals.length > 1,
       scored, defWeight: defW, maxRes: wantRes, resTarget, def: scored ? { before: def0, after: cfg.defence(items) } : null };
   }
 
@@ -10223,7 +10240,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { noFitWhy, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  const api = { noFitWhy, defenceTotal, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -10803,7 +10820,8 @@ window.BOStartApp = function () {
       for (const m of mods) if (m.stat === a || m.stat === 'Attributes') { if (m.mode === 'Flat') flat += m.v; else if (m.mode === 'Inc') inc += m.v; }
       attr[a] = Math.floor(flat * (1 + inc / 100));
     }
-    return Object.assign(defenceCore(ch, mods, attr), { attr });
+    const tot = s => { try { return S.defenceTotal(GD, ch, mods, attr, s) || 0; } catch (e) { return 0; } };
+    return Object.assign(defenceCore(ch, mods, attr), { attr, armour: tot('Armour'), evasion: tot('Evasion'), block: tot('Block') });
   }
   function defenceCore(ch, mods, attr) {
     const life = Math.floor(S.heroMaxLife(GD, ch, mods, attr)); // the game rounds down: 467.5 shows as 467
@@ -12813,7 +12831,7 @@ window.BOStartApp = function () {
   // ---------- Optimize tree ----------
   // Same points, moved to where the chosen skill gains the most (src/treeopt.js). Shown as a proposal
   // (green = take, red = refund) until applied or dismissed; changing the tree or a setting clears it.
-  const optKey = () => st.skill + '|' + JSON.stringify(optExtra()) + '|' + [...allocSet()].sort().join(',') + '|' + [...(st.ban || [])].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
+  const optKey = () => GS.set.prio + JSON.stringify(GS.set.layers) + '|' + st.skill + '|' + JSON.stringify(optExtra()) + '|' + [...allocSet()].sort().join(',') + '|' + [...(st.ban || [])].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
   function clearOpt() {
     T.optJob = (T.optJob || 0) + 1; T.opt = null; $('#treeOpt').hidden = true;
     const b = $('#treeOptimize'); b.disabled = false; b.textContent = 'Optimize tree';
@@ -12840,7 +12858,8 @@ window.BOStartApp = function () {
     $('#treePlan').disabled = true; $('#treePlanAll').disabled = true; $('#treeOptimize').disabled = true;
     card.hidden = false; card.innerHTML = '<p class="hint">' + (plan ? 'Planning your next ' + extra + ' point' + (extra > 1 ? 's' : '') : 'Optimizing the tree') + ' for ' + esc(skillName) + '…</p>';
     // conduitMargin: keep a Conduit channel's tick 1% above the interval (the game's tick runs a hair faster).
-    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])] });
+    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])],
+      defWeight: GS.set.prio / 100, defStats: gsDefStats(), defence: list => gsDefence(Object.assign({}, st.ch, { passives: list })) });
     // Progress bar inside the running button (q = overall progress from treeopt), so it is clear it is still going.
     let phase = 'Starting', q = 0;
     const busy = on => { btn.classList.toggle('opt-busy', on); btn.style.setProperty('--q', on ? q : 0); btn.setAttribute('aria-busy', on ? 'true' : 'false'); };
@@ -12884,20 +12903,33 @@ window.BOStartApp = function () {
     if (o.addOnly) return showPlan(o, card);
     const kept = o.kept.length ? '<p class="hint">Left where they are: ' + o.kept.map(k => esc(GD.nodes[k.id].Name) + ' (' + esc(k.why) + ')').join(', ') + '.</p>' : '';
     if (!(o.gain > 0.001)) {
-      card.innerHTML = '<h2>Your tree already looks right for ' + esc(o.skillName) + '</h2><p class="hint">Moving the same ' + o.points + ' points around gains less than 0.1% DPS.</p>' + kept +
+      card.innerHTML = '<h2>Your tree already looks right for ' + esc(o.skillName) + '</h2><p class="hint">Moving the same ' + o.points + ' points around gains less than 0.1% ' + (o.scored ? 'at ' + gsPrioText(Math.round(o.defWeight * 100)) : 'DPS') + '.</p>' + kept +
         '<div class="opt-actions"><button class="btn small ghost" type="button" id="optDismiss">Close</button></div>';
     } else {
       const at = Object.entries(o.attrs).filter(([, v]) => v).map(([k, v]) => k + ' ' + (v > 0 ? '+' : '−') + Math.abs(v));
-      card.innerHTML = '<h2>Optimized for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.multi ? 'weighted DPS' : 'DPS') + '</span> <span class="hint">same ' + o.points + ' points' + (o.multi ? '' : ' · ' + num(o.base) + ' → ' + num(o.value)) + '</span></h2>' + optSkillRows(o) +
+      card.innerHTML = '<h2>Optimized for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.scored ? 'score' : o.multi ? 'weighted DPS' : 'DPS') + '</span> <span class="hint">same ' + o.points + ' points' + (o.multi || o.scored ? '' : ' · ' + num(o.base) + ' → ' + num(o.value)) + '</span></h2>' + optScoredRows(o) + optSkillRows(o) +
         '<div class="opt-cols"><div><h3 class="rem">Refund (red on the tree)</h3><ul>' + optRows(o.remove, -1) + '</ul></div>' +
         '<div><h3 class="add">Take (green on the tree)</h3><ul>' + optRows(o.add, 1) + '</ul></div></div>' +
         (at.length ? '<p class="hint">Attributes from the tree: ' + esc(at.join(', ')) + '. Check your gear and gem requirements still fit.</p>' : '') + kept +
-        '<p class="hint">Each value is that node\'s share of the DPS. The sim cannot weigh lines it does not count (see a node\'s tooltip), so check the picks fit how you play. Click a row to find it on the tree.</p>' +
+        '<p class="hint">Each value is that node\'s share of the ' + (o.scored ? 'score (DPS and defence, weighed as set)' : 'DPS') + '. The sim cannot weigh lines it does not count (see a node\'s tooltip), so check the picks fit how you play. Click a row to find it on the tree.</p>' +
         '<div class="opt-actions"><button class="btn small" type="button" id="optApply">Apply to my tree</button><button class="btn small ghost" type="button" id="optDismiss">Dismiss</button></div>';
       $('#optApply').onclick = () => { const list = o.list; clearOpt(); setPassives(list); $('#treeStatus').textContent = 'Optimized tree applied. Undo goes back; Copy build code gives it to the game.'; };
     }
     $('#optDismiss').onclick = () => { clearOpt(); paintTree(); };
     card.querySelectorAll('[data-focus]').forEach(li => li.onclick = () => focusNode(li.dataset.focus));
+  }
+  // Defence weighed (the Prioritize slider): DPS and the EHP estimate before → after, and what the score is made of.
+  function optScoredRows(o) {
+    if (!o.scored) return '';
+    const sa = o.skills.reduce((a, x) => a + x.base, 0), sb = o.skills.reduce((a, x) => a + x.value, 0), A = o.def.before, B = o.def.after;
+    const sp = x => '<span class="' + (x >= 0 ? 'up' : 'down') + '">' + pct(x) + '</span>';
+    const resLine = d => ['Fire', 'Cold', 'Lightning', 'Poison'].map(k => d.res[k]).join(' / ');
+    return '<ul class="opt-skills"><li><span>DPS' + (o.skills.length > 1 ? ' <span class="c">added up</span>' : '') + '</span><span class="v">' + num(sa) + ' → ' + num(sb) + ' (' + sp(sa ? sb / sa - 1 : 0) + ')</span></li>' +
+      '<li><span>Defence <span class="c">EHP estimate</span></span><span class="v">' + num(A.ehp) + ' → ' + num(B.ehp) + ' (' + sp(A.ehp ? B.ehp / A.ehp - 1 : 0) + ')</span></li>' +
+      '<li><span>Life + energy shield</span><span class="v">' + num(A.life + A.es) + ' → ' + num(B.life + B.es) + '</span></li>' +
+      '<li><span>Resistances <span class="c">Fire / Cold / Lightning / Poison</span></span><span class="v">' + resLine(A) + ' → ' + resLine(B) + '</span></li></ul>' +
+      (gsLayerLine(A, B) ? '<p class="hint">' + gsLayerLine(A, B) + '</p>' : '') +
+      '<p class="hint">Weighed as ' + gsPrioText(Math.round(o.defWeight * 100)) + '. ' + gsDefNote() + '</p>';
   }
   // Several skills: each one's own DPS before → after, and skills left out for having no DPS.
   function optSkillRows(o) {
@@ -12914,8 +12946,8 @@ window.BOStartApp = function () {
       return '<li data-focus="' + esc(s.nodes[s.nodes.length - 1]) + '"><span><span class="c">' + (s.cost > 1 ? 'Points ' + from + '–' + n : 'Point ' + from) + '</span> ' + s.nodes.map(tip).join(' › ') + '</span><span class="v">' + pct(s.gain) + '</span></li>'; }).join('');
     const at = Object.entries(o.attrs).filter(([, v]) => v).map(([k, v]) => k + ' ' + (v > 0 ? '+' : '−') + Math.abs(v));
     const left = o.points - o.used;
-    card.innerHTML = '<h2>Next ' + (o.points - o.base0) + ' points for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.multi ? 'weighted DPS' : 'DPS') + '</span>' + (o.multi ? '' : ' <span class="hint">' + num(o.base) + ' → ' + num(o.value) + '</span>') + '</h2>' + optSkillRows(o) +
-      (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">No node within reach adds DPS to this skill.</p>') +
+    card.innerHTML = '<h2>Next ' + (o.points - o.base0) + ' points for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.scored ? 'score' : o.multi ? 'weighted DPS' : 'DPS') + '</span>' + (o.multi || o.scored ? '' : ' <span class="hint">' + num(o.base) + ' → ' + num(o.value) + '</span>') + '</h2>' + optScoredRows(o) + optSkillRows(o) +
+      (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">No node within reach adds ' + (o.scored ? 'anything at this setting' : 'DPS to this skill') + '.</p>') +
       (left > 0 && rows ? '<p class="hint">' + left + ' point' + (left > 1 ? 's' : '') + ' left over: nothing else within reach adds DPS.</p>' : '') +
       (at.length ? '<p class="hint">Attributes from these picks: ' + esc(at.join(', ')) + '.</p>' : '') +
       '<p class="hint">Take them top to bottom: each row is worth most per point at that moment, its path included (gains are on top of the rows above). Keystones and skill-changing nodes are left out; Channel Conduit builds keep their channel 1% slower than the cast interval. Green on the tree. Click a row to find it.</p>' +
@@ -13128,10 +13160,22 @@ window.BOStartApp = function () {
   // ---------- Gear Set Sim (the second sub-tab of Item Compare) ----------
   // Searches every unique, Oathword and rare (best prefixes and damage suffixes) for the best gear for the selected
   // skill, with the tree, skills, supports and idols as they are (gearopt.js, run in slices so the page stays usable).
-  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false }, store.get('gearSim', {})) };
-  // Defence for the Gear Set Sim's DPS / Defense slider and "Reach max resistances" (owner, 12 Nov 2026). The same display
-  // estimate as the Ladder tab's EHP: (life + energy shield) / (1 - average of Fire, Cold, Lightning and Poison resistance, each
-  // capped at ResistCap). Armour, evasion, block and the resistance penalty are not counted (the page has no defensive sim).
+  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxLines: '', maxVows: '', layers: { es: true, armour: true, evasion: true, block: true } }, store.get('gearSim', {})) };
+  GS.set.layers = Object.assign({ es: true, armour: true, evasion: true, block: true }, GS.set.layers || {});
+  // Defence for the DPS / Defense slider and "Reach max resistances" (owner, 12 Nov 2026): an estimate, not a defensive sim.
+  // EHP = (life + energy shield) / share of a hit taken, against an assumed enemy (ours, not the game's): a hit of ArmourBigHitRef
+  // (1,000) or more, half physical and half elemental, half of the hits attacks. The owner ticks which defences count (Energy
+  // Shield, Armour, Evasion, Block; life and resistances always do), so the searches go for that kind. The game's own rules:
+  //   Resistance: average of Fire, Cold, Lightning and Poison, each capped at Hero.ResistCap (as the Ladder tab's EHP).
+  //   Armour: cuts a physical hit by armour / (armour + ArmourFactor75 x the hit), at most ArmourMaxReduction %, a hit over
+  //     ArmourBigHitRef counting as that much (scaling.json Hero; the game's hold-Alt panel, owner's screenshot 8 Nov 2026, see
+  //     faq.js). 50% of maximum energy shield counts as armour against hits (switch r85.DEFENCE59.EsAsArmourPct; log "EsArmour59").
+  //   Evasion: the developer's formulas.md (API archive b70) section 5, "Evade chance": effective = Evasion x EvasionScale /
+  //     (1 + attacker level x EvasionMlvlFactor); evade = min(EvasionMax %, 1 - EvasionBase / (EvasionBase + effective)). "Only
+  //     attacks can be evaded." Attacker level = the enemy level set on the page, else the hero's. Glancing blows are left out.
+  //   Block: the sheet's block chance (capped at BlockMax); a blocked hit is taken as Hero.BlockReduction % smaller, against every
+  //     hit. That reading of BlockReduction is ours: not checked against a tooltip or log.
+  // The resistance penalty is not counted.
   // miss: resistance points still short of the target, added up over the resistances asked for.
   const gsResCap = () => (GD.scaling.Hero || {}).ResistCap || 75;
   const gsResTarget = () => GS.set.resTarget > 0 ? GS.set.resTarget : gsResCap();
@@ -13140,10 +13184,37 @@ window.BOStartApp = function () {
     const res = {}; for (const [k, v] of d.resParts) res[k] = v;
     const avg = d.resParts.reduce((a, x) => a + Math.min(cap, x[1]), 0) / d.resParts.length;
     let miss = 0; for (const k of ['Fire', 'Cold', 'Lightning'].concat(GS.set.resPoison ? ['Poison'] : [])) miss += Math.max(0, target - (res[k] || 0));
-    return { life: d.life, es: d.es, res, ehp: (d.life + d.es) / Math.max(0.05, 1 - avg / 100), miss };
+    const H = GD.scaling.Hero || {}, L = GS.set.layers, R = GD.rules || {};
+    const esArm = +(R['r85.DEFENCE59.EsAsArmourPct'] != null ? R['r85.DEFENCE59.EsAsArmourPct'] : 50) || 0;
+    const armHit = d.armour + d.es * esArm / 100, hit = H.ArmourBigHitRef || 1000, af = H.ArmourFactor75 || H.ArmourFactor || 5;
+    const armDR = armHit > 0 ? Math.min((H.ArmourMaxReduction || 80) / 100, armHit / (armHit + af * hit)) : 0;
+    const lvl = +st.enemyLevel || (Array.isArray(items) ? st.ch : items).level || 1;
+    const eff = d.evasion * (H.EvasionScale || 0) / (1 + lvl * (H.EvasionMlvlFactor || 0));
+    const evade = H.EvasionBase && eff > 0 ? Math.min((H.EvasionMax || 75) / 100, 1 - H.EvasionBase / (H.EvasionBase + eff)) : 0;
+    const block = Math.min(H.BlockMax || 75, d.block) / 100, blockCut = (H.BlockReduction || 0) / 100;
+    // Share of the assumed hit taken: half physical (armour), half elemental (resistance); half the hits attacks (evasion); block on all.
+    const taken = (0.5 * (1 - (L.armour ? armDR : 0)) + 0.5 * (1 - avg / 100)) * (1 - 0.5 * (L.evasion ? evade : 0)) * (1 - (L.block ? block * blockCut : 0));
+    return { life: d.life, es: d.es, res, armour: d.armour, armDR, evasion: d.evasion, evade, block, ehp: (d.life + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
   }
+  // Which defences the estimate counts (one setting everywhere, with the slider). Life and resistances always count.
+  const GS_LAYERS = [['es', 'Energy Shield', 'EnergyShield'], ['armour', 'Armour', 'Armour'], ['evasion', 'Evasion', 'Evasion'], ['block', 'Block', 'Block']];
+  const gsLayersInner = off => '<span class="meta" title="Tick the defences your build uses: the estimate counts only these (life and resistances always), so the searches go for that kind. Armour + Evasion, Evasion + Energy Shield and so on: tick both">Defences that count</span>' +
+    GS_LAYERS.map(([k, n]) => '<label class="check-row"><input type="checkbox" data-gs-layer="' + k + '"' + (GS.set.layers[k] ? ' checked' : '') + (off ? ' disabled' : '') + '><span>' + n + '</span></label>').join('');
+  const gsLayersHtml = off => '<span class="gs-layers">' + gsLayersInner(off) + '</span>';
+  const gsLayerNames = () => ['life', 'resistances'].concat(GS_LAYERS.filter(([k]) => GS.set.layers[k]).map(x => x[1].toLowerCase()));
+  const gsDefStats = () => ['Life', 'Resist'].concat(GS_LAYERS.filter(([k]) => GS.set.layers[k]).map(x => x[2])).concat(GS.set.layers.armour || GS.set.layers.evasion || GS.set.layers.es ? ['Defences'] : []);
+  const gsDefNote = () => 'Defence is an estimate against a boss hit of ' + num((GD.scaling.Hero || {}).ArmourBigHitRef || 1000) + ' or more: half physical, half elemental, half of the hits attacks. Counted: ' + gsLayerNames().join(', ') + ' (resistances capped at ' + gsResCap() + '%). Glancing blows and the resistance penalty are not.';
+  // Armour, evasion and block before → after, for the ticked ones (A, B: gsDefence results).
+  function gsLayerLine(A, B) {
+    const L = GS.set.layers, p = x => Math.round(x * 100) + '%', out = [];
+    if (L.armour) out.push('Armour ' + num(A.armour) + ' → ' + num(B.armour) + ' (' + p(A.armDR) + ' → ' + p(B.armDR) + ' less physical)');
+    if (L.evasion) out.push('Evasion ' + num(A.evasion) + ' → ' + num(B.evasion) + ' (' + p(A.evade) + ' → ' + p(B.evade) + ' evade)');
+    if (L.block) out.push('Block ' + p(A.block) + ' → ' + p(B.block));
+    return out.join(' · ');
+  }
+  function setGsLayer(k, on) { GS.set.layers[k] = !!on; store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) { clearOpt(); paintTree(); } }
   // The DPS / Defense slider: one setting for Item Compare and Gear Set Sim.
-  const gsPrioHtml = off => '<label class="field gs-prio" title="What counts when items are weighed. Defence is an estimate: life + energy shield against elemental hits, resistances capped at ' + gsResCap() + '%"><span>Prioritize <b id="gsPrioText">' + gsPrioText(GS.set.prio) + '</b></span>' +
+  const gsPrioHtml = off => '<label class="field gs-prio" title="What counts when items are weighed. Defence is an estimate; tick the defences that count below"><span>Prioritize <b id="gsPrioText">' + gsPrioText(GS.set.prio) + '</b></span>' +
     '<span class="gs-prio-row"><span>DPS</span><input type="range" id="gsPrio" min="0" max="100" step="10" value="' + GS.set.prio + '" aria-label="Prioritize DPS or defense"' + (off ? ' disabled' : '') + '><span>Defense</span></span></label>';
   // Item Compare's verdict (owner, 12 Nov 2026): the two items weighed as the slider says, score = (DPS new / DPS yours)^(1 - w)
   // x (EHP new / EHP yours)^w, the same score the Gear Set Sim searches with. dr: the DPS ratio (weighted over Also count).
@@ -13175,8 +13246,16 @@ window.BOStartApp = function () {
       say += ' ' + (v.dr > 1 ? 'It deals more but is less tough' : 'It is tougher but deals less') + ': the slider decides which matters.';
     return '<div class="cmp-reco' + (v.win === 'b' ? ' yes' : v.win === 'a' ? ' no' : '') + '"><p>' + say + '</p>' +
       '<div class="headline small">' + stat('Life + energy shield', num(v.A.life + v.A.es) + ' → ' + num(v.B.life + v.B.es), '', '', 'life ' + num(v.A.life) + ' → ' + num(v.B.life) + ', energy shield ' + num(v.A.es) + ' → ' + num(v.B.es)) +
-      stat('Defence (EHP est.)', num(v.A.ehp) + ' → ' + num(v.B.ehp), '<div class="delta ' + (v.er >= 1 ? 'up' : 'down') + '">' + pct(v.er - 1) + '</div>', '', 'life + energy shield against elemental hits, resistances capped at ' + gsResCap() + '%') +
-      stat('Resistances', resLine(v.B), '<div class="delta">was ' + resLine(v.A) + '</div>', '', 'Fire / Cold / Lightning / Poison, not capped') + '</div></div>';
+      stat('Defence (EHP est.)', num(v.A.ehp) + ' → ' + num(v.B.ehp), '<div class="delta ' + (v.er >= 1 ? 'up' : 'down') + '">' + pct(v.er - 1) + '</div>', '', 'counts ' + gsLayerNames().join(', ')) +
+      stat('Resistances', resLine(v.B), '<div class="delta">was ' + resLine(v.A) + '</div>', '', 'Fire / Cold / Lightning / Poison, not capped') + '</div>' +
+      (gsLayerLine(v.A, v.B) ? '<p class="hint">' + gsLayerLine(v.A, v.B) + '</p>' : '') + '<p class="hint">' + gsDefNote() + '</p></div>';
+  }
+  const syncOptPrio = () => { const p = $('#optPrio'), x = $('#optPrioText'), l = $('#optLayers'); if (p) p.value = GS.set.prio; if (x) x.textContent = gsPrioText(GS.set.prio); if (l) { l.innerHTML = gsLayersInner(false); l.classList.toggle('off', !(GS.set.prio > 0)); } };
+  if ($('#optPrio')) {
+    $('#optPrio').addEventListener('input', e => { $('#optPrioText').textContent = gsPrioText(+e.target.value); });
+    $('#optPrio').addEventListener('change', e => { GS.set.prio = Math.max(0, Math.min(100, Math.round(+e.target.value / 10) * 10 || 0)); store.set('gearSim', GS.set); syncOptPrio(); clearOpt(); paintTree(); });
+    $('#optLayers').addEventListener('change', e => { const k = e.target.dataset && e.target.dataset.gsLayer; if (k) setGsLayer(k, e.target.checked); });
+    setTimeout(syncOptPrio, 0);
   }
   const gsPrioText = p => p <= 0 ? 'DPS only' : p >= 100 ? 'Defense only' : (100 - p) + '% DPS · ' + p + '% defense';
   const cmpModesHtml = () => '<div class="cmp-modes" role="tablist" aria-label="Item Simulator tools">' +
@@ -13261,7 +13340,7 @@ window.BOStartApp = function () {
         return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(gsSlotName(s.slot)) + '</td><td' + (s.was ? ' class="gs-hov" data-gs-tip="was:' + si + '"' : '') + '>' + gsItemLabel(s.was) + '</td><td' + (s.item ? ' class="gs-hov" data-gs-tip="item:' + si + '"' : '') + '>' + (s.changed ? '' : '<span class="meta">kept: </span>') + gsItemLabel(s.item) + tip + '</td><td>' +
           (s.changed ? '<span class="' + (s.gain >= 0 ? 'up' : 'down') + '">' + pct(s.gain) + '</span>' : '<span class="meta">–</span>') + '</td><td>' + (s.item ? num(s.worth * 100, 1) + '%' : '–') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
-    h += '<p class="hint">Every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best, so this is the most the gear can give, not a drop you will see soon. Rares carry the prefixes and suffixes that add the most DPS and the best runes in their sockets; a rare with every line at its top tier counts as a Flawless Rare in the sim. ' + (r.scored ? 'Defence here is life + energy shield against elemental hits with resistances capped at ' + gsResCap() + '% (the Ladder tab\'s EHP estimate): armour, evasion, block and the resistance penalty are not counted. Attribute requirements,' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); attribute requirements,') + ' rune and item prices and drop chances are ignored. Idols, the tree and the supports stay as they are.</p>';
+    h += '<p class="hint">Every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best, so this is the most the gear can give, not a drop you will see soon. Rares carry the prefixes and suffixes that add the most' + (r.scored ? '' : ' DPS') + (r.lineMax < 6 ? ' (at most ' + r.lineMax + ' a rare, as set)' : '') + ' and the best runes in their sockets' + (r.vowMax < 6 ? '; uniques carry at most ' + r.vowMax + ' Vow' + (r.vowMax === 1 ? '' : 's') + ', as set' : '') + '; a rare with every line at its top tier counts as a Flawless Rare in the sim. ' + (r.scored ? gsDefNote() + ' Attribute requirements,' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); attribute requirements,') + ' rune and item prices and drop chances are ignored. Idols, the tree and the supports stay as they are.</p>';
     return h + '</div>';
   }
   // Result headline when the search weighed defence: DPS, the EHP estimate and the resistances, before and after.
@@ -13272,6 +13351,7 @@ window.BOStartApp = function () {
     let h = '<div class="headline small">' + stat('DPS', num(sa) + ' → ' + num(sb), delta(dp), 'main', label + ', total DPS' + (r.skills.length > 1 ? ' added up' : '')) +
       stat('Defence (EHP est.)', num(A.ehp) + ' → ' + num(B.ehp), delta(ep), '', 'life + energy shield ' + num(A.life + A.es) + ' → ' + num(B.life + B.es)) +
       stat('Resistances', resLine(B), '<div class="delta">was ' + resLine(A) + '</div>', '', 'Fire / Cold / Lightning / Poison, not capped · found in ' + (r.ms / 1000).toFixed(1) + ' s' + (r.timedOut ? ' (stopped at the time limit)' : '')) + '</div>';
+    if (gsLayerLine(A, B)) h += '<p class="hint">' + gsLayerLine(A, B) + '</p>';
     h += '<p class="hint">Weighed as ' + gsPrioText(Math.round(r.defWeight * 100)) + (r.maxRes ? ', with ' + (GS.set.resPoison ? 'Fire, Cold, Lightning and Poison' : 'Fire, Cold and Lightning') + ' resistance brought to ' + r.resTarget + '% first' : '') + '.</p>';
     if (r.maxRes) h += B.miss > 0 ? '<p class="hint bad">The target was not reached: ' + Math.round(B.miss) + ' resistance point' + (Math.round(B.miss) === 1 ? '' : 's') + ' still missing' + (r.timedOut ? ' when the time ran out. Equip the set and search again to continue' : ' with the items this search may use') + '.</p>' : '<p class="hint good">Every resistance asked for is at ' + r.resTarget + '% or more.</p>';
     if (r.skills.length > 1) h += '<ul class="opt-skills">' + r.skills.map((x, i) => '<li><span>' + skillDot(x.id) + esc(names[i]) + ' <span class="c">weight ' + x.w + '</span></span><span class="v">' + num(x.base) + ' → ' + num(x.value) + ' DPS (' + pct(x.gain) + ')</span></li>').join('') + '</ul>';
@@ -13288,8 +13368,10 @@ window.BOStartApp = function () {
       chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
       chk('vows', 'Vows on uniques', 'A red item takes up to 6 lines from rares at the cube; the best ones are added') +
-      chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') + '</div>' +
-      '<div class="gs-controls gs-goal">' + gsPrioHtml(GS.running) +
+      chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') +
+      '<label class="field inline" title="The most rolled lines (prefixes and suffixes) a rare item may carry. Empty: 6 (3 prefixes and 3 suffixes)"><span>Max lines on rares</span><input type="number" min="0" max="6" id="gsMaxLines" placeholder="6" value="' + (S_.maxLines === '' || S_.maxLines == null ? '' : S_.maxLines) + '"' + (GS.running ? ' disabled' : '') + '></label>' +
+      '<label class="field inline" title="The most Vows a unique (red) item may carry. Empty: 6"><span>Max Vows on uniques</span><input type="number" min="0" max="6" id="gsMaxVows" placeholder="6" value="' + (S_.maxVows === '' || S_.maxVows == null ? '' : S_.maxVows) + '"' + (GS.running || !S_.vows ? ' disabled' : '') + '></label>' + '</div>' +
+      '<div class="gs-controls gs-goal">' + gsPrioHtml(GS.running) + gsLayersHtml(GS.running) +
       chk('maxRes', 'Reach max resistances', 'Brings Fire, Cold and Lightning resistance to the target with the lines, runes and uniques that cost the least, then follows the slider with what is left. Nothing is spent on resistance past the target') +
       (S_.maxRes ? '<label class="field inline" title="Resistance to reach on each element. The game caps resistances at ' + gsResCap() + '%; set it higher to cover a resistance penalty"><span>Target %</span><input type="number" min="1" max="200" id="gsResTarget" value="' + gsResTarget() + '"' + (GS.running ? ' disabled' : '') + '></label>' +
         chk('resPoison', 'Poison too', 'Bring Poison resistance to the target as well') : '') + '</div>' +
@@ -13311,7 +13393,7 @@ window.BOStartApp = function () {
     const g = planner.gear, slot = cmpSlot(), ia = CMP.a.items[0] || null, ib = CMP.b.items[0] || null;
     h += '<div class="card cmp-pick"><div class="cmp-pick-head"><h2>Item slot</h2>' +
       '<span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill">' + cmpSkillOptions() + '</select></label>' + cmpMultiHtml() + enemyBtn() + '</span></div>' +
-      cmpSlotButtons() + '<div class="gs-controls gs-goal">' + gsPrioHtml(false) + '<span class="hint">The recommendation and the green mark follow this.</span></div>' + (CMP.msg ? '<p class="hint pl-status">' + esc(CMP.msg) + '</p>' : '') + '</div>';
+      cmpSlotButtons() + '<div class="gs-controls gs-goal">' + gsPrioHtml(false) + '<span class="hint">The recommendation and the green mark follow this.</span>' + gsLayersHtml(false) + '</div>' + (CMP.msg ? '<p class="hint pl-status">' + esc(CMP.msg) + '</p>' : '') + '</div>';
     // The item that deals more with the selected skill is marked green, with how much more.
     const rows = st.skill ? cmpRows(ia, ib) : null, r0 = rows && rows[0], cb = rows && cmpCombined(rows);
     let win = '', by = 0;
@@ -13366,9 +13448,11 @@ window.BOStartApp = function () {
     el.addEventListener('change', e => {
       const t = e.target;
       if (t.id === 'cmpSkill') return selectSkill(t.value);
+      if (t.dataset.gsLayer) { setGsLayer(t.dataset.gsLayer, t.checked); GS.msg = ''; return renderCompare(); }
       if (t.dataset.gsSet) { GS.set[t.dataset.gsSet] = t.checked; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
-      if (t.id === 'gsPrio') { GS.set.prio = Math.max(0, Math.min(100, Math.round(+t.value / 10) * 10 || 0)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsPrio') { GS.set.prio = Math.max(0, Math.min(100, Math.round(+t.value / 10) * 10 || 0)); store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) clearOpt(); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsResTarget') { const v = Math.max(1, Math.min(200, Math.round(+t.value) || 0)); GS.set.resTarget = v === gsResCap() ? 0 : v; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsMaxLines' || t.id === 'gsMaxVows') { const v = String(t.value).trim(); GS.set[t.id === 'gsMaxLines' ? 'maxLines' : 'maxVows'] = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(6, Math.round(+v))); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsIlvl') { GS.set.ilvl = Math.max(1, Math.min(100, Math.round(+t.value) || 84)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'cmpFile') { if (t.files[0]) cmpReadImage(t.files[0]); return; }
       const s = side(t); if (!s || !t.dataset.f) return;

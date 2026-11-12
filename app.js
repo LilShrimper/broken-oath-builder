@@ -1753,7 +1753,7 @@ window.BOPlanner = function (ctx) {
   const uniquesFor = slot => Object.values(GD.uniques).filter(u => { const b = GD.bases[lc(u.BaseId)]; return b && b.Slot === baseSlot(slot); }).sort(byName);
   const oathwordBases = (slot, word) => {
     const allowed = new Set((word && word.Bases || []).map(lc));
-    // The base must take the word's tag and have room for all its runes (Kindling, Sunder and Sigilbreaker skip the weapons with fewer sockets).
+    // The base must take the word's tag and have room for all its runes (Kindling and Sunder skip the weapons with fewer sockets).
     return basesFor(slot).filter(b => [b.Class, b.Slot, ...(b.Tags || [])].some(tag => tag && allowed.has(lc(tag))) && runeSlots(b) >= ((word && word.Runes) || []).length);
   };
   const oathwordsFor = slot => (GD.runewords || []).filter(w => oathwordBases(slot, w).length).sort(byName);
@@ -5607,7 +5607,7 @@ window.BOFaq = function (ctx) {
   'use strict';
   const { $, esc } = ctx;
   const GROUPS = [
-    ['Game mechanics', [['ailments', 'Ailments'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
+    ['Game mechanics', [['ailments', 'Ailments'], ['multipliers', 'Damage Multipliers'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
       ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep']]],
     ['About this site', [['sim', 'Sim vs the Game Panel'], ['data', 'Game Data & Patches'], ['privacy', 'Privacy']]],
   ];
@@ -5734,7 +5734,7 @@ window.BOFaq = function (ctx) {
         pct(A.FreezeBossMult) + '% as long, at most ' + A.FreezeBossMaxSeconds + ' s, then immune for ' + A.FreezeBossImmuneSeconds + ' s.'],
       ['<b>Chill</b>', 'No chance roll', 'A hit that is at least 25% Cold chills the enemy and slows it. A little Cold on a Physical hit (an Adds Cold prefix, a weapon that gains some Physical as extra Cold) still adds its damage but no longer chills or freezes. It counts again with 30% or more increased freeze duration or chill effect, or any Shatter (the developer\'s patch notes, 11 Nov 2026).', 'Same rules.'],
       ['<b>Bleed</b>', 'From skills and lines that cause it', 'Deals ' + pct(A.BleedFracPerSec) + '% of the Physical hit per second.', 'Same rules.'],
-    ]));
+    ], 'faq-wrap'));
     // Poison's three groups. Game log 11 Nov 2026 (Mech70Check, Death Coil on the training dummy): "poison hit 72737.4, inc 154%, dot x1.06
     // -> 39167.61/s a stack" = 72737.4 x 0.2 x 2.54 x 1.06; with the amulet's 47% off: "hit 35965.8, inc 107%, dot x1.00 -> 14889.83/s".
     h += card('How poison damage is worked out', '<p class="faq-stats faq-formula"><b>One stack, per second</b> = the hit that poisoned × ' + pct(A.PoisonFracPerSec) + '% × (1 + increased Poison damage over time) × (1 + Damage over Time Multiplier)</p>' +
@@ -5753,6 +5753,42 @@ window.BOFaq = function (ctx) {
       'Damage over time ticks every ' + A.TickSeconds + ' s.',
       A.bMinionAilments ? 'Minions can ignite, shock and poison, but only with the added chance from their summon gem (supports and lines). They have no base chance and cannot freeze or chill.' : '',
       'The game\'s skill panel uses the tooltip duration for poison. The sim\'s Damage tab shows both where they differ.',
+    ]));
+    return h;
+  }
+
+  // ---------- Damage multipliers ----------
+  // Display only: the grouping the sim already uses (sim.js "engine" and engineCollapse). Evidence:
+  //   engine: the developer's 0.56.5 patch notes (stat engines add together), Ironclad Fury's text (build 26543267), game log
+  //     9 Nov 2026 "TrustFix91: engine now oath_of_many_fires ManaMore 2.0 x 8.27"; Oath of a Thousand Cuts is assumed, not checked.
+  //   separate: Glass Cannon on the character panel, 11 Nov 2026 (Runic Ward on 316,165 -> 368,374, off 302,271 -> 352,185: x1.1651
+  //     both) and 12 Nov 2026 (Boundless Mind on 34,229 -> 40,412, off 25,966 -> 30,656: x1.1806 both); poison groups: log 11 Nov.
+  //   Bloodlust: in the engine from 0.56.5 to 0.56.7; from 0.56.8 it is increased melee damage (blessings.json), so in neither list.
+  function multipliers() {
+    let h = intro('Damage Multipliers', 'Which "more" lines add together into one multiplier and which multiply on their own.');
+    h += card('Added together into one multiplier', hint('Every line of the form "X% more damage for every amount of a stat". These add to each other first and then multiply your damage once. The game calls this group the damage engine.') +
+      list([
+        '<b>For every 1,000 Armour, Evasion, Energy Shield or Life:</b> Bone Armour, Iron Skin, Runic Ward, Bastion\'s Reckoning, the Ironclad Fury support and similar.',
+        '<b>For every 1% chance to Block:</b> Radiant Crusade and similar.',
+        '<b>For every 10 Strength:</b> Mountainborn (Physical attack damage only). <b>For every 10 Intelligence:</b> Boundless Mind.',
+        '<b>For every 100 Mana:</b> Oath of Many Fires. <b>For every 10% increased attack speed:</b> Oath of a Thousand Cuts.',
+        '<b>Hammer of Judgement</b> (Slams, for every 1,000 Armour).',
+        '<b>Bloodlust</b> stacks were in this group until patch 0.56.7. Since 0.56.8 Bloodlust gives increased melee damage, so it is in neither list.',
+        'Example: an engine line worth 30% and one worth 20% give ×1.5 together, not ×1.3 × 1.2 = ×1.56. A second engine line is worth less than it reads.',
+        'From the developer\'s patch notes (0.56.5) and the game log. Oath of a Thousand Cuts is taken to follow the same rule; that one is not checked yet.',
+      ]), 'the damage engine');
+    h += card('Multiply separately', hint('Everything written as a plain "X% more damage". Each one multiplies by itself, so it is worth what it reads.') +
+      list([
+        '<b>Plain "more" lines</b> on the tree, keystones and supports: Holy "more" lines, Glass Cannon, Bone Sovereign\'s 15%, Multistrike\'s 52% less.',
+        '<b>Damage over Time Multiplier</b> and <b>increased Poison damage over time</b>: each is a group of its own (see <b>Ailments</b>).',
+        '<b>Crit multiplier</b>, and anything that makes the enemy take more damage: curses, Marks, shock.',
+        '<b>For minions:</b> the summon skill\'s own increased damage, affinity, near you and zone level (see the Skills tab, Minion Scaling).',
+        'The Rampart Strike support pays "more damage for each 1% chance to Block" but its text does not put it in the engine; the sim counts it separately. Not checked in the game.',
+        'Checked on the character panel: Glass Cannon gave the same ×1.165 with Runic Ward on and off (11 Nov 2026), and the same ×1.181 with Boundless Mind on and off (12 Nov 2026). In the engine it would have given less with the other node on. Both poison groups: game log, 11 Nov 2026.',
+      ]), 'each its own multiplier');
+    h += card('Good to know', list([
+      '"Increased" lines are a third kind: all increased damage that fits the skill adds together and multiplies once.',
+      'To test whether two lines share a group: note the panel damage with both off, each one on alone, and both on. If the second line gives the same gain with the first on and off, they multiply separately.',
     ]));
     return h;
   }
@@ -6096,7 +6132,7 @@ window.BOFaq = function (ctx) {
     return h;
   }
 
-  const RENDER = { minions, ailments, defences, monsters, affixes, guardians, curses, xp, deep, sim, data, privacy };
+  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, sim, data, privacy };
   function show() {
     const nav = $('#faqNav'), GD = ctx.gd() || {};
     nav.innerHTML = GROUPS.map(g => '<div class="faq-group"><span class="faq-group-label">' + g[0] + '</span><div class="sc-chips">' +
@@ -8523,7 +8559,7 @@ window.BOCharacter = function (ctx) {
     // Limits per enemy, by kind (curses.json: Woe and Sentence are separate kinds): one Sentence and up
     // to two Woes (Woe skill text "Two Woes per enemy"; log "Woe Bearer laid ... (1 Woes now, limit 2)").
     // Guardians take them all (BossEffect already halves a Woe). The best ones for this hit are kept.
-    // CurseLimit lines ("You can lay +1 more Woe on each enemy": amulet Woe-sworn, Twofold Woe, Twin Oath) add Woes.
+    // CurseLimit lines ("You can lay +1 more Woe on each enemy": amulet Woe-sworn, Twofold Woe) add Woes.
     let woeExtra = 0; for (const m of pickMods(mods, 'CurseLimit', 'Flat')) { woeExtra += m.v; use(m); }
     const LIMIT = { Sentence: 1, Woe: 2 + woeExtra };
     const hitTotal = Object.values(hit).reduce((a, h) => a + h.avg, 0) || 1;

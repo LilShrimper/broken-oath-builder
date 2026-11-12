@@ -1398,11 +1398,21 @@ body.compare-page #controls { display: none; }
 .faq-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .faq-group-label { flex: 0 0 120px; color: var(--faint); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 @media (max-width: 640px) { .faq-group-label { flex-basis: 100%; } }
+.faq-nav .sc-chips { flex-wrap: wrap; } /* nine sections: wrap to a second row instead of squeezing the chips over each other */
+.faq-nav .sc-chip { flex: 0 0 auto; }
 .faq-sec[hidden] { display: none; }
 .faq-card h2 small { color: var(--faint); font-weight: 500; font-size: 12px; margin-left: 6px; }
 .faq-list { margin: 8px 0 10px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
 .faq-tbl td, .faq-tbl th { vertical-align: top; text-align: left; }
 .faq-tbl td:nth-child(4) { min-width: 260px; }
+/* A FAQ table that wraps its text to the card's width instead of scrolling sideways (Ailments). */
+.faq-wrap { width: 100%; }
+.faq-wrap th, .faq-wrap td { white-space: normal; overflow-wrap: break-word; }
+.faq-wrap td:first-child { white-space: nowrap; }
+.faq-wrap th:nth-child(2) { width: 17%; }
+.faq-wrap th:nth-child(4) { width: 27%; }
+.faq-wrap td:nth-child(4) { min-width: 0; }
+@media (max-width: 640px) { .faq-wrap { font-size: 12px; } .faq-wrap th, .faq-wrap td { padding-left: 5px; padding-right: 5px; } .faq-wrap th:nth-child(2) { width: 20%; } }
 .faq-note { display: block; color: var(--faint); font-size: 11.5px; margin-top: 3px; }
 .faq-off { opacity: .55; }
 .faq-xp-chart { position: relative; width: 100%; margin: 4px 0 0; overflow: hidden; }

@@ -1210,7 +1210,7 @@
 // Slots are optimized in rounds (a few passes) because gear lines scale each other; weapons are chosen as a set
 // (two-hander, or one-hander + off hand, or bow + quiver).
 // Defences count only when asked (owner, 12 Nov 2026). cfg.defence(items) -> { ehp, miss } comes from the page (app.js gsDefence):
-//   cfg.defWeight 0..1 (the DPS / Defense slider): a set scores (DPS / DPS now)^(1 - w) x (EHP / EHP now)^w, so 0 is DPS only
+//   cfg.defWeight 0..1 (the DPS / Defence slider): a set scores (DPS / DPS now)^(1 - w) x (EHP / EHP now)^w, so 0 is DPS only
 //     (the old search, untouched) and 1 is defence only (the skill must still deal damage).
 //   cfg.maxRes: miss = resistance points still short of the target, added up; the score is divided by 1 + 4 x miss / target,
 //     so a line that closes the gap beats any damage line, and resistance past the target is worth nothing (no overcapping).
@@ -1266,7 +1266,7 @@
       let v = 0; for (const gl of goals) if (gl.base > 0) v += gl.w * dpsOf(gl, items) / gl.base;
       return v / wSum;
     };
-    // With the Defense slider or "max resistances" on, the value is a score (see the top of the file), not DPS.
+    // With the Defence slider or "max resistances" on, the value is a score (see the top of the file), not DPS.
     const defW = typeof cfg.defence === 'function' ? Math.max(0, Math.min(1, +cfg.defWeight || 0)) : 0;
     const wantRes = typeof cfg.defence === 'function' && !!cfg.maxRes, resTarget = Math.max(1, +cfg.resTarget || 75);
     const scored = defW > 0 || wantRes;
@@ -13162,7 +13162,7 @@ window.BOStartApp = function () {
   const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxVows: '', layers: { es: true, armour: true, evasion: true, block: true } }, store.get('gearSim', {})) };
   delete GS.set.maxLines; // a box that was on the page for one version (v255)
   GS.set.layers = Object.assign({ es: true, armour: true, evasion: true, block: true }, GS.set.layers || {});
-  // Defence for the DPS / Defense slider and "Reach max resistances" (owner, 12 Nov 2026): an estimate, not a defensive sim.
+  // Defence for the DPS / Defence slider and "Reach max resistances" (owner, 12 Nov 2026): an estimate, not a defensive sim.
   // EHP = (life + energy shield) / share of a hit taken, against an assumed enemy (ours, not the game's): a hit of ArmourBigHitRef
   // (1,000) or more, half physical and half elemental, half of the hits attacks. The owner ticks which defences count (Energy
   // Shield, Armour, Evasion, Block; life and resistances always do), so the searches go for that kind. The game's own rules:
@@ -13213,9 +13213,9 @@ window.BOStartApp = function () {
     return out.join(' · ');
   }
   function setGsLayer(k, on) { GS.set.layers[k] = !!on; store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) { clearOpt(); paintTree(); } }
-  // The DPS / Defense slider: one setting for Item Compare and Gear Set Sim.
+  // The DPS / Defence slider: one setting for Item Compare and Gear Set Sim.
   const gsPrioHtml = off => '<label class="field gs-prio" title="What counts when items are weighed. Defence is an estimate; tick the defences that count below"><span>Prioritize <b id="gsPrioText">' + gsPrioText(GS.set.prio) + '</b></span>' +
-    '<span class="gs-prio-row"><span>DPS</span><input type="range" id="gsPrio" min="0" max="100" step="10" value="' + GS.set.prio + '" aria-label="Prioritize DPS or defense"' + (off ? ' disabled' : '') + '><span>Defense</span></span></label>';
+    '<span class="gs-prio-row"><span>DPS</span><input type="range" id="gsPrio" min="0" max="100" step="10" value="' + GS.set.prio + '" aria-label="Prioritize DPS or defence"' + (off ? ' disabled' : '') + '><span>Defence</span></span></label>';
   // Item Compare's verdict (owner, 12 Nov 2026): the two items weighed as the slider says, score = (DPS new / DPS yours)^(1 - w)
   // x (EHP new / EHP yours)^w, the same score the Gear Set Sim searches with. dr: the DPS ratio (weighted over Also count).
   function cmpVerdict(ia, ib, rows, cb) {
@@ -13257,7 +13257,7 @@ window.BOStartApp = function () {
     $('#optLayers').addEventListener('change', e => { const k = e.target.dataset && e.target.dataset.gsLayer; if (k) setGsLayer(k, e.target.checked); });
     setTimeout(syncOptPrio, 0);
   }
-  const gsPrioText = p => p <= 0 ? 'DPS only' : p >= 100 ? 'Defense only' : (100 - p) + '% DPS · ' + p + '% defense';
+  const gsPrioText = p => p <= 0 ? 'DPS only' : p >= 100 ? 'Defence only' : (100 - p) + '% DPS · ' + p + '% defence';
   const cmpModesHtml = () => '<div class="cmp-modes" role="tablist" aria-label="Item Simulator tools">' +
     [['item', 'Item Compare', 'M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4'], ['gear', 'Gear Set Sim', 'M12 3 4 6v6c0 4.5 3.4 7.8 8 9 4.6-1.2 8-4.5 8-9V6z']].map(([k, n, d]) => '<button type="button" class="cmp-mode' + (CMP.mode === k ? ' on' : '') + '" role="tab" aria-selected="' + (CMP.mode === k) + '" data-cmpmode="' + k + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '"/></svg><span>' + n + '</span></button>').join('') + '</div>';
   // Anything that changes the answer: the character's gear, tree and supports, the enemy settings, this tab's settings.
@@ -14005,4 +14005,58 @@ window.BOStartApp = function () {
       if (fresh(cached)) { window.GD = cached; return start(); }
       showSetup(cached ? 'The sim was updated and reads a little more from your game files now. Pick the Data folder once more.' : '');
     });
+})();
+
+// ---------- hover text in the page's own tooltip look ----------
+// Every plain title="" on the page (buttons, tick boxes, table heads, cells) shows as a .pl-tip box, like the item and skill
+// tooltips, instead of the browser's grey one (owner, 12 Nov 2026). The title is moved to data-title the first time the mouse or
+// the keyboard reaches the element, so the browser's box never opens; an element with no text of its own keeps the words as its
+// aria-label. Elements that draw their own tooltip (data-tip and the like) are left alone.
+(function () {
+  'use strict';
+  if (typeof document === 'undefined') return;
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const OWN = '[data-tip], [data-gs-tip], [data-dn]';
+  let tip = null, cur = null;
+  const hide = () => { if (tip) tip.hidden = true; cur = null; };
+  // title -> data-title (an emptied title clears it, so text set by script stays in step).
+  function take(el) {
+    const t = el.getAttribute('title'); if (t == null) return;
+    el.removeAttribute('title');
+    if (!t.trim()) { delete el.dataset.title; return; }
+    el.dataset.title = t;
+    if (!el.getAttribute('aria-label') && !el.getAttribute('aria-labelledby') && !(el.textContent || '').trim() && !el.matches('input, select, textarea')) el.setAttribute('aria-label', t);
+  }
+  // The element's own short label, as the tooltip's gold heading ("Keep defence notables").
+  function heading(el, text) {
+    let h = '';
+    if (el.matches('label, button, th, summary, a, .bs-cell, .tab')) h = (el.querySelector('.bs-label, .label') || el).textContent || '';
+    h = h.replace(/\s+/g, ' ').trim();
+    if (!h) h = (el.getAttribute('aria-label') || '').trim();
+    if (!h || h.length > 48 || h === text || text.toLowerCase().startsWith(h.toLowerCase())) return '';
+    return h;
+  }
+  function show(e) {
+    const t = e.target, el = t && t.closest && t.closest('[title], [data-title]');
+    if (!el || el.closest('svg')) return hide();
+    if (el.hasAttribute('title')) take(el);
+    const own = t.closest(OWN);
+    if (own && (own === el || el.contains(own))) return hide(); // that one draws its own
+    const text = el.dataset.title; if (!text) return hide();
+    if (cur === el && tip && !tip.hidden) return;
+    if (!tip) { tip = document.createElement('div'); tip.className = 'pl-tip pl-tip-plain'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
+    const h = heading(el, text);
+    tip.innerHTML = (h ? '<b>' + esc(h) + '</b>' : '') + '<span class="pl-tip-desc">' + esc(text).replace(/\n/g, '<br>') + '</span>';
+    tip.hidden = false; cur = el;
+    const r = el.getBoundingClientRect(), w = tip.offsetWidth, hg = tip.offsetHeight;
+    let y = r.bottom + 6; if (y + hg > innerHeight - 8) y = Math.max(8, r.top - hg - 6);
+    tip.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px'; tip.style.top = y + 'px';
+  }
+  document.addEventListener('mouseover', show);
+  document.addEventListener('focusin', e => { if (e.target.matches && e.target.matches(':focus-visible')) show(e); });
+  document.addEventListener('mouseout', e => { if (cur && !(e.relatedTarget && cur.contains(e.relatedTarget))) hide(); });
+  document.addEventListener('focusout', hide);
+  document.addEventListener('mousedown', hide, true);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); }, true);
+  window.addEventListener('scroll', hide, { passive: true, capture: true });
 })();

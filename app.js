@@ -4619,7 +4619,8 @@ window.BOItemSearch = function (ctx) {
       (mods ? field('Prefix / suffix', '<select id="isAffix">' + opt('', 'Both', !F.affix) + opt('Prefix', 'Prefixes only', F.affix === 'Prefix') + opt('Suffix', 'Suffixes only', F.affix === 'Suffix') + '</select>') : '') +
       field('Level', '<span class="is-range"><input type="number" id="isMin" min="0" max="200" placeholder="min" value="' + esc(F.min) + '"><span>–</span><input type="number" id="isMax" min="0" max="200" placeholder="max" value="' + esc(F.max) + '"></span>') +
       field('Sort', '<select id="isSort">' + sorts.map(([k, t]) => opt(k, t, F.sort === k)).join('') + '</select>') +
-      '</div><div class="is-opts"><label class="check-row"><input type="checkbox" id="isSecrets"' + (F.secrets ? ' checked' : '') + '><span>Show secret recipes <span class="meta">Runes of the Oathwords the game hides behind riddles</span></span></label>' +
+      // The public site's data has no secret Oathwords (build.js leaves them out), so the box has nothing to show there.
+      '</div><div class="is-opts">' + ((ctx.gd().runewords || []).some(w => w.Secret) ? '<label class="check-row"><input type="checkbox" id="isSecrets"' + (F.secrets ? ' checked' : '') + '><span>Show secret recipes <span class="meta">Runes of the Oathwords the game hides behind riddles</span></span></label>' : '') +
       (F.cat === 'oathword' ? (owned() && owned().loaded ? '<label class="check-row"><input type="checkbox" id="isCraft"' + (F.craft ? ' checked' : '') + '><span>Craftable or held only <span class="meta">Runes from your ' + esc(ctx.owned().leagueName(owned().league)) + ' stash and bags</span></span></label>'
         : '<span class="meta">Load your saves folder to see which Oathwords you can make.</span>') : '') +
       '<button type="button" class="btn ghost" id="isReset">Clear filters</button></div>';

@@ -1609,6 +1609,7 @@ body.io-open { overflow: hidden; }
 @media (max-width: 560px) { .is-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .is-opts { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; }
 .is-opts .check-row { margin: 0; }
+.is-opts #isReset { margin-left: auto; } /* stays on the right when no checkbox is drawn before it */
 .is-count { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
 .is-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; align-items: start; }
 .is-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; min-width: 0; font-size: 13px; }

@@ -6636,6 +6636,11 @@ window.BOCharacter = function (ctx) {
   // Uniques; each extra Totem or Ballista 50% (was 80%), each extra Trap 20% (was 35%). Switches on with data newer than 0.56.7 (build 26568753).
   const LAST_BUILD_0567 = 26568753;
   const is0568 = GD => GD.steamBuild ? +GD.steamBuild > LAST_BUILD_0567 : String(GD.filesAt || '') >= '2026-11-11';
+  // Patch 0.56.9 (developer's patch notes, Discord 11/12 Nov 2026, build 26604566): Elemental Overload 25% more (was 60%); Wheeling Axe from a
+  // trap or totem strikes for 50% on its way back; extra Sparks (past your first 3) strike for 50% each; chill and freeze need a hit that is
+  // at least 25% cold (or 30% increased freeze duration / chill effect, or any shatter). Switches on with data newer than build 26595060.
+  const LAST_BUILD_0568 = 26595060;
+  const is0569 = GD => GD.steamBuild ? +GD.steamBuild > LAST_BUILD_0568 : false;
   // Knee: m <= 8 stays; above it 8 x 1.41^log2(m/8). Not applied to minion sheets (minionSheet is separate).
   const moreKnee = m => m <= 8 ? m : 8 * Math.pow(1.41, Math.log2(m / 8));
   // 0.56.5 count rule (Multiple Totems and Trap Support texts, build 26543267): "each past the first adds 80% of one's
@@ -7960,7 +7965,9 @@ window.BOCharacter = function (ctx) {
         // crit 30.0% x2.44, 5.5 strikes a second). The 9 Nov fit of x1.5 (level 58, panels 21.46 and 20.12 hit-equivalents against
         // 14.3 and 13.4) no longer holds on this build: with it the sim gave 8.56M (1.47x), without it 5.76M (0.988).
         const SPARK565_STRIKE = 1;
-        const strikeRate = n => spark565 && gather ? n * 0.85 * SPARK565_STRIKE / strikeEvery : gather ? (Math.floor(n / 3) * 3 * 0.85 + (n % 3)) / strikeEvery : n / strikeEvery;
+        const baseSparks = capM ? Math.min(+capM[1], 3) : 3; // 0.56.9: your first 3 Sparks strike in full, extra ones from tree and gear for 50% each
+        const sparkW = n => is0569(GD) ? Math.min(n, baseSparks) + 0.5 * Math.max(0, n - baseSparks) : n;
+        const strikeRate = n => spark565 && gather ? sparkW(n) * 0.85 * SPARK565_STRIKE / strikeEvery : gather ? (Math.floor(n / 3) * 3 * 0.85 + (n % 3)) / strikeEvery : n / strikeEvery;
         const throwsPerSec = usesPerSec; // cast rate, already capped by the cooldown
         // 0.56.5 (Spark texts, build 26543267): "One cast throws all your Sparks at once ... recast to refresh them": the
         // full cap stands while you recast within a Spark's life (else the share of time they stand).
@@ -8192,7 +8199,8 @@ window.BOCharacter = function (ctx) {
     const rainWaves = sk.Delivery === 'Rain' && sk.Rain && sk.Rain.Waves > 0 ? (res.coc && res.coc.attack ? 1 : sk.Rain.Waves) : 0;
     const hopper = mirage || flight, hops = mirage ? mirage.Hops : flights;
     // Wheeling Axe (skills.json bReturnFlight; gem text "wheels back to your hand and cuts them again on the way"; game data, Steam build 26595060, read 11 Nov 2026; from the data file / gem text, not yet checked against a tooltip or log): two cuts a throw.
-    const returnHits = sk.bReturnFlight ? 2 : 1;
+    const axeFromTrapTotem = is0569(GD) && (res.totem || shape === 'trap_support' || shape === 'totem_support'); // 0.56.9 notes: a trap or totem axe strikes for 50% on the way back (once called back it hit twice for full)
+    const returnHits = sk.bReturnFlight ? (axeFromTrapTotem ? 1.5 : 2) : 1;
     const strikes = (hopper ? hops : rainWaves || (typeof sk.Strikes === 'object' && sk.Strikes ? (sk.Strikes.Count || 1) : (+sk.Strikes || 1))) * returnHits;
     // Mirage: every hop cuts; the last cut deals FinalScale (x1.8), so a use is worth Hops - 1 + FinalScale hits.
     if (hopper) {
@@ -8206,7 +8214,7 @@ window.BOCharacter = function (ctx) {
     if (strikeFin) {
       perHitFactor *= (strikes - 1 + strikeFin) / strikes;
       res.notes.push(sk.Name + ' strikes ' + strikes + ' times per use; the last strike deals ' + Math.round(strikeFin * 100) + '% (' + (strikes - 1 + strikeFin).toFixed(1) + ' full hits per use). The finisher share is from the game\'s skill data; not checked in a fight.');
-    } else if (returnHits > 1) res.notes.push(sk.Name + ' cuts the enemy twice per throw: on the way out and on the way back.');
+    } else if (returnHits > 1) res.notes.push(sk.Name + (returnHits === 1.5 ? ' thrown by a trap or totem cuts for 100% on the way out and 50% on the way back (patch 0.56.9).' : ' cuts the enemy twice per throw: on the way out and on the way back.'));
     else if (strikes > 1 && !rainWaves && !hopper) res.notes.push(sk.Name + ' strikes ' + strikes + ' times per use; every strike is counted at the full hit.');
     // Spell Echo on a Trap (11 Nov 2026): the repeat throws another trap, but the traps stand under one cap (log: "Echo: arc repeat 1"
     // then "Totem: arc placed (n / 8)", 600 of 712 throws at 8 / 8, never past 8), so it adds no strikes. The Training Post readouts with only
@@ -8625,11 +8633,12 @@ window.BOCharacter = function (ctx) {
     if (overload) {
       const u = ail.ignite && ascFlag('Asc71_Backdraft') ? ail.ignite.uptime : 0;
       const critsPerSec = hitsPerSec * (u + (1 - u) * critChance / 100);
-      const up = 1 - Math.exp(-critsPerSec * 8), ovF = 1 + 0.6 * up;
+      const ovMore = is0569(GD) ? (((GD.scaling || {}).Hero || {}).ElementalOverloadMore || 25) : 60; // 0.56.9 notes: 25% (was 60%); the data's Hero.ElementalOverloadMore says the same
+      const up = 1 - Math.exp(-critsPerSec * 8), ovF = 1 + ovMore / 100 * up;
       for (const d of ['Fire', 'Cold', 'Lightning']) if (byType[d] !== undefined) { hitDpsVs += byType[d] * (ovF - 1); byType[d] *= ovF; }
       res.hitDps = hitDpsVs;
       res.overload = { uptime: up, critsPerSec, factor: ovF };
-      res.notes.push('Elemental Overload: critical strikes grant 60% more elemental damage for 8 s, counted up ' + Math.round(up * 100) + '% of the time (' + critsPerSec.toFixed(1) + ' crits a second); your critical strike multiplier is fixed at 100%.');
+      res.notes.push('Elemental Overload: critical strikes grant ' + ovMore + '% more elemental damage for 8 s, counted up ' + Math.round(up * 100) + '% of the time (' + critsPerSec.toFixed(1) + ' crits a second); your critical strike multiplier is fixed at 100%.');
     }
     res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
     // What the in-game skill panel shows: hits + ailments to one enemy, before its resistances and curses.
@@ -8647,11 +8656,20 @@ window.BOCharacter = function (ctx) {
       res.notes.push('Life Leech: ' + leechMore + '% more damage while you are leeching (below full life), counted as on.');
     }
     let chillMore = 0; for (const m of pickMods(mods, 'ChilledLightningMore', 'Flat')) if (applies(ctx, m)) { chillMore += m.v; use(m); }
+    // 0.56.9 (patch notes 11/12 Nov 2026): chill and freeze need a hit that is at least 25% cold, unless the hero has 30% or more increased
+    // freeze duration or chill effect, or any shatter. Not log-checked.
+    let chillOk = byType.Cold > 0;
+    if (chillOk && is0569(GD)) {
+      const tot = Object.values(byType).reduce((x, y) => x + (+y || 0), 0);
+      let ce = 0; for (const st of ['ChillEffect', 'FreezeDuration']) for (const m of pickMods(mods, st, 'Inc')) if (applies(ctx, m)) ce = Math.max(ce, m.v);
+      const shat = (res.supports || []).some(x => x.ok && /shatter/i.test(x.id));
+      chillOk = byType.Cold / Math.max(tot, 1e-9) >= 0.25 || ce >= 30 || shat;
+    }
     if (chillMore && byType.Lightning > 0) {
-      if (byType.Cold > 0) {
+      if (chillOk) {
         const add = byType.Lightning * chillMore / 100; byType.Lightning += add; hitDpsVs += add; res.hitDps = hitDpsVs;
         res.notes.push('Stormfrost: Lightning deals ' + chillMore + '% more against a Chilled or Frozen enemy; counted because this skill\'s own Cold chills it.');
-      } else res.notes.push('Stormfrost: its ' + chillMore + '% more Lightning against a Chilled enemy is not counted, because this skill deals no Cold to chill it.');
+      } else res.notes.push('Stormfrost: its ' + chillMore + '% more Lightning against a Chilled enemy is not counted, because the hit of this skill is under 25% Cold (patch 0.56.9) or has none, so it does not chill.');
     }
     // ----- Executioner (LowLifeMore, CullingStrike) -----
     // X% more damage below T% of life, and hits kill below C%. Against one enemy fought from full life this is a

@@ -6984,7 +6984,12 @@ window.BOCharacter = function (ctx) {
       // the save's values. That closes the panel's Int (223 vs 210) and ES (items +90 vs 83) gaps exactly.
       const topAt = a => { const T = (GD.affixes[lc(a.id)] || {}).Tiers || []; const i = T.findIndex(t => t.ILvl <= (it.level || 0)); return i < 0 ? 0 : i; };
       const topLines = rolled.filter(a => a.tier <= topAt(a)).length;
-      const rareKind = rolled.length && topLines === rolled.length ? 'Flawless Rare' : topLines >= 4 ? 'Great Rare' : '';
+      // A Flawless Rare is a Great Rare (4 or more top-tier lines) whose every line is top tier: a rare with only one or two
+      // lines, all top tier, gets no boost. Character panel, 12 Nov 2026 (Magetest, an offline test build: nine rares with
+      // +50 Int and nothing or one more top-tier line each): Intelligence 904 = (319 + 9 x 50 + 53 from the tree) x 1.10;
+      // boosted x1.3 it would be 1,052. With 904 the sheet's Ember Bolt panel DPS is within 0.3% of the game's in all four
+      // test states. Not known: a rare with exactly 4 or 5 lines, all top tier (taken as Flawless here).
+      const rareKind = topLines >= 4 && topLines === rolled.length ? 'Flawless Rare' : topLines >= 4 ? 'Great Rare' : '';
       const rareBoost = rareKind === 'Flawless Rare' ? 1.3 : rareKind === 'Great Rare' ? 1.1 : 1;
       for (const a of it.affixes) {
         if (a.id.startsWith('unique:')) {

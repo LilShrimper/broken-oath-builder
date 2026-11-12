@@ -10056,8 +10056,11 @@ window.BOStartApp = function () {
     st.curses = {};
     for (const c of Object.values(GD.curses)) st.curses[c.Id] = { on: ch.hotbar.includes(c.Skill), dread: 0 };
     st.enemyLevel = null; $('#enemyLevel').value = ''; $('#enemyLevel').placeholder = ch.level;
-    st.combo = store.get('combo:' + ch.id, []) || [];
-    st.optW = store.get('optw:' + ch.id, {}) || {};
+    // The Damage tab's "Also count" and the optimizer's are one setting (st.optW, a weight per skill).
+    // An older page kept the Damage tab's list apart ('combo:'): moved in once, at weight 1.
+    st.optW = store.get('optw:' + ch.id, null);
+    if (!st.optW) { st.optW = {}; for (const id of store.get('combo:' + ch.id, []) || []) st.optW[id] = 1; store.set('optw:' + ch.id, st.optW); }
+    st.combo = [];
     $('#treeReset').hidden = !!ch.plan; // a plan's tree is the plan itself
     const { skills, pickable } = fillSkills(ch);
     const remembered = store.get('skill:' + ch.id, null);
@@ -10164,21 +10167,16 @@ window.BOStartApp = function () {
     st.optW = w; if (st.ch) store.set('optw:' + st.ch.id, w);
     renderOptMulti(); render(); if (planner && !$('#buildPane').hidden) planner.render();
   });
-  const comboIds = () => (st.combo || []).filter(id => id !== st.skill && (st.pickable || []).some(s => s.id === id));
+  const comboIds = () => optExtra().map(g => g.id);
   function comboRuns(extra) {
     return comboIds().map(id => ({ id, r: S.calcSkill(GD, st.ch, id, comboOpts(extra)) })).filter(x => !x.r.error && !x.r.unsupported && isFinite(x.r.totalDps));
   }
+  // Same rows as the other Also count pickers; the shared change handler saves them (setOptWeight-like).
+  // The Damage tab adds the ticked skills' DPS up; the weights are for the optimizers' "which is better".
   function renderCombo() {
-    const on = new Set(st.combo || []);
-    const list = (st.pickable || []).filter(s => s.id !== st.skill && (s.where !== 'Owned gem' || on.has(s.id)));
-    $('#comboField').hidden = !st.ch || !list.length;
-    $('#comboList').innerHTML = list.map(s => '<label class="check-row"><input type="checkbox" value="' + esc(s.id) + '"' + (on.has(s.id) ? ' checked' : '') + '><span>' + skillDot(s.id) + esc(s.name) + '</span></label>').join('');
+    $('#comboField').hidden = !st.ch || !optMultiList().length;
+    $('#comboList').innerHTML = optMultiRows('Skill');
   }
-  $('#comboList').addEventListener('change', () => {
-    st.combo = [...document.querySelectorAll('#comboList input:checked')].map(i => i.value);
-    if (st.ch) store.set('combo:' + st.ch.id, st.combo);
-    render();
-  });
   function comboCard(r, runs) {
     if (!runs.length) return '';
     const rows = [{ id: st.skill, r }].concat(runs);

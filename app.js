@@ -5735,6 +5735,17 @@ window.BOFaq = function (ctx) {
       ['<b>Chill</b>', 'No chance roll', 'A hit that is at least 25% Cold chills the enemy and slows it. A little Cold on a Physical hit (an Adds Cold prefix, a weapon that gains some Physical as extra Cold) still adds its damage but no longer chills or freezes. It counts again with 30% or more increased freeze duration or chill effect, or any Shatter (the developer\'s patch notes, 11 Nov 2026).', 'Same rules.'],
       ['<b>Bleed</b>', 'From skills and lines that cause it', 'Deals ' + pct(A.BleedFracPerSec) + '% of the Physical hit per second.', 'Same rules.'],
     ]));
+    // Poison's three groups. Game log 11 Nov 2026 (Mech70Check, Death Coil on the training dummy): "poison hit 72737.4, inc 154%, dot x1.06
+    // -> 39167.61/s a stack" = 72737.4 x 0.2 x 2.54 x 1.06; with the amulet's 47% off: "hit 35965.8, inc 107%, dot x1.00 -> 14889.83/s".
+    h += card('How poison damage is worked out', '<p class="faq-stats faq-formula"><b>One stack, per second</b> = the hit that poisoned × ' + pct(A.PoisonFracPerSec) + '% × (1 + increased Poison damage over time) × (1 + Damage over Time Multiplier)</p>' +
+      list([
+        '<b>The hit:</b> everything that makes the hit bigger is already in it, including generic increased damage (spell, poison, elemental) and "more" lines. It reaches the poison once, through the hit, and is not counted again.',
+        '<b>Increased Poison damage over time:</b> a group of its own. The lines add together, then multiply the hit.',
+        '<b>Damage over Time Multiplier:</b> another group of its own. The lines add together, then multiply again. Its text says it also covers Ignite and Bleeding (only poison is checked here).',
+        'Because the two groups multiply, a point of Damage over Time Multiplier is worth more than a point of increased Poison damage once the increased total is large. With 154% increased, +6% multiplier adds 6% to a stack; +6% increased adds about 2.4%.',
+        A.bPoisonTakesDamageTaken ? 'Each tick is then raised by whatever makes the enemy take more damage (curses, Hunter\'s Marks, War Banner, shock).' : '',
+        'Example from the game: a 72,737 hit with 154% increased and a 6% multiplier poisons for 72,737 × 20% × 2.54 × 1.06 = 39,168 a second per stack. Checked against the game log on 11 Nov 2026, with an amulet on and off (154% and 107% increased) and with and without a multiplier node: exact each time.',
+      ]));
     h += card('Good to know', list([
       'Chill and freeze need a hit that is at least 25% Cold (see Chill above); a hit with less Cold still deals its Cold damage. The sim\'s Stormfrost line follows this.',
       'Chances are per hit that carries the element. Ignite, shock and poison chance lines add to the base chance.',

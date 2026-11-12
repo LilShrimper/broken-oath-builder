@@ -13,7 +13,7 @@
   // Read when the folder has them; an older game folder without them still loads.
   const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json', 'Items/quality_stones.json', 'Gameplay/league_rules.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 28; // 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 29; // 29: the game's rule numbers (rules.json, switches.json; Damage tab); 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -260,6 +260,15 @@
     for (const t of J('Items/stat_text.json').texts) statText[t.Key] = t.Text;
 
     // Trap / totem strike prices (trap_price95.json, in the game files since build 26595060): skill id -> share of a hand throw.
+    // The game's own rule numbers (sim.js ruleNum). rules.json: the public API's short list of gameplay tunables with what each
+    // means (game data build 70). switches.json: every gameplay switch of the shipped build, kept by the API in its archive
+    // folder (v1/static/b<build>/, fetched by tools/api-source.js); only the damage sections are kept, values only.
+    // Keys are "section.key" (r87.SPARKS.PerBody). A game folder has neither file: the sim then uses its own defaults.
+    const gameRules = {};
+    const ruleVal = v => v === 'True' ? true : v === 'False' ? false : v !== '' && v != null && isFinite(+v) ? +v : v;
+    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA)$/;
+    try { for (const s of (J('Gameplay/switches.json') || {}).switches || []) if (RULE_SECTIONS.test(s.section)) gameRules[s.section + '.' + s.key] = ruleVal(s.value); } catch (e) { /* not served */ }
+    try { for (const [k, v] of Object.entries((J('Gameplay/rules.json') || {}).values || {})) gameRules[k] = ruleVal(v && v.value); } catch (e) { /* older game data */ }
     let trapPrice = {};
     try { const tp = J('Gameplay/trap_price95.json'); for (const [k, v] of Object.entries((tp && tp.prices) || {})) if (v > 0) trapPrice[k.toLowerCase()] = +v; } catch (e) { /* older game files: no price table */ }
 
@@ -277,7 +286,7 @@
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
       { skills, classes, supports, nodes, masteries, oaths, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice });
+        affixes, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice, rules: gameRules });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, OPTIONAL, SCHEMA };
@@ -2872,13 +2881,13 @@ window.BOPlanner = function (ctx) {
     p.supportGems = []; p.gems = p.gems.filter(g => used.has(g));
     p.gemLevels = Object.fromEntries(Object.entries(p.gemLevels).filter(([k]) => used.has(k)));
     p.items = p.items.map(it => [it.slot, it.base, it.rarity, it.unique && it.unique !== 'None' ? it.unique : 0, it.level || 0,
-      (it.affixes || []).map(a => [a.id, a.tier || 0, r4(a.v), r4(a.v2)].join(',')).join(';'), (it.runes || []).join(','), it.name || '', it.roll == null ? null : r4(it.roll)]);
+      (it.affixes || []).map(a => { const fl = (a.crafted ? 1 : 0) + (a.oath ? 2 : 0); return [a.id, a.tier || 0, r4(a.v), r4(a.v2)].concat(fl ? [fl] : []).join(','); }).join(';'), (it.runes || []).join(','), it.name || '', it.roll == null ? null : r4(it.roll)]);
     return 'BOS1.' + (await toCode(p)).slice(5);
   }
   function unpackShare(p) {
     p.items = (p.items || []).map(r => {
       const it = { slot: r[0], base: r[1], rarity: r[2], unique: r[3] || 'None', name: r[7] || '', level: r[4] || 0,
-        affixes: r[5] ? r[5].split(';').map(a => { const [id, tier, v, v2] = a.split(','); return { id, tier: +tier || 0, v: +v || 0, v2: +v2 || 0 }; }) : [],
+        affixes: r[5] ? r[5].split(';').map(a => { const [id, tier, v, v2, fl] = a.split(','); return { id, tier: +tier || 0, v: +v || 0, v2: +v2 || 0, crafted: !!(+fl & 1), oath: !!(+fl & 2) }; }) : [],
         runes: r[6] ? r[6].split(',') : [] };
       if (r[8] != null) it.roll = r[8];
       return it;
@@ -5111,7 +5120,7 @@ window.BOItemSearch = function (ctx) {
     const items = (b.items || []).map(it => ({
       slot: it.slot, base: it.base, rarity: it.rarity || 'Normal', unique: it.unique && !isHidden(it.unique) ? it.unique : 'None', name: '',
       level: it.item_level || l, quality: it.quality || 0, forged: it.forged || 0,
-      affixes: (it.affixes || []).filter(a => !isHidden(a.id)).map(a => ({ id: a.id, tier: a.tier || 0, v: +a.value || 0, v2: +a.value2 || 0, crafted: !!a.crafted })),
+      affixes: (it.affixes || []).filter(a => !isHidden(a.id)).map(a => ({ id: a.id, tier: a.tier || 0, v: +a.value || 0, v2: +a.value2 || 0, crafted: !!a.crafted, oath: !!a.oath })),
       runes: it.runes_hidden ? [] : (it.runes || []).filter(r => r && !isHidden(r)),
     }));
     const gemLevels = {}; for (const [k, v] of Object.entries(b.gem_levels || {})) if (!isHidden(k)) gemLevels[k] = v;
@@ -5798,7 +5807,7 @@ window.BOFaq = function (ctx) {
         ['Count', (s.Delivery === 'Summon' ? m.Count + (m.CountEvery ? ', +1 every ' + m.CountEvery + ' gem levels' : '') + ', cap ' + m.Cap : 'up to ' + m.Cap + (m.PerLevels && m.PerLevels.length ? ', +1 at gem levels ' + m.PerLevels.join(', ') : '') + ' (raised from kills, the oldest is replaced)')],
         ['Base attack every', m.AttackEvery + ' s <span class="faq-note">the minion\'s pace is this × 0.72 ÷ minion speed (measured in the game log, not in the data files)</span>'],
         ['Damage', 'gem hit ' + dmg(s) + ' × minion multiplier ' + m.DamageMult],
-        m.LevelDamage && SIM.minionLevelFactor ? ['Zone level', ZONES.map(z => 'level ' + z + ': ×' + SIM.minionLevelFactor(GD, m, z).toFixed(2)).join(' · ') + ' <span class="faq-note">LevelDamage ' + m.LevelDamage + ', k ' + SIM.minionLevelK(m) + ' (formula above)</span>'] : null,
+        m.LevelDamage && SIM.minionLevelFactor ? ['Zone level', ZONES.map(z => 'level ' + z + ': ×' + SIM.minionLevelFactor(GD, s, z, z, 20).toFixed(2)).join(' · ') + ' <span class="faq-note">at gem level 20, hero at the zone\'s level; LevelDamage ' + m.LevelDamage + ', gem growth ' + (s.SpellGrowth != null ? s.SpellGrowth : 0.12) + ' (formula above)</span>'] : null,
         m.Affinity ? ['Affinity', '+' + pct(m.AffinityDamage) + '% minion damage per 10 ' + esc(m.Affinity) + (m.AffinityCap ? ', up to ' + m.AffinityCap : '')] : null,
         s.ManaCost ? ['Cast', (s.CastTime !== undefined ? s.CastTime + ' s, ' : '') + s.ManaCost + ' mana' + (s.Cooldown ? ', ' + s.Cooldown + ' s cooldown' : '')] : null,
       ].filter(Boolean);
@@ -5826,17 +5835,17 @@ window.BOFaq = function (ctx) {
     // The sim's minion formula in words (sim.js minionSheet); every part was checked against the game's own minion sheet in the log.
     h += card('How a minion\'s damage is worked out', '<p class="faq-stats faq-formula"><b>Hit</b> = gem hit × 1.19<sup>gem level − 1</sup> × minion multiplier × affinity × near you × zone level × (1 + increased Minion Damage) × (1 + the summon skill\'s own increased damage) × every "more" line</p>' +
       '<p class="faq-stats faq-formula"><b>DPS</b> = hit × crit (6% chance, ×1.5) × minions standing × strikes ÷ pace &nbsp;·&nbsp; pace = base attack interval × ' + (SIM.MINION_PACE || 0.72) + ' ÷ minion speed</p>' +
-      '<p class="faq-stats faq-formula"><b>Zone level</b> = 1 + LevelDamage × k × e<sup>⅔ × ' + (MD.K || 0.2959) + ' × level^' + (MD.P || 0.6) + '</sup> &nbsp;·&nbsp; k = 0.467 (Raise Zombie, Grave Golem), 1.71 (Skeletons), 1.39 (Skeletal Mage)</p>' +
+      '<p class="faq-stats faq-formula"><b>Zone level</b> = 1 + LevelDamage × (gap − 1) &nbsp;·&nbsp; gap = monster life at the pet level ÷ monster life at level 1 ÷ (1 + gem growth)<sup>gem level − 1</sup>, never under 1 &nbsp;·&nbsp; pet level = halfway between the zone\'s level and yours</p>' +
       list([
         '<b>Gem level:</b> levels from gear count like the gem\'s own, ×1.19 each.',
         '<b>Affinity:</b> the Strength or Intelligence line on the minion\'s card.',
         '<b>Near you:</b> ' + (SIM.MINION_NEAR || 60) + '% more within 7 m of you, fading to none at 12 m. The game\'s panel counts it in full.',
-        '<b>Zone level:</b> minions grow with the level of the zone they fight in; in the hub that is your own level. The curve is the game\'s monster damage curve to the power ⅔. In Damage Analysis, set the Monster level box to the Rupture you run.',
+        '<b>Zone level:</b> minions grow with the level of the zone they fight in; in the hub that is your own level. It makes up for the gap between the monsters and the gem, so a low gem in a high zone gets the most and a high gem gets less. In Damage Analysis, set the Monster level box to the Rupture you run.',
         '<b>Increased Minion Damage:</b> every "minions deal X% increased damage" line, plus 1% per 10 Intelligence. They add together.',
         '<b>The summon skill\'s own increased damage:</b> "increased damage" on the summon\'s supports (Ravening Host 25%) and lines that name Minion skills (Bone Sovereign 30%). They add to each other and multiply the group above.',
         '<b>More lines:</b> the summon\'s supports (Multistrike 52% less a strike, Ravening Host 12% more, a granted Chain 5% less), Added Fire\'s 30% extra, minion "more" lines (Bone Sovereign 15%), Harmony, and the defence lines that pay "more damage per 1,000 Armour" and the like (Bone Armour).',
         '<b>Strikes:</b> with Multistrike each blow strikes 3 times; the game\'s skill panel is 3 × its one-strike number.',
-        'Checked against the game log on 11 Nov 2026 (Necromancer level 48–49; hub and Ruptures 31, 48, 64, 67 and 69): Skeletal Mage within 0.6%, Skeletons 0.5%, Raise Zombie 1.3%, Grave Golem 2.1%. The Skeletons and Skeletal Mage k values are measured, not from the data files.',
+        'Checked against the game log on 11 Nov 2026 (Necromancer level 48–49; hub and Ruptures 31, 48, 64, 67 and 69): Skeletal Mage within 0.6%, Skeletons 0.5%, Raise Zombie 1.3%, Grave Golem 2.1%. The zone level rule is the game\'s own (the developer\'s formulas file in the public API) and fits those log numbers within 0.4%.',
       ]));
     h += grid;
     h += card('Rules for all minions', list([
@@ -7090,6 +7099,12 @@ window.BOCharacter = function (ctx) {
   const LAST_BUILD_0569 = 26604566;
   const is070 = GD => GD.steamBuild ? +GD.steamBuild > LAST_BUILD_0569 : false;
   // Knee: m <= 8 stays; above it 8 x 1.41^log2(m/8). Not applied to minion sheets (minionSheet is separate).
+  // A number from the game's own rules (GD.rules: the public API's game-data/rules.json and the archive's switches.json,
+  // keyed "section.key"), or the given default when the data has none (older game data).
+  // Read this way so a patch that moves one of these numbers reaches the sim with the game data (12 Nov 2026): the Spark numbers,
+  // the Totem, Ballista and Spark caps, the extra Totem and Trap shares, the Totem echo and the Vow skill-level share. Each default
+  // is the value the sim used before, proven where its own comment says so.
+  const ruleNum = (GD, key, def) => { const v = (GD.rules || {})[key]; const n = typeof v === 'object' && v ? +v.value : +v; return v != null && isFinite(n) ? n : def; };
   const moreKnee = m => m <= 8 ? m : 8 * Math.pow(1.41, Math.log2(m / 8));
   // 0.56.5 count rule (Multiple Totems and Trap Support texts, build 26543267): "each past the first adds 80% of one's
   // damage, and each past the sixth adds 20%" (Totems and Ballistas of one skill); Traps "90% ... past your sixth 40%".
@@ -7155,7 +7170,7 @@ window.BOCharacter = function (ctx) {
       id: S.ID, name: S.Name, classId: S.ClassId, level: S.Level, league: S.League, lastZone: S.LastZone,
       items: (R.Items || []).filter(i => i.EquippedSlot && i.EquippedSlot !== 'None').map(i => ({
         slot: i.EquippedSlot, base: i.BaseID, rarity: i.Rarity, unique: i.UniqueID, name: i.Name, level: i.ItemLevel, quality: i.Quality || 0, grade: i.BaseGrade95 || 0,
-        affixes: (i.Affixes || []).map(a => ({ id: a.AffixId, tier: a.Tier, v: a.Value, v2: a.Value2 })), runes: i.Runes || [],
+        affixes: (i.Affixes || []).map(a => ({ id: a.AffixId, tier: a.Tier, v: a.Value, v2: a.Value2, crafted: !!a.bCrafted, oath: !!a.bOath83 })), runes: i.Runes || [],
       })),
       passives: R.PassiveNodeIds || [], bonusPoints: R.BonusPassivePoints || 0, gems: R.Gems || [], gemLevels: R.GemLevels || {},
       sockets: (R.Sockets || []).map(s => ({ skill: s.SkillId, supports: (s.Supports || []).filter(Boolean), conduit: s.ConduitLink || '' })),
@@ -7275,6 +7290,8 @@ window.BOCharacter = function (ctx) {
     const o = Object.assign({}, um); for (const f of ['Min', 'Max', 'Min2', 'Max2']) if (o[f] != null) o[f] = uniqueLineValue(uid, i, o[f]);
     return o;
   }
+  // Rolled lines that are counts: a Great or Flawless Rare does not boost them (formulas.md section 9, see collectMods).
+  const RARE_COUNT_STATS = new Set(['SkillLevel', 'Projectiles', 'Chains', 'TotemCount', 'MinionCap', 'CurseLimit', 'MaxResist']);
   function itemLabel(GD, it) {
     const base = GD.bases[lc(it.base)];
     const u = GD.uniques[lc(it.unique)];
@@ -7319,13 +7336,21 @@ window.BOCharacter = function (ctx) {
       // and Grave Brow (ilvl 66, 4 of 6) show x1.1 (Int 30 -> 33, 33 -> 36); four ilvl-84 rares with 0-1 tier-0 lines show
       // the save's values. That closes the panel's Int (223 vs 210) and ES (items +90 vs 83) gaps exactly.
       const topAt = a => { const T = (GD.affixes[lc(a.id)] || {}).Tiers || []; const i = T.findIndex(t => t.ILvl <= (it.level || 0)); return i < 0 ? 0 : i; };
-      const topLines = rolled.filter(a => a.tier <= topAt(a)).length;
+      // The game's own grading rule (developer's formulas.md in the public API archive, v1/static/b70, section 9, read 12 Nov
+      // 2026): "count its rolled, non-crafted lines (Lines) and the ones whose tier index is <= the best tier its item level
+      // allows (Top). Flawless = Lines >= 4 and Top == Lines; Great = Top >= 4". Crafted lines are neither counted nor boosted;
+      // the Oathsworn line (the Cube's 7th line) "counts at x1 and is not graded". Not boosted either: "mythic_" lines and
+      // counts ("SkillLevel, Projectiles, Chains, totem / minion / curse counts, MaxResist, triggers, keystones, flags").
+      // Rounding: "a whole number stays whole (rounded; a Vow never rounds a non-zero line to 0), other numbers round to 0.1",
+      // which is what the 10 Nov panel shows (42 -> 55, 24 -> 31, leech 0.6 -> 0.8).
+      const graded = rolled.filter(a => !a.crafted && !a.oath);
+      const topLines = graded.filter(a => a.tier <= topAt(a)).length;
       // A Flawless Rare is a Great Rare (4 or more top-tier lines) whose every line is top tier: a rare with only one or two
       // lines, all top tier, gets no boost. Character panel, 12 Nov 2026 (Magetest, an offline test build: nine rares with
       // +50 Int and nothing or one more top-tier line each): Intelligence 904 = (319 + 9 x 50 + 53 from the tree) x 1.10;
       // boosted x1.3 it would be 1,052. With 904 the sheet's Ember Bolt panel DPS is within 0.3% of the game's in all four
-      // test states. Not known: a rare with exactly 4 or 5 lines, all top tier (taken as Flawless here).
-      const rareKind = topLines >= 4 && topLines === rolled.length ? 'Flawless Rare' : topLines >= 4 ? 'Great Rare' : '';
+      // test states. A rare with exactly 4 or 5 lines, all top tier, is Flawless (the rule above).
+      const rareKind = topLines >= 4 && topLines === graded.length ? 'Flawless Rare' : topLines >= 4 ? 'Great Rare' : '';
       const rareBoost = rareKind === 'Flawless Rare' ? 1.3 : rareKind === 'Great Rare' ? 1.1 : 1;
       for (const a of it.affixes) {
         if (a.id.startsWith('unique:')) {
@@ -7337,9 +7362,11 @@ window.BOCharacter = function (ctx) {
           if (!af) { notes.push('Unknown affix ' + a.id + ' on ' + label); continue; }
           // An affix on a red item is a Vow: the 1st counts in full, each later one less (vowShare; cube_recipes.json
           // Vows83 Shares 100/85/70/60/50/40%, applied on the owner's say, 6 Nov 2026). Saves keep the full value.
-          let sh = it.rarity === 'Unique' ? vowShare(GD, vowN++) : 1;
+          // A crafted line on a red item is not a Vow (formulas.md section 9: "every non-unique: line that is not crafted, in order").
+          const isVow = it.rarity === 'Unique' && !a.crafted;
+          let sh = isVow ? vowShare(GD, vowN++) : 1;
           // Patch 0.56.0 notes: "Vows that grant +skill levels count at half value" (on top of the Vow's share).
-          if (it.rarity === 'Unique' && af.Mod && af.Mod.Stat === 'SkillLevel' && is056(GD)) sh *= 0.5;
+          if (isVow && af.Mod && af.Mod.Stat === 'SkillLevel' && is056(GD)) sh *= ruleNum(GD, 'r83.VOWS.VowSkillLevelShare', 0.5);
           // Patch 0.56.0 notes: "A rare with 4 or more lines at their top tier is a GREAT RARE and its rolled lines
           // count 10% more; a FLAWLESS RARE, every line at its top tier, counts 30% more." Saves keep each line's
           // tier (0 = the top one in affixes.json). NOT CHECKED: whether the save's value already has it.
@@ -7348,9 +7375,10 @@ window.BOCharacter = function (ctx) {
           // Core Touched Astral Codex +2 (three Flawless Rares with a +2 line: boosted they would be 2.6; the Codex also holds an Othala rune at half
           // value, 0.5, which adds nothing), Cinderwick +1 (its Vow: 2 x 85% x half = 0.85), Stride of the First Oath +1. The sim had +10.
           const lvlLine = !!(af.Mod && af.Mod.Stat === 'SkillLevel');
-          const boost = rareBoost !== 1 && !lvlLine;
+          const boost = rareBoost !== 1 && !lvlLine && !a.crafted && !a.oath && !/^mythic_/i.test(a.id) && !RARE_COUNT_STATS.has(af.Mod && af.Mod.Stat);
           if (boost) sh *= rareBoost;
-          add(af.Mod, a.v * sh, a.v2 * sh, label + (it.rarity === 'Unique' ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
+          const cnt = x => sh === 1 || !x ? x : Number.isInteger(x) ? (Math.round(x * sh) || (isVow ? Math.sign(x) : 0)) : Math.round(x * sh * 10) / 10;
+          add(af.Mod, cnt(a.v), cnt(a.v2), label + (isVow ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
         }
       }
       const weaponSlot = it.slot === 'MainHand' || it.slot === 'OffHand';
@@ -7593,10 +7621,16 @@ window.BOCharacter = function (ctx) {
   }
 
   function pickMods(mods, stat, mode) { return mods.filter(m => m.stat === stat && (!mode || m.mode === mode) && !m.local); }
-  // Max mana: Hero ManaBase + ManaPerLevel x level + ManaPerInt x Int, + Mana lines, x increased Mana.
+  // Max mana: Hero ManaBase + ManaPerLevel x (level - 1) + ManaPerLevelLate for each level from ManaLateFromLevel on
+  // + ManaPerInt x Int, + Mana lines, x increased Mana.
+  // Game's own sheet (Copy stats, 12 Nov 2026, build 71, Necromancer 51, Int 279, +198 mana on gear): "mana 821.5" =
+  // 120 + 6 x 50 + 4 x 16 (levels 36 to 51) + 139.5 + 198. Before this the sim had 120 + 6 x 51 + 139.5 + 198 = 763.5 and did
+  // not read ManaPerLevelLate. One character only: the level - 1 and the 16 late levels are the one whole-number reading
+  // that gives 821.5; a copy from a hero under level 36 would settle the first part.
   function heroMaxMana(H, ch, mods, attr) {
     const flat = pickMods(mods, 'Mana', 'Flat').reduce((a, m) => a + m.v, 0), inc = pickMods(mods, 'Mana', 'Inc').reduce((a, m) => a + m.v, 0);
-    return ((H.ManaBase || 40) + (H.ManaPerLevel || 6) * ch.level + (H.ManaPerInt || 0.5) * (attr.Int || 0) + flat) * Math.max(0, 1 + inc / 100);
+    const lvl = ch.level || 1, late = H.ManaPerLevelLate > 0 && H.ManaLateFromLevel > 0 ? H.ManaPerLevelLate * Math.max(0, lvl - H.ManaLateFromLevel + 1) : 0;
+    return ((H.ManaBase || 40) + (H.ManaPerLevel || 6) * (H.ManaPerLevelLate > 0 ? lvl - 1 : lvl) + late + (H.ManaPerInt || 0.5) * (attr.Int || 0) + flat) * Math.max(0, 1 + inc / 100);
   }
 
   // ---------- Channel Conduit ----------
@@ -8323,9 +8357,14 @@ window.BOCharacter = function (ctx) {
     // time; past it more speed adds nothing (game tooltip "2.86 (speed cap)"). Clip lengths are not in the
     // data files, so only floors measured in the game are known (CLIP_FLOOR).
     let speedOverK = 1;
-    const floor = (CLIP_FLOOR[lc(ch.classId)] || {})[skillId];
-    if (floor && !(sk.Channel && sk.Channel.Tick) && useTime < floor) {
-      res.notes.push('Speed cap: ' + skillId.replace(/_/g, ' ') + ' can\'t be used faster than once per ' + floor + ' s (' + (1 / floor).toFixed(2) + ' a second; the game\'s animation plays at most ' + (H.ActionRateMax || 4) + 'x its speed). You have ' + usesPerSec.toFixed(2) + ' a second of speed, so more attack speed adds nothing to this skill.');
+    // Where no clip floor is measured the game's general floor holds (developer's formulas.md in the public API archive,
+    // v1/static/b70, section 0, read 12 Nov 2026: spells "use time = CastTime / (...), min 0.12 s", attacks "use time = 1/APS,
+    // min 0.12 s"). The overshoot is turned into damage the same way (the log's "speed past the cap" line names no cap;
+    // not seen in the log for this floor). Skills whose use is a swing plus hops or flights are left alone.
+    const clipFloor = (CLIP_FLOOR[lc(ch.classId)] || {})[skillId];
+    const floor = clipFloor || (!mirage && !flight && sk.Delivery !== 'Summon' ? 0.12 : 0);
+    if (floor &&!(sk.Channel && sk.Channel.Tick) && useTime < floor) {
+      res.notes.push('Speed cap: ' + skillId.replace(/_/g, ' ') + ' can\'t be used faster than once per ' + floor + ' s (' + (1 / floor).toFixed(2) + ' a second; ' + (clipFloor ? 'the game\'s animation plays at most ' + (H.ActionRateMax || 4) + 'x its speed' : 'the game\'s shortest use time for any skill') + '). You have ' + usesPerSec.toFixed(2) + ' a second of speed, so more attack speed adds nothing to this skill.');
       // Speed past the cap is not lost: it becomes damage, x (speed / cap)^0.5. Game log 12 Nov 2026: "AsOver90: on, pow 0.50",
       // "split_shot speed past the cap x1.253 -> damage x1.119", "arcane_bolt ... x1.324 -> damage x1.151",
       // "thousand_sparks ... x1.085 -> damage x1.042". On the owner's test Ranger it closes the panel DPS (10,169) with Base Grade.
@@ -8342,7 +8381,15 @@ window.BOCharacter = function (ctx) {
       // Late cooldown (data: CooldownLate from gem level CooldownLateAt, counting the +levels from gear and passives).
       // Flame Dash tooltip 9 Nov 2026 (gem 17 + 3 = level 20, Swift Step -40%): Cooldown 0.3 s = 0.5 x 0.6, 3.33 casts a
       // second; the sim used the level-1 1.2 s and said 1.67.
-      const cdBase = sk.CooldownLate > 0 && sk.CooldownLateAt && res.gem && res.gem.total >= sk.CooldownLateAt ? sk.CooldownLate : sk.Cooldown;
+      // The cooldown shortens level by level, in a straight line from the gem's level 1 to CooldownLateAt (it was a step at
+      // CooldownLateAt here), and a Movement skill's cooldown recovers with Dexterity (scaling Hero.DexMoveRechargePer10: 1% per
+      // 10 Dex), not with cast or attack speed, with no floor. Game's own sheet (Copy stats, 12 Nov 2026, build 71, Necromancer
+      // 51, Vampire Dash gem 16 + 1 with Swift Step, Dex 185, 6% increased cast speed): "cooldown_s 0.309127" =
+      // (1.2 - 0.7 x 16/19 = 0.610526) x 0.6 / 1.185 = 0.309127. The old rule gave 1.2 x 0.6 / 1.06 = 0.679. The Flame Dash
+      // tooltip above (level 20, 0.3 s) fits both. Seen on a Blink spell only; taken for every skill tagged Movement.
+      const lateT = sk.CooldownLate > 0 && sk.CooldownLateAt > 1 && res.gem ? clamp((res.gem.total - 1) / (sk.CooldownLateAt - 1), 0, 1) : 0;
+      const cdBase = sk.Cooldown + ((sk.CooldownLate || 0) - sk.Cooldown) * lateT;
+      const moveRecharge = ctx.tags.has('movement') && H.DexMoveRechargePer10 > 0 ? 1 + (attr.Dex || 0) / 10 * H.DexMoveRechargePer10 / 100 : 0;
       // No floor here: the game shows 0.3 s although MinCooldown is 0.5 (the floor only limits speed recovery below).
       cooldown = cdBase * Math.max(0.1, 1 + cdInc / 100);
       const cdBeforeSpeed = cooldown;
@@ -8360,7 +8407,10 @@ window.BOCharacter = function (ctx) {
         res.notes.push('Spark cooldown recovers with cast speed: ' + cooldown.toFixed(2) + ' s.');
       }
       // 0.56.2: every other cooldown recovers with attack or cast speed too (patch notes 7 Nov; Rain and Sparks above already did).
-      if (is0562(GD) && !(META.bRainCooldownBySpeed && isAttack && sk.Delivery === 'Rain') && !(!isAttack && sk.Delivery === 'Brand') && speedRate > 0) {
+      if (moveRecharge) {
+        cooldown = cooldown / moveRecharge;
+        res.notes.push('Movement skill: its cooldown recovers with Dexterity (1% per 10), not with ' + (isAttack ? 'attack' : 'cast') + ' speed: ' + cooldown.toFixed(2) + ' s at ' + (attr.Dex || 0) + ' Dexterity.');
+      } else if (is0562(GD) && !(META.bRainCooldownBySpeed && isAttack && sk.Delivery === 'Rain') && !(!isAttack && sk.Delivery === 'Brand') && speedRate > 0) {
         // The floor never lifts a cooldown above what it was before cast speed (Flame Dash shows 0.3 s with MinCooldown 0.5).
         cooldown = Math.max(Math.min(sk.MinCooldown || 0, cdBeforeSpeed), cooldown / speedRate);
         res.notes.push('Cooldown recovers with ' + (isAttack ? 'attack' : 'cast') + ' speed: ' + cooldown.toFixed(2) + ' s.');
@@ -8381,7 +8431,7 @@ window.BOCharacter = function (ctx) {
       // Totem count set by hand (owner request, 9 Nov 2026): no game data on how many spell totems stand, so the
       // default stays one. The cap of 10 Totems is from the 0.56.2 patch notes (7 Nov).
       let tcount = Math.max(1, Math.floor(o.totemCount || 1));
-      if (is0562(GD)) tcount = Math.min(tcount, 10);
+      if (is0562(GD)) tcount = Math.min(tcount, ruleNum(GD, 'r80.CAPS.Totems', 10));
       // Totem speed also speeds a Spell Totem's casts (owner's Judgement tooltip, 9 Nov 2026: "10 totems, each casting it
       // every 0.36 s" and "Casts per second 2.78" per totem, from the gem's 0.8 s; the build's +134.9% increased
       // totem speed gives 0.8 / 2.349 = 0.341 s, close to the shown 0.36 s, so the sum may include a line that does not apply).
@@ -8393,7 +8443,7 @@ window.BOCharacter = function (ctx) {
       // 0.56.5: totems of one skill share their damage (80% each past the first, 20% past the sixth).
       if (is0565(GD) && tcount > 1) {
         const tt = /each past the first adds (\d+)% of one's damage/i.exec((GD.supports.multiple_totems || {}).Description || '');
-        const tNext = is0568(GD) ? (tt ? +tt[1] / 100 : 0.5) : 0.8, tPast = is0568(GD) ? tNext : 0.2; // 0.56.8 text: 50% each, no second step
+        const tNext = is0568(GD) ? (tt ? +tt[1] / 100 : ruleNum(GD, 'r85.METASYS.fTotemExtraShare', 0.5)) : 0.8, tPast = is0568(GD) ? tNext : 0.2; // 0.56.8 text: 50% each, no second step
         countFactor = countShare(tcount, tNext, tPast);
         res.notes.push('Totems share their damage (patch 0.56.5): each past the first adds ' + Math.round(tNext * 100) + '% of one' + (tPast !== tNext ? ', past the sixth 20%' : '') + ' (x' + countFactor.toFixed(3) + ' on average over ' + tcount + ').');
       }
@@ -8407,7 +8457,10 @@ window.BOCharacter = function (ctx) {
       // was not modelled; the 2.5 s base is the sim's own assumption.
       if (is0564(GD)) {
         const ri = pickMods(mods, 'TrapRearm', 'Inc').filter(m => applies(ctx, m)); let inc = 0; for (const m of ri) { inc += m.v; use(m); }
-        const eff = inc <= 100 ? inc : 100 + (inc - 100) / 2;
+        // 0.56.8 notes: "the knees in the damage, armour, strength and trap math are gone"; the game's switch says the same
+        // (public API archive switches.json, build 70: "r89.METAFIX.fTrapRearmKnee89 = 0 ... knee out"). So from 0.56.8
+        // every point of re-arm speed counts in full.
+        const eff = inc <= 100 || is0568(GD) ? inc : 100 + (inc - 100) / 2;
         if (inc > 0) { rearm /= 1 + eff / 100; res.notes.push('Trap re-arm speed +' + Math.round(inc) + '% increased' + (inc > 100 ? ' (counts as +' + Math.round(eff) + '%, patch 0.56.4)' : '') + '.'); }
       }
       // 11 Nov 2026 log (Arc trap on the Training Post, +100% re-arm): "TrapMine: r62 v2 ON - lock 0.15 s, re-arm 0.90 s" and
@@ -8427,7 +8480,7 @@ window.BOCharacter = function (ctx) {
       if (is0565(GD) && traps > 1) {
         // 0.56.8 text: "each Trap past the first adds 20% of a Trap's damage" (one step, no sixth-trap step).
         const t68 = is0568(GD) ? /each Trap past the first adds (\d+)%/i.exec(d) : null;
-        const a = t68 ? +t68[1] / 100 : tx ? +tx[1] / 100 : is0568(GD) ? 0.2 : 0.9, b = t68 ? a : tx ? +tx[2] / 100 : is0568(GD) ? 0.2 : is0567(GD) ? 0.25 : 0.4;
+        const a = t68 ? +t68[1] / 100 : tx ? +tx[1] / 100 : is0568(GD) ? ruleNum(GD, 'r86.ARROWFIX.fTrapExtraShare86', 0.2) : 0.9, b = t68 ? a : tx ? +tx[2] / 100 : is0568(GD) ? a : is0567(GD) ? 0.25 : 0.4;
         countFactor = countShare(traps, a, b);
         res.notes.push('Traps share their damage (patch 0.56.5): each past the first adds ' + Math.round(a * 100) + '% of one, past the sixth ' + Math.round(b * 100) + '% (x' + countFactor.toFixed(3) + ' on average over ' + traps + '; other Trap skills count toward the six in game, not here).');
       } else if (extraLess && traps > 1) {
@@ -8472,7 +8525,7 @@ window.BOCharacter = function (ctx) {
         // 9 Nov 21:13 "Spark87: ON ... 4 spark skills live 7.0 s longer", "FieldDuration: Spark ember_spark lasts 19.50 s (base 13.00
         // x1.50)" and storm_brand 18.00 s (base 12.00); Ember Spark panel 10 Nov: "Lasts 19.5 s (base 13.0 s)". The text now says
         // "Lasts {BrandLife} seconds", so the number comes from the data.
-        const sparkLife = GD.steamBuild && +GD.steamBuild >= 26551640 ? 7 : 4;
+        const sparkLife = GD.steamBuild && +GD.steamBuild >= 26551640 ? ruleNum(GD, 'r87.SPARKS.DurAdd', 7) : 4;
         const baseDur = lasts ? +lasts[1] + (gather ? sparkLife : 0) : 0;
         let durInc = 0; for (const m of pickMods(mods, 'SkillDuration', 'Inc')) if (applies(ctx, m)) { durInc += m.v; use(m); }
         // 10 Nov 2026 23:50 log: Ember Spark lasts 17.68 s (base 13 x1.36).
@@ -8483,7 +8536,7 @@ window.BOCharacter = function (ctx) {
         // "+N to the maximum number of Sparks (at most 27 Sparks in all)". Storm Spark tooltip 4 Nov: base 3,
         // Thunderhead + Brand Smith + Crown of Sparks -> "Counted with 6 brands on the enemy".
         let extra = 0; for (const m of pickMods(mods, 'BrandCount', 'Flat')) if (applies(ctx, m)) { extra += m.v; use(m); }
-        const cap = capM ? Math.min(27, +capM[1] + extra) : 0;
+        const cap = capM ? Math.min(ruleNum(GD, 'r80.CAPS.Sparks', 27), +capM[1] + extra) : 0;
         // 0.56.5 log (owner's Shrimpage, 9 Nov 2026 12:48, build 26543267): "SparkCast91: storm_brand one cast threw 2 bodies ->
         // 6/6 Sparks (refresh ...), each body every 0.30 s = 6.57 strikes/s" with 23% increased cast speed and 35% Spark strike
         // rate (Brand Smith 15, Thunderhead 10, Sparking Sky 10): 0.5 / 1.23 / 1.35 = 0.301 s fits; the 0.56.2 square root
@@ -8511,7 +8564,7 @@ window.BOCharacter = function (ctx) {
         const baseSparks = capM ? Math.min(+capM[1], 3) : 3; // 0.56.9: your first 3 Sparks strike in full, extra ones from tree and gear for 50% each
         // Patch 70 (12 Nov 2026 notes): "extra Sparks deal full damage (was 50%)", so the 0.56.9 half share ends.
         const sparkW = n => is0569(GD) && !is070(GD) ? Math.min(n, baseSparks) + 0.5 * Math.max(0, n - baseSparks) : n;
-        const strikeRate = n => spark565 && gather ? sparkW(n) * 0.85 * SPARK565_STRIKE / strikeEvery : gather ? (Math.floor(n / 3) * 3 * 0.85 + (n % 3)) / strikeEvery : n / strikeEvery;
+        const strikeRate = n => spark565 && gather ? sparkW(n) * ruleNum(GD, 'r87.SPARKS.DamageMult', 0.85) * SPARK565_STRIKE / strikeEvery : gather ? (Math.floor(n / 3) * 3 * 0.85 + (n % 3)) / strikeEvery : n / strikeEvery;
         const throwsPerSec = usesPerSec; // cast rate, already capped by the cooldown
         // 0.56.5 (Spark texts, build 26543267): "One cast throws all your Sparks at once ... recast to refresh them": the
         // full cap stands while you recast within a Spark's life (else the share of time they stand).
@@ -8522,6 +8575,21 @@ window.BOCharacter = function (ctx) {
         res.brand = { sparks, every: strikeEvery, duration: dur, cap: cap || 1, rate: strikeRate, sparksFor, allAtOnce, castsPerSec: throwsPerSec };
         if (allAtOnce && cap > 1) res.notes.push('One cast throws all ' + cap + ' Sparks (patch 0.56.5).' + (sparkRate ? ' Sparks strike ' + Math.round(sparkRate) + '% faster.' : ''));
         res.notes.push('Spark: ' + (sparks % 1 ? sparks.toFixed(1) : sparks) + ' on the target' + (cap ? ' (up to ' + cap + ', each lasting ' + dur.toFixed(1) + ' s, thrown ' + throwsPerSec.toFixed(2) + ' times a second)' : '') + ', each striking every ' + (gather ? strikeEvery.toFixed(2) : ev[1]) + ' s' + (gather ? ', every 3 gathered into one body (x0.85 per spark)' : '') + '. Different Spark skills stack on the same enemy.');
+        // Several Spark skills on one enemy (public API game-data/rules.json, game data build 70, read 12 Nov 2026:
+        // "r96.META.fSparkHost70 = 0.6: a monster hit by Sparks of K different Spark skills takes each strike
+        // x(1 + (K-1) x f) / K"): 2 skills x0.80 a strike, 3 x0.733, 4 x0.70. K = the Spark skills on the bar (the four
+        // Sparks; the Living Orb is not counted: the rule names Spark skills), assumed all kept up on this enemy.
+        // From the developer's rules file, not yet seen in a tooltip or the log. o.sparkSkills sets K by hand.
+        if (is070(GD)) {
+          const f = ruleNum(GD, 'r96.META.fSparkHost70', 0.6);
+          const isSpark = id => { const k = GD.skills[lc(id)]; return k && k.Delivery === 'Brand' && /spark/i.test(k.Name || ''); };
+          const K = o.sparkSkills > 0 ? Math.floor(o.sparkSkills) : isSpark(skillId) ? new Set((ch.hotbar || []).map(lc).filter(isSpark).concat(lc(skillId))).size : 1;
+          if (K > 1 && f < 1) {
+            const share = (1 + (K - 1) * f) / K;
+            hitFactor *= share; res.sparkHost = { skills: K, share };
+            res.notes.push('You have ' + K + ' Spark skills on your bar: on an enemy that carries Sparks of all ' + K + ', each strike deals ' + Math.round(share * 1000) / 10 + '% (the game\'s rule for several Spark skills on one enemy). With only this one on the enemy it strikes in full.');
+          }
+        }
       }
     } else if (sk.Orbit && sk.Orbit.AngularSpeed && sk.Delivery === 'Orbit') {
       // A toggled ring (Orbiting Hammers): every hammer passes a target once per turn, so it is hit
@@ -8545,9 +8613,9 @@ window.BOCharacter = function (ctx) {
       for (const m of pickMods(mods, 'TotemCount', 'Flat')) if (applies(ctx, m)) { count += m.v; use(m); }
       if (o.totemCount > 0) count = Math.floor(o.totemCount); // set by hand (owner request, 9 Nov 2026)
       // 0.56.2 (patch notes 7 Nov): at most 6 Ballistas and 10 Totems stand at once.
-      if (is0562(GD)) count = Math.min(count, tt.Kind === 'Ballista' ? 6 : 10);
+      if (is0562(GD)) count = Math.min(count, tt.Kind === 'Ballista' ? ruleNum(GD, 'r80.CAPS.Ballistas', 6) : ruleNum(GD, 'r80.CAPS.Totems', 10));
       let tsInc = 0; for (const m of pickMods(mods, 'TotemSpeed', 'Inc')) if (applies(ctx, m)) { tsInc += m.v; use(m); }
-      const every = tt.Interval / Math.max(0.1, 1 + tsInc / 100);
+      const every = tt.Interval / Math.max(0.25, 1 + tsInc / 100); // formulas.md section 3 (public API archive, 12 Nov 2026): "interval = Totem.Interval / max(0.25, 1 + increased totem speed)", which also settles that totem speed fires a Ballista faster
       usesPerSec = count / every; useTime = 1 / usesPerSec;
       res.totem = { count, every };
       // Patch 0.56.0: Ancestral Host and Siege Pact cost "Each Totem or Ballista past the first deals 20% less damage"
@@ -8559,7 +8627,7 @@ window.BOCharacter = function (ctx) {
         // Siege Pact still say "Each Totem or Ballista past the first deals 20% less" in build 26543267: counted on top.
         const k = 1 - totemLess / 100;
         // 0.56.8 (patch notes 11 Nov 2026, quoted above; Multiple Totems text: "each past the first adds 50% of one's damage"): 50% each, one step.
-        const bNext = is0568(GD) ? 0.5 : 0.8, bPast = is0568(GD) ? 0.5 : 0.2;
+        const bNext = is0568(GD) ? ruleNum(GD, 'r85.METASYS.fTotemExtraShare', 0.5) : 0.8, bPast = is0568(GD) ? bNext : 0.2;
         countFactor = (1 + ((Math.min(count, 6) - 1) * bNext + Math.max(0, count - 6) * bPast) * k) / count;
         res.notes.push('Totems share their damage (patch 0.56.5): each past the first adds ' + Math.round(bNext * 100) + '% of one' + (bPast !== bNext ? ', past the sixth 20%' : '') + (totemLess ? ', and your keystone makes each past the first deal ' + totemLess + '% less' : '') + ' (x' + countFactor.toFixed(3) + ' on average over ' + count + ').');
       } else if (totemLess && count > 1) {
@@ -8679,8 +8747,18 @@ window.BOCharacter = function (ctx) {
     // damage share (repeatWeight) on the repeats; a tie halves the gear/tree ones.
     let repSup = 0, repGear = 0;
     if (!noEcho && !cocNoEcho) for (const m of pickMods(mods, 'Repeats', 'Flat')) if (applies(ctx, m)) { repeats += m.v; use(m); if (String(m.key || '').startsWith('support:')) repSup += m.v; else repGear += m.v; }
-    const repeatWeight = is0565(GD) && repSup > 0 && repGear > 0 ? (1 + Math.max(repSup, repGear) + 0.5 * Math.min(repSup, repGear)) / (1 + repeats) : 1;
-    if (repeatWeight < 1) res.notes.push('Repeats: ' + repSup + ' from supports and ' + repGear + ' from gear or passives stack; the ' + (repSup < repGear ? 'support' : 'gear/passive') + ' repeat' + (Math.min(repSup, repGear) > 1 ? 's deal' : ' deals') + ' 50% less (patch 0.56.5).');
+    let repeatWeight = is0565(GD) && repSup > 0 && repGear > 0 ? (1 + Math.max(repSup, repGear) + 0.5 * Math.min(repSup, repGear)) / (1 + repeats) : 1;
+    // A Ballista prices its repeats its own way (developer's formulas.md in the public API archive, v1/static/b70, section 3,
+    // read 12 Nov 2026: "repeats = clamp(Repeats, 0, 8) extra shots per volley; repeats 1-2 at full, 3+ at 50%. Sheet DPS for a
+    // ballista: shot * count_eff(totems) * (1 + RepeatsEff(repeats)) / interval"). Used in place of the support / gear stack
+    // rule above; from the developer's file, not yet seen in a tooltip or the log.
+    const ballistaRepeats = is070(GD) && sk.Totem && sk.Totem.Kind === 'Ballista' && repeats > 0;
+    if (ballistaRepeats) {
+      const had = repeats; repeats = Math.min(8, repeats);
+      repeatWeight = (1 + Math.min(repeats, 2) + 0.5 * Math.max(0, repeats - 2)) / (1 + repeats);
+      if (repeats > 2 || had > repeats) res.notes.push('Ballista repeats: ' + repeats + (had > repeats ? ' (at most 8 count, you have ' + had + ')' : '') + ' a volley; the first two at full damage, each one after that at 50% (the game\'s rule for Ballistas).');
+    }
+    if (repeatWeight < 1 && !ballistaRepeats) res.notes.push('Repeats: ' + repSup + ' from supports and ' + repGear + ' from gear or passives stack; the ' + (repSup < repGear ? 'support' : 'gear/passive') + ' repeat' + (Math.min(repSup, repGear) > 1 ? 's deal' : ' deals') + ' 50% less (patch 0.56.5).');
     if (cocNoEcho && pickMods(mods, 'Repeats', 'Flat').some(m => applies(ctx, m))) res.notes.push('Spell Echo does not repeat a spell cast by Cast on Crit (the game log shows one cast per trigger, never an echo), so it only costs this spell 15% damage here. The skill panel still shows it, as the game\'s tooltip does.');
     let projectiles = 0;
     if (ctx.tags.has('projectile')) {
@@ -8794,7 +8872,7 @@ window.BOCharacter = function (ctx) {
     // Spell Echo on a Spark does not repeat the cast: it adds one more body of 3 Sparks (Ember Spark tooltip 9 Nov: "Spell
     // Echo adds one more body of 3 Sparks, so you hold 9 in all", 9 Sparks = 3 bodies x 2/s = 6.0 strikes/s, 29,024 DPS).
     if (sk.Delivery === 'Brand' && res.brand && res.brand.rate && repeats > 0 && !(o.hitsPerSecOverride > 0)) {
-      const sp = Math.min(27, res.brand.sparks + 3 * repeats);
+      const sp = Math.min(ruleNum(GD, 'r80.CAPS.Sparks', 27), res.brand.sparks + 3 * repeats);
       usesPerSec = res.brand.rate(sp); useTime = 1 / usesPerSec; hitsPerUse = projOnTarget * strikes * falls;
       res.brand.sparks = sp;
       res.notes.push('Spell Echo adds ' + repeats + ' more body of 3 Sparks: ' + sp + ' Sparks in all (the cast is not repeated).');
@@ -8803,8 +8881,8 @@ window.BOCharacter = function (ctx) {
     // Spell Echo on a Spell Totem: the totem's casts are echoed, each echo at 80% (developer's patch notes 4 Nov,
     // patch 0.53: "Spell Echo repeats a Spell Totem's casts (each echo at 80%)"; not yet seen in the log).
     if (shape === 'totem_support' && repeats > 0 && !(o.hitsPerSecOverride > 0)) {
-      perHitFactor *= (1 + TOTEM_ECHO * repeats) / (1 + repeats);
-      res.notes.push('Spell Echo on a Spell Totem: the totem\'s casts are echoed, each echo at ' + Math.round(TOTEM_ECHO * 100) + '% of the cast (patch notes 4 Nov; the echoes fire in a fight, log 9 Nov). The game\'s own skill panel does not count them, so its DPS reads about ' + (1 + TOTEM_ECHO * repeats).toFixed(1) + 'x lower than this sheet.');
+      perHitFactor *= (1 + ruleNum(GD, 'r81.SKILLBUGS.fTotemEchoScale', TOTEM_ECHO) * repeats) / (1 + repeats);
+      res.notes.push('Spell Echo on a Spell Totem: the totem\'s casts are echoed, each echo at ' + Math.round(ruleNum(GD, 'r81.SKILLBUGS.fTotemEchoScale', TOTEM_ECHO) * 100) + '% of the cast (patch notes 4 Nov; the echoes fire in a fight, log 9 Nov). The game\'s own skill panel does not count them, so its DPS reads about ' + (1 + ruleNum(GD, 'r81.SKILLBUGS.fTotemEchoScale', TOTEM_ECHO) * repeats).toFixed(1) + 'x lower than this sheet.');
     }
     // Afterimages (scaling.json Meta AfterimageCap / AfterimageDamagePct; Shade of the Blow, idols, Earthbreaker):
     // a melee attack gets that many afterimages, at most the cap; each repeats the blow after the plain repeats
@@ -9278,7 +9356,11 @@ window.BOCharacter = function (ctx) {
       // also lists only its damage price.
       for (const sp of res.supports) if (sp.ok && !sp.hostOnly && !sp.granted && !(o.off && o.off.has(sp.key))) { const sd = GD.supports[lc(sp.id)]; if (sd && sd.ManaMultiplier) mult *= sd.ManaMultiplier; }
       let costInc = 0; for (const m of pickMods(mods, 'ManaCost', 'Inc')) if (applies(ctx, m)) costInc += m.v;
-      const cut = (G.ManaCostAtGemLevel || [])[L - 1] || 1;
+      // The price follows the gem's OWN level: levels from gear and passives do not make it dearer (scaling.json Gem note:
+      // "+4% per OWN gem level past 11; gear +levels never make a gem dearer"). Game's own sheet (Copy stats, 12 Nov 2026,
+      // build 71): Vampire Dash gem 16 + 1 with Swift Step "mana_cost 9.24" = 7 x 1.1 x 1.20 (level 16); at level 17 it
+      // would be 9.55. The sheet's number is before the Clarity refund (res.mana.listed).
+      const cut = (G.ManaCostAtGemLevel || [])[(res.gem ? res.gem.own : L) - 1] || 1;
       const cost = sk.ManaCost * cut * mult * Math.max(0, 1 + costInc / 100) * (res.coc ? 0.5 : 1) * (1 - refund / 100);
       const spend = cost * res.speed.usesPerSec;
       let onHit = 0; for (const m of pickMods(mods, 'ManaOnHit', 'Flat')) if (applies(ctx, m)) onHit += m.v;
@@ -9295,7 +9377,7 @@ window.BOCharacter = function (ctx) {
       }
       const pool = Math.max(0, max - reserved), deficit = spend - gain;
       const lasts = deficit > 0 ? pool / deficit : Infinity;
-      res.mana = { max, reserved, pool, regen, cost, mult, costInc, cut, refund, spend, onHit: onHit * hitsPerSec, leech: leechGain, gain, sustained: deficit <= 0, lasts, ok: lasts >= 60 };
+      res.mana = { max, reserved, pool, regen, cost, listed: refund < 100 ? cost / (1 - refund / 100) : cost, mult, costInc, cut, refund, spend, onHit: onHit * hitsPerSec, leech: leechGain, gain, sustained: deficit <= 0, lasts, ok: lasts >= 60 };
     } else res.mana = { skip: skipMana };
 
     // Lines that matched this skill but that the model does not use.
@@ -9358,13 +9440,30 @@ window.BOCharacter = function (ctx) {
   // character's earlier levels in the log (Golem 1.18-1.25 at zone 10, 1.75-1.88 at 54; Mage 1.01-1.02 at 10, 1.07 near 45).
   // Before this the sheet used 1 + LevelDamage x 0.0887 x level^0.87 (fitted at zone levels 6-26 on an older build), which
   // gave 1.02 / 1.02 / 1.49 where the game has 1.14 / 1.12 / 1.93 at Rupture 64.
-  const MINION_PACE = 0.72, MINION_NEAR = 60, MINION_LEVEL_K = 0.467, MINION_LEVEL_BY = { skeleton_warrior: 1.71, skeleton_wizard: 1.39 };
-  // The zone-level factor above; also shown on the page's Minion Scaling tab (k is the constant used for this minion).
-  function minionLevelK(mi) { return MINION_LEVEL_BY[lc(mi.MonsterId)] || MINION_LEVEL_K; }
-  function minionLevelFactor(GD, mi, zoneLevel) {
+  //
+  // 12 Nov 2026: that fit is replaced by the game's own rule, from the developer's formulas.md in the public API's archive
+  // (v1/static/b70/formulas.md section 2, "Minion (pet) level and damage catch-up", read from the game's code; owner, 12 Nov 2026:
+  // fit these into the sim):
+  //   pet level = round(zone level + (hero level - zone level) x PetCatchupHeroShare)     (scaling Meta59, 0.5)
+  //   gap       = max(1, MonsterLife(pet level) / MonsterLife(1) / (1 + SpellGrowth)^(gem level - 1))
+  //   level factor = 1 + LevelDamage x (gap - 1)
+  // Checked against the 11 Nov log numbers above (hero 48, every minion at gem 17, no fitted constant):
+  //   Skeletal Mage 1.057 / 1.085 / 1.135 / 1.140 (log 1.053 / 1.081 / 1.130 / 1.138);  Skeletons 1.067 / 1.101 / 1.158 / 1.165
+  //   (log 1.064 / 1.103 / 1.160 / 1.167);  Raise Zombie 1.216, 1.227 (log 1.218, 1.228);  Grave Golem 2.027 (log 2.03).
+  // The fit's separate k per minion was the skill's SpellGrowth (Skeletons 0.05, Skeletal Mage 0.06, Zombie and Golem 0.13).
+  // The fit had no gem level in it, so it read high for a gem above 17 and low below it (ladder Grave Golems 12 Nov: 0.89x to 1.19x).
+  const MINION_PACE = 0.72, MINION_NEAR = 60;
+  // Also shown on the page's Minion Scaling tab. sk = the summon skill (SpellGrowth, Minion.LevelDamage).
+  function minionLevelFactor(GD, sk, zoneLevel, heroLevel, gemLevel) {
+    const mi = sk && sk.Minion;
     if (!mi || !mi.LevelDamage) return 1;
-    const MD = ((GD.scaling || {}).Monster || {}).Damage || {};
-    return 1 + mi.LevelDamage * minionLevelK(mi) * Math.exp(2 / 3 * (MD.K || 0.2959) * Math.pow(Math.max(1, zoneLevel), MD.P || 0.6));
+    const SC = GD.scaling || {}, ML = (SC.Monster || {}).Life || {}, K = ML.K || 0.4577, P = ML.P || 0.55;
+    const share = (SC.Meta || {}).PetCatchupHeroShare != null ? SC.Meta.PetCatchupHeroShare : 0.5;
+    const zone = Math.max(1, zoneLevel || 1), hero = Math.max(1, heroLevel || zone);
+    const pet = Math.max(1, Math.round(zone + (hero - zone) * share));
+    const lifeMult = Math.exp(K * (Math.pow(pet, P) - 1)); // the MonsterLife curve at the pet's level over level 1
+    const gap = Math.max(1, lifeMult / Math.pow(1 + (sk.SpellGrowth != null ? sk.SpellGrowth : 0.12), Math.max(1, gemLevel || 1) - 1));
+    return 1 + mi.LevelDamage * (gap - 1);
   }
   function minionSheet(GD, ch, sk, res, mods, use, attr, L, o) {
     const H = GD.scaling.Hero, G = GD.scaling.Gem, mi = sk.Minion;
@@ -9442,7 +9541,8 @@ window.BOCharacter = function (ctx) {
     const aff = mi.Affinity && mi.AffinityDamage ? 1 + Math.min(mi.AffinityCap || 50, (attr[mi.Affinity] || 0) * mi.AffinityDamage) / 100 : 1;
     const near = o.minionNear === false ? 1 : 1 + MINION_NEAR / 100;
     const zoneLevel = o.enemyLevel || ch.level;
-    const lvlK = minionLevelFactor(GD, mi, zoneLevel);
+    const minionGem = res.gem ? res.gem.own + res.gem.bonus : L;
+    const lvlK = minionLevelFactor(GD, sk, zoneLevel, ch.level, minionGem);
     // The summon skill's own "increased damage" lines (its supports' and lines that name Minion skills) are a group of their
     // own: they add to each other and multiply the "increased Minion Damage" group. Ravening Host "25% increased damage" +
     // Bone Sovereign "30% increased damage" = x1.55. Game log 11 Nov 2026, PetSheet68 "spec avg" at gem 15+2 (the game's
@@ -9565,10 +9665,11 @@ window.BOCharacter = function (ctx) {
     res.minionCurseK = curseK;
     res.sheetHitDps = res.panelDps = dps;
     res.hitDps = res.totalDps = dps * curseK;
-    res.minion = { specInc, soloK, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.stat === 'MinionDamage' ? 1 + golem.v / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth };
+    // specAvg: the summon gem's own hit before the minion's multipliers, the game's "spec avg" (PetSheet68) and the avg_hit of a summon in Copy stats.
+    res.minion = { specAvg: DT.reduce((a, d) => a + (scaled[d][0] + scaled[d][1]) / 2, 0) * (1 + specInc / 100), specInc, soloK, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.stat === 'MinionDamage' ? 1 + golem.v / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth };
     res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
     if (near > 1) res.notes.push('Counted at your side: minions deal ' + MINION_NEAR + '% more within 7 m of you (fading to none at 12 m), as the game\'s panel counts it.');
-    if (mi.LevelDamage) res.notes.push(sk.Name + ' also grows with the level of the zone it fights in (the Monster level box): x' + lvlK.toFixed(3) + ' at level ' + zoneLevel + '. Set the Monster level box to the Rupture you run: the game shows this number for where you stand (in the hub, your own level). Checked against the game log in the hub and Ruptures 31 to 69 (11 Nov 2026).');
+    if (mi.LevelDamage) res.notes.push(sk.Name + ' also grows with the level of the zone it fights in (the Monster level box): x' + lvlK.toFixed(3) + ' at level ' + zoneLevel + ' with the gem at level ' + minionGem + '. It makes up for the gap between the monsters there (taken halfway to your own level) and the gem, so a higher gem level gets less of it. Set the Monster level box to the Rupture you run: the game shows this number for where you stand (in the hub, your own level). The game\'s own rule (developer\'s formulas file), checked against the game log in the hub and Ruptures 31 to 69 (11 Nov 2026).');
     if (specInc) res.notes.push('Increased damage of the summon skill itself: ' + Math.round(specInc) + '% (its supports and lines that name Minion skills). It multiplies the increased Minion Damage (game log, 11 Nov 2026).');
     if (soloK !== 1) res.notes.push('One golem: each +1 to maximum minions it cannot use gives it 30% more damage, x' + soloK.toFixed(1) + ' here (game log, 11 Nov 2026).');
     if (kind !== 1) res.notes.push('Harmony: ' + kinds + ' kind' + (kinds > 1 ? 's' : '') + ' of minion on your bar, ' + Math.round((kind - 1) * 100) + '% more damage.');
@@ -10069,7 +10170,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { gemPlayLevel, minionLevelFactor, minionLevelK, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  const api = { gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -13510,7 +13611,7 @@ window.BOStartApp = function () {
     // An item's lines as text: base numbers (weapon damage or defences) then its own lines, added up by stat (as Item Simulator).
     itemLines: (item, classId) => {
       const out = [], it = Object.assign({}, item, { unique: item.unique && item.unique !== 'hidden' ? item.unique : 'None',
-        affixes: (item.affixes || []).filter(a => a.id !== 'hidden').map(a => ({ id: a.id, tier: a.tier || 0, v: +a.value || 0, v2: +a.value2 || 0, crafted: !!a.crafted })),
+        affixes: (item.affixes || []).filter(a => a.id !== 'hidden').map(a => ({ id: a.id, tier: a.tier || 0, v: +a.value || 0, v2: +a.value2 || 0, crafted: !!a.crafted, oath: !!a.oath })),
         runes: item.runes_hidden ? [] : (item.runes || []).filter(r => r && r !== 'hidden'), level: item.item_level || 1 });
       try { for (const x of planner.gear.baseStats(it, it.slot)) out.push(lineText(Object.assign({ v2: 0 }, x))); } catch (e) { /* no base stats */ }
       const lone = { items: [it], passives: [], dragonNodes: [], dragonAspect: '', hotbar: [], gemLevels: {}, gems: [], classId };

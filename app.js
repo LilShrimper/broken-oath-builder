@@ -4545,8 +4545,11 @@ window.BOItemSearch = function (ctx) {
       if ((w.PowerMods || []).length) {
         const rows = [['Below item level ' + (lv[0] || '?'), w.PowerMods]];
         let from = 0; lv.forEach((l, i) => { if (w.PowerBandMods && cnt[i]) rows.push(['Item level ' + l + '+', w.PowerBandMods.slice(from, from + cnt[i])]); from += cnt[i] || 0; });
-        body += '<details class="is-power"><summary>Power lines by item level' + (w.Power2H > 1 ? ' <small>(×' + w.Power2H + ' on two-handed)</small>' : '') + '</summary>' +
-          rows.map(([k, mods]) => '<div class="is-band"><b>' + esc(k) + '</b><ul class="is-lines oathword">' + mods.map(mm => li(plain(GD, mm.Mod))).join('') + '</ul></div>').join('') + '</details>';
+        // The top band shows open (what a crafted endgame word gets); the lower bands fold away (player report, 12 Nov 2026).
+        const band = ([k, mods]) => '<div class="is-band"><b>' + esc(k) + (w.Power2H > 1 ? ' <small>(×' + w.Power2H + ' on two-handed)</small>' : '') + '</b><ul class="is-lines oathword">' + mods.map(mm => li(plain(GD, mm.Mod))).join('') + '</ul></div>';
+        const top = rows[rows.length - 1], lower = rows.slice(0, -1);
+        body += '<div class="is-power is-power-top">' + band(top) + '</div>';
+        if (lower.length) body += '<details class="is-power"><summary>Lower item levels</summary>' + lower.reverse().map(band).join('') + '</details>';
       }
       if (w.Flavour) body += '<p class="is-flavour">' + esc(w.Flavour) + '</p>';
       if (e.tiers[0] !== 'Standard') badges.push(badge(e.tiers[0], 'tier ' + lc(e.tiers[0]).replace(/\W/g, '')));
@@ -6821,6 +6824,12 @@ window.BOCharacter = function (ctx) {
   // at least 25% cold (or 30% increased freeze duration / chill effect, or any shatter). Switches on with data newer than build 26595060.
   const LAST_BUILD_0568 = 26595060;
   const is0569 = GD => GD.steamBuild ? +GD.steamBuild > LAST_BUILD_0568 : false;
+  // Patch 70 (developer's patch notes, Discord 12 Nov 2026 12:11 UTC, build 26617933): "Sparks strike whole again: extra Sparks deal full
+  // damage (was 50%)"; "Fortified really works: 2% increased melee damage per stack". Maim 10% (was 20%), Multistrike 44% a strike
+  // (was 48%), mana regen 1.75% (was 2.5%), life regen halved: those come through the data (supports.json, scaling Hero 1.75 / 0.4).
+  // Switches on with data newer than build 26604566.
+  const LAST_BUILD_0569 = 26604566;
+  const is070 = GD => GD.steamBuild ? +GD.steamBuild > LAST_BUILD_0569 : false;
   // Knee: m <= 8 stays; above it 8 x 1.41^log2(m/8). Not applied to minion sheets (minionSheet is separate).
   const moreKnee = m => m <= 8 ? m : 8 * Math.pow(1.41, Math.log2(m / 8));
   // 0.56.5 count rule (Multiple Totems and Trap Support texts, build 26543267): "each past the first adds 80% of one's
@@ -7149,6 +7158,22 @@ window.BOCharacter = function (ctx) {
       // Kindling (0.56.8 support text): 0.5% increased spell damage and 0.2% cast speed a stack, up to 50, from kills with the linked spell.
       if (id === 'kindling' && n > 50) { n = 50; notes.push('Kindling: at most 50 stacks.'); }
       for (const m of b.Mods || []) add(m, (m.Value || 0) * (m.PerStack ? n : 1), m.Value2, b.Name + ' x' + n, 'charge:' + id);
+    }
+    // Fortified (Patch 70 notes, 12 Nov 2026: "Fortified really works: 2% increased melee damage per stack"; statText FortifyDamage
+    // "{v}% more Melee Damage for every Fortified stack you have", e.g. Ki Breathing 0.2, The Oathkeeper's Stand 0.4-0.5). Melee hits
+    // give the stacks, so a boss fight is counted at full stacks. UNPROVEN: the game data holds no base stack count, so the cap here
+    // is only the sum of "+N to maximum Fortified" lines (Ki Breathing 5, Oath of the Still Mind 3, ...); a hidden base would add more.
+    if (is070(GD)) {
+      const fortMax = mods.filter(m => m.stat === 'FortifyMax' && m.mode === 'Flat').reduce((s, m) => s + m.v, 0);
+      if (fortMax > 0) {
+        sources.push({ key: 'fortify', label: 'Fortified x' + fortMax + ' (full stacks, melee)', group: 'Vows & Heralds' });
+        if (!off.has('fortify')) {
+          const perMore = mods.filter(m => m.stat === 'FortifyDamage' && m.mode === 'Flat').reduce((s, m) => s + m.v, 0);
+          add({ Stat: 'Damage', Mode: 'Inc', Tags: ['Melee'] }, 2 * fortMax, 0, 'Fortified x' + fortMax, 'fortify');
+          if (perMore) add({ Stat: 'Damage', Mode: 'More', Tags: ['Melee'] }, perMore * fortMax, 0, 'Fortified x' + fortMax + ' (' + perMore + '% more a stack)', 'fortify');
+          notes.push('Fortified: ' + fortMax + ' stacks (your "maximum Fortified" lines; any base the game adds is not in its data), ' + (2 * fortMax) + '% increased melee damage' + (perMore ? ' and ' + +(perMore * fortMax).toFixed(1) + '% more' : '') + ' (patch 70).');
+        }
+      }
     }
     // Brewmaw's potions from the Brewery tab (brewery.js works out each potion's lines; the user turns a slot off in
     // the Vows list). What proves it: potions.json, the game's own lines and tooltip text (Vowbreaker's Draught
@@ -8166,7 +8191,8 @@ window.BOCharacter = function (ctx) {
         // 14.3 and 13.4) no longer holds on this build: with it the sim gave 8.56M (1.47x), without it 5.76M (0.988).
         const SPARK565_STRIKE = 1;
         const baseSparks = capM ? Math.min(+capM[1], 3) : 3; // 0.56.9: your first 3 Sparks strike in full, extra ones from tree and gear for 50% each
-        const sparkW = n => is0569(GD) ? Math.min(n, baseSparks) + 0.5 * Math.max(0, n - baseSparks) : n;
+        // Patch 70 (12 Nov 2026 notes): "extra Sparks deal full damage (was 50%)", so the 0.56.9 half share ends.
+        const sparkW = n => is0569(GD) && !is070(GD) ? Math.min(n, baseSparks) + 0.5 * Math.max(0, n - baseSparks) : n;
         const strikeRate = n => spark565 && gather ? sparkW(n) * 0.85 * SPARK565_STRIKE / strikeEvery : gather ? (Math.floor(n / 3) * 3 * 0.85 + (n % 3)) / strikeEvery : n / strikeEvery;
         const throwsPerSec = usesPerSec; // cast rate, already capped by the cooldown
         // 0.56.5 (Spark texts, build 26543267): "One cast throws all your Sparks at once ... recast to refresh them": the
@@ -9223,7 +9249,7 @@ window.BOCharacter = function (ctx) {
     if (specInc) res.notes.push('Increased damage of the summon skill itself: ' + Math.round(specInc) + '% (its supports and lines that name Minion skills). It multiplies the increased Minion Damage (game log, 11 Nov 2026).');
     if (soloK !== 1) res.notes.push('One golem: each +1 to maximum minions it cannot use gives it 30% more damage, x' + soloK.toFixed(1) + ' here (game log, 11 Nov 2026).');
     if (kind !== 1) res.notes.push('Harmony: ' + kinds + ' kind' + (kinds > 1 ? 's' : '') + ' of minion on your bar, ' + Math.round((kind - 1) * 100) + '% more damage.');
-    if (shotRepeats) res.notes.push('Multistrike on ' + sk.Name + ': each blow strikes ' + strikes + ' times at Multistrike\'s 52% less, as the game\'s panel counts it. Since the 5 Nov patch the mage throws a bolt for each repeat.');
+    if (shotRepeats) res.notes.push('Multistrike on ' + sk.Name + ': each blow strikes ' + strikes + ' times at Multistrike\'s ' + (is070(GD) ? 56 : 52) + '% less, as the game\'s panel counts it. Since the 5 Nov patch the mage throws a bolt for each repeat.');
     if (golem && golem.stat !== 'EnemyTaken') res.notes.push('Your ' + golem.name + ' blesses minions near it, itself included: ' + golem.text + ' (counted, as the game\'s panel does).');
     if (army && (army.parts.length > 1 || army.total > ARMY_FULL)) {
       const standing = Math.min(ARMY_TOTAL, army.total);

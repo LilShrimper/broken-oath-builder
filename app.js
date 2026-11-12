@@ -7686,7 +7686,10 @@ window.BOCharacter = function (ctx) {
           if (m.mode === 'Flat') { flat += m.v; use(m); } else if (m.mode === 'Inc') { inc += m.v; use(m); }
         }
       }
-      attr[a] = Math.floor(flat * (1 + inc / 100));
+      // Rounded to the nearest point, not down. Character panel, 12 Nov 2026 (Nectest, Necromancer level 100: 0.5 / 1.5 / 2.5
+      // a level): Str 76, Dex 179, Int 738 where the sums are 75.5, 178.5 and 737.5; Magetest's 904.2 shows 904, so it is
+      // rounding and not rounding up. With Int 738 the sheet's Energy Shield is 9,024, the panel's number.
+      attr[a] = Math.round(flat * (1 + inc / 100));
     }
     res.attr = attr;
     const per10 = (a, k) => attr[a] / 10 * (H[k] || 0); // not rounded down (Shrimpbow tooltips: 107 Dex = +10.7% attack speed, 52 Int = 4.21 s bleed)

@@ -1718,7 +1718,10 @@
     const level = ilvlM ? Math.max(1, Math.min(100, +ilvlM[1])) : null;
     if (u) {
       const mid = (lo, hi) => lo == null ? 0 : Math.round((lo + hi) / 2 * 100) / 100;
-      const aff = u.Mods.map((um, i) => um.Mod ? { id: 'unique:' + i, tier: 0, v: uniqueVals[i] ? uniqueVals[i].v : mid(um.Min, um.Max), v2: uniqueVals[i] ? uniqueVals[i].v2 : mid(um.Min2, um.Max2) } : null).filter(Boolean);
+      // A tooltip shows a scaled red line as the game counts it (sim.js UNIQUE_LINE_SCALE); items keep the unscaled roll,
+      // so a read number is taken back (divided by the scale, held inside the line's own range).
+      const unscale = (i, x, lo, hi) => { const k = S.uniqueLineScale(u.Id, i); if (k === 1 || typeof x !== 'number') return x; const r = Math.round(x / k * 100) / 100; return lo == null || hi == null ? r : Math.max(Math.min(lo, hi), Math.min(Math.max(lo, hi), r)); };
+      const aff = u.Mods.map((um, i) => um.Mod ? { id: 'unique:' + i, tier: 0, v: uniqueVals[i] ? unscale(i, uniqueVals[i].v, um.Min, um.Max) : mid(um.Min, um.Max), v2: uniqueVals[i] ? unscale(i, uniqueVals[i].v2, um.Min2, um.Max2) : mid(um.Min2, um.Max2) } : null).filter(Boolean);
       const missing = u.Mods.filter((um, i) => um.Mod && !uniqueVals[i] && um.Min != null && um.Min !== um.Max).length;
       if (missing) notes.push(missing + ' of ' + u.Name + '\'s lines were not read: they are set to the middle of their range.');
       item = { slot, base: u.BaseId, rarity: 'Unique', unique: u.Id, name: u.Name, level: level || o.level || 1, affixes: aff.concat(affixes), runes: [] }; // affixes: its Vows
@@ -2196,14 +2199,17 @@ window.BOPlanner = function (ctx) {
       // Each line that rolls in a range gets a box per number (its range beside it); fixed lines are text only.
       if (u) h += it.affixes.map((a, ai) => {
         if (!a.id.startsWith('unique:')) return '';
-        const um = u.Mods[+a.id.slice(7)]; if (!um) return '';
-        const text = esc((um.Text ? um.Text.replace(/\{(0|v)\}/g, a.v).replace(/\{1\}/g, a.v2) : modLine(um.Mod, a.v, a.v2)).replace(/\+-/g, '-'));
+        const ui = +a.id.slice(7), um = u.Mods[ui]; if (!um) return '';
+        // Some red lines are scaled by the game (sim.js UNIQUE_LINE_SCALE): the text and range show what the game shows, the box holds the item's own roll.
+        const sc = S.uniqueLineScale(it.unique, ui), gm = S.uniqueLineShown(it.unique, ui, um), gv = S.uniqueLineValue(it.unique, ui, a.v), gv2 = S.uniqueLineValue(it.unique, ui, a.v2);
+        const scNote = sc !== 1 ? ' <span class="meta" title="The game multiplies this line by ' + sc + '. The box holds the roll as the save stores it; the text is what the game shows and counts.">(game counts x' + sc + ')</span>' : '';
+        const text = esc((um.Text ? um.Text.replace(/\{(0|v)\}/g, gv).replace(/\{1\}/g, gv2) : modLine(um.Mod, gv, gv2)).replace(/\+-/g, '-')) + scNote;
         const rolls = (lo, hi) => lo != null && hi != null && lo !== hi;
         const box = (f, x, lo, hi) => '<input class="mini" type="number" step="any" data-f="' + f + '" value="' + x + '" min="' + Math.min(lo, hi) + '" max="' + Math.max(lo, hi) + '" title="Rolls ' + lo + ' to ' + hi + '"' + dis + '>';
         const out = (x, lo, hi) => rolls(lo, hi) && (x < Math.min(lo, hi) || x > Math.max(lo, hi));
         const r1 = rolls(um.Min, um.Max), r2 = rolls(um.Min2, um.Max2);
         if (!r1 && !r2) return '<div class="pl-affix"><span class="pl-type"></span><span class="pl-nobox"></span><span class="pl-text">' + text + '</span></div>';
-        const range = (r1 ? um.Min + ' to ' + um.Max : '') + (r1 && r2 ? ' / ' : '') + (r2 ? um.Min2 + ' to ' + um.Max2 : '');
+        const range = (r1 ? gm.Min + ' to ' + gm.Max : '') + (r1 && r2 ? ' / ' : '') + (r2 ? gm.Min2 + ' to ' + gm.Max2 : '');
         return '<div class="pl-affix" data-ai="' + ai + '"><span class="pl-type"></span>' + (r1 ? box('v', a.v, um.Min, um.Max) : '') + (r2 ? box('v2', a.v2, um.Min2, um.Max2) : '') +
           '<span class="pl-text">' + text + ' <span class="meta">[' + range + ']</span>' + (out(a.v, um.Min, um.Max) || out(a.v2, um.Min2, um.Max2) ? ' <span class="bad">outside its range</span>' : '') + '</span></div>';
       }).join('');
@@ -2290,8 +2296,9 @@ window.BOPlanner = function (ctx) {
     let vi = 0;
     for (const a of it.affixes) {
       if (a.id.startsWith('unique:')) {
-        const um = u && u.Mods[+a.id.slice(7)];
-        if (um) uniq.push(roll('', um.Text ? um.Text.replace(/\{(0|v)\}/g, a.v).replace(/\{1\}/g, a.v2).replace(/\+-/g, '-') : modLine(um.Mod, a.v, a.v2), um));
+        // Value and range as the game shows them (sim.js UNIQUE_LINE_SCALE).
+        const ui = +a.id.slice(7), um = u && u.Mods[ui], gv = S.uniqueLineValue(it.unique, ui, a.v), gv2 = S.uniqueLineValue(it.unique, ui, a.v2);
+        if (um) uniq.push(roll('', um.Text ? um.Text.replace(/\{(0|v)\}/g, gv).replace(/\{1\}/g, gv2).replace(/\+-/g, '-') : modLine(um.Mod, gv, gv2), S.uniqueLineShown(it.unique, ui, um)));
       } else {
         const af = GD.affixes[lc(a.id)];
         if (!af) { other.push(li('Unknown affix ' + a.id, 'bad')); continue; }
@@ -4474,7 +4481,7 @@ window.BOItemSearch = function (ctx) {
     for (const u of Object.values(GD.uniques || {})) {
       const b = GD.bases[lc(u.BaseId)];
       const tier = u.Chase ? 'Chase' : u.Primal ? 'Primal' : u.Core ? 'Core' : u.Signature ? 'Signature' : 'Standard';
-      const lines = (u.Mods || []).map(m => uniqueLine(GD, m));
+      const lines = (u.Mods || []).map((m, i) => uniqueLine(GD, S.uniqueLineShown(u.Id, i, m))); // ranges as the game shows them (sim.js UNIQUE_LINE_SCALE)
       ALL.push({ cat: 'unique', id: u.Id, name: u.Name, level: u.Level || (b && b.Level) || 1, slots: b ? [slotName(b.Slot)] : [], types: b ? [baseType(b)] : [],
         tiers: [tier], tierSort: ['Standard', 'Signature', 'Core', 'Primal', 'Chase'].indexOf(tier), icon: baseIcon(b), u, b, lines,
         text: [u.Name, b && b.Name, b && baseType(b), ...lines].join(' ') });
@@ -4766,7 +4773,7 @@ window.BOItemSearch = function (ctx) {
     let h = '<b>' + esc(u.Name) + '</b><span class="pl-tip-sub">' + esc('Unique · ' + (b ? b.Name + ' · ' + baseType(b) : u.BaseId) + (u.Level ? ' · level ' + u.Level : '')) + '</span>';
     const imp = (b && b.Implicits) || [];
     if (imp.length) h += '<ul class="pl-tip-imp">' + imp.map(m => li(plain(GD, m))).join('') + '</ul>';
-    h += '<ul class="pl-tip-base">' + (u.Mods || []).map(m => li(uniqueLine(GD, m))).join('') + '</ul>';
+    h += '<ul class="pl-tip-base">' + (u.Mods || []).map((m, i) => li(uniqueLine(GD, S.uniqueLineShown(u.Id, i, m)))).join('') + '</ul>';
     if (u.Flavour) h += '<span class="pl-tip-desc pl-tip-flavour">' + esc(u.Flavour) + '</span>';
     return h;
   }
@@ -6702,7 +6709,7 @@ window.BOCharacter = function (ctx) {
   }
   function uniqueLines(u) {
     const range = (lo, hi) => lo == null ? '0' : lo === hi ? String(lo) : lo + '-' + hi;
-    return (u.Mods || []).map(m => m.Text ? m.Text.replace(/\{(0|v)\}/g, range(m.Min, m.Max)).replace(/\{1\}/g, range(m.Min2, m.Max2)) : m.Mod ? safe(() => G.modLine(m.Mod, m.Max, m.Max2)) : '').filter(Boolean);
+    return (u.Mods || []).map((m, i) => window.BOSim.uniqueLineShown(u.Id, i, m)).map(m => m.Text ? m.Text.replace(/\{(0|v)\}/g, range(m.Min, m.Max)).replace(/\{1\}/g, range(m.Min2, m.Max2)) : m.Mod ? safe(() => G.modLine(m.Mod, m.Max, m.Max2)) : '').filter(Boolean);
   }
   const card = (kind, id, name, cls, sub, lines) => '<button type="button" class="io-card ' + cls + '" data-io="pick" data-kind="' + kind + '" data-id="' + esc(id) + '"><b>' + esc(name) + '</b><span class="io-sub">' + esc(sub) + '</span>' +
     lines.slice(0, 8).map(l => '<span class="io-line">' + esc(l) + '</span>').join('') + (lines.length > 8 ? '<span class="io-line meta">+' + (lines.length - 8) + ' more</span>' : '') + '</button>';
@@ -6794,12 +6801,15 @@ window.BOCharacter = function (ctx) {
       let un = '';
       if (u) un = it.affixes.map((a, ai) => {
         if (!a.id.startsWith('unique:')) return '';
-        const um = u.Mods[+a.id.slice(7)]; if (!um) return '';
-        const text = esc((um.Text ? um.Text.replace(/\{(0|v)\}/g, a.v).replace(/\{1\}/g, a.v2) : safe(() => G.modLine(um.Mod, a.v, a.v2))).replace(/\+-/g, '-'));
+        const ui = +a.id.slice(7), um = u.Mods[ui]; if (!um) return '';
+        // Some red lines are scaled by the game (sim.js UNIQUE_LINE_SCALE): the text and range show what the game shows, the box holds the item's own roll.
+        const US = window.BOSim, sc = US.uniqueLineScale(it.unique, ui), gm = US.uniqueLineShown(it.unique, ui, um), gv = US.uniqueLineValue(it.unique, ui, a.v), gv2 = US.uniqueLineValue(it.unique, ui, a.v2);
+        const scNote = sc !== 1 ? ' <span class="meta" title="The game multiplies this line by ' + sc + '. The box holds the roll as the save stores it; the text is what the game shows and counts.">(game counts x' + sc + ')</span>' : '';
+        const text = esc((um.Text ? um.Text.replace(/\{(0|v)\}/g, gv).replace(/\{1\}/g, gv2) : safe(() => G.modLine(um.Mod, gv, gv2))).replace(/\+-/g, '-')) + scNote;
         const rolls = (lo, hi) => lo != null && hi != null && lo !== hi, r1 = rolls(um.Min, um.Max), r2 = rolls(um.Min2, um.Max2);
         const box = (f, x, lo, hi) => '<input class="mini" type="number" step="any" data-f="' + f + '" value="' + x + '" min="' + Math.min(lo, hi) + '" max="' + Math.max(lo, hi) + '" title="Rolls ' + lo + ' to ' + hi + '">';
         if (!r1 && !r2) return '<div class="io-aff"><span class="io-afftext">' + text + '</span></div>';
-        const range = (r1 ? um.Min + ' to ' + um.Max : '') + (r1 && r2 ? ' / ' : '') + (r2 ? um.Min2 + ' to ' + um.Max2 : '');
+        const range = (r1 ? gm.Min + ' to ' + gm.Max : '') + (r1 && r2 ? ' / ' : '') + (r2 ? gm.Min2 + ' to ' + gm.Max2 : '');
         return '<div class="io-aff" data-ai="' + ai + '"><span class="io-afftext">' + text + ' <span class="meta">[' + range + ']</span></span>' + (r1 ? box('v', a.v, um.Min, um.Max) : '') + (r2 ? box('v2', a.v2, um.Min2, um.Max2) : '') + '</div>';
       }).join('');
       h += section('Unique lines', un || '<div class="io-imp meta">None</div>');
@@ -7135,6 +7145,37 @@ window.BOCharacter = function (ctx) {
   // ---------- modifier collection ----------
   // How much the n-th Vow (0 = first) on a red item counts: GD.vowShares (cube_recipes.json Vows83), past the list its last share.
   function vowShare(GD, n) { const s = GD.vowShares || []; return s.length ? s[Math.min(n, s.length - 1)] : 1; }
+  // The game scales some red (unique) lines when it loads them; uniques.json, the public API and the save all keep the
+  // unscaled numbers. Game log 12 Nov 2026 (build 26617933): "MetaSys85: UniqueLineScale ON, 37 line(s) on 16 unique(s):"
+  // followed by this whole table, then "UniqueLineScale the_heartwood_girdle line 0 x0.250: 3.0/0.0 -> 1.0/0.0",
+  // "glass_soul line 0 x0.500: 30.0/0.0 -> 15.0/0.0" and "TreeEng85: LifeMore 1.00 x 2.1 = 2.1% more". The tooltip that
+  // day: "1% more Damage for every 1,000 maximum Life" with range [0.6-1] where the data says 2.5-3. The table is not in
+  // the Data folder (it comes from the game's packed config): after a patch, re-read that log line.
+  // Rounding is a fit on that one item: 3 x 0.25 = 0.75 shows and counts as 1, 2.5 x 0.25 = 0.625 shows as 0.6, so a
+  // scaled number keeps the decimals of the number it came from. Not checked on a roll between the ends.
+  const UNIQUE_LINE_SCALE = {
+    wyrmblade_of_the_black_oath: { 0: 0.8, 4: 0.8 }, kingbreaker: { 0: 1.5, 1: 1.5, 3: 1.5 }, gravesong: { 0: 1.5, 1: 1.5, 2: 1.5, 4: 1.5 },
+    gravecleaver: { 0: 1.5, 1: 2, 2: 2, 4: 1.5 }, tidebreaker_maul: { 0: 1.5, 1: 2, 2: 2, 4: 1.5 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 },
+    rimecrown_staff: { 0: 1.5, 1: 2.5 }, cinderwick: { 2: 1.5, 3: 1.5 }, dawnforge_maul: { 0: 1.25, 1: 1.25, 2: 1.25, 4: 1.25 },
+    glass_soul: { 0: 0.5, 1: 0.5 }, the_unyielding_vow: { 0: 0.25 }, the_patient_bastion: { 0: 0.25 }, the_heartwood_girdle: { 0: 0.25 },
+    crown_of_the_quiet_ward: { 0: 0.25 }, windwrit_treads: { 0: 0.25 }, the_oathkeepers_stand: { 0: 0.25 } };
+  // How much the game multiplies line i of a unique by (1 = as written).
+  function uniqueLineScale(uid, i) { const u = UNIQUE_LINE_SCALE[lc(uid)]; return (u && u[i]) || 1; }
+  // A stored number of that line (a roll or a range end) as the game counts and shows it.
+  function uniqueLineValue(uid, i, x) {
+    const k = uniqueLineScale(uid, i); if (k === 1 || x == null || typeof x !== 'number') return x;
+    const p = Math.pow(10, (String(x).split('.')[1] || '').length);
+    // A whole number that would round to 0 (The Unyielding Vow's 1 x 0.25) keeps one decimal instead: a guess, no
+    // tooltip or log line for those items yet.
+    const r = Math.round(x * k * p) / p;
+    return r === 0 && x !== 0 ? Math.round(x * k * p * 10) / (p * 10) : r;
+  }
+  // The line's data entry with its ranges as the game shows them (the same object when the line is not scaled).
+  function uniqueLineShown(uid, i, um) {
+    if (!um || uniqueLineScale(uid, i) === 1) return um;
+    const o = Object.assign({}, um); for (const f of ['Min', 'Max', 'Min2', 'Max2']) if (o[f] != null) o[f] = uniqueLineValue(uid, i, o[f]);
+    return o;
+  }
   function itemLabel(GD, it) {
     const base = GD.bases[lc(it.base)];
     const u = GD.uniques[lc(it.unique)];
@@ -7189,8 +7230,9 @@ window.BOCharacter = function (ctx) {
       const rareBoost = rareKind === 'Flawless Rare' ? 1.3 : rareKind === 'Great Rare' ? 1.1 : 1;
       for (const a of it.affixes) {
         if (a.id.startsWith('unique:')) {
-          const u = GD.uniques[lc(it.unique)]; const um = u && u.Mods[+a.id.slice(7)];
-          if (um) add(um.Mod, a.v, a.v2, label, key, { text: um.Text }); else notes.push('Unknown unique line ' + a.id + ' on ' + label);
+          const u = GD.uniques[lc(it.unique)]; const ui = +a.id.slice(7), um = u && u.Mods[ui];
+          // Saves keep the unscaled roll; the game counts the scaled one (UNIQUE_LINE_SCALE above).
+          if (um) add(um.Mod, uniqueLineValue(it.unique, ui, a.v), uniqueLineValue(it.unique, ui, a.v2), label, key, { text: um.Text }); else notes.push('Unknown unique line ' + a.id + ' on ' + label);
         } else {
           const af = GD.affixes[lc(a.id)];
           if (!af) { notes.push('Unknown affix ' + a.id + ' on ' + label); continue; }
@@ -9928,7 +9970,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { gemPlayLevel, minionLevelFactor, minionLevelK, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare,cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  const api = { gemPlayLevel, minionLevelFactor, minionLevelK, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -10656,10 +10698,10 @@ window.BOStartApp = function () {
     html += '<details><summary>Modifiers used <span class="count">(' + used.length + ')</span></summary>' + keys.map(k => {
       const list = groups[k]; const mode = list[0].mode;
       const total = mode === 'More' ? '×' + num(list.reduce((p, m) => p * (1 + m.v / 100), 1), 3) : (list.every(m => !m.v2) ? '+' + num(list.reduce((s, m) => s + m.v, 0), 1) : '');
-      return '<div class="modgroup"><h4>' + esc(k.replace(' Inc', ' · increased').replace(' More', ' · more').replace(' Flat', '')) + '<span>' + total + '</span></h4>' + list.map(m => '<div class="modline"><span>' + esc(m.text || S.modText(GD, m)) + '</span><span class="src">' + esc(m.src) + '</span></div>').join('') + '</div>';
+      return '<div class="modgroup"><h4>' + esc(k.replace(' Inc', ' · increased').replace(' More', ' · more').replace(' Flat', '')) + '<span>' + total + '</span></h4>' + list.map(m => '<div class="modline"><span>' + esc(m.text ? m.text.replace(/\{(0|v)\}/g, m.v).replace(/\{1\}/g, m.v2) : S.modText(GD, m)) + '</span><span class="src">' + esc(m.src) + '</span></div>').join('') + '</div>';
     }).join('') + '</details>';
     html += '<details><summary>Lines that apply but are not in this model <span class="count">(' + r.notModelled.length + ')</span></summary>' +
-      (r.notModelled.length ? r.notModelled.map(m => '<div class="modline"><span>' + esc(m.text || S.modText(GD, m)) + '</span><span class="src">' + esc(m.src) + '</span></div>').join('') : '<p class="hint">None for this skill.</p>') + '</details>';
+      (r.notModelled.length ? r.notModelled.map(m => '<div class="modline"><span>' + esc(m.text ? m.text.replace(/\{(0|v)\}/g, m.v).replace(/\{1\}/g, m.v2) : S.modText(GD, m)) + '</span><span class="src">' + esc(m.src) + '</span></div>').join('') : '<p class="hint">None for this skill.</p>') + '</details>';
     html += '<details><summary>Notes for this skill <span class="count">(' + r.notes.length + ')</span></summary><ul class="notes">' + r.notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul></details>';
     html += '<details><summary>How it is calculated</summary><ul class="notes">' +
       '<li><b>Checked against the game</b> (31 Oct): a Necromancer\'s Death Coil tooltip (crit, cast time, poison per stack, duration, stacks) matches within 1–2% and its skill panel DPS within 2.4%; Unholy Void within 3%; a Paladin\'s Channel Conduit Judgement cast rate matches the game log. Other skills use the same rules but were not checked one by one.</li>' +

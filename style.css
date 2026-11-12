@@ -1368,9 +1368,7 @@ body.compare-page #controls { display: none; }
 .bw-belt-slot.empty { opacity: .7; }
 .bw-belt-slot[data-bw-slot] { cursor: pointer; }
 .bw-belt-slot[data-bw-slot]:hover, .bw-belt-slot[data-bw-slot]:focus-visible { border-color: var(--dashboard-gold); outline: none; }
-.bw-tip { max-width: 340px; } .bw-tip p { margin: 4px 0; }
-.bw-tiptiers { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px; color: var(--muted); }
-.bw-tiptiers li.on { color: var(--dashboard-gold); }
+.pl-tip li.on { color: var(--dashboard-gold); }
 .bw-win { width: min(560px, 100%); height: auto; max-height: 100%; }
 @media (max-width: 760px) { .bw-win { height: 100%; max-height: none; } }
 .bw-belt-slot > div { display: grid; gap: 2px; min-width: 0; }
@@ -1792,6 +1790,9 @@ body.support-page #configEnemy .hint { margin: 2px 0 6px; }
 
 /* Skills & Minions cards (faq.js): compact, 2-4 columns by width, text wraps instead of scrolling sideways */
 .faq-minion-grid .faq-stats { margin: 8px 0 0; font-size: 12px; }
+.faq-formula { margin: 6px 0; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.faq-formula b { color: var(--accent); }
+.faq-formula sup { font-size: 0.78em; }
 .faq-minion-grid details p { margin: 4px 0 0; }
 .faq-minion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(min(100%, 260px), calc((100% - 24px) / 3 - 1px)), 1fr)); gap: 12px; align-items: start; margin: 0 0 12px; }
 .faq-minion-grid .faq-card { margin: 0; padding: 12px 14px; min-width: 0; }

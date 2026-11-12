@@ -4158,26 +4158,29 @@ window.BOBrewery = function (ctx) {
   function closeOv() { if (ov) ov.hidden = true; document.body.classList.remove('io-open'); }
 
   // ---------- hover tooltip on the dropdowns: what the chosen option is, without opening the list ----------
+  // Same look as the skill and item tooltips (planner.js skillTip): gold name, faint subtitle, tags, description, ruled lists.
   function selTip(sel) {
     const i = +sel.dataset.slot, f = sel.dataset.f, k = +sel.dataset.k || 0, v = sel.value, p = P(), s = B && B.slots[i];
     if (!p || !s || !f) return '';
-    const head = (name, cls) => '<b class="bw-name' + (cls ? ' ' + cls : '') + '">' + esc(name) + '</b>';
-    const none = '<span class="meta">Nothing chosen.</span>';
-    if (f === 'type') { const t = typeById(v); return t ? head(t.Name) + '<p>' + esc(fill(t.Text)) + '</p>' : none; }
-    if (f === 'unique') { const u = uniqueById(v); return u ? head(u.Name, 'unique') + '<p>' + esc(fill(u.Text)) + '</p><span class="meta">' + esc(u.Source || '') + '</span>' : none; }
+    const li = t => '<li>' + esc(t) + '</li>';
+    const top = (name, sub) => '<b>' + esc(name) + '</b><span class="pl-tip-sub">' + esc(sub) + '</span>';
+    const none = '<span class="pl-tip-sub">Nothing chosen.</span>';
+    if (f === 'type') { const t = typeById(v); return t ? top(t.Name, 'Potion · ' + ROLE_NAME[roleOf(i)]) + '<span class="pl-tip-desc">' + esc(fill(t.Text)) + '</span>' : none; }
+    if (f === 'unique') { const u = uniqueById(v); return u ? top(u.Name, 'Unique potion' + (u.Source ? ' · ' + u.Source : '')) + '<span class="pl-tip-desc">' + esc(fill(u.Text)) + '</span>' : none; }
     if (f === 'vessel') {
       const ve = vesselById(v); if (!ve) return none;
-      return head(ve.Name) + '<p>' + esc([ve.Prefixes + ' prefix' + (ve.Prefixes === 1 ? '' : 'es'), ve.Suffixes + ' suffix' + (ve.Suffixes === 1 ? '' : 'es')].concat(ve.Oath ? ['Oath line'] : [], ve.Core ? ['Core line'] : []).join(', ')) + '</p>' + (ve.CoreOnly ? '<span class="meta">Core drops only</span>' : '');
+      const lines = [ve.Prefixes + ' prefix' + (ve.Prefixes === 1 ? '' : 'es'), ve.Suffixes + ' suffix' + (ve.Suffixes === 1 ? '' : 'es')].concat(ve.Oath ? ['Oath line'] : [], ve.Core ? ['Core line'] : [], ve.CoreOnly ? ['Core drops only'] : []);
+      return top(ve.Name, 'Vessel') + '<ul class="pl-tip-base">' + lines.map(li).join('') + '</ul>';
     }
-    if (f === 'pour') { const x = (p.Pour || []).find(y => y.Id === v); return x ? head(cap(x.name)) : '<span class="meta">You drink it yourself.</span>'; }
-    // A line (prefix, suffix, Oath, Core) or its tier box: the line's name, its range, and the tier picked.
-    const slotKey = f.replace(/t$/, ''), isTier = ['pret', 'suft', 'oatht', 'coret'].includes(f);
+    if (f === 'pour') { const x = (p.Pour || []).find(y => y.Id === v); return x ? top(cap(x.name), 'Pours itself') : '<span class="pl-tip-sub">You drink it yourself.</span>'; }
+    // A line (prefix, suffix, Oath, Core) or its tier box.
+    const isTier = ['pret', 'suft', 'oatht', 'coret'].includes(f), slotKey = f.replace(/t$/, '');
     const pick = isTier ? (['pre', 'suf'].includes(slotKey) ? s[slotKey][k] : s[slotKey]) : null;
     const m = modById(isTier ? pick && pick.id : v); if (!m) return none;
     const ts = tiersOk(m), cur = isTier ? ts.find(t => String(t.Tier) === v) : null;
-    let h = head(m.Name) + '<p>' + esc(cur ? fill(m.Text, cur.Value, cur.Value2) : rangeText(m)) + '</p>';
-    h += '<span class="meta">' + esc(m.Kind) + (m.Material ? ' · needs ' + esc(matName(m.Material)) : '') + (m.Recipe ? ' · recipe' : '') + '</span>';
-    if (ts.length > 1) h += '<ul class="bw-tiptiers">' + ts.map(t => '<li' + (cur && t.Tier === cur.Tier ? ' class="on"' : '') + '>T' + t.Tier + ': ' + esc(fill(m.Text, t.Value, t.Value2)) + '</li>').join('') + '</ul>';
+    let h = top(m.Name, m.Kind + ' line' + (m.Recipe ? ' · recipe' : '')) + '<span class="pl-tip-tags"><i>' + esc(m.Kind) + '</i>' + (m.Material ? '<i>needs ' + esc(matName(m.Material)) + '</i>' : '') + '</span>';
+    h += '<span class="pl-tip-desc">' + esc(cur ? fill(m.Text, cur.Value, cur.Value2) : rangeText(m)) + '</span>';
+    if (ts.length > 1) h += '<span class="pl-tip-head">Tiers</span><ul class="pl-tip-base">' + ts.map(t => '<li' + (cur && t.Tier === cur.Tier ? ' class="on"' : '') + '><span class="pl-tier">T' + t.Tier + '</span> ' + esc(fill(m.Text, t.Value, t.Value2)) + '</li>').join('') + '</ul>';
     return h;
   }
   let tipEl = null;
@@ -4187,7 +4190,7 @@ window.BOBrewery = function (ctx) {
     if (!sel || sel.matches(':focus')) return hideTip();
     let html = ''; try { use(); html = selTip(sel); } catch (err) { html = ''; }
     if (!html) return hideTip();
-    if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'pl-tip bw-tip'; tipEl.setAttribute('role', 'tooltip'); tipEl.style.zIndex = 1000; tipEl.style.pointerEvents = 'none'; document.body.appendChild(tipEl); }
+    if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'pl-tip'; tipEl.setAttribute('role', 'tooltip'); document.body.appendChild(tipEl); }
     tipEl.innerHTML = html; tipEl.hidden = false;
     const r = sel.getBoundingClientRect(), w = tipEl.offsetWidth, hg = tipEl.offsetHeight;
     let y = r.bottom + 6; if (y + hg > innerHeight - 8) y = Math.max(8, r.top - hg - 6);
@@ -5629,16 +5632,18 @@ window.BOFaq = function (ctx) {
   // logs" and the comments in sim.js minionSheet): nothing new is claimed here.
   const MINION_RULES = {
     summon_skeletons: ['The army is shared with your other summons: 40 in all, the oldest go first (game log 6 Nov 2026, build 26474163).'],
-    summon_skeletal_mage: ['Multistrike on the mage: each strike does 52% less damage and all 3 strikes land (the mage throws all 3 bolts since the 5 Nov patch; the developer, 5 Nov: real damage is 94% of the panel).', 'Follows Faster Casting (patch notes, 7 Nov 2026).'],
+    summon_skeletal_mage: ['Multistrike on the mage: each strike does 52% less damage and all 3 strikes land (the mage throws all 3 bolts since the 5 Nov patch; the developer, 5 Nov: real damage is 94% of the panel).', 'Follows Faster Casting (patch notes, 7 Nov 2026).', 'Choir of Bones grants Chain to the bolts at the gem\'s own price: 5% less damage (game log, 11 Nov 2026).'],
     grave_reap: ['Kills rise as Risen Thralls (Bone Warrior). The skill panel shows the risen minions only, not the sweep (tooltip: "DPS (all its minions)"); they stand in the same 40-minion army as your summons.', 'Minion damage multiplier 0.12 (skills.json; the sim works the minion hit out from the skill\'s base damage).'],
     marrow_lance: ['Kills rise as Risen Casters (Skeleton Wizard). The skill panel shows the risen minions only, not the lance.', 'Log, 9 Nov 2026 (Marrow Lance gem 11, 11 summons on the bar): 4 risen at gem 11 (3 + 1), shared with the other summons in one army; PetSheet68 "marrow_lance avg 107-108" at gem 11.'],
-    summon_bone_golem: ['Always exactly one golem, whatever "+minions" lines say (log: PetSheet68 cap 1).', 'The fire golem blessing (12.5% more minion damage) applies to the golem itself too.', 'Brutality removes all fire, cold and lightning: linked Added Fire is idle and the golem deals no element.'],
+    summon_bone_golem: ['Always exactly one golem, whatever "+minions" lines say (log: PetSheet68 cap 1).', 'Each +1 to maximum minions the golem cannot use gives it 30% more damage instead, added together (4 of them: ×2.2). Not in the game\'s text: worked out from the game log, 11 Nov 2026.', 'The fire golem blessing (12.5% more minion damage) applies to the golem itself too.', 'Brutality removes all fire, cold and lightning: linked Added Fire is idle and the golem deals no element.'],
   };
   function minions(GD) {
     const MM = GD.minionMonsters, SK = Object.values(GD.skills || {});
     let h = intro('Minion Scaling', 'Every skill with its tags and base numbers, and a card for each minion: what the game data says about it and the rules the sim applies.');
     if (!MM) return needData(h);
     const dmg = s => s.SpellMax ? r1(s.SpellMin) + '–' + r1(s.SpellMax) : '';
+    const SIM = window.BOSim || {}, ZONES = [10, 30, 50, 70, 90];
+    const MD = ((GD.scaling || {}).Monster || {}).Damage || {};
     const summons = SK.filter(s => s.Minion && s.Minion.MonsterId); // summon gems, then the attacks whose kills rise as minions (Gravereap, Marrow Lance)
     summons.sort((a, b) => (a.Delivery === 'Summon' ? 0 : 1) - (b.Delivery === 'Summon' ? 0 : 1));
     const monBlock = mon => {
@@ -5655,7 +5660,8 @@ window.BOFaq = function (ctx) {
         ['Minion', mon ? esc(mon.Name) + (mon.Role ? ' <span class="faq-note">role: ' + esc(mon.Role) + '</span>' : '') : esc(m.MonsterId)],
         ['Count', (s.Delivery === 'Summon' ? m.Count + (m.CountEvery ? ', +1 every ' + m.CountEvery + ' gem levels' : '') + ', cap ' + m.Cap : 'up to ' + m.Cap + (m.PerLevels && m.PerLevels.length ? ', +1 at gem levels ' + m.PerLevels.join(', ') : '') + ' (raised from kills, the oldest is replaced)')],
         ['Base attack every', m.AttackEvery + ' s <span class="faq-note">the minion\'s pace is this × 0.72 ÷ minion speed (measured in the game log, not in the data files)</span>'],
-        ['Damage', 'gem hit ' + dmg(s) + ' × minion multiplier ' + m.DamageMult + (m.LevelDamage ? ', +' + pct(m.LevelDamage) + '% per zone level' : '')],
+        ['Damage', 'gem hit ' + dmg(s) + ' × minion multiplier ' + m.DamageMult],
+        m.LevelDamage && SIM.minionLevelFactor ? ['Zone level', ZONES.map(z => 'level ' + z + ': ×' + SIM.minionLevelFactor(GD, m, z).toFixed(2)).join(' · ') + ' <span class="faq-note">LevelDamage ' + m.LevelDamage + ', k ' + SIM.minionLevelK(m) + ' (formula above)</span>'] : null,
         m.Affinity ? ['Affinity', '+' + pct(m.AffinityDamage) + '% minion damage per 10 ' + esc(m.Affinity) + (m.AffinityCap ? ', up to ' + m.AffinityCap : '')] : null,
         s.ManaCost ? ['Cast', (s.CastTime !== undefined ? s.CastTime + ' s, ' : '') + s.ManaCost + ' mana' + (s.Cooldown ? ', ' + s.Cooldown + ' s cooldown' : '')] : null,
       ].filter(Boolean);
@@ -5679,9 +5685,25 @@ window.BOFaq = function (ctx) {
     if (gc) cards += card(esc(gc.Name), '<p class="faq-stats">' + esc(gc.Description || '') + '</p>' +
       (MM.zombie ? '<p class="faq-stats"><b>Minion:</b> ' + esc(MM.zombie.Name) + ' (the same monster as Raise Zombie)' + (MM.zombie.Role ? ', role: ' + esc(MM.zombie.Role) : '') + '.</p>' + monBlock(MM.zombie) : '') +
       '<p class="faq-note">A support gem, not a summon. The sim does not count these Zombies in any DPS number yet.</p>', 'support');
-    h += '<div class="faq-minion-grid">' + cards + '</div>';
+    const grid = '<div class="faq-minion-grid">' + cards + '</div>';
+    // The sim's minion formula in words (sim.js minionSheet); every part was checked against the game's own minion sheet in the log.
+    h += card('How a minion\'s damage is worked out', '<p class="faq-stats faq-formula"><b>Hit</b> = gem hit × 1.19<sup>gem level − 1</sup> × minion multiplier × affinity × near you × zone level × (1 + increased Minion Damage) × (1 + the summon skill\'s own increased damage) × every "more" line</p>' +
+      '<p class="faq-stats faq-formula"><b>DPS</b> = hit × crit (6% chance, ×1.5) × minions standing × strikes ÷ pace &nbsp;·&nbsp; pace = base attack interval × ' + (SIM.MINION_PACE || 0.72) + ' ÷ minion speed</p>' +
+      '<p class="faq-stats faq-formula"><b>Zone level</b> = 1 + LevelDamage × k × e<sup>⅔ × ' + (MD.K || 0.2959) + ' × level^' + (MD.P || 0.6) + '</sup> &nbsp;·&nbsp; k = 0.467 (Raise Zombie, Grave Golem), 1.71 (Skeletons), 1.39 (Skeletal Mage)</p>' +
+      list([
+        '<b>Gem level:</b> levels from gear count like the gem\'s own, ×1.19 each.',
+        '<b>Affinity:</b> the Strength or Intelligence line on the minion\'s card.',
+        '<b>Near you:</b> ' + (SIM.MINION_NEAR || 60) + '% more within 7 m of you, fading to none at 12 m. The game\'s panel counts it in full.',
+        '<b>Zone level:</b> minions grow with the level of the zone they fight in; in the hub that is your own level. The curve is the game\'s monster damage curve to the power ⅔. In Damage Analysis, set the Monster level box to the Rupture you run.',
+        '<b>Increased Minion Damage:</b> every "minions deal X% increased damage" line, plus 1% per 10 Intelligence. They add together.',
+        '<b>The summon skill\'s own increased damage:</b> "increased damage" on the summon\'s supports (Ravening Host 25%) and lines that name Minion skills (Bone Sovereign 30%). They add to each other and multiply the group above.',
+        '<b>More lines:</b> the summon\'s supports (Multistrike 52% less a strike, Ravening Host 12% more, a granted Chain 5% less), Added Fire\'s 30% extra, minion "more" lines (Bone Sovereign 15%), Harmony, and the defence lines that pay "more damage per 1,000 Armour" and the like (Bone Armour).',
+        '<b>Strikes:</b> with Multistrike each blow strikes 3 times; the game\'s skill panel is 3 × its one-strike number.',
+        'Checked against the game log on 11 Nov 2026 (Necromancer level 48–49; hub and Ruptures 31, 48, 64, 67 and 69): Skeletal Mage within 0.6%, Skeletons 0.5%, Raise Zombie 1.3%, Grave Golem 2.1%. The Skeletons and Skeletal Mage k values are measured, not from the data files.',
+      ]));
+    h += grid;
     h += card('Rules for all minions', list([
-      'Your own damage lines do not reach minions: only the summon gem\'s own supports and the lines for minions count.',
+      'Your own damage lines do not reach minions: only the summon gem\'s own supports, the lines for minions and the defence "more damage per 1,000" lines count.',
       'Harmony: more damage for each different kind of minion you command, up to 4 kinds.',
       'One army across all your summon skills: 40 in all, and the oldest go first (game log, 6 Nov 2026).',
       'Grave Call: 30% more damage and 20% faster for 4 s after each cast. The game\'s skill panel leaves it out.',
@@ -8921,11 +8943,27 @@ window.BOCharacter = function (ctx) {
   //          x 60% more near you x (1 + increased Minion Damage, +1% per 10 Int) x the supports' more x Harmony
   //   pace = AttackEvery x 0.72 / minion speed;   DPS = average hit x crit x minions / pace.
   // The 0.72 is measured (every PetSheet line: Skeletons 0.8 s -> 0.576 s, Golem 1.05 -> 0.756), not in the data.
-  // The Grave Golem grows with the level of the zone it fights in (not the hero's: hero 24 showed x1.10 in an area
-  // level 10 zone, x1.23 at Rupture 26). Fitted to 24 log readings (PetHit68 'level', area levels 6-26) and the
-  // panel's 'x1.23 damage now' at Rupture 26: 1 + LevelDamage x 0.0887 x level^0.87 (LevelDamage 0.15).
-  // Beyond level 26 it is the same curve carried on (not yet checked deeper).
-  const MINION_PACE = 0.72, MINION_NEAR = 60, MINION_LEVEL_K = 0.0887, MINION_LEVEL_P = 0.87;
+  // Minions grow with the level of the zone they fight in (in the hub: the hero's level). The growth follows the game's
+  // monster damage curve (scaling.json MonsterDamage: exp(K x level^P), K 0.2959, P 0.6) to the power 2/3:
+  //   level factor = 1 + LevelDamage x k x exp(2/3 x K x zone^P)
+  // Owner's controlled test, game log 11 Nov 2026 (hero 48-49; hub, Ruptures 31, 48, 67, 69; nothing else changed):
+  //   Skeletal Mage PetSheet68 hitmult 26.44 (31), 27.16 (hub 48), 28.39 (67), 28.59 (69) with PetHit68 'level 1.13' at 67:
+  //     1.053 / 1.081 / 1.130 / 1.138; the formula gives 1.052 / 1.083 / 1.130 / 1.136
+  //   Raise Zombie hitmult 19.70 (31) / 20.64 (hub 48) = 0.9545; formula 0.9541; PetHit68 level 1.22 (67), 1.23 (69): 1.218, 1.228
+  //   Grave Golem PetHit68 level 2.03 (67): 2.04.  Skeletons 1.07 (31), 1.10 (hub 48), 1.16 (67 and 69): 1.064, 1.103, 1.160, 1.167
+  // k is 0.467 for the Zombie and the Golem (LevelDamage 0.04 and 0.19 give the same k); the two LevelDamage 0.008 minions
+  // read higher and not alike, so theirs are measured: Skeletons 1.71, Skeletal Mage 1.39. The same curve fits this
+  // character's earlier levels in the log (Golem 1.18-1.25 at zone 10, 1.75-1.88 at 54; Mage 1.01-1.02 at 10, 1.07 near 45).
+  // Before this the sheet used 1 + LevelDamage x 0.0887 x level^0.87 (fitted at zone levels 6-26 on an older build), which
+  // gave 1.02 / 1.02 / 1.49 where the game has 1.14 / 1.12 / 1.93 at Rupture 64.
+  const MINION_PACE = 0.72, MINION_NEAR = 60, MINION_LEVEL_K = 0.467, MINION_LEVEL_BY = { skeleton_warrior: 1.71, skeleton_wizard: 1.39 };
+  // The zone-level factor above; also shown on the page's Minion Scaling tab (k is the constant used for this minion).
+  function minionLevelK(mi) { return MINION_LEVEL_BY[lc(mi.MonsterId)] || MINION_LEVEL_K; }
+  function minionLevelFactor(GD, mi, zoneLevel) {
+    if (!mi || !mi.LevelDamage) return 1;
+    const MD = ((GD.scaling || {}).Monster || {}).Damage || {};
+    return 1 + mi.LevelDamage * minionLevelK(mi) * Math.exp(2 / 3 * (MD.K || 0.2959) * Math.pow(Math.max(1, zoneLevel), MD.P || 0.6));
+  }
   function minionSheet(GD, ch, sk, res, mods, use, attr, L, o) {
     const H = GD.scaling.Hero, G = GD.scaling.Gem, mi = sk.Minion;
     const tags = new Set([...(sk.Tags || []), sk.Delivery].map(lc));
@@ -9002,7 +9040,7 @@ window.BOCharacter = function (ctx) {
     const aff = mi.Affinity && mi.AffinityDamage ? 1 + Math.min(mi.AffinityCap || 50, (attr[mi.Affinity] || 0) * mi.AffinityDamage) / 100 : 1;
     const near = o.minionNear === false ? 1 : 1 + MINION_NEAR / 100;
     const zoneLevel = o.enemyLevel || ch.level;
-    const lvlK = mi.LevelDamage ? 1 + mi.LevelDamage * MINION_LEVEL_K * Math.pow(Math.max(1, zoneLevel), MINION_LEVEL_P) : 1;
+    const lvlK = minionLevelFactor(GD, mi, zoneLevel);
     // The summon skill's own "increased damage" lines (its supports' and lines that name Minion skills) are a group of their
     // own: they add to each other and multiply the "increased Minion Damage" group. Ravening Host "25% increased damage" +
     // Bone Sovereign "30% increased damage" = x1.55. Game log 11 Nov 2026, PetSheet68 "spec avg" at gem 15+2 (the game's
@@ -9028,7 +9066,18 @@ window.BOCharacter = function (ctx) {
     // The Grave Golem is one at a time ("Only one answers at a time"): +minion lines do not add golems (the log's
     // PetSheet68 always has the golem at cap 1 while the same lines take Skeletons to 10-12).
     const oneOnly = !!mi.GolemAuras;
-    if (oneOnly) alive = 1;
+    // Each "+1 to the maximum number of minions" the lone golem cannot use gives it 30% more damage instead (added together).
+    // Not in the game's text; from the log's PetHit68 'dmgmult' (= DamageMult 1.946 x Str affinity x this), 11 Nov 2026:
+    // 4.76 = 1.946 x 1.112 x 2.2 and 4.86 = 1.946 x 1.135 x 2.2 with +4 (Lord of the Dead, Bone Sovereign, Dragonling Bone
+    // Tyrant +2); 3.53 = x1.6 with +2 before Bone Tyrant (level 42-44), and the step 3.53 -> 4.86 came with Bone Tyrant at 45.
+    let soloK = 1;
+    if (oneOnly) {
+      alive = 1;
+      let extra = 0;
+      for (const m of pickMods(mods, 'MinionCap', 'Flat')) if (fit(m)) { extra += m.v; use(m, 'minion, 30% more for the one golem'); }
+      soloK = 1 + 0.30 * Math.max(0, extra);
+      if (soloK !== 1) { for (const d of Object.keys(hit)) { hit[d].min *= soloK; hit[d].max *= soloK; hit[d].avg *= soloK; } avg *= soloK; }
+    }
     else for (const m of pickMods(mods, 'MinionCap', 'Flat')) if (fit(m)) { alive += m.v; use(m, 'minion'); }
     // One army across all your summon skills. Game log 6 Nov (build 26474163): "ArmyBack81: ON - army 40 in all,
     // past 27 each body adds 0.50 of a body (a full army: each blow x0.837, 33.5 bodies of damage)" and
@@ -9114,10 +9163,12 @@ window.BOCharacter = function (ctx) {
     res.minionCurseK = curseK;
     res.sheetHitDps = res.panelDps = dps;
     res.hitDps = res.totalDps = dps * curseK;
-    res.minion = { specInc, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.stat === 'MinionDamage' ? 1 + golem.v / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth };
+    res.minion = { specInc, soloK, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.stat === 'MinionDamage' ? 1 + golem.v / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth };
     res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
     if (near > 1) res.notes.push('Counted at your side: minions deal ' + MINION_NEAR + '% more within 7 m of you (fading to none at 12 m), as the game\'s panel counts it.');
-    if (mi.LevelDamage) res.notes.push(sk.Name + ' also grows with the level of the zone it fights in (the Monster level box): x' + lvlK.toFixed(3) + ' at level ' + zoneLevel + '. Fitted to the game\'s log and panel at zone levels 6-26 (x1.23 at Rupture 26); deeper Ruptures carry the same curve on, not yet checked.');
+    if (mi.LevelDamage) res.notes.push(sk.Name + ' also grows with the level of the zone it fights in (the Monster level box): x' + lvlK.toFixed(3) + ' at level ' + zoneLevel + '. Set the Monster level box to the Rupture you run: the game shows this number for where you stand (in the hub, your own level). Checked against the game log in the hub and Ruptures 31 to 69 (11 Nov 2026).');
+    if (specInc) res.notes.push('Increased damage of the summon skill itself: ' + Math.round(specInc) + '% (its supports and lines that name Minion skills). It multiplies the increased Minion Damage (game log, 11 Nov 2026).');
+    if (soloK !== 1) res.notes.push('One golem: each +1 to maximum minions it cannot use gives it 30% more damage, x' + soloK.toFixed(1) + ' here (game log, 11 Nov 2026).');
     if (kind !== 1) res.notes.push('Harmony: ' + kinds + ' kind' + (kinds > 1 ? 's' : '') + ' of minion on your bar, ' + Math.round((kind - 1) * 100) + '% more damage.');
     if (shotRepeats) res.notes.push('Multistrike on ' + sk.Name + ': each blow strikes ' + strikes + ' times at Multistrike\'s 52% less, as the game\'s panel counts it. Since the 5 Nov patch the mage throws a bolt for each repeat.');
     if (golem && golem.stat !== 'EnemyTaken') res.notes.push('Your ' + golem.name + ' blesses minions near it, itself included: ' + golem.text + ' (counted, as the game\'s panel does).');
@@ -9564,7 +9615,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare,cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  const api = { minionLevelFactor, minionLevelK, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare,cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

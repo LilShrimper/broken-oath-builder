@@ -5246,10 +5246,6 @@ window.BOItemSearch = function (ctx) {
       for (const [, f] of files) for (const h of (f && f.heroes) || []) {
         if (!h || !h.build || !h.hero) continue;
         const items = (h.build.items || []).flatMap(itemNames);
-        // Keystones taken and unique items worn, for the table's columns (undiscovered ones are counted, never named).
-        const keys = (h.build.passive_nodes || []).filter(id => !isHidden(id)).map(id => (GD().nodes || {})[id]).filter(n => n && n.Kind === 'Keystone').map(n => n.Name);
-        const wornU = (h.build.items || []).filter(it => it.unique && it.unique !== 'None');
-        const uniq = wornU.filter(it => !isHidden(it.unique)).map(it => uniqueName(it.unique)), uniqHidden = wornU.length - uniq.length;
         try {
           const ch = charFromApi(h), d = ctx.defence(ch);
           // Sim the skill the hero has dealt the most damage with (build.skill_damage), owner 11 Nov 2026: the ladder's
@@ -5265,7 +5261,7 @@ window.BOItemSearch = function (ctx) {
             try { sim = ctx.simDps ? ctx.simDps(ch, h.rupture_level || 0) : null; } catch (e) { sim = null; }
             if (sim > 0) { simSkill = id; break; }
           }
-          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), sim, simSkill, keys, uniq, uniqHidden, items, find: items.join('\n').toLowerCase() };
+          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), sim, simSkill, items, find: items.join('\n').toLowerCase() };
         } catch (e) { roster(league)[h.hero] = { life: null, es: null, ehp: null, sim: null, items, find: items.join('\n').toLowerCase() }; }
         if (++n % 15 === 0) { S.rosterBusy = 'Running the sim on the builds… ' + n; paint(); await new Promise(r => setTimeout(r, 0)); }
       }
@@ -5398,12 +5394,10 @@ window.BOItemSearch = function (ctx) {
           '<td class="num">' + (r.level || '') + '</td><td class="num">' + (r.rupture_level || 0) + '</td>' +
           '<td class="num">' + (r.guardian_dps_median ? fmt(r.guardian_dps_median) : '<span class="meta">–</span>') + '</td>' +
           '<td class="num lad-sim">' + simCell(r) + '</td>' + ex +
-          '<td class="lad-keys">' + (!r.has_build ? '<span class="meta">–</span>' : x ? listCell(x.keys || [], 0) : '<span class="meta">…</span>') + '</td>' +
-          '<td class="lad-uniq">' + (!r.has_build ? '<span class="meta">–</span>' : x ? listCell(x.uniq || [], x.uniqHidden || 0) : '<span class="meta">…</span>') + '</td>' +
           '<td class="go" aria-hidden="true">' + (r.has_build && r.build ? '›' : '') + '</td></tr>';
       }).join('');
       const note = extra ? (extra === 'EHP' ? ' EHP here: (life + energy shield) against elemental hits after the hero\'s resistances (capped at ' + cap() + '%); armour, evasion and block are not counted.' : ' Life and energy shield as the Build Planner adds them up from gear and tree.') + ' Only heroes with a published build have one.' : '';
-      return '<div class="card lad-table-card"><div class="table-wrap"><table class="tbl lad-table"><thead><tr><th class="num">#</th><th title="Class, with its rank inside the class">Class</th><th>Main skill</th><th class="num">Level</th><th class="num" title="Best Rupture Level">Rupture</th><th class="num" title="The game\'s own median Guardian DPS over its real fights (heroes with a build file)">Boss DPS</th><th class="num" title="Our damage sim on the published build: the skill the hero has dealt the most damage with, against a Guardian at the hero\'s Rupture Level. An estimate">Sim DPS <small class="meta">est.</small></th>' + (extra ? '<th class="num">' + extra + '</th>' : '') + '<th title="Keystone passives taken">Keystones</th><th title="Unique items worn (undiscovered ones are not named)">Equipped uniques</th><th aria-label="Build"></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
+      return '<div class="card lad-table-card"><div class="table-wrap"><table class="tbl lad-table"><thead><tr><th class="num">#</th><th title="Class, with its rank inside the class">Class</th><th>Main skill</th><th class="num">Level</th><th class="num" title="Best Rupture Level">Rupture</th><th class="num" title="The game\'s own median Guardian DPS over its real fights (heroes with a build file)">Boss DPS</th><th class="num" title="Our damage sim on the published build: the skill the hero has dealt the most damage with, against a Guardian at the hero\'s Rupture Level. An estimate">Sim DPS <small class="meta">est.</small></th>' + (extra ? '<th class="num">' + extra + '</th>' : '') + '<th aria-label="Build"></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
         '<p class="hint">' + rows.length + ' heroes shown. Click a hero to see their build (published for the top 50 of each class). Ladder rank: best Rupture Level, then level, experience, fastest clear and who got there first. Boss DPS is the game\'s own median over its Guardian fights. Sim DPS is our damage sim run on the published build (the skill the hero has dealt the most damage with, named under the number when it is not the listed main skill, against a Guardian at that Rupture Level, curses on the hotbar counted): an estimate, which can be off for skills the sim has not been checked on.' + note + '</p></div>';
     }
     function itemCard(it, classId) {
@@ -5444,7 +5438,7 @@ window.BOItemSearch = function (ctx) {
       return '<div class="card lad-hero">' +
         '<div class="lad-hero-head"><div><div class="eyebrow">' + esc(h.league || '') + ' · hero ' + esc(String(h.hero).slice(0, 8)) + '</div><h3 class="lad-hero-title">' + esc(h.class) + (h.ascendancy && h.ascendancy !== 'None' ? ' · ' + esc(h.ascendancy) : '') + ' · level ' + (h.level || '?') + ' · Rupture ' + (h.rupture_level || 0) + '</h3>' +
         '<small class="meta">Class rank ' + (h.class_rank || '?') + (h.dead ? ' · dead' : '') + (h.updated_at ? ' · build updated ' + esc(ago(h.updated_at)) : '') + '</small></div>' +
-        '<div class="lad-actions"><button type="button" class="btn" id="ladOpen">Open in Build Planner</button><button type="button" class="btn ghost" id="ladLink">Copy link</button></div></div>' +
+        '<div class="lad-actions"><button type="button" class="btn" id="ladOpen">Open in Build Planner</button><button type="button" class="btn ghost" id="ladLink">Copy link</button><button type="button" class="btn ghost" id="ladClose" aria-label="Close hero">Close</button></div></div>' +
         measured +
         '<h3>Skills</h3><ul class="lad-skills">' + (skills || '<li class="meta">None listed</li>') + '</ul>' +
         '<h3>Passives</h3><p>' + nodes.length + ' points' + (b.bonus_passive_points ? ' (' + b.bonus_passive_points + ' bonus)' : '') + (hiddenNodes ? ', ' + hiddenNodes + ' undiscovered' : '') + '.' +
@@ -5506,6 +5500,11 @@ window.BOItemSearch = function (ctx) {
           refresh(async () => {});
           setTimeout(() => { const t = el.querySelector('.lad-classes'); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
           return;
+        }
+        if (e.target.closest('#ladClose')) {
+          S.hero = null; S.heroData = null;
+          try { if (location.hash.startsWith('#hero=')) history.replaceState(null, '', location.pathname + location.search); } catch (err) { /* ignore */ }
+          paint(); return;
         }
         if (e.target.closest('#ladOpen') && S.heroData && S.heroData.build) { ctx.openBuild(charFromApi(S.heroData)); return; }
         if (e.target.closest('#ladLink') && S.hero) {

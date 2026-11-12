@@ -4944,6 +4944,7 @@ window.BOItemSearch = function (ctx) {
       const t = (GD()[kind] || {})[id] || (GD()[kind] || {})[String(id).toLowerCase()];
       return t && t.Name ? t.Name : String(id).replace(/_/g, ' ');
     };
+    const listCell = (names, hiddenN) => names.length || hiddenN ? '<div class="lad-tags">' + names.map(n => '<span class="chip lad-sup">' + esc(n) + '</span>').join('') + (hiddenN ? '<span class="chip lad-sup meta">' + hiddenN + ' undiscovered</span>' : '') + '</div>' : '<span class="meta">–</span>';
     const clsIco = c => (ctx.classIcon ? ctx.classIcon(c) : '');
     const skillName = id => name('skills', id), supportName = id => name('supports', id), uniqueName = id => name('uniques', id);
     const ago = iso => {
@@ -5020,6 +5021,10 @@ window.BOItemSearch = function (ctx) {
       for (const [, f] of files) for (const h of (f && f.heroes) || []) {
         if (!h || !h.build || !h.hero) continue;
         const items = (h.build.items || []).flatMap(itemNames);
+        // Keystones taken and unique items worn, for the table's columns (undiscovered ones are counted, never named).
+        const keys = (h.build.passive_nodes || []).filter(id => !isHidden(id)).map(id => (GD().nodes || {})[id]).filter(n => n && n.Kind === 'Keystone').map(n => n.Name);
+        const wornU = (h.build.items || []).filter(it => it.unique && it.unique !== 'None');
+        const uniq = wornU.filter(it => !isHidden(it.unique)).map(it => uniqueName(it.unique)), uniqHidden = wornU.length - uniq.length;
         try {
           const ch = charFromApi(h), d = ctx.defence(ch);
           // Sim the skill the hero has dealt the most damage with (build.skill_damage), owner 11 Nov 2026: the ladder's
@@ -5035,7 +5040,7 @@ window.BOItemSearch = function (ctx) {
             try { sim = ctx.simDps ? ctx.simDps(ch, h.rupture_level || 0) : null; } catch (e) { sim = null; }
             if (sim > 0) { simSkill = id; break; }
           }
-          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), sim, simSkill, items, find: items.join('\n').toLowerCase() };
+          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), sim, simSkill, keys, uniq, uniqHidden, items, find: items.join('\n').toLowerCase() };
         } catch (e) { roster(league)[h.hero] = { life: null, es: null, ehp: null, sim: null, items, find: items.join('\n').toLowerCase() }; }
         if (++n % 15 === 0) { S.rosterBusy = 'Running the sim on the builds… ' + n; paint(); await new Promise(r => setTimeout(r, 0)); }
       }
@@ -5087,7 +5092,9 @@ window.BOItemSearch = function (ctx) {
       const rows = (S.ladder && S.ladder.heroes) || [];
       const deepest = rows.reduce((m, r) => Math.max(m, r.rupture_level || 0), 0);
       const best = rows.reduce((m, r) => Math.max(m, r.guardian_dps_median || 0), 0);
-      const L = S.ladder, build = (L && L.game_build) || (S.version && S.version.game_build);
+      const ro = roster();
+      const bestSim = rows.reduce((m, r) => Math.max(m, (ro[r.hero] && ro[r.hero].sim) || 0), 0);
+      const L = S.ladder, build =(L && L.game_build) || (S.version && S.version.game_build);
       const fresh = L && L.generated_at && Date.now() - Date.parse(L.generated_at) < 40 * 60000;
       const kpi = (label, value, sub) => '<div class="bs-cell"><span class="bs-label">' + label + '</span><b>' + value + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>';
       const lg = (S.leagues || []).find(l => l.id === S.league);
@@ -5099,6 +5106,7 @@ window.BOItemSearch = function (ctx) {
         kpi('Heroes ranked', L ? rows.length : '–', L ? 'with a Rupture completed' : '') +
         kpi('Deepest Rupture', L ? deepest : '–', '') +
         kpi('Top Boss DPS', L ? short(best) : '–', L && !best ? 'none measured yet' : 'game\'s own median') +
+        kpi('Highest Est. Sim DPS', L ? (bestSim ? short(bestSim) : S.rosterBusy ? '…' : '–') : '–', L && bestSim ? 'our sim, top-50 builds' : '') +
         '</div></div>';
     }
     const toggle = (id, left, right, on) => '<div class="lad-switch"><span class="' + (on ? '' : 'on') + '">' + left + '</span><button type="button" role="switch" id="' + id + '" aria-checked="' + on + '" aria-label="' + left + ' or ' + right + '"><i></i></button><span class="' + (on ? 'on' : '') + '">' + right + '</span></div>';
@@ -5157,7 +5165,7 @@ window.BOItemSearch = function (ctx) {
       const body = rows.map(r => {
         // Supports as the site's gem chips (colour by attribute); undiscovered ones are not named.
         const sups = (r.main_supports || []).filter(Boolean).map(id => '<span class="chip lad-sup">' + (isHidden(id) ? '' : (ctx.gemDot ? ctx.gemDot(id) : '')) + esc(supportName(id)) + '</span>').join('');
-        const on = S.hero && r.build === S.hero;
+        const on = S.hero && r.build === S.hero, x = roster()[r.hero];
         const ex = extra ? '<td class="num">' + (metric(r) != null ? fmt(metric(r)) : '<span class="meta">–</span>') + '</td>' : '';
         return '<tr class="' + (on ? 'on' : '') + (r.dead ? ' dead' : '') + '"' + (r.has_build && r.build ? ' data-build="' + esc(r.build) + '" tabindex="0"' : '') + '>' +
           '<td class="num">' + (r.rank || '') + '</td>' +
@@ -5166,10 +5174,12 @@ window.BOItemSearch = function (ctx) {
           '<td class="num">' + (r.level || '') + '</td><td class="num">' + (r.rupture_level || 0) + '</td>' +
           '<td class="num">' + (r.guardian_dps_median ? fmt(r.guardian_dps_median) : '<span class="meta">–</span>') + '</td>' +
           '<td class="num lad-sim">' + simCell(r) + '</td>' + ex +
+          '<td class="lad-keys">' + (!r.has_build ? '<span class="meta">–</span>' : x ? listCell(x.keys || [], 0) : '<span class="meta">…</span>') + '</td>' +
+          '<td class="lad-uniq">' + (!r.has_build ? '<span class="meta">–</span>' : x ? listCell(x.uniq || [], x.uniqHidden || 0) : '<span class="meta">…</span>') + '</td>' +
           '<td class="go" aria-hidden="true">' + (r.has_build && r.build ? '›' : '') + '</td></tr>';
       }).join('');
       const note = extra ? (extra === 'EHP' ? ' EHP here: (life + energy shield) against elemental hits after the hero\'s resistances (capped at ' + cap() + '%); armour, evasion and block are not counted.' : ' Life and energy shield as the Build Planner adds them up from gear and tree.') + ' Only heroes with a published build have one.' : '';
-      return '<div class="card lad-table-card"><div class="table-wrap"><table class="tbl lad-table"><thead><tr><th class="num">#</th><th title="Class, with its rank inside the class">Class</th><th>Main skill</th><th class="num">Level</th><th class="num" title="Best Rupture Level">Rupture</th><th class="num" title="The game\'s own median Guardian DPS over its real fights (heroes with a build file)">Boss DPS</th><th class="num" title="Our damage sim on the published build: the skill the hero has dealt the most damage with, against a Guardian at the hero\'s Rupture Level. An estimate">Sim DPS <small class="meta">est.</small></th>' + (extra ? '<th class="num">' + extra + '</th>' : '') + '<th aria-label="Build"></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
+      return '<div class="card lad-table-card"><div class="table-wrap"><table class="tbl lad-table"><thead><tr><th class="num">#</th><th title="Class, with its rank inside the class">Class</th><th>Main skill</th><th class="num">Level</th><th class="num" title="Best Rupture Level">Rupture</th><th class="num" title="The game\'s own median Guardian DPS over its real fights (heroes with a build file)">Boss DPS</th><th class="num" title="Our damage sim on the published build: the skill the hero has dealt the most damage with, against a Guardian at the hero\'s Rupture Level. An estimate">Sim DPS <small class="meta">est.</small></th>' + (extra ? '<th class="num">' + extra + '</th>' : '') + '<th title="Keystone passives taken">Keystones</th><th title="Unique items worn (undiscovered ones are not named)">Equipped uniques</th><th aria-label="Build"></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
         '<p class="hint">' + rows.length + ' heroes shown. Click a hero to see their build (published for the top 50 of each class). Ladder rank: best Rupture Level, then level, experience, fastest clear and who got there first. Boss DPS is the game\'s own median over its Guardian fights. Sim DPS is our damage sim run on the published build (the skill the hero has dealt the most damage with, named under the number when it is not the listed main skill, against a Guardian at that Rupture Level, curses on the hotbar counted): an estimate, which can be off for skills the sim has not been checked on.' + note + '</p></div>';
     }
     function itemCard(it, classId) {
@@ -5608,9 +5618,11 @@ window.BOFaq = function (ctx) {
         'The Dragonling\'s Virulence lets Rares and Guardians hold more stacks (60).'],
       ['<b>Freeze</b>', 'No chance roll', 'A Cold hit freezes for ' + A.FreezeSecPerPct + ' s per 1% of the enemy\'s life it took, at least ' + A.FreezeMinSeconds + ' s, at most ' + A.FreezeMaxSeconds + ' s. Rares freeze for ' + pct(A.FreezeRareMult) + '% as long.',
         pct(A.FreezeBossMult) + '% as long, at most ' + A.FreezeBossMaxSeconds + ' s, then immune for ' + A.FreezeBossImmuneSeconds + ' s.'],
+      ['<b>Chill</b>', 'No chance roll', 'A hit that is at least 25% Cold chills the enemy and slows it. A little Cold on a Physical hit (an Adds Cold prefix, a weapon that gains some Physical as extra Cold) still adds its damage but no longer chills or freezes. It counts again with 30% or more increased freeze duration or chill effect, or any Shatter (the developer\'s patch notes, 11 Nov 2026).', 'Same rules.'],
       ['<b>Bleed</b>', 'From skills and lines that cause it', 'Deals ' + pct(A.BleedFracPerSec) + '% of the Physical hit per second.', 'Same rules.'],
     ]));
     h += card('Good to know', list([
+      'Chill and freeze need a hit that is at least 25% Cold (see Chill above); a hit with less Cold still deals its Cold damage. The sim\'s Stormfrost line follows this.',
       'Chances are per hit that carries the element. Ignite, shock and poison chance lines add to the base chance.',
       H.IntAilmentDurPer10 ? 'Every 10 Intelligence makes ailments last ' + H.IntAilmentDurPer10 + '% longer; ailment duration lines add more.' : '',
       'Damage over time ticks every ' + A.TickSeconds + ' s.',
@@ -5915,6 +5927,12 @@ window.BOFaq = function (ctx) {
       'Gate rallies: the Guardian takes only a small share of damage until its champions fall.',
       'Mods like Armoured, Elemental Ward or Regenerating that the sheet does not count.',
       'Within 15% is a match. A much bigger gap on one skill usually means a rule the sim does not know yet: please use <b>Report a problem</b> or <b>Send a check report</b>.',
+    ]));
+    h += card('What real Guardian fights look like', list([
+      'The Ladder tab\'s top heroes come with a Guardian figure measured by the game: Guardian life ÷ fight time over the last day, all skills and all downtime included.',
+      'On 12 Nov 2026, 195 top-50 heroes across the public leagues had Guardian kills in that window. Their median kill took about <b>21 s</b>; the middle 80% took 13 to 43 s.',
+      'That is why the Damage tab\'s sheet number is higher than the measured one: the sheet is the main skill while it is hitting, the measured number also counts moving, dodging, other skills and the Guardian\'s breaks. For 167 heroes the sim\'s main-skill figure was a median of about 5 times their measured DPS, and the spread between skills is wide. Use it to compare builds, not as a kill timer.',
+      'Numbers, skills and the meta change with every patch, so treat these as one day\'s snapshot. Data: Broken Oath public API.',
     ]));
     h += card('How the sim is kept right', list([
       'It reads the game\'s own data files for skills, supports, items, the tree and monster rules.',

@@ -11,9 +11,9 @@
     'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json', 'Gameplay/monster_affixes.json', 'Gameplay/monsters.json', 'Gameplay/oath_masteries.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Read when the folder has them; an older game folder without them still loads.
-  const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json'];
+  const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json', 'Items/quality_stones.json', 'Gameplay/league_rules.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 27; // 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 28; // 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -244,6 +244,15 @@
     // ForgeRecipes = forge.json Recipes ids, ZoneFlags cube_rx_<id> = cube_recipes.json recipes, Pouch keys are
     // "<upside>.<tier>.<downside>" (e.g. hoard.4.life15) from sigils.json; omen_ / u_ upsides and disabled downsides left out.
     const SG = J('Rifts/sigils.json');
+    // Quality stones and custom league settings (quality_stones.json, league_rules.json; public API game data build 70):
+    // display only, FAQ tab. est: the developer's own estimate block ("_sim" in the file), shown as his, not as a rule.
+    let qualityStones = null, leagueRules = null;
+    try { const q = J('Items/quality_stones.json'); qualityStones = Object.assign(pick(q, ['FromAL', 'Normal', 'Magic', 'Rare', 'Guardian', 'WhetstoneShare', 'Step', 'Cap', 'Cog']), q._sim ? { est: q._sim } : {}); } catch (e) { /* older game files: none */ }
+    try {
+      const L = J('Gameplay/league_rules.json');
+      leagueRules = Object.assign(pick(L, ['MaxBans', 'DifficultyLifePerStep', 'DifficultyDamagePerStep', 'StarterDamageFloor', 'Protected']),
+        { Tabs: (L.Tabs || []).map(t => pick(t, ['Id', 'Name'])), Knobs: (L.Knobs || []).map(k => pick(k, ['Id', 'Tab', 'Kind', 'Min', 'Max', 'Step', 'Default', 'Name', 'Help'])) });
+    } catch (e) { /* older game files: none */ }
     const saveIds = { forgeRecipes: (J('Gameplay/forge.json').Recipes || []).map(r => r.Id), cubeRecipes: (J('Items/cube_recipes.json').recipes || []).map(r => r.Id),
       sigilUps: (SG.upsides || []).filter(u => !/^(omen_|u_)/.test(u.Id)).map(u => u.Id), sigilDowns: (SG.downsides || []).filter(d => d.bEnabled !== false).map(d => d.Id) };
 
@@ -268,7 +277,7 @@
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
       { skills, classes, supports, nodes, masteries, oaths, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, uniques, bases, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice });
+        affixes, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, OPTIONAL, SCHEMA };
@@ -5736,7 +5745,7 @@ window.BOFaq = function (ctx) {
   const { $, esc } = ctx;
   const GROUPS = [
     ['Game mechanics', [['ailments', 'Ailments'], ['multipliers', 'Damage Multipliers'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
-      ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep'], ['tundra', 'Tundra Desert']]],
+      ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep'], ['tundra', 'Tundra Desert'], ['items', 'Item Quality, Riven & Mythic'], ['leagues', 'Custom Leagues']]],
     ['About this site', [['sim', 'Sim vs the Game Panel'], ['data', 'Game Data & Patches'], ['privacy', 'Privacy']]],
   ];
   const ALL = GROUPS.flatMap(g => g[1]);
@@ -6245,6 +6254,66 @@ window.BOFaq = function (ctx) {
   }
 
   // ---------- About this site ----------
+  // Item quality, Riven mods and Mythic lines (GD.qualityStones from quality_stones.json; GD.affixes Kind from
+  // affixes_riven95.json / mythic_lines.json). Display only. The per-map figures are the developer's own estimate block
+  // in the file ("_sim"); they follow from the drop chances and his kill mix (149 x 0.36% + 28 x 1.2% + 9 x 3.6% + 0.6 = 1.8).
+  function items(GD) {
+    const Q = GD.qualityStones, AF = Object.values(GD.affixes || {}), SIM = window.BOSim || {};
+    const line = (a, t) => SIM.modText ? SIM.modText(GD, { stat: a.Mod.Stat, mode: a.Mod.Mode, tags: a.Mod.Tags || [], v: t.Max, v2: t.Max2 || 0 }).replace(/\+-/g, '-') : a.Id;
+    let h = intro('Item Quality, Riven & Mythic', 'Quality stones, and the two kinds of item lines above the normal tiers.');
+    if (Q) {
+      const E = Q.est || {}, S = Q.Step || {}, share = Q.WhetstoneShare || 0;
+      h += card('Quality stones', list([
+        'They drop from area level <b>' + Q.FromAL + '</b>. Chance per kill: normal monster ' + Math.round(Q.Normal * 10000) / 100 + '%, magic ' + pct(Q.Magic) + '%, rare ' + pct(Q.Rare) + '%, Guardian ' + pct(Q.Guardian) + '%.',
+        share ? 'About ' + pct(share) + '% of them are <b>Whetstones</b> (weapons), the rest <b>Rivets</b> (armour).' : '',
+        'One stone adds <b>' + S.Normal + '%</b> quality to a normal (white) item, ' + S.Magic + '% to a magic one, ' + S.Rare + '% to a rare and ' + S.Unique + '% to a unique. Stones stop at <b>' + Q.Cap + '%</b>.',
+        'So a white item needs ' + Math.ceil(Q.Cap / S.Normal) + ' stones to reach ' + Q.Cap + '%, a rare or unique ' + Math.ceil(Q.Cap / S.Rare) + '.',
+        'On a weapon, quality counts as increased physical damage of that weapon. The sim counts weapon quality only.',
+      ]));
+      if (E.stones_per_map && E.kill_mix_per_map) h += card('How long it takes', list([
+        'A map with about ' + E.kill_mix_per_map.white + ' normal, ' + E.kill_mix_per_map.magic + ' magic and ' + E.kill_mix_per_map.rare + ' rare kills and ' + E.kill_mix_per_map.guardian + ' Guardian gives about <b>' + r1(E.stones_per_map) + '</b> stones.',
+        'A white item to ' + Q.Cap + '%: about <b>' + r1(E.maps_white_to_20) + '</b> maps. A rare weapon: about <b>' + r1(E.maps_rare_weapon_to_20) + '</b> maps. Rare armour: about <b>' + r1(E.maps_rare_armour_to_20) + '</b> maps.',
+        Q.Cog && E.cogs_per_gnome_map ? '<b>Cogs</b> take quality past the stone cap. They drop at ' + pct(Q.Cog.Normal) + '% per normal kill, ' + pct(Q.Cog.Magic) + '% magic, ' + pct(Q.Cog.Rare) + '% rare, and a Guardian gives ' + Q.Cog.Guardian + '. The estimate is about ' + r1(E.cogs_per_gnome_map) + ' cogs a map and ' + r1(E.gnome_maps_20_to_30) + ' maps to go from 20% to 30%. The game data does not say which maps drop them (the estimate calls them gnome maps).' : '',
+      ]) + hint('These per-map figures are the developer\'s own estimate, stored in the game\'s data. They are not measured in play.'), 'the developer\'s estimate');
+    }
+    const riven = AF.filter(a => a.Kind === 'Riven'), mythic = AF.filter(a => a.Kind === 'Mythic');
+    if (riven.length) {
+      const ex = riven.find(a => /life_large/.test(a.Id)) || riven[0], twin = (GD.affixes || {})[ex.Id.toLowerCase().replace(/^riven95_/, '')];
+      h += card('Riven mods', list([
+        'There are <b>' + riven.length + '</b> Riven mods. Each is a stronger copy of a normal mod: same line, one tier above the best normal tier, item level ' + (ex.Tiers[0].ILvl || 84) + '.',
+        twin ? 'Example: ' + esc(line(ex, ex.Tiers[0]).replace(String(ex.Tiers[0].Max), ex.Tiers[0].Min + '–' + ex.Tiers[0].Max)) + ' as a Riven mod, against ' + twin.Tiers[0].Min + '–' + twin.Tiers[0].Max + ' at the best normal tier.' : '',
+        'A Riven mod takes the place of the normal mod of its kind: an item cannot have both.',
+        'The full list is in <b>Item Search</b>: choose Item mods and search for "riven". The Build Planner offers them on every item their normal mod can roll on.',
+      ]) + hint('Where they roll is worked out, not written in the game data: each Riven mod matches one normal mod, and top ladder builds wear them on the same item types.'));
+    }
+    if (mythic.length) h += card('Mythic lines', hint('The game data lists these ' + mythic.length + ' lines but not which items carry them. The sim counts one when a build has it.') +
+      table(['Name', 'Line'], mythic.map(a => ['<b>' + esc(a.Tiers[0].Name || a.Id) + '</b>', esc(line(a, a.Tiers[0]))])));
+    if (!Q && !riven.length && !mythic.length) h += card('No data', hint('This game data has no quality, Riven or Mythic tables.'));
+    return h;
+  }
+
+  // Custom league settings (GD.leagueRules from league_rules.json). Display only: names and help texts are the game's own.
+  function leagues(GD) {
+    const L = GD.leagueRules;
+    let h = intro('Custom Leagues', 'What a custom league can change, and by how much.');
+    if (!L) return h + card('No data', hint('This game data has no league settings.'));
+    const P = L.Protected || {};
+    h += card('Limits', list([
+      L.MaxBans ? 'A league can ban up to <b>' + L.MaxBans + '</b> things in all (skill gems, supports, reds, item mods).' : '',
+      P.Gems ? 'Starter and tutorial skill gems cannot be banned; neither can tutorial supports.' : '',
+      L.StarterDamageFloor ? 'A starter skill keeps at least <b>' + pct(L.StarterDamageFloor) + '%</b> of its damage, whatever the league sets.' : '',
+      L.DifficultyLifePerStep ? 'Each <b>Monster strength</b> step gives monsters ' + pct(L.DifficultyLifePerStep) + '% more life and ' + pct(L.DifficultyDamagePerStep) + '% more damage.' : '',
+      'The sim and the Ladder tab use the normal rules. A custom league\'s changes are not applied to your numbers here.',
+    ]));
+    const x = v => '×' + v, range = k => k.Kind === 'ban' ? 'a list' : k.Kind === 'toggle' ? 'on or off' : k.Kind === 'count' ? k.Min + ' to ' + (k.Max > 0 ? '+' : '') + k.Max : k.Max > 3 ? k.Min + ' to ' + k.Max : x(k.Min) + ' to ' + x(k.Max);
+    const normal = k => k.Kind === 'ban' ? 'none' : k.Kind === 'toggle' ? (k.Default ? 'on' : 'off') : k.Kind === 'scale_each' ? '×1' : k.Kind === 'count' || k.Max > 3 ? String(k.Default) : x(k.Default);
+    for (const t of L.Tabs || []) {
+      const ks = (L.Knobs || []).filter(k => k.Tab === t.Id); if (!ks.length) continue;
+      h += card(esc(t.Name), table(['Setting', 'Range', 'Step', 'Normal', 'What it does'], ks.map(k => ['<b>' + esc(k.Name) + '</b>' + (k.Kind === 'scale_each' ? ' <span class="meta">per item</span>' : ''), range(k), k.Step != null ? String(k.Step) : '', normal(k), esc(k.Help || '')])));
+    }
+    return h;
+  }
+
   function sim() {
     let h = intro('Sim vs the Game Panel', 'Why the numbers on the Damage tab can differ from the in-game skill panel, and from your real kills.');
     h += card('Three different numbers', list([
@@ -6266,7 +6335,7 @@ window.BOFaq = function (ctx) {
       'Numbers, skills and the meta change with every patch, so treat these as one day\'s snapshot. Data: Broken Oath public API.',
     ]));
     h += card('How the sim is kept right', list([
-      'It reads the game\'s own data files for skills, supports, items, the tree and monster rules.',
+      'It reads the game\'s own data files (from the Broken Oath public API) for skills, supports, items, the tree and monster rules.',
       'Rules the files do not hold come from the game log, in-game tooltips or the developer\'s patch notes, and only change with that kind of evidence.',
       'Some values are estimates and are marked on the page, for example skill levels past gem level 25.',
       'Minions get their own sheet: summon gems show the minion\'s hit, not yours.',
@@ -6277,11 +6346,13 @@ window.BOFaq = function (ctx) {
     const built = GD && (GD.apiBuild ? 'game build ' + GD.apiBuild : GD.steamBuild ? 'Steam build ' + GD.steamBuild : '') + (GD && (GD.filesAt || GD.builtAt) ? ' (' + String(GD.filesAt || GD.builtAt).slice(0, 10) + ')' : '');
     let h = intro('Game Data & Patches', 'Where the numbers come from and how fast the site follows a game patch.');
     h += card('Where the numbers come from', list([
-      'Skills, supports, items, the passive tree and monster rules are read from the game\'s own Data folder (Steam).',
+      'Skills, supports, items, the passive tree and monster rules come from the game\'s own data files, as the developer publishes them in the Broken Oath public API.',
+      'A few things the API does not publish (Guardian fight rules, the Rupture map, forge recipes, animation speeds) are from the game files of 12 Nov 2026 and stay as they were then.',
+      'Where the game log shows the game using another number than its data, the sim follows the log. Example: some unique lines are scaled when the game loads them.',
       built ? 'This page uses: <b>' + esc(built) + '</b>. On a computer the same line is near the bottom of the side menu, under the light/dark and report buttons.' : '',
     ]));
     h += card('After a game patch', list([
-      'The site checks for a new Steam build every 15 minutes and updates its numbers by itself.',
+      'The site asks the public API for new game data every 15 to 30 minutes and updates its numbers by itself once the developer has published a patch\'s data there.',
       'New things (a new skill, tree changes, a new mechanic) need code changes. Those come after the patch notes are read, so they can take a little longer.',
     ]));
     return h;
@@ -6302,7 +6373,7 @@ window.BOFaq = function (ctx) {
     return h;
   }
 
-  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, tundra, sim, data, privacy };
+  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, tundra, items, leagues, sim, data, privacy };
   function show() {
     const nav = $('#faqNav'), GD = ctx.gd() || {};
     nav.innerHTML = GROUPS.map(g => '<div class="faq-group"><span class="faq-group-label">' + g[0] + '</span><div class="sc-chips">' +

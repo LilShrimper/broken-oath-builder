@@ -24,7 +24,7 @@
     const SKILL_KEYS = ['Id', 'Name', 'Kind', 'Attribute', 'Description', 'Tags', 'Delivery', 'DamageType', 'Family', 'Effectiveness',
       'EffectivenessLate', 'EffectivenessLateFrom', 'EffectivenessLateAt', 'EffectivenessEarly', 'EffectivenessEarlyHold', 'EffectivenessEarlyFull',
       'SpellMin', 'SpellMax', 'SpellGrowth', 'CastTime', 'ActionSpeed', 'ManaCost', 'Cooldown', 'CooldownLate', 'CooldownLateAt', 'MinCooldown',
-      'WeaponKinds', 'Projectiles', 'ProjectilesAtLevels', 'Chains', 'Pierce', 'Strikes', 'WaveCount', 'ConvertShare', 'LifeAsBase', 'bBothHands', 'bReturnFlight'];
+      'WeaponKinds', 'Projectiles', 'ProjectilesAtLevels', 'Chains', 'Pierce', 'Strikes', 'WaveCount', 'ConvertShare', 'LifeAsBase', 'bBothHands', 'bReturnFlight', 'Requires'];
     const skills = {};
     for (const s of skillsArr) {
       const o = pick(s, SKILL_KEYS);
@@ -40,6 +40,9 @@
       if (s.Orbit) o.Orbit = typeof s.Orbit === 'object' ? pick(s.Orbit, ['Count', 'CountPerLevels', 'Max', 'AngularSpeed', 'SweepPeriod', 'HitInterval', 'RingSplitAt', 'EmpowerSpeed']) : true;
       skills[s.Id.toLowerCase()] = Object.assign(skills[s.Id.toLowerCase()] || {}, o);
     }
+
+    // Which classes a gem is at home in (gem_homes.json): any other class is asked more of its attribute (sim.js gemPlayLevel).
+    try { for (const h of J('Gameplay/gem_homes.json').homes || []) { const k = skills[String(h.Id).toLowerCase()]; if (k) k.HomeClasses = h.HomeClasses || []; } } catch (e) { /* older game data has no gem_homes.json */ }
 
     const classes = {}, classAnims = {};
     for (const c of [...J('Gameplay/classes.json').classes, ...parts('classes.json').flatMap(p => p.classes)]) {
@@ -7799,6 +7802,13 @@ window.BOCharacter = function (ctx) {
     // Gem level. Weapon and basic skills follow the hero (CharLevelForGemLevel).
     let own = o.gemLevel || ch.gemLevels[skillId];
     if (!own) { const t = G.CharLevelForGemLevel || []; own = 1; for (let i = 0; i < t.length; i++) if (ch.level >= t[i]) own = i + 1; }
+    // A gem plays at the highest level your attributes meet (gemPlayLevel below).
+    const play = gemPlayLevel(GD, sk, ch, attr, own);
+    if (play && play.level < own) {
+      res.notes.push(sk.Name + ' plays at gem level ' + play.level + ', not ' + own + ': level ' + (play.level + 1) + ' needs ' + play.need + ' ' + play.attr + ' (you have ' + play.have + ')' + (play.offClass ? '. A skill of another class asks more.' : '.'));
+      res.gemPlay = { level: play.level, own, attr: play.attr, need: play.need, have: play.have, offClass: play.offClass };
+      own = play.level;
+    }
     let bonus = 0;
     for (const m of mods) if (m.stat === 'SkillLevel' && m.mode === 'Flat') {
       const { types, conds } = splitTags(m.tags);
@@ -7873,7 +7883,9 @@ window.BOCharacter = function (ctx) {
       // Pyre of Faith (LifeAsBase 0.75): "damage that grows with your maximum life". Owner's tooltip, 10 Nov 2026
       // (gem 5, 3429 max life): Fire 12,315 to 13,921. 0.75% of 3429 = 25.72 added to the base 5.412-9.471:
       // (5.412+25.72) x 395.6 = 12,315 and (9.471+25.72) x 395.6 = 13,921, the same multiplier at both ends.
-      // Assumed: the life share is levelled like the flat base (the min/max ratio cannot tell).
+      // The life share is levelled like the flat base, and it is the full maximum life (life a Vow reserves under Blood Magic
+      // still counts). Owner's tooltip, 12 Nov 2026 (Wartest, gem 20, life 3,151, both Vows reserving 45%): Fire 10,057 to 11,463
+      // = (5.412 + 23.62) x 346.4 and (9.471 + 23.62) x 346.4; 23.62 = 0.75% of 3,150.
       let spellLife = 0;
       if (sk.LifeAsBase) {
         res.heroLife = heroMaxLife(GD, ch, mods, attr);
@@ -8030,7 +8042,14 @@ window.BOCharacter = function (ctx) {
     const scaled = {}; const scaleInfo = {};
     const early = earlyDamage(cls, ch.level);
     const spellLike = ctx.isSpell || spellblade;
-    const intSpell = spellLike ? per10('Int', 'IntSpellDamagePer10') : 0;
+    // The spell's "2% increased per 10" comes from the GEM's attribute: a Strength gem's spell (Pyre of Faith, Judgement,
+    // Orbiting Hammers, Consecrated Ground) reads Strength, an Intelligence gem's reads Intelligence. Owner's tooltips,
+    // 12 Nov 2026, one Warrior (Str 405, Int 78), gem bases x 1.19^(level - 1) x effectiveness:
+    //   Pyre of Faith gem 20: Fire 10,057 to 11,463 = (base + 0.75% of 3,150 life) x 191.3 x 1.810 (Str: 1 + 405 x 0.2%)
+    //   Ember Bolt playing at gem 9: Fire 215 to 347 = 186.1 to 300.6 x 1.155 (Int: 1 + 78 x 0.2%)
+    // Before this every spell read Intelligence, which left that pyre 37% short. Dexterity gems are not checked: they keep Int.
+    const spellAttr = sk.Attribute === 'Str' && ctx.isSpell ? 'Str' : 'Int';
+    const intSpell = spellLike ? per10(spellAttr, 'IntSpellDamagePer10') : 0;
     // Boundless Mind: "Every 10 Intelligence also gives you 1% more Spell damage" (Spellblade carries it to
     // attacks: see above; with 501 Int it is x1.50 and the Signet test needs it).
     let intMore = 1;
@@ -8163,9 +8182,16 @@ window.BOCharacter = function (ctx) {
     // Speed cap: a clip plays at most ActionRateMax (4x) its own speed, so each skill has a shortest use
     // time; past it more speed adds nothing (game tooltip "2.86 (speed cap)"). Clip lengths are not in the
     // data files, so only floors measured in the game are known (CLIP_FLOOR).
+    let speedOverK = 1;
     const floor = (CLIP_FLOOR[lc(ch.classId)] || {})[skillId];
     if (floor && !(sk.Channel && sk.Channel.Tick) && useTime < floor) {
       res.notes.push('Speed cap: ' + skillId.replace(/_/g, ' ') + ' can\'t be used faster than once per ' + floor + ' s (' + (1 / floor).toFixed(2) + ' a second; the game\'s animation plays at most ' + (H.ActionRateMax || 4) + 'x its speed). You have ' + usesPerSec.toFixed(2) + ' a second of speed, so more attack speed adds nothing to this skill.');
+      // Speed past the cap is not lost: it becomes damage, x (speed / cap)^0.5. Game log 12 Nov 2026: "AsOver90: on, pow 0.50",
+      // "split_shot speed past the cap x1.253 -> damage x1.119", "arcane_bolt ... x1.324 -> damage x1.151",
+      // "thousand_sparks ... x1.085 -> damage x1.042". On the owner's test Ranger it closes the panel DPS (10,169) with Base Grade.
+      const over = usesPerSec * floor, overK = Math.sqrt(over);
+      speedOverK = overK; res.speedOver = { over, damage: overK };
+      res.notes[res.notes.length - 1] = res.notes[res.notes.length - 1].replace('so more attack speed adds nothing to this skill.', 'and the speed past the cap becomes damage: x' + overK.toFixed(3) + ' (the square root of the overshoot; game log, 12 Nov 2026).');
       usesPerSec = 1 / floor; useTime = floor; res.speedCapped = true;
     }
     const animUses = animOn ? usesPerSec : null;
@@ -8675,7 +8701,7 @@ window.BOCharacter = function (ctx) {
 
     // ----- the hit -----
     const hit = {}; let hitAvg = 0;
-    for (const d of Object.keys(scaled)) { const a = scaled[d][0] * hitFactor, b = scaled[d][1] * hitFactor; hit[d] = { min: a, max: b, avg: (a + b) / 2 }; hitAvg += hit[d].avg; }
+    for (const d of Object.keys(scaled)) { const a = scaled[d][0] * hitFactor * speedOverK, b = scaled[d][1] * hitFactor * speedOverK; hit[d] = { min: a, max: b, avg: (a + b) / 2 }; hitAvg += hit[d].avg; }
     res.hit = hit;
     res.hitAvg = hitAvg; res.hitAvgCrit = hitAvg * critFactor;
     res.sheetHitDps = hitAvg * critFactor * hitsPerSec * perHitFactor;
@@ -8900,7 +8926,12 @@ window.BOCharacter = function (ctx) {
         let burning = uptime;
         if (stacks > 1) { burning = 0; let p = Math.exp(-mu), cum = 0; for (let k = 0; k < stacks; k++) { cum += p; burning += 1 - cum; p *= mu / (k + 1); } }
         igniteDps = dps1 * burning * dotTakenFor('Fire');
-        ail.ignite = { chance: igChance, dps1, uptime, duration: dur, dps: igniteDps, stacks, burning };
+        // The game's skill panel counts the Ignite by plain arithmetic: ignites a second x duration burning at once (at most the
+        // slots), not the chance that one is burning. Owner's Pyre of Faith tooltip, 12 Nov 2026 (2 ticks a second, 6% a hit,
+        // 4.31 s): "Ignite 2,421 a second ... Includes 1,333 ignite a second on one enemy: about 0.5 burning at your hit rate";
+        // 2 x 0.06 x 4.312 = 0.517 burning, and 2,421 x crit 1.064 x 0.517 = 1,333. Total 24,225 = hit 10,760 x 1.064 x 2 + 1,333.
+        // The vs-enemy DPS keeps the chance-based figure (only the strongest Ignite burns).
+        ail.ignite = { chance: igChance, dps1, uptime, duration: dur, dps: igniteDps, stacks, burning, panelBurning: Math.min(stacks, mu) };
         if (stacks > 1) res.notes.push('Ignites stack: up to ' + stacks + ' burn at once, ' + burning.toFixed(2) + ' on average (from how often you ignite in ' + (+dur.toFixed(2)) + ' s). Not checked against the game yet.');
         // Backdraft (ascended Pyromancer): "your Fire hits on Ignited enemies are always critical strikes, at 80% of
         // your critical bonus". Log 9 Nov 2026 17:09-17:11: 11 lines "AscB72: Backdraft-crit <skill> on <monster>: ...
@@ -9020,7 +9051,7 @@ window.BOCharacter = function (ctx) {
     }
     res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
     // What the in-game skill panel shows: hits + ailments to one enemy, before its resistances and curses.
-    res.panelDps = res.sheetHitDps * (1 + (hit.Physical ? hit.Physical.avg / (hitAvg || 1) : 0) * maimPct / 100) +(ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * ail.ignite.burning : 0) + (ail.bleed ? ail.bleed.dps1 * ail.bleed.uptime : 0);
+    res.panelDps = res.sheetHitDps * (1 + (hit.Physical ? hit.Physical.avg / (hitAvg || 1) : 0) * maimPct / 100) +(ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * ail.ignite.panelBurning : 0) + (ail.bleed ? ail.bleed.dps1 * ail.bleed.uptime : 0);
     // ----- Life Leech's "more damage while leeching" and Stormfrost's Lightning against the Chilled -----
     // Support texts (game data, Steam build 26595060, read 11 Nov 2026; from the data file / gem text, not yet checked against a tooltip or log): Life Leech "deals 15% more damage while you are leeching (below full
     // life)"; Stormfrost "its Lightning damage is 15% more against Chilled or Frozen enemies". Life Leech is counted as on (in a fight you are rarely at
@@ -9489,7 +9520,10 @@ window.BOCharacter = function (ctx) {
       if (m.stat === 'Life') { if (m.mode === 'Flat') flat += m.v; else if (m.mode === 'Inc') inc += m.v; else if (m.mode === 'More') more *= 1 + m.v / 100; }
       else if (m.stat === 'DexLife' && m.mode === 'Flat') flat += m.v * (attr.Dex || 0) / 10;
     }
-    const base = (H.LifeBase || 130) + (H.LifePerLevel || 11.5) * ch.level + (H.LifePerStr || 0.5) * (attr.Str || 0) + flat;
+    // Life per level counts from level 2 (level - 1), like the attributes. Character panel, 12 Nov 2026: Wartest (Warrior 100,
+    // Str 405, +773 flat, 8% increased, Blood Magic 30% more) shows 3,151 = (130 + 11.5 x 99 + 202.5 + 773) x 1.08 x 1.30; Nectest
+    // (Necromancer 100) shows 1,738, the sheet 1,737.6. With x level both ran 0.5% over.
+    const base = (H.LifeBase || 130) + (H.LifePerLevel || 11.5) * Math.max(0, (ch.level || 1) - 1) + (H.LifePerStr || 0.5) * (attr.Str || 0) + flat;
     return base * Math.max(0, 1 + inc / 100) * more;
   }
   // Estimated Armour, Evasion, Energy Shield, Life or Block chance for the 0.56.5 defence engine. Armour / Evasion / ES:
@@ -9499,10 +9533,39 @@ window.BOCharacter = function (ctx) {
   // Armour checked against the game log 11 Nov 2026 (below); Evasion, ES and Block follow the same method.
   // Base Grade (saves: BaseGrade95, 1-100; 0 or missing = an item from before grades, plain base). The game shows it as
   // "Base Grade: 45, 97% of the base" and it scales the item's base Armour / Evasion / Energy Shield before its own lines.
-  // Not in the data files: 0.85 + 0.40 x (grade / 100)^1.5 fits every reading so far. Tooltips, 11 Nov 2026: grade 9 = 86%
+  // Not in the data files (the log only says "Grade95: on (new drops roll a Base Grade, 85% to 125% of the base)"):
+  // 0.85 + 0.40 x (grade / 100)^1.5 fits every reading so far, also the log's drops of 12 Nov 2026 (grade 4 = 85%, 19 = 88%,
+  // 28 = 91%, 47 = 98%, 62 = 105%, 86 = 117%, 96 = 123%). Tooltips, 11 Nov 2026: grade 9 = 86%
   // (86.1), 45 = 97% (97.1), 80 = 114% (113.6); Rangtest's Evasion hover, 12 Nov 2026: four grade-77 pieces add up to
-  // 4,258 = 112.0% of their bases (112.0). Only checked on armour pieces; weapons are left alone.
+  // 4,258 = 112.0% of their bases (112.0). Weapons: see weaponStats.
   const gradeMult = g => g > 0 ? 0.85 + 0.40 * Math.pow(Math.min(100, g) / 100, 1.5) : 1;
+  // The level a skill gem plays at. Each gem level asks (ReqBase + ReqPerCharLevel x (CharLevelForGemLevel - ReqLevelOffset))
+  // of the gem's attribute (x its Requires weights), and a gem outside the hero's class (gem_homes.json) asks OffClassReqFloor
+  // more, a movement gem OffClassMoveReqFloor. "A gem never switches off: it plays at the highest level your attributes meet"
+  // (the game's Guide). Formula and numbers: scaling.json Gem._ReqDoc / _OffClassDoc. Owner's tooltips, 12 Nov 2026, a
+  // Warrior with level 20 gems of other classes:
+  //   Ember Bolt   Int 78: "Plays at level 9: level 10 needs 83 Int";  Int 120: level 14, 15 needs 128;  Int 170: level 19, 20 needs 180
+  //   Shuriken Fan Dex 149: level 17, 18 needs 155;  Dex 131: level 15, 16 needs 137
+  //   Flame Dash   Int 170: level 17, 18 needs 171;  Int 120: level 12, 13 needs 126   (movement: +40)
+  // and the hit follows the played level (Ember Bolt 215-347 at 9, 533-860 at 14, 1,296-2,093 at 19). Not seen: a gem of the
+  // hero's own class held back (taken as the same curve without the extra), and split Requires weights (taken from the doc).
+  function gemPlayLevel(GD, sk, ch, attr, own) {
+    const G = GD.scaling.Gem || {}, CL = G.CharLevelForGemLevel || [];
+    if (!sk || sk.Kind !== 'Gem' || !CL.length || !(own > 1)) return null;
+    const homes = sk.HomeClasses; if (!homes) return null; // game data without gem_homes.json: no rule
+    const offClass = !homes.some(c => lc(c) === lc(ch.classId));
+    const move = (sk.Tags || []).includes('Movement');
+    const floor = offClass ? (move ? (G.OffClassMoveReqFloor || 0) : (G.OffClassReqFloor || 0)) : 0;
+    const weights = sk.Requires && Object.keys(sk.Requires).length ? sk.Requires : { [sk.Attribute || 'Int']: 100 };
+    const need = (L, w) => { const v = ((G.ReqBase || 0) + (G.ReqPerCharLevel || 0) * ((CL[Math.min(L, CL.length) - 1] || 1) - (G.ReqLevelOffset || 0)) + floor) * w / 100; return v < (G.ReqMinimum || 0) ? 0 : v; };
+    let level = 1, short = null;
+    for (let L = 2; L <= own; L++) {
+      const miss = Object.entries(weights).find(([a, w]) => need(L, w) > (attr[a] || 0));
+      if (miss) { short = { attr: miss[0], need: Math.round(need(L, miss[1])), have: attr[miss[0]] || 0 }; break; }
+      level = L;
+    }
+    return short ? Object.assign({ level, offClass }, short) : { level: own, offClass };
+  }
   const noEvasion = mods => mods.some(m => m.stat === 'Keystone' && m.mode === 'Flag' && (m.tags || []).includes('NoEvasion'));
   function defenceTotal(GD, ch, mods, attr, stat) {
     const H = GD.scaling.Hero || {};
@@ -9570,7 +9633,10 @@ window.BOCharacter = function (ctx) {
     // hits 3.5% over the sheet without it, (1 + 1.83) / (1 + 1.73) = 1.037; a plain quality-0 bow matches.
     physInc += item.quality || 0;
     const xb = extraBase || 0;
-    dmg.Physical = [(base.DamageMin + xb + added.Physical[0]) * (1 + physInc / 100), (base.DamageMax + xb + added.Physical[1]) * (1 + physInc / 100)];
+    // Base Grade scales the weapon's base damage too (gradeMult below). Game log 12 Nov 2026: "Src95: Staff_15 'Physical Damage
+    // from: base 33-63 · Grade 91%'"; the owner's test Ranger's bow (grade 77 = 112%) needs it to reach the panel DPS.
+    const gm = gradeMult(item.grade);
+    dmg.Physical = [(base.DamageMin * gm + xb + added.Physical[0]) * (1 + physInc / 100), (base.DamageMax * gm + xb + added.Physical[1]) * (1 + physInc / 100)];
     for (const d of DT) if (d !== 'Physical') dmg[d] = added[d];
     return { name: base.Name, dmg, aps: (base.AttacksPerSecond || 1) * (1 + asInc / 100), crit: (base.Crit || GD.scaling.Hero.CritBase) * (1 + critInc / 100), physInc, isStaff: lc(base.Class) === 'staff' };
   }
@@ -9863,7 +9929,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { minionLevelFactor, minionLevelK, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare,cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  const api = { gemPlayLevel, minionLevelFactor, minionLevelK, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare,cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

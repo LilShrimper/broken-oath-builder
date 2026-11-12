@@ -875,7 +875,10 @@
       if (!nodes[l]) continue;
       (adj[n.Id] = adj[n.Id] || []).push(l); (adj[l] = adj[l] || []).push(n.Id);
     }
-    const walkable = id => { const n = nodes[id]; return !!n && n.Kind !== 'Start'; };
+    // cfg.ban: node ids the user marked "never take". They are never pathed through or picked, and a taken one is dropped
+    // (its point is spent again). A page feature: the damage model is untouched.
+    const ban = new Set((cfg.ban || []).map(realId));
+    const walkable = id => { const n = nodes[id]; return !!n && n.Kind !== 'Start' && !ban.has(id); };
     const altarOf = id => (nodes[id] || {}).Choice || null;
     const otherAtAltar = (set, id) => { const a = altarOf(id); if (!a) return null; for (const x of set) if (x !== id && altarOf(x) === a) return x; return null; };
 
@@ -894,8 +897,9 @@
         if (c && cfg.conduitMargin > 0 && c.ticks === 1 && c.tick < c.interval * (1 + cfg.conduitMargin)) v *= 0.5;
       return v;
     };
-    const have = new Set((ch.passives || []).map(realId).filter(id => walkable(id)));
-    const budget = have.size + Math.max(0, cfg.extraPoints | 0); // cfg.extraPoints: unspent points to plan too
+    const taken = new Set((ch.passives || []).map(realId).filter(id => nodes[id] && nodes[id].Kind !== 'Start'));
+    const have = new Set([...taken].filter(id => walkable(id)));
+    const budget = taken.size + Math.max(0, cfg.extraPoints | 0); // cfg.extraPoints: unspent points to plan too
     const haveList = [...have].sort();
     for (const g of goals) g.base = dpsOf(g, haveList);
     const dropped = goals.filter(g => !(g.base > 0)).map(g => g.id);
@@ -10065,6 +10069,7 @@ window.BOStartApp = function () {
     st.enemyLevel = null; $('#enemyLevel').value = ''; $('#enemyLevel').placeholder = ch.level;
     // The Damage tab's "Also count" and the optimizer's are one setting (st.optW, a weight per skill).
     // An older page kept the Damage tab's list apart ('combo:'): moved in once, at weight 1.
+    st.ban = new Set(store.get('ban:' + ch.id, []) || []);
     st.optW = store.get('optw:' + ch.id, null);
     if (!st.optW) { st.optW = {}; for (const id of store.get('combo:' + ch.id, []) || []) st.optW[id] = 1; store.set('optw:' + ch.id, st.optW); }
     st.combo = [];
@@ -10800,7 +10805,8 @@ window.BOStartApp = function () {
         keepDefence: $('#optKeepDef').checked,
         allowKeystones: $('#optKeys').checked,
         conduitMargin: 0.01,
-        extraPoints: free
+        extraPoints: free,
+        ban: [...(st.ban || [])]
       });
     }
     catch (error) {
@@ -11759,6 +11765,22 @@ window.BOStartApp = function () {
   const startNode = () => 'start_' + String(st.ch.classId).toLowerCase();
   const blocked = id => { const n = GD.nodes[id]; return !n || (n.Kind === 'Start' && id !== startNode()); };
   const allocSet = () => new Set(st.ch.passives.map(realId).filter(id => GD.nodes[id]));
+  // "Never take" marks (right-click a node, or the button in the touch panel): a marked node is not pathed through, gets no
+  // DPS value, and Optimize / Plan never pick it. Kept per character in the browser. A page feature only: no game rule.
+  const banned = id => !!(st.ban && st.ban.has(id));
+  const banStoreKey = () => 'ban:' + (st.chOrig || st.ch).id;
+  function toggleBan(id) {
+    const n = GD.nodes[id]; if (!st.ch || !n || n.Kind === 'Start') return;
+    if (!st.ban) st.ban = new Set();
+    const on = !st.ban.has(id), have = allocSet();
+    if (on) st.ban.add(id); else st.ban.delete(id);
+    store.set(banStoreKey(), [...st.ban]);
+    clearOpt(); T.scores = new Map();
+    let gone = 0;
+    if (on && have.has(id)) { const r = new Set(refundList(have, id)); gone = r.size; setPassives([...have].filter(x => !r.has(x))); }
+    else { paintTree(); scoreSoon(); if (T.sel === id) showSheet(id); }
+    $('#treeStatus').textContent = on ? n.Name + ' is marked never take' + (gone ? ' (refunded' + (gone > 1 ? ' with ' + (gone - 1) + ' node' + (gone > 2 ? 's' : '') + ' behind it' : '') + ')' : '') + ': Optimize, Plan and the node values skip it. Right-click it again to allow it.' : n.Name + ' can be taken again.';
+  }
   // Choice nodes sit at an altar (node.Choice): you keep one of its options.
   const altarOf = id => (GD.nodes[id] || {}).Choice || null;
   function altarTaken(have, id) { const a = altarOf(id); if (!a) return null; for (const x of have) if (x !== id && altarOf(x) === a) return x; return null; }
@@ -11769,7 +11791,7 @@ window.BOStartApp = function () {
     const prev = {}, seen = new Set([s0, ...have]), q = [s0, ...have];
     for (let i = 0; i < q.length; i++) {
       const u = q[i]; if (u === target) break;
-      for (const v of adj[u] || []) if (!seen.has(v) && !blocked(v) && !(v !== target && altarTaken(have, v))) { seen.add(v); prev[v] = u; q.push(v); }
+      for (const v of adj[u] || []) if (!seen.has(v) && !blocked(v) && !banned(v) && !(v !== target && altarTaken(have, v))) { seen.add(v); prev[v] = u; q.push(v); }
     }
     if (!seen.has(target)) return null;
     const path = []; let x = target; while (!have.has(x) && x !== s0) { path.unshift(x); x = prev[x]; }
@@ -12134,7 +12156,7 @@ window.BOStartApp = function () {
   function paintTree() {
     if (!T.built) return;
     const have = allocSet(), s0 = startNode(), adj = treeAdj();
-    const next = new Set(); for (const id of [s0, ...have]) for (const v of adj[id] || []) if (!have.has(v) && !blocked(v)) next.add(v);
+    const next = new Set(); for (const id of [s0, ...have]) for (const v of adj[id] || []) if (!have.has(v) && !blocked(v) && !banned(v)) next.add(v);
     const q = ($('#treeSearch').value || '').trim().toLowerCase();
     const heat = $('#treeHeat').checked;
     let best = 0; for (const [id, s] of T.scores) if (!have.has(id) && perPt(s) > best) best = perPt(s);
@@ -12143,7 +12165,7 @@ window.BOStartApp = function () {
     const oa = T.opt && T.opt.addSet || new Set(), orm = T.opt && T.opt.remSet || new Set();
     for (const c of $('#treeSvg').querySelectorAll('circle.tn')) {
       const id = c.dataset.id, n = GD.nodes[id], on = have.has(id) || id === s0;
-      c.classList.toggle('alloc', on); c.classList.toggle('next', !on && next.has(id));
+      c.classList.toggle('alloc', on); c.classList.toggle('next', !on && next.has(id)); c.classList.toggle('ban', banned(id));
       const ic = T.icons && T.icons.get(id);
       if (ic) { const want = on || oa.has(id) ? ic.key : dimKey(ic.key); if (ic.cur !== want) { ic.el.setAttribute('viewBox', iconBox(want)); ic.cur = want; } }
       c.classList.toggle('opt-add', oa.has(id)); c.classList.toggle('opt-rem', orm.has(id));
@@ -12180,6 +12202,15 @@ window.BOStartApp = function () {
     }
     const order = pickOrder();
     for (const b of $('#treeSvg').querySelectorAll('text.tnum')) { const k = order.get(b.dataset.id); b.textContent = k || ''; b.style.display = k ? 'block' : 'none'; }
+    const bc = $('#treeBanClear'), nb = st.ban ? st.ban.size : 0; bc.hidden = !nb; bc.textContent = 'Never take: ' + nb + ' · clear';
+    // A red cross over every node marked never take (drawn on top; clicks pass through to the node).
+    let bg = $('#treeSvg').querySelector('#treeBans');
+    if (!bg) { bg = document.createElementNS('http://www.w3.org/2000/svg', 'g'); bg.id = 'treeBans'; $('#treeSvg').appendChild(bg); }
+    bg.innerHTML = [...(st.ban || [])].map(id => {
+      const c = $('#treeSvg').querySelector('circle.tn[data-id="' + id + '"]'); if (!c) return '';
+      const x = +c.getAttribute('cx'), y = +c.getAttribute('cy'), r = (+c.getAttribute('r') || 20) * 0.8;
+      return '<path class="tban" d="M' + (x - r) + ' ' + (y - r) + 'L' + (x + r) + ' ' + (y + r) + 'M' + (x - r) + ' ' + (y + r) + 'L' + (x + r) + ' ' + (y - r) + '"/>';
+    }).join('');
     const saved = (st.chOrig.passives || []).length;
     const free = S.freePoints(GD, st.chOrig || st.ch);
     $('#treePoints').textContent = have.size + ' points taken' + (have.size !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level + (free ? ' · ' + free + ' free' : '') + (sw.size ? ' · ' + sw.size + ' Oath' + (sw.size > 1 ? 's' : '') + ' sworn' : '');
@@ -12205,7 +12236,8 @@ window.BOStartApp = function () {
     const have = allocSet(), on = have.has(id), s = T.scores.get(id);
     // No damage skill picked: no DPS score is coming, so drop the "scoring…" line.
     $('#treeSheetBody').innerHTML = tipHtml(id).replace(/<div class="tk">Click to (?:refund|take) · scoring…<\/div>/, st.skill ? '<div class="tk">Scoring…</div>' : '');
-    const pl = !on && n.Kind !== 'Start' && !blocked(id) ? planTake(have, id) : null, cost = s ? s.cost : pl && pl.cost;
+    const pl = !on && n.Kind !== 'Start' && !blocked(id) && !banned(id) ? planTake(have, id) : null, cost = s ? s.cost : pl && pl.cost;
+    const bb = $('#treeSheetBan'); bb.hidden = n.Kind === 'Start'; bb.textContent = banned(id) ? 'Allow again' : 'Never take';
     const act = $('#treeSheetAct');
     act.hidden = !on && !pl;
     act.textContent = on ? 'Refund' : s && s.swapped ? 'Swap' : cost > 1 ? 'Take (' + cost + ' points)' : 'Take';
@@ -12313,6 +12345,7 @@ window.BOStartApp = function () {
     if (n.Text && (n.Kind === 'Keystone' || n.Kind === 'Notable' || n.Kind === 'Socket') && n.Text !== lines.join(' ')) h += '<div>' + esc(n.Text) + '</div>';
     if (n.Price) h += '<div class="gain down">' + esc(n.Price) + '</div>';
     if (n.Kind === 'Start') return h;
+    if (banned(id) && !on) return h + '<div class="gain down">Marked never take: Optimize, Plan and the node values skip it.</div><div class="tk tk-ban">Right-click to allow it again</div>';
     const s = T.scores.get(id);
     const skillName = optLabel() + (optExtra().length ? ' weighted' : '');
     if (s) {
@@ -12323,6 +12356,7 @@ window.BOStartApp = function () {
     } else h += '<div class="tk">' + (on ? 'Click to refund' : 'Click to take') + ' · scoring…</div>';
     const unc = [n, s && s.swapped ? GD.nodes[s.swapped] : null].filter(Boolean).flatMap(uncounted);
     if (unc.length) h += '<div class="tk" style="margin-top:5px">Not in the DPS number: ' + esc(unc.join(' · ')) + '</div>';
+    h += '<div class="tk tk-ban">Right-click: never take</div>';
     return h;
   }
 
@@ -12339,7 +12373,7 @@ window.BOStartApp = function () {
     const wSum = 1 + more.reduce((a, g) => a + g.w, 0);
     const b = base.totalDps, have = allocSet();
     const rel = list => { const c = Object.assign({}, st.ch, { passives: list }); let v = S.calcSkill(GD, c, st.skill, o).totalDps / b; for (const g of more) v += g.w * S.calcSkill(GD, c, g.id, co).totalDps / g.b; return (more.length ? v / wSum : v) - 1; };
-    const ids = Object.keys(GD.nodes).filter(id => !blocked(id) && GD.nodes[id].Kind !== 'Start');
+    const ids = Object.keys(GD.nodes).filter(id => !blocked(id) && !banned(id) && GD.nodes[id].Kind !== 'Start');
     let i = 0;
     const step = () => {
       if (job !== T.job) return;
@@ -12383,7 +12417,7 @@ window.BOStartApp = function () {
   // ---------- Optimize tree ----------
   // Same points, moved to where the chosen skill gains the most (src/treeopt.js). Shown as a proposal
   // (green = take, red = refund) until applied or dismissed; changing the tree or a setting clears it.
-  const optKey = () => st.skill + '|' + JSON.stringify(optExtra()) + '|' + [...allocSet()].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
+  const optKey = () => st.skill + '|' + JSON.stringify(optExtra()) + '|' + [...allocSet()].sort().join(',') + '|' + [...(st.ban || [])].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
   function clearOpt() {
     T.optJob = (T.optJob || 0) + 1; T.opt = null; $('#treeOpt').hidden = true;
     const b = $('#treeOptimize'); b.disabled = false; b.textContent = 'Optimize tree';
@@ -12410,7 +12444,7 @@ window.BOStartApp = function () {
     $('#treePlan').disabled = true; $('#treePlanAll').disabled = true; $('#treeOptimize').disabled = true;
     card.hidden = false; card.innerHTML = '<p class="hint">' + (plan ? 'Planning your next ' + extra + ' point' + (extra > 1 ? 's' : '') : 'Optimizing the tree') + ' for ' + esc(skillName) + '…</p>';
     // conduitMargin: keep a Conduit channel's tick 1% above the interval (the game's tick runs a hair faster).
-    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra });
+    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])] });
     // Progress bar inside the running button (q = overall progress from treeopt), so it is clear it is still going.
     let phase = 'Starting', q = 0;
     const busy = on => { btn.classList.toggle('opt-busy', on); btn.style.setProperty('--q', on ? q : 0); btn.setAttribute('aria-busy', on ? 'true' : 'false'); };
@@ -12509,6 +12543,7 @@ window.BOStartApp = function () {
     const n = GD.nodes[id]; if (!n || n.Kind === 'Start' || blocked(id)) return;
     const have = allocSet();
     if (have.has(id)) { const r = new Set(refundList(have, id)); setPassives([...have].filter(x => !r.has(x))); }
+    else if (banned(id)) $('#treeStatus').textContent = n.Name + ' is marked never take. Right-click it to allow it again.';
     else {
       const pl = planTake(have, id); if (!pl) return;
       // Cap: one point per level up to max level 100 (not the character's own level, so you can plan ahead) plus the 13 Inscribed Quartz.
@@ -13048,6 +13083,7 @@ window.BOStartApp = function () {
   const pinchInfo = () => { const [a, b] = [...pts.values()]; return { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
   view.addEventListener('pointerdown', e => {
     if (e.target.closest('.tree-zoom, .tree-sheet') || inDragon(e) || !T.vb) return;
+    if (e.button === 2) return; // right-click marks a node never take (contextmenu below); it never takes or drags
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { view.setPointerCapture(e.pointerId); } catch (_) { /* pointer already gone */ }
     if (pts.size === 2) {
@@ -13123,6 +13159,9 @@ window.BOStartApp = function () {
   $('#treeFit').onclick = () => { if (T.full) setVB(T.full.slice()); };
   $('#treeSheetAct').onclick = () => { if (T.sel) clickNode(T.sel); }; // the repaint refreshes the panel
   $('#treeSheetClose').onclick = hideSheet;
+  $('#treeSheetBan').onclick = () => { if (T.sel) toggleBan(T.sel); };
+  view.addEventListener('contextmenu', e => { const id = e.target.dataset && e.target.dataset.id; if (!id || inDragon(e) || !GD.nodes[id]) return; e.preventDefault(); tip.hidden = true; toggleBan(id); });
+  $('#treeBanClear').onclick = () => { if (!st.ban || !st.ban.size) return; st.ban = new Set(); store.set(banStoreKey(), []); clearOpt(); T.scores = new Map(); paintTree(); scoreSoon(); $('#treeStatus').textContent = 'Every node can be taken again.'; };
   $('#treeSheetBody').addEventListener('click', e => { const b = e.target.closest && e.target.closest('button[data-oath]'); if (b && T.selM && !b.disabled) swearOath(T.selM, b.dataset.oath); });
   $('#treeSearch').addEventListener('input', paintTree);
   $('#treeHeat').addEventListener('change', paintTree);

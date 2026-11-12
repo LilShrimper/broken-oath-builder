@@ -486,6 +486,10 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 .opt-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .tn.opt-add { fill: var(--good); stroke: var(--good); stroke-width: 16; }
 .tn.opt-rem { fill: var(--panel-2); stroke: var(--bad); stroke-width: 16; }
+.tn.ban { stroke: var(--bad); stroke-width: 14; }
+.tban { stroke: var(--bad); stroke-width: 13; stroke-linecap: round; fill: none; pointer-events: none; }
+.tk-ban { margin-top: 5px; opacity: .75; }
+.tree-sheet-body .tk-ban { display: none; }
 .tl.opt-add { stroke: var(--good); stroke-width: 12; stroke-dasharray: 30 18; }
 .tl.opt-rem { stroke: var(--bad); stroke-width: 10; stroke-dasharray: 20 20; }
 /* Old game data reminder */

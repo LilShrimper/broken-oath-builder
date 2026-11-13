@@ -19,38 +19,22 @@ window.PAGE_LANGS = {
   ru: { html: 'ru', label: 'RU', word: 'Язык', name: 'Русский', to: 'Переключить на русский',
     beta: 'Русский перевод в бета-версии. Если что-то не так, сообщите через <button type="button" class="linkish">«Сообщить о проблеме»</button>.' },
   // Owner, 13 Nov 2026: our page text by DeepL (tools/deepl-fill.js), game names from the game's own files; the notice
-  // says it is machine translation. Danish, Finnish and Swedish added the same way 13 Nov 2026 (owner).
-  cs: { html: 'cs', label: 'CS', word: 'Jazyk', name: 'Čeština', to: 'Přepnout do češtiny',
-    beta: 'Český překlad je strojový (DeepL) a ve verzi beta. Pokud je něco špatně, dejte nám vědět přes <button type="button" class="linkish">„Nahlásit problém“</button>.' },
-  da: { html: 'da', label: 'DA', word: 'Sprog', name: 'Dansk', to: 'Skift til dansk',
-    beta: 'Den danske oversættelse er maskinoversat (DeepL) og i beta. Hvis noget er forkert, så sig det via <button type="button" class="linkish">„Rapporter et problem“</button>.' },
+  // says it is machine translation. Owner, 13 Nov 2026: Czech, Danish, Finnish, Italian, Dutch, Swedish, Turkish and
+  // Vietnamese retired (files kept in src/lang-retired/; build.js RETIRED_LANGS sends their old addresses to English).
   de: { html: 'de', label: 'DE', word: 'Sprache', name: 'Deutsch', to: 'Auf Deutsch umschalten',
     beta: 'Die deutsche Übersetzung ist maschinell (DeepL) und in der Beta. Wenn etwas falsch ist, sag uns über <button type="button" class="linkish">„Ein Problem melden“</button> Bescheid.' },
-  fi: { html: 'fi', label: 'FI', word: 'Kieli', name: 'Suomi', to: 'Vaihda suomeksi',
-    beta: 'Suomenkielinen käännös on konekäännös (DeepL) ja beta-vaiheessa. Jos jokin on väärin, kerro siitä <button type="button" class="linkish">”Ilmoita ongelmasta”</button>-painikkeella.' },
   fr: { html: 'fr', label: 'FR', word: 'Langue', name: 'Français', to: 'Passer en français',
     beta: 'La traduction française est automatique (DeepL) et en bêta. Si quelque chose ne va pas, signalez-le avec <button type="button" class="linkish">« Signaler un problème »</button>.' },
-  it: { html: 'it', label: 'IT', word: 'Lingua', name: 'Italiano', to: 'Passa all’italiano',
-    beta: 'La traduzione italiana è automatica (DeepL) e in beta. Se qualcosa non va, faccelo sapere con <button type="button" class="linkish">«Segnala un problema»</button>.' },
   ja: { html: 'ja', label: 'JA', word: '言語', name: '日本語', to: '日本語に切り替え',
     beta: '日本語訳は機械翻訳（DeepL）のベータ版です。誤りがあれば<button type="button" class="linkish">「問題を報告」</button>からお知らせください。' },
   ko: { html: 'ko', label: 'KO', word: '언어', name: '한국어', to: '한국어로 전환',
     beta: '한국어 번역은 기계 번역(DeepL)이며 베타 버전입니다. 잘못된 부분이 있으면 <button type="button" class="linkish">“문제 신고”</button>로 알려 주세요.' },
-  // Dutch (13 Nov 2026): page text written by Claude like the Chinese, not DeepL; not yet read by a native speaker.
-  nl: { html: 'nl', label: 'NL', word: 'Taal', name: 'Nederlands', to: 'Naar het Nederlands',
-    beta: 'De Nederlandse vertaling is in bèta en nog niet door een moedertaalspreker nagelezen. Klopt er iets niet, laat het ons weten via <button type="button" class="linkish">Probleem melden</button>.' },
   pl: { html: 'pl', label: 'PL', word: 'Język', name: 'Polski', to: 'Przełącz na polski',
     beta: 'Polskie tłumaczenie jest maszynowe (DeepL) i w wersji beta. Jeśli coś jest nie tak, daj nam znać przez <button type="button" class="linkish">„Zgłoś problem”</button>.' },
   pt: { html: 'pt-BR', label: 'PT', word: 'Idioma', name: 'Português (Brasil)', to: 'Mudar para português',
     beta: 'A tradução para o português é automática (DeepL) e está em beta. Se algo estiver errado, avise-nos em <button type="button" class="linkish">“Relatar um problema”</button>.' },
-  sv: { html: 'sv', label: 'SV', word: 'Språk', name: 'Svenska', to: 'Byt till svenska',
-    beta: 'Den svenska översättningen är maskinöversatt (DeepL) och i beta. Om något är fel, säg till via <button type="button" class="linkish">”Rapportera ett problem”</button>.' },
-  tr: { html: 'tr', label: 'TR', word: 'Dil', name: 'Türkçe', to: 'Türkçeye geç',
-    beta: 'Türkçe çeviri makine çevirisidir (DeepL) ve beta aşamasındadır. Bir hata görürsen <button type="button" class="linkish">“Sorun bildir”</button> ile bize haber ver.' },
   uk: { html: 'uk', label: 'UK', word: 'Мова', name: 'Українська', to: 'Перейти на українську',
     beta: 'Український переклад машинний (DeepL) і в бета-версії. Якщо щось не так, повідомте нам через <button type="button" class="linkish">«Повідомити про проблему»</button>.' },
-  vi: { html: 'vi', label: 'VI', word: 'Ngôn ngữ', name: 'Tiếng Việt', to: 'Chuyển sang tiếng Việt',
-    beta: 'Bản dịch tiếng Việt là bản dịch máy (DeepL) và đang ở giai đoạn beta. Nếu có gì sai, hãy cho chúng tôi biết qua <button type="button" class="linkish">“Báo cáo sự cố”</button>.' }
 };
 (function () {
   const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* off */ } } };
@@ -9145,9 +9129,14 @@ window.BOCharacter = function (ctx) {
       // Rending Slam: "4% of your maximum life joins the weapon's base damage" (LifeAsBase). Game log 6 Nov,
       // Shrimpslam (572 life, Steel Greatsword 21-38, gem 8): unexposed Vampire Lord hits 4554 and 4746, afterimages
       // 1848 and 1884 (40%); without the life share the sheet tops out at 3299 (1320 for an afterimage), with it
-      // 3525-5096. Whether local % physical on the weapon scales the life share is not checked (this sword has none).
+      // 3525-5096.
+      // The weapon's local % physical does NOT scale the life share, and it counts unarmed too. Game Copy stats, 13 Nov 2026,
+      // build 73 (Spin_win, Warrior 45, gem 14, Bone Cleaver with 80% local physical, sheet life 3,095): Rending Slam
+      // 16,380-23,633. Its multiplier matches Leap Slam/Slash/Cyclone on the same weapon, and the hit back-solves to
+      // weapon + 123.3 (min) / 124.0 (max) = 4% of 3,095 added after the local lines (the old order gave +39%).
+      // Unarmed copy, same day: 10,566-12,652, far above the bare fists alone (the old sim left the share out: -76%).
       let lifeBase = 0;
-      if (sk.LifeAsBase && mainBase && mainBase.DamageMin) {
+      if (sk.LifeAsBase) {
         res.heroLife = heroMaxLife(GD, ch, mods, attr);
         lifeBase = res.heroLife * sk.LifeAsBase / 100;
         res.notes.push(sk.Name + ': ' + sk.LifeAsBase + '% of your ~' + Math.round(res.heroLife) + ' maximum life (+' + lifeBase.toFixed(1) + ') joins the weapon\'s base physical damage. Max life here counts level, Strength and life lines on gear and the tree (checked against the game log); temporary life buffs are not counted.');
@@ -11095,7 +11084,7 @@ window.BOCharacter = function (ctx) {
   }
 
   // Weapon damage with its local lines (local % physical, local added damage, local speed and crit).
-  // extraBase: physical added to the weapon's base roll (Rending Slam's share of max life), before local % lines.
+  // extraBase: physical added to the weapon's damage (Rending Slam's share of max life), after local % lines (Copy stats 13 Nov 2026).
   function weaponStats(GD, item, base, mods, use, extraBase) {
     const dmg = {}; DT.forEach(d => dmg[d] = [0, 0]);
     // Unarmed: 12-27 physical at 1.6 attacks a second (was 2-5 at 1.2). The API's classes.json Unarmed block is empty.
@@ -11103,7 +11092,7 @@ window.BOCharacter = function (ctx) {
     // Bare Fists, Leap Slam and Cyclone all took exactly 4/3 the game's time per attack at 1.2 (so 1.6), and their hits
     // back-solve to an unarmed base of 12.0-27.2 / 11.6-26.4 / 11.9-27.0 (Bare Fists gem 14: game 1,629-3,600).
     // One hero level only: whether the base grows with level is not checked yet (a copy from Magetest, level 92, would say).
-    if (!base || !base.DamageMin) { dmg.Physical = [12, 27]; return { name: 'Unarmed', dmg, aps: 1.6, crit: GD.scaling.Hero.CritBase }; }
+    if (!base || !base.DamageMin) { const xb0 = extraBase || 0; dmg.Physical = [12 + xb0, 27 + xb0]; return { name: 'Unarmed', dmg, aps: 1.6, crit: GD.scaling.Hero.CritBase }; }
     const key = 'item:' + item.slot;
     let physInc = 0, asInc = 0, critInc = 0;
     const added = {}; DT.forEach(d => added[d] = [0, 0]);
@@ -11122,7 +11111,7 @@ window.BOCharacter = function (ctx) {
     // Base Grade scales the weapon's base damage too (gradeMult below). Game log 12 Nov 2026: "Src95: Staff_15 'Physical Damage
     // from: base 33-63 · Grade 91%'"; the owner's test Ranger's bow (grade 77 = 112%) needs it to reach the panel DPS.
     const gm = gradeMult(item.grade);
-    dmg.Physical = [(base.DamageMin * gm + xb + added.Physical[0]) * (1 + physInc / 100), (base.DamageMax * gm + xb + added.Physical[1]) * (1 + physInc / 100)];
+    dmg.Physical = [(base.DamageMin * gm + added.Physical[0]) * (1 + physInc / 100) + xb, (base.DamageMax * gm + added.Physical[1]) * (1 + physInc / 100) + xb];
     for (const d of DT) if (d !== 'Physical') dmg[d] = added[d];
     return { name: base.Name, dmg, aps: (base.AttacksPerSecond || 1) * (1 + asInc / 100), crit: (base.Crit || GD.scaling.Hero.CritBase) * (1 + critInc / 100), physInc, isStaff: lc(base.Class) === 'staff' };
   }

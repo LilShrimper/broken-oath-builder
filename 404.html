@@ -1,5 +1,7 @@
 <!doctype html><meta charset="utf-8"><title>Broken Oath Builder</title>
-<script>/* Addresses are lowercase (Pages is case-sensitive): /Build/Tree -> /build/tree; anything else goes to the site root. */
+<script>/* Addresses are lowercase (Pages is case-sensitive): /Build/Tree -> /build/tree. A retired page language
+   (/it/build/damage/) goes to the same English page, search and hash (share codes) kept. Anything else: the site root. */
 var p = location.pathname, l = p.toLowerCase(), root = /\.github\.io$/.test(location.hostname) ? "/" + p.split("/")[1] + "/" : "/";
-location.replace(l !== p ? l + location.search + location.hash : root);</script>
+var gone = ["cs","da","fi","it","nl","sv","tr","vi"], rest = l.slice(root.length), m = rest.match(/^([a-z]{2})(\/|$)/);
+location.replace(m && gone.indexOf(m[1]) >= 0 ? root + rest.slice(m[0].length) + location.search + location.hash : l !== p ? l + location.search + location.hash : root);</script>
 <a href="./">Broken Oath Builder</a>

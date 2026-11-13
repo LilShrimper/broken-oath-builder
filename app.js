@@ -1342,7 +1342,13 @@
     const baseOf = it => it && GD.bases[lc(it.base)];
     const twoHanded = b => !!b && (b.bTwoHanded || (b.Tags || []).includes('TwoHand'));
     // Off hand: a quiver only with a bow; a shield or tome only with a one-hander (a Mace and Shield is one item).
-    const offOk = (main, off) => !main || !off || (off.Class === 'Quiver' ? main.Class === 'Bow' : !twoHanded(main));
+    // Dual wielding (owner's request, 12 Nov 2026): a one-handed weapon (a wand, say) also goes in the off hand, but only with a one-hander
+    // in the main hand, never with a staff or other two-hander. The sim counts it as DualWielding (sim.js: both items' lines add up,
+    // each weapon's local lines stay on that weapon), so two wands are scored against one staff in the weapon-set step below.
+    // ASSUMPTION: the game data names no pairing rule, so any one-hander may pair with any other (not only the same kind).
+    const oneHandWeapon = b => !!b && b.Slot === 'MainHand' && !twoHanded(b) && (b.Tags || []).includes('OneHand') && b.DamageMin > 0;
+    const offOk = (main, off) => !main || !off || (off.Class === 'Quiver' ? main.Class === 'Bow' : oneHandWeapon(off) ? oneHandWeapon(main) : !twoHanded(main));
+    const fitsSlot = (b, slot) => b.Slot === baseSlot(slot) || (baseSlot(slot) === 'OffHand' && oneHandWeapon(b));
     const affixesFor = base => {
       const tags = new Set((base && base.Tags) || []);
       return Object.values(GD.affixes).filter(a => (a.BaseTags || []).some(t => tags.has(t)) && !(a.ExcludeTags || []).some(t => tags.has(t)) && (a.Tiers || []).length);
@@ -1352,6 +1358,14 @@
       const R = GD.runeSockets || {}, tags = base.Tags || [], keys = Object.keys(R).filter(k => tags.includes(k) || base.Slot === k);
       return keys.length ? Math.max(...keys.map(k => R[k])) : 0;
     };
+    // A rare only drops with sockets from item level 30 (runes.json Rules.SocketFromML 30, public API); below that it has none.
+    // Oathword items are made by socketing, so they are not held to this.
+    const SOCKET_FROM_ILVL = 30;
+    // Owner's request, 12 Nov 2026: at most 3 sockets on a rare. The legal maximum on a two-hander is 4, but only about 12% of rares roll it
+    // (runes.json Rules.SocketWeights 20/34/34/12 for 1-4 sockets), so planning on 4 overstates a typical item. Oathwords keep their own count.
+    // cfg.rareSockets: the most sockets a rare is planned with (0-4; the page defaults to 3). Empty / not set: the base's maximum, as before.
+    const rareCap = cfg.rareSockets === '' || cfg.rareSockets == null || !isFinite(+cfg.rareSockets) ? 99 : Math.max(0, Math.round(+cfg.rareSockets));
+    const rareSockets = base => ilvl >= SOCKET_FROM_ILVL ? Math.min(rareCap, runeSlots(base)) : 0;
     const rollUnique = (it, roll) => {
       const u = GD.uniques[lc(it.unique)], pt = (lo, hi) => lo == null ? 0 : Math.round((lo + (hi - lo) * roll) * 100) / 100;
       it.roll = roll;
@@ -1363,7 +1377,7 @@
     };
     // Bases the character can use, newest rules first; bases that differ only in defences count once (they play the same).
     const baseCache = {};
-    const baseList = slot => baseCache[slot] || (baseCache[slot] = Object.values(GD.bases).filter(b => b.Slot === baseSlot(slot) && lvOk(b.Level)));
+    const baseList = slot => baseCache[slot] || (baseCache[slot] = Object.values(GD.bases).filter(b => fitsSlot(b, slot) && lvOk(b.Level)));
     const sig = b => JSON.stringify([b.Class, (b.Tags || []).filter(t => !/^(Armour|Evasion|EnergyShield|Defences)$/.test(t)).sort(), b.Implicits, b.DamageMin, b.DamageMax, b.AttacksPerSecond, b.Crit, b.bTwoHanded, b.Block]);
     const distinct = list => { const m = new Map(); for (const b of list) { const k = sig(b); const o = m.get(k); if (!o || (b.Level || 0) > (o.Level || 0)) m.set(k, b); } return [...m.values()]; };
 
@@ -1422,7 +1436,7 @@
     // Runes in a rare's sockets (rune stats differ for weapons and armour; sim.js counts the right ones).
     const runeList = Object.values(GD.runes).filter(r => r.Kind === 'rune' && lvOk(r.Level));
     function* fillRunes(items, slot, it, v) {
-      const n = runeSlots(baseOf(it));
+      const n = rareSockets(baseOf(it));
       let cur = { ...it, runes: [] };
       for (let i = 0; i < n; i++) {
         let best = null, bv = v;
@@ -1443,7 +1457,8 @@
     function* bestFor(slot, items, filter, K) {
       const keepIt = at(items, slot), others = put(items, slot, null), taken = uniqueIds(others);
       const mainB = baseOf(at(items, 'MainHand'));
-      const okBase = b => (!filter || filter(b)) && (slot !== 'MainHand' || mainOk(b));
+      // The off hand's weapon must be a kind the skill can use too (a one-hander, so it is never a bow / staff here).
+      const okBase = b => (!filter || filter(b)) && ((slot !== 'MainHand' && !(slot === 'OffHand' && oneHandWeapon(b))) || mainOk(b));
       let best = { item: keepIt, v: keepIt && okBase(baseOf(keepIt)) ? V(items) : 0 };
       const offer = (it, v) => { if (v > best.v * (1 + MIN_GAIN)) best = { item: it, v }; };
       // A candidate in this slot; the other hand is cleared when it can't be held with it.
@@ -1458,7 +1473,7 @@
       // Uniques
       const uniq = Object.values(GD.uniques).filter(u => {
         const b = GD.bases[lc(u.BaseId)];
-        return b && b.Slot === baseSlot(slot) && okBase(b) && lvOk(u.Level || b.Level) && !taken.has(lc(u.Id)) && (useLimited || !u.Limited);
+        return b && fitsSlot(b, slot) && okBase(b) && lvOk(u.Level || b.Level) && !taken.has(lc(u.Id)) && (useLimited || !u.Limited);
       });
       curPhase = phaseName(slot) + ': uniques';
       const scored = [];
@@ -1498,7 +1513,7 @@
           if (late()) break;
           const f = yield* fillAffixes(items, slot, s.it, false);
           let item = f.item, v = f.v;
-          if (useRunes && runeSlots(baseOf(item)) && !late()) { const r = yield* fillRunes(trial(item).filter(i => i.slot !== slot), slot, item, v); item = r.item; }
+          if (useRunes && rareSockets(baseOf(item)) && !late()) { const r = yield* fillRunes(trial(item).filter(i => i.slot !== slot), slot, item, v); item = r.item; }
           offer(item, V(trial(item)));
         }
       }
@@ -1618,6 +1633,8 @@
           }
         }
         items = bestSet.items;
+        // Never leave a hand pairing the game would not allow (e.g. a quiver kept beside a one-hander, a shield beside a staff).
+        { const m = baseOf(at(items, 'MainHand')), o = baseOf(at(items, 'OffHand')); if (o && !offOk(m, o)) items = put(items, 'OffHand', null); }
       }
       done = 1;
       for (const slot of SLOTS) {
@@ -13625,7 +13642,7 @@ window.BOStartApp = function () {
   // ---------- Gear Set Sim (the second sub-tab of Item Compare) ----------
   // Searches every unique, Oathword and rare (best prefixes and damage suffixes) for the best gear for the selected
   // skill, with the tree, skills, supports and idols as they are (gearopt.js, run in slices so the page stays usable).
-  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxVows: '', maxRiven: '', idolAffixes: '', layers: { es: true, armour: true, evasion: true, block: true } }, store.get('gearSim', {})) };
+  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxVows: '', maxRiven: '', rareSockets: 3, idolAffixes: '', layers: { es: true, armour: true, evasion: true, block: true } }, store.get('gearSim', {})) };
   delete GS.set.maxLines; // a box that was on the page for one version (v255)
   GS.set.layers = Object.assign({ es: true, armour: true, evasion: true, block: true }, GS.set.layers || {});
   // Defence for the DPS / Defence slider and "Reach max resistances" (owner, 12 Nov 2026): an estimate, not a defensive sim.
@@ -13837,7 +13854,9 @@ window.BOStartApp = function () {
       chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') +
       '<label class="field inline" title="The most Vows a unique (red) item may carry. Empty: 6"><span>Max Vows on uniques</span><input type="number" min="0" max="6" id="gsMaxVows" placeholder="6" value="' + (S_.maxVows === '' || S_.maxVows == null ? '' : S_.maxVows) + '"' + (GS.running || !S_.vows ? ' disabled' : '') + '></label>' +
       '<label class="field inline" title="The most Riven mods the whole build may carry, counted over all items. Empty: no limit. 0: none"><span>Max Riven mods (total)</span><input type="number" min="0" max="99" id="gsMaxRiven" placeholder="no limit" value="' + (S_.maxRiven === '' || S_.maxRiven == null ? '' : S_.maxRiven) + '"' + (GS.running ? ' disabled' : '') + '></label>' + '</div>' +
-      '<div class="gs-controls"><label class="field inline" title="Also choose the idols: how many lines each idol carries. Keep my idols leaves the idols as they are"><span>Optimize idols with</span><select id="gsIdol"' + (GS.running ? ' disabled' : '') + '><option value=""' + (S_.idolAffixes === '' || S_.idolAffixes == null ? ' selected' : '') + '>Keep my idols</option>' +
+      '<div class="gs-controls"><label class="field inline" title="The most sockets a rare item is planned with. A two-hander can roll 4, but only about 12% of rares do (3 and 2 are the common cases). Oathwords keep their own number of sockets"><span>Sockets on rares</span><select id="gsRareSock"' + (GS.running || !S_.runes ? ' disabled' : '') + '>' +
+        [[3, 'Up to 3 (default)'], [4, 'Up to 4 (two-handers)'], [2, 'Up to 2'], [1, 'Up to 1'], [0, 'None']].map(([n, l]) => '<option value="' + n + '"' + (+S_.rareSockets === n ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></label>' +
+        '<label class="field inline" title="Also choose the idols: how many lines each idol carries. Keep my idols leaves the idols as they are"><span>Optimize idols with</span><select id="gsIdol"' + (GS.running ? ' disabled' : '') + '><option value=""' + (S_.idolAffixes === '' || S_.idolAffixes == null ? ' selected' : '') + '>Keep my idols</option>' +
         [1, 2, 3, 4, 5, 6].map(n => '<option value="' + n + '"' + (+S_.idolAffixes === n ? ' selected' : '') + '>' + n + ' affix' + (n === 1 ? '' : 'es') + ' per idol</option>').join('') + '</select></label></div>' +
       '<p class="hint">Idols sit in the Dwarven Fossil, a 5 by 5 grid without its corners (21 cells), and they never turn. The search only picks a set of idol sizes that fits that grid, and only the lines an idol can hold: 1 or 2 lines make a magic idol (1 prefix, 1 suffix), 3 to 6 a rare idol (up to 3 and 3). Red idols you wear stay and keep their cells; all other idols are chosen again.</p>' +
       '<p class="hint">Riven mods are rare-item lines one tier above the best normal tier of the same line (for example Life 146–167 instead of 120–139). They need item level 84 or more, take a normal prefix or suffix slot, and replace the normal line they match, so an item never holds both. The limit counts every Riven mod on the whole build.</p>' +
@@ -13922,6 +13941,7 @@ window.BOStartApp = function () {
       if (t.dataset.gsSet) { GS.set[t.dataset.gsSet] = t.checked; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsPrio') { GS.set.prio = Math.max(0, Math.min(100, Math.round(+t.value / 10) * 10 || 0)); store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) clearOpt(); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsResTarget') { const v = Math.max(1, Math.min(200, Math.round(+t.value) || 0)); GS.set.resTarget = v === gsResCap() ? 0 : v; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsRareSock') { GS.set.rareSockets = Math.max(0, Math.min(4, Math.round(+t.value) || 0)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsIdol') { GS.set.idolAffixes = t.value === '' ? '' : Math.max(1, Math.min(6, Math.round(+t.value) || 1)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsMaxRiven') { const v = String(t.value).trim(); GS.set.maxRiven = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(99, Math.round(+v))); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsMaxVows') { const v = String(t.value).trim(); GS.set.maxVows = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(6, Math.round(+v))); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }

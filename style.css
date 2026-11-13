@@ -1578,6 +1578,18 @@ body.compare-page #controls { display: none; }
 .ch-idol.dragging { opacity: .3; }
 .ch-slot.ch-idol.ch-idol-ghost { position: fixed; z-index: 1000; margin: 0; box-sizing: border-box; pointer-events: none; cursor: grabbing; border-color: var(--dashboard-gold); box-shadow: 0 8px 22px rgba(0,0,0,.45); opacity: .95; }
 .ch-idol-ghost.copy::after { content: "+ copy"; position: absolute; top: -9px; right: -9px; padding: 2px 6px; border-radius: 999px; background: var(--dashboard-gold); color: #14161f; font: 700 10px/1.2 system-ui, sans-serif; white-space: nowrap; }
+/* Spare idols: beside the Fossil (below it when the card is narrow); each keeps its shape at the Fossil's cell size. */
+.ch-fwrap { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; margin: 6px 0 10px; }
+.ch-fwrap .ch-fossil { margin: 0; flex: 0 1 400px; }
+.ch-shelf { --cell: 70px; flex: 1 1 160px; min-width: 160px; min-height: 120px; padding: 8px; border: 1px dashed color-mix(in srgb, var(--dashboard-gold) 35%, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--bg) 70%, var(--panel)); box-sizing: border-box; }
+.ch-shelf.drop-on { border-style: solid; border-color: var(--good); background: color-mix(in srgb, var(--good) 12%, var(--panel)); }
+.ch-shelf-head { font-size: 12px; font-weight: 700; color: var(--muted); margin: 0 2px 8px; }
+.ch-shelf-head small { font-weight: 400; color: var(--faint); }
+.ch-shelf-list { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
+.ch-shelf .ch-slot.ch-idol { width: calc(var(--w) * var(--cell) + (var(--w) - 1) * 6px); height: calc(var(--h) * var(--cell) + (var(--h) - 1) * 6px); flex: none; box-sizing: border-box; }
+.ch-shelf-add { width: var(--cell); height: var(--cell); padding: 0; border: 1px dashed var(--line); border-radius: 6px; background: none; color: var(--dashboard-gold); font: 700 22px/1 system-ui, sans-serif; cursor: pointer; }
+.ch-shelf-add:hover, .ch-shelf-add:focus-visible { border-color: var(--dashboard-gold); }
+@media (max-width: 520px) { .ch-shelf { --cell: 52px; } }
 .ch-fdrop { z-index: 3; pointer-events: none; border: 2px solid var(--good); border-radius: 6px; background: color-mix(in srgb, var(--good) 22%, transparent); }
 .ch-fdrop.no { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 20%, transparent); }
 .ch-fdrop[hidden] { display: none; }

@@ -3109,20 +3109,24 @@ window.BOPlanner = function (ctx) {
     const used = new Set([...p.hotbar, ...p.sockets.flatMap(s => [s.skill, s.conduit]), p.mainSkill].filter(Boolean));
     p.supportGems = []; p.gems = p.gems.filter(g => used.has(g));
     p.gemLevels = Object.fromEntries(Object.entries(p.gemLevels).filter(([k]) => used.has(k)));
-    p.items = p.items.map(it => [it.slot, it.base, it.rarity, it.unique && it.unique !== 'None' ? it.unique : 0, it.level || 0,
+    const row = it => [it.slot, it.base, it.rarity, it.unique && it.unique !== 'None' ? it.unique : 0, it.level || 0,
       (it.affixes || []).map(a => { const fl = (a.crafted ? 1 : 0) + (a.oath ? 2 : 0) + (a.scar ? 4 : 0); return [a.id, a.tier || 0, r4(a.v), r4(a.v2)].concat(fl ? [fl] : []).join(','); }).join(';'), (it.runes || []).join(','), it.name || '', it.roll == null ? null : r4(it.roll)]
-      .concat(it.slot === 'Idol' && Number.isInteger(it.gx) && Number.isInteger(it.gy) ? [it.gx + ',' + it.gy] : [])); // an idol's cell in the Fossil (character.js)
+      .concat(it.slot === 'Idol' && Number.isInteger(it.gx) && Number.isInteger(it.gy) ? [it.gx + ',' + it.gy] : []); // an idol's cell in the Fossil (character.js)
+    p.items = p.items.map(row);
+    if (Array.isArray(p.idolShelf) && p.idolShelf.length) p.idolShelf = p.idolShelf.map(row); else delete p.idolShelf; // spare idols (character.js), not worn
     return 'BOS1.' + (await toCode(p)).slice(5);
   }
   function unpackShare(p) {
-    p.items = (p.items || []).map(r => {
+    const unrow = r => {
       const it = { slot: r[0], base: r[1], rarity: r[2], unique: r[3] || 'None', name: r[7] || '', level: r[4] || 0,
         affixes: r[5] ? r[5].split(';').map(a => { const [id, tier, v, v2, fl] = a.split(','); return Object.assign({ id, tier: +tier || 0, v: +v || 0, v2: +v2 || 0, crafted: !!(+fl & 1), oath: !!(+fl & 2) }, +fl & 4 ? { scar: true } : {}); }) : [],
         runes: r[6] ? r[6].split(',') : [] };
       if (r[8] != null) it.roll = r[8];
       if (typeof r[9] === 'string' && /^\d,\d$/.test(r[9])) { it.gx = +r[9][0]; it.gy = +r[9][2]; }
       return it;
-    });
+    };
+    p.items = (p.items || []).map(unrow);
+    if (Array.isArray(p.idolShelf)) p.idolShelf = p.idolShelf.filter(Array.isArray).map(unrow);
     return p;
   }
   // The item editor for the Item Compare tab (app.js): its own state from gear.newKit(true), edits on its own holder.
@@ -6978,10 +6982,23 @@ window.BOCharacter = function (ctx) {
     }
     return FCELLS.find(([x, y]) => L.fits(x, y, w, h, skip)) || null;
   }
+  // Spare idols: a list beside the Fossil (ch.idolShelf) for idols taken out to re-arrange, or kept to try later. Not worn:
+  // they are not in ch.items, so the sim never counts them. Kept in plans, plan codes and share links.
+  const shelfOf = ch => (ch && Array.isArray(ch.idolShelf) ? ch.idolShelf : []);
+  const shelfW = ch => (Array.isArray(ch.idolShelf) ? ch.idolShelf : (ch.idolShelf = []));
+  const offGrid = it => { const c = copyOf(it); delete c.gx; delete c.gy; c.slot = 'Idol'; return c; };
   // Can idol idx go to x, y? 'ok', 'same' (where it is), 'swap' (trades places with an idol of the same size) or ''.
-  function canDrop(L, idx, x, y, copy) {
-    const it = L.ch.items[idx]; if (!it) return '';
-    const [w, h] = idolDims(it), me = L.at.get(idx);
+  // fromShelf: idx is a spare idol (a swap then sends the worn one to the spares in its place).
+  function canDrop(L, idx, x, y, copy, fromShelf) {
+    const it = fromShelf ? shelfOf(L.ch)[idx] : L.ch.items[idx]; if (!it) return '';
+    const [w, h] = idolDims(it), me = fromShelf ? null : L.at.get(idx);
+    if (fromShelf) {
+      if (L.fits(x, y, w, h, -1)) return 'ok';
+      if (copy) return '';
+      const o = L.used.get(fk(x, y)); if (o == null) return '';
+      const [ow, oh] = idolDims(L.ch.items[o]), p = L.at.get(o);
+      return ow === w && oh === h && p[0] === x && p[1] === y ? 'swap' : '';
+    }
     if (!copy && me && me[0] === x && me[1] === y) return 'same';
     if (L.fits(x, y, w, h, copy ? -1 : idx)) return 'ok';
     if (copy || !me) return '';
@@ -6989,11 +7006,17 @@ window.BOCharacter = function (ctx) {
     const [ow, oh] = idolDims(L.ch.items[o]), p = L.at.get(o);
     return ow === w && oh === h && p[0] === x && p[1] === y ? 'swap' : '';
   }
-  function dropIdol(idx, x, y, copy) {
+  function dropIdol(idx, x, y, copy, fromShelf) {
     const ch = ctx.editable(); if (!ch) return false;
-    const L = idolLayout(ch), how = canDrop(L, idx, x, y, copy);
+    const L = idolLayout(ch), how = canDrop(L, idx, x, y, copy, fromShelf);
     if (how !== 'ok' && how !== 'swap') return false;
     pinIdols(ch, L);
+    if (fromShelf) {
+      const sh = shelfW(ch), n = Object.assign(offGrid(sh[idx]), { gx: x, gy: y });
+      if (how === 'swap') { const oi = L.used.get(fk(x, y)); sh[idx] = offGrid(ch.items[oi]); ch.items.splice(oi, 1); }
+      else if (!copy) sh.splice(idx, 1);
+      ch.items.push(n); ctx.commit(ch); render(); return true;
+    }
     const it = ch.items[idx];
     if (copy) ch.items.push(Object.assign(copyOf(it), { gx: x, gy: y }));
     else {
@@ -7002,8 +7025,29 @@ window.BOCharacter = function (ctx) {
     }
     ctx.commit(ch); render(); return true;
   }
+  // To the spares: a worn idol (taken off, or copied), or a spare one (moved, or copied). before: the spare it goes in front of (-1: last).
+  // Returns its index in the spares, or -1.
+  function shelveIdol(idx, fromShelf, copy, before) {
+    const ch = ctx.editable(); if (!ch) return -1;
+    const sh = shelfW(ch), src = fromShelf ? sh[idx] : ch.items[idx]; if (!src) return -1;
+    let at = before >= 0 && before <= sh.length ? before : sh.length;
+    if (fromShelf && !copy) { if (at === idx || at === idx + 1) return idx; sh.splice(idx, 1); if (at > idx) at--; }
+    else if (!fromShelf) { pinIdols(ch, idolLayout(ch)); if (!copy) ch.items.splice(idx, 1); }
+    sh.splice(at, 0, offGrid(src));
+    ctx.commit(ch); render(); return at;
+  }
+  function shelfHtml(ch) {
+    const s = shelfOf(ch);
+    let h = '<div class="ch-shelf" role="group" aria-label="Spare idols, not worn"><div class="ch-shelf-head">Spare idols <small>not worn</small></div><div class="ch-shelf-list">';
+    s.forEach((it, i) => {
+      const n = itemName(it, 'Idol'), [w, hh] = idolDims(it), a = itemArt(it);
+      h += '<div class="ch-slot ch-idol ' + n.cls + (w * hh === 1 ? ' tiny' : '') + withArt(a) + '" data-open="1" data-tip="item" data-slot="Idol" data-shelf="1" data-idx="' + i + '" tabindex="0" role="button" aria-label="' + esc(n.name + ', ' + w + 'x' + hh + ', spare') + '" style="--w:' + w + ';--h:' + hh + '">' +
+        '<button class="ch-item-x" type="button" data-rmshelf="' + i + '" aria-label="Remove ' + esc(n.name) + '">×</button>' + a + '<b class="ch-item-name">' + esc(n.name) + '</b>' + (n.name === n.base ? '' : '<span class="ch-item-base">' + esc(n.base) + '</span>') + '</div>';
+    });
+    return h + '<button type="button" class="ch-shelf-add" data-open="1" data-slot="Idol" data-shelf="1" data-idx="-1" aria-label="Add a spare idol" title="Add a spare idol">+</button></div></div>';
+  }
   function fossilHtml(ch, L) {
-    let h = '<div class="fo-grid ch-fossil" role="group" aria-label="Idols in the Dwarven Fossil, 5 by 5 without corners">';
+    let h = '<div class="ch-fwrap"><div class="fo-grid ch-fossil" role="group" aria-label="Idols in the Dwarven Fossil, 5 by 5 without corners">';
     for (const [x, y] of FCELLS) {
       const taken = L.used.has(fk(x, y));
       h += '<button type="button" class="fo-cell"' + (taken ? ' tabindex="-1" aria-hidden="true"' : ' data-open="1" data-slot="Idol" data-idx="-1" aria-label="Add an idol at column ' + (x + 1) + ', row ' + (y + 1) + '"') +
@@ -7014,8 +7058,8 @@ window.BOCharacter = function (ctx) {
       h += '<div class="ch-slot ch-idol ' + n.cls + (w * hh === 1 ? ' tiny' : '') + withArt(a) + '" data-open="1" data-tip="item" data-slot="Idol" data-idx="' + i + '" tabindex="0" role="button" aria-label="' + esc(n.name + ', ' + w + 'x' + hh + ', column ' + (p[0] + 1) + ', row ' + (p[1] + 1)) + '"' +
         ' style="grid-column:' + (p[0] + 1) + ' / span ' + w + ';grid-row:' + (p[1] + 1) + ' / span ' + hh + '">' + rmItemBtn(i, n.name) + a + '<b class="ch-item-name">' + esc(n.name) + '</b>' + (n.name === n.base ? '' : '<span class="ch-item-base">' + esc(n.base) + '</span>') + '</div>';
     }
-    h += '<div class="ch-fdrop" hidden></div></div>';
-    h += '<p class="hint">Click an empty cell to add an idol there, or an idol to edit it. Drag an idol to move it; hold Ctrl while dragging to copy it.</p>';
+    h += '<div class="ch-fdrop" hidden></div></div>' + shelfHtml(ch) + '</div>';
+    h += '<p class="hint">Click an empty cell to add an idol there, or an idol to edit it. Drag an idol to move it; hold Ctrl while dragging to copy it. Drag one to Spare idols to take it out while you re-arrange (spares are not counted), and back into the Fossil to wear it.</p>';
     if (L.out.length) h += '<p class="hint bad">No room in the Fossil for ' + plural(L.out.length, 'idol') + ':</p><div class="ch-idols">' + L.out.map(i => {
       const n = itemName(ch.items[i], 'Idol'), a = itemArt(ch.items[i]);
       return '<div class="ch-slot ' + n.cls + withArt(a) + '" data-open="1" data-tip="item" data-slot="Idol" data-idx="' + i + '" tabindex="0" role="button">' + rmItemBtn(i, n.name) + a + '<b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + '</span></div>';
@@ -7028,10 +7072,10 @@ window.BOCharacter = function (ctx) {
   const dragGrid = () => document.querySelector('#characterPane .ch-fossil');
   function dragDown(e) {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
-    const t = e.target.closest && e.target.closest('.ch-fossil .ch-idol'); if (!t || e.target.closest('.ch-item-x')) return;
-    const ch = ctx.current(), idx = +t.dataset.idx, it = ch && ch.items[idx]; if (!it) return;
+    const t = e.target.closest && e.target.closest('.ch-fossil .ch-idol, .ch-shelf .ch-idol'); if (!t || e.target.closest('.ch-item-x')) return;
+    const shelf = !!t.closest('.ch-shelf'), ch = ctx.current(), idx = +t.dataset.idx, it = ch && (shelf ? shelfOf(ch) : ch.items)[idx]; if (!it) return;
     const [w, h] = idolDims(it), r = t.getBoundingClientRect(), lim = (v, n) => Math.max(0, Math.min(n - 1, v));
-    DR = { idx, w, h, el: t, pid: e.pointerId, x0: e.clientX, y0: e.clientY, ox: e.clientX - r.left, oy: e.clientY - r.top, bw: r.width, bh: r.height,
+    DR = { idx, shelf, toShelf: false, before: -1, w, h, el: t, pid: e.pointerId, x0: e.clientX, y0: e.clientY, ox: e.clientX - r.left, oy: e.clientY - r.top, bw: r.width, bh: r.height,
       gcx: lim(Math.floor((e.clientX - r.left) / (r.width / w)), w), gcy: lim(Math.floor((e.clientY - r.top) / (r.height / h)), h), on: false, ghost: null, at: null, copy: false, L: null, px: e.clientX, py: e.clientY };
   }
   function dragMove(e) {
@@ -7054,6 +7098,15 @@ window.BOCharacter = function (ctx) {
     const d = DR, grid = dragGrid(); if (!d || !d.on || !grid) return;
     d.ghost.style.left = (d.px - d.ox) + 'px'; d.ghost.style.top = (d.py - d.oy) + 'px';
     d.ghost.classList.toggle('copy', d.copy); d.el.classList.toggle('dragging', !d.copy);
+    // Over the spare idols: goes in front of the spare under the pointer, else last.
+    const sh = document.querySelector('#characterPane .ch-shelf'), sr = sh && sh.getBoundingClientRect();
+    d.toShelf = !!sr && d.px >= sr.left && d.px <= sr.right && d.py >= sr.top && d.py <= sr.bottom;
+    if (sh) sh.classList.toggle('drop-on', d.toShelf);
+    if (d.toShelf) {
+      const under = document.elementFromPoint(d.px, d.py), tile = under && under.closest && under.closest('.ch-shelf .ch-idol');
+      d.before = tile ? +tile.dataset.idx : -1; d.at = null;
+      grid.querySelector('.ch-fdrop').hidden = true; return;
+    }
     // The cell under the pointer, from two cells' places on screen.
     const a = grid.querySelector('.fo-cell[data-fx="1"][data-fy="0"]').getBoundingClientRect(), b = grid.querySelector('.fo-cell[data-fx="2"][data-fy="1"]').getBoundingClientRect();
     const pw = b.left - a.left, ph = b.top - a.top;
@@ -7062,7 +7115,7 @@ window.BOCharacter = function (ctx) {
     d.at = cx >= 0 && cy >= 0 && cx < FN && cy < FN ? [cx - d.gcx, cy - d.gcy] : null;
     const x1 = d.at ? Math.max(0, d.at[0]) : 0, x2 = d.at ? Math.min(FN, d.at[0] + d.w) : 0, y1 = d.at ? Math.max(0, d.at[1]) : 0, y2 = d.at ? Math.min(FN, d.at[1] + d.h) : 0;
     if (!d.at || x1 >= x2 || y1 >= y2) { box.hidden = true; return; }
-    const how = canDrop(d.L, d.idx, d.at[0], d.at[1], d.copy);
+    const how = canDrop(d.L, d.idx, d.at[0], d.at[1], d.copy, d.shelf);
     box.hidden = how === 'same'; box.classList.toggle('no', !how);
     box.style.gridColumn = (x1 + 1) + ' / ' + (x2 + 1); box.style.gridRow = (y1 + 1) + ' / ' + (y2 + 1);
   }
@@ -7073,8 +7126,12 @@ window.BOCharacter = function (ctx) {
     if (e && e.ctrlKey != null && !cancel) d.copy = e.ctrlKey || e.metaKey;
     d.ghost.remove(); d.el.classList.remove('dragging'); document.body.classList.remove('ch-dragging');
     const box = dragGrid() && dragGrid().querySelector('.ch-fdrop'); if (box) box.hidden = true;
+    const sh = document.querySelector('#characterPane .ch-shelf'); if (sh) sh.classList.remove('drop-on');
     dragJust = true; setTimeout(() => { dragJust = false; }, 0); // the click that follows a drag opens nothing
-    if (!cancel && d.at && dropIdol(d.idx, d.at[0], d.at[1], d.copy)) { const t = document.querySelector('#characterPane .ch-idol[data-idx="' + (d.copy ? ctx.current().items.length - 1 : d.idx) + '"]'); if (t) t.focus({ preventScroll: true }); }
+    const focus = sel => { const t = document.querySelector('#characterPane ' + sel); if (t) t.focus({ preventScroll: true }); };
+    if (cancel) return;
+    if (d.toShelf) { const at = shelveIdol(d.idx, d.shelf, d.copy, d.before); if (at >= 0) focus('.ch-shelf .ch-idol[data-idx="' + at + '"]'); }
+    else if (d.at && dropIdol(d.idx, d.at[0], d.at[1], d.copy, d.shelf)) focus('.ch-fossil .ch-idol[data-idx="' + (d.copy || d.shelf ? ctx.current().items.length - 1 : d.idx) + '"]');
   }
   function dragKey(e) {
     if (!DR || !DR.on) return;
@@ -7159,7 +7216,7 @@ window.BOCharacter = function (ctx) {
     if (!t || !ch) return hide();
     let html = '';
     try {
-      if (t.dataset.tip === 'item') { const it = ch.items[+t.dataset.idx]; html = it ? planner.itemTip(it, t.dataset.slot) : ''; }
+      if (t.dataset.tip === 'item') { const it = (t.dataset.shelf ? shelfOf(ch) : ch.items)[+t.dataset.idx]; html = it ? planner.itemTip(it, t.dataset.slot) : ''; }
       else if (t.dataset.tip === 'skill') html = planner.skillTip(ch, t.dataset.id);
       else if (t.dataset.tip === 'sup') html = planner.supTip(t.dataset.id);
     } catch (err) { html = ''; }
@@ -7188,7 +7245,15 @@ window.BOCharacter = function (ctx) {
         e.stopPropagation();
         const ch0 = ctx.current(), i = +ri.dataset.rmitem, it0 = ch0 && ch0.items[i]; if (!it0) return;
         hide(); const ch = ctx.editable(); if (!ch) return;
+        pinIdols(ch, idolLayout(ch)); // the other idols keep their cells (idols without a saved place would otherwise be laid out again)
         ch.items.splice(i, 1); ctx.commit(ch); render(); return;
+      }
+      const rs = e.target.closest && e.target.closest('[data-rmshelf]');
+      if (rs) {
+        e.stopPropagation();
+        const i = +rs.dataset.rmshelf; if (!shelfOf(ctx.current())[i]) return;
+        hide(); const ch = ctx.editable(); if (!ch) return;
+        shelfW(ch).splice(i, 1); ctx.commit(ch); render(); return;
       }
       const rm = e.target.closest && e.target.closest('[data-rmskill]');
       if (rm) {
@@ -7273,6 +7338,11 @@ window.BOCharacter = function (ctx) {
   // Puts an idol on: in place of old (keeping its cells when the new shape fits there), or as a new one at the clicked cell
   // (M.pos) or the first room. False when the Fossil has no room for its shape.
   function setIdol(ch, item, old) {
+    if (M.shelf) { // a spare: no place, always room
+      const sh = shelfW(ch); delete item.gx; delete item.gy;
+      if (old) sh[M.idx] = item; else { sh.push(item); M.idx = sh.length - 1; }
+      return true;
+    }
     const L = idolLayout(ch), [w, h] = idolDims(item), oi = old ? M.idx : -1;
     const spot = idolSpot(L, w, h, old ? L.at.get(oi) : M.pos, oi);
     if (!spot) return false;
@@ -7305,7 +7375,7 @@ window.BOCharacter = function (ctx) {
   let M = null, back = null, lastFocus = null; // M: { slot, idx, tab, kind, cat, q, word }
   const rarCls = it => it.rarity === 'Unique' ? 'unique' : lc(it.rarity);
   const safe = f => { try { return f(); } catch (e) { return ''; } };
-  const itemNow = ch => !M ? null : M.slot === 'Idol' ? (ch.items[M.idx] || null) : (ch.items.find(i => i.slot === M.slot) || null);
+  const itemNow = ch => !M ? null : M.slot === 'Idol' ? ((M.shelf ? shelfOf(ch) : ch.items)[M.idx] || null) : (ch.items.find(i => i.slot === M.slot) || null);
   const baseTypeName = b => b.TypeName || b.Name;
   // Sidebar group of a base: its weapon / off-hand type, or for armour its defence mix (Armour, Armour / Evasion ...).
   const DEF_ORDER = ['Armour', 'Evasion', 'Energy Shield', 'Armour / Evasion', 'Armour / Energy Shield', 'Evasion / Energy Shield'];
@@ -7318,11 +7388,11 @@ window.BOCharacter = function (ctx) {
   function openItem(el) {
     if (!ctx.current()) return;
     hide();
-    const slot = el.dataset.slot, idx = +el.dataset.idx;
+    const slot = el.dataset.slot, idx = +el.dataset.idx, shelf = el.dataset.shelf === '1';
     lastFocus = el.closest('.ch-slot') || el;
-    const it = idx >= 0 ? ctx.current().items[idx] : null;
+    const it = idx >= 0 ? (shelf ? shelfOf(ctx.current()) : ctx.current().items)[idx] : null;
     RD = { busy: '', r: null };
-    M = { slot, idx: it ? idx : -1, tab: it ? 'edit' : 'select', kind: 'basic', cat: '', q: '', word: '', msg: '', pos: el.dataset.fx != null ? [+el.dataset.fx, +el.dataset.fy] : null }; // pos: the Fossil cell clicked for a new idol
+    M = { slot, shelf, idx: it ? idx : -1, tab: it ? 'edit' : 'select', kind: 'basic', cat: '', q: '', word: '', msg: '', pos: el.dataset.fx != null ? [+el.dataset.fx, +el.dataset.fy] : null }; // pos: the Fossil cell clicked for a new idol
     if (!back) {
       back = document.createElement('div'); back.className = 'io-back'; back.setAttribute('role', 'dialog'); back.setAttribute('aria-modal', 'true'); back.setAttribute('aria-label', 'Item');
       back.addEventListener('mousedown', e => { if (e.target === back) closeItem(); });
@@ -7532,7 +7602,8 @@ window.BOCharacter = function (ctx) {
     const word = planner.oathwordForItem(it, M.slot);
     const art = itemArt(it);
     let h = '<div class="io-top"><div class="io-ident' + withArt(art) + '">' + art + '<div><span class="io-slotlabel">' + esc(planner.slotName[M.slot] || M.slot) + '</span><div class="io-name ' + n.cls + '">' + esc(n.name) + '</div><span class="meta">' + esc(n.base) + (word || u ? '' : ' · ' + it.rarity) + '</span></div></div>' +
-      '<div class="io-acts"><button class="btn small ghost" type="button" data-io="saveitem" title="Keeps this item in this browser. Put it on again from Select, under Saved, on any character or plan.">Save item</button>' + (M.slot === 'Idol' ? '<button class="btn small ghost" type="button" data-io="dupidol" title="Puts a copy of this idol in the first free room of the Fossil. Holding Ctrl while dragging an idol copies it too.">Duplicate</button>' : '') + '<button class="btn small ghost" type="button" data-io="change">⟳ Change item</button><button class="btn small ghost" type="button" data-io="unequip">✕ ' + (M.slot === 'Idol' ? 'Remove' : 'Unequip') + '</button></div></div>';
+      '<div class="io-acts"><button class="btn small ghost" type="button" data-io="saveitem" title="Keeps this item in this browser. Put it on again from Select, under Saved, on any character or plan.">Save item</button>' + (M.slot === 'Idol' ? '<button class="btn small ghost" type="button" data-io="dupidol" title="' + (M.shelf ? 'Adds a copy of this idol to the spare idols.' : 'Puts a copy of this idol in the first free room of the Fossil.') + ' Holding Ctrl while dragging an idol copies it too.">Duplicate</button>' +
+        (M.shelf ? '<button class="btn small ghost" type="button" data-io="wearidol" title="Puts this idol in the first free room of the Fossil, where it counts">Put in Fossil</button>' : '<button class="btn small ghost" type="button" data-io="spareidol" title="Takes this idol out of the Fossil to the spare idols (not counted)">Move to spares</button>') : '') + '<button class="btn small ghost" type="button" data-io="change">⟳ Change item</button><button class="btn small ghost" type="button" data-io="unequip">✕ ' + (M.slot === 'Idol' ? 'Remove' : 'Unequip') + '</button></div></div>';
     if (M.msg) h += '<p class="hint pl-status" role="status">' + esc(M.msg) + '</p>';
     if (!isU) h += '<div class="io-row"><label class="field inline"><span>Rarity</span><select data-f="rarity">' + RAR.map(r => '<option' + (it.rarity === r ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></label>' +
       '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label></div>';
@@ -7619,6 +7690,17 @@ window.BOCharacter = function (ctx) {
       return renderItem();
     }
     const ch = ctx.editable(), it = itemNow(ch); if (!ch || !it) return;
+    if (act === 'dupidol' && M.shelf) { shelfW(ch).splice(M.idx + 1, 0, offGrid(it)); M.msg = 'Copied to the spare idols.'; return commit(ch); }
+    if (act === 'spareidol' && !M.shelf) {
+      pinIdols(ch, idolLayout(ch)); ch.items.splice(M.idx, 1); shelfW(ch).push(offGrid(it));
+      M.shelf = true; M.idx = ch.idolShelf.length - 1; M.msg = 'Moved to the spare idols: not counted now.'; return commit(ch);
+    }
+    if (act === 'wearidol' && M.shelf) {
+      const L = idolLayout(ch), [w, h] = idolDims(it), spot = idolSpot(L, w, h, null, -1);
+      if (!spot) { M.msg = noRoom(it); return renderItem(); }
+      pinIdols(ch, L); shelfW(ch).splice(M.idx, 1); ch.items.push(Object.assign(offGrid(it), { gx: spot[0], gy: spot[1] }));
+      M.shelf = false; M.idx = ch.items.length - 1; M.msg = 'Put in the Fossil at column ' + (spot[0] + 1) + ', row ' + (spot[1] + 1) + '.'; return commit(ch);
+    }
     if (act === 'dupidol') {
       const L = idolLayout(ch), [w, h] = idolDims(it), spot = idolSpot(L, w, h, null, -1);
       if (!spot) { M.msg = noRoom(it); return renderItem(); }
@@ -7626,7 +7708,7 @@ window.BOCharacter = function (ctx) {
       M.msg = 'Copied to column ' + (spot[0] + 1) + ', row ' + (spot[1] + 1) + '.'; return commit(ch);
     }
     if (act === 'unequip') {
-      if (M.slot === 'Idol') { ch.items.splice(M.idx, 1); ctx.commit(ch); render(); return closeItem(); }
+      if (M.slot === 'Idol') { if (!M.shelf) pinIdols(ch, idolLayout(ch)); (M.shelf ? shelfW(ch) : ch.items).splice(M.idx, 1); ctx.commit(ch); render(); return closeItem(); }
       ch.items = ch.items.filter(i => i !== it); M.tab = 'select'; return commit(ch);
     }
     if (act === 'rmaffix') { it.affixes.splice(+b.dataset.ai, 1); return commit(ch); }
@@ -10775,7 +10857,13 @@ window.BOCharacter = function (ctx) {
     let t = null; for (const k of keys) if (GD.statText[k]) { t = GD.statText[k]; break; }
     const fmt = x => (Math.round(x * 100) / 100).toString();
     if (!t) return m.stat + ' ' + m.mode + ' ' + fmt(m.v) + (m.v2 ? '-' + fmt(m.v2) : '') + (m.tags.length ? ' [' + m.tags.join(', ') + ']' : '');
-    const tagWords = [...types.filter((x, i, a) => a.indexOf(x) === i), ...conds].join(' ');
+    // Fire + Cold + Lightning (the Elemental tag) reads "Elemental", as the game's tooltip does (owner, 13 Nov 2026:
+    // idol "5% increased Elemental Damage"); other sets of types read as a list ("Cold and Lightning").
+    // Display text only, no effect on numbers.
+    const ut = types.filter((x, i, a) => a.indexOf(x) === i);
+    const isEle = ut.length === 3 && ['Fire', 'Cold', 'Lightning'].every(x => ut.includes(x));
+    const typeWords = isEle ? 'Elemental' : ut.length > 1 ? ut.slice(0, -1).join(', ') + ' and ' + ut[ut.length - 1] : ut.join('');
+    const tagWords = [typeWords, ...conds].filter(Boolean).join(' ');
     return t.replace('{v}', fmt(m.v)).replace('{v2}', fmt(m.v2)).replace('{abs}', fmt(Math.abs(m.v))).replace('{tags}', tagWords || '').replace('{skills}', (conds.join(' ') || 'Skills'))
       .replace('{tag0}', m.tags[0] || '').replace('{tag1}', m.tags[1] || '').replace(/\{n\}\|plural\(one=([^,]+),other=([^)]+)\)/, (_, a, b) => Math.abs(m.v) === 1 ? a : b).replace(/\s+/g, ' ').trim()
       + (conds.length && !/\{tags\}|\{skills\}/.test(t) && !t.includes(conds[0]) ? ' (' + conds.join(', ') + ')' : '');

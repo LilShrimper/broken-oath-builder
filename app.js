@@ -13039,7 +13039,9 @@ window.BOStartApp = function () {
   // tree), opens on the other end as a plan. Short form <site>#s=<id>: the code is kept by the share-worker
   // (Cloudflare, share-worker/). If that can't be reached, the long form <site>#build=<code> carries it all.
   const SITE_URL = 'https://lilshrimper.github.io/broken-oath-builder/';
-  const SHARE_API = 'https://bo-share.bo-share.workers.dev';
+  // Own domain (13 Nov 2026): China's DNS answers *.workers.dev with a fake address (173.244.209.150, viewdns firewall test),
+  // so the Ladder, share links and reports failed there; api.lilshrimper.dev resolved correctly. Same worker, same KV.
+  const SHARE_API = 'https://api.lilshrimper.dev';
   // ItemDatabase planner links (broked-db.pages.dev/planner#b=...; broked-db.vercel.app/planner.html#b= before 11 Nov 2026): "z" + base64url(raw deflate(JSON)) or
   // "j" + base64url(JSON). Same format tools/offline-clone.js reads. Unlike a BO1. code they carry rolled items:
   // it = [{ s slot, b base, r rarity, u unique, n name, il item level, q quality, ef, ru runes, a: [[id, tier, v, v2, crafted]] }].

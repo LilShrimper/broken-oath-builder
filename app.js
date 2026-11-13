@@ -16,6 +16,9 @@
   const I = window.I18N = { lang, missing: new Set(), ready: Promise.resolve(), t: s => s };
   const root = document.documentElement;
   if (lang !== 'zh') return;
+  // Opening a zh/ page with no choice made yet counts as choosing Chinese: the plain address then sends this visitor to
+  // zh/ too (build.js's head script on English pages). The EN button stores 'en' and stops that.
+  if (routed && !store.get('bods:lang')) store.set('bods:lang', 'zh');
   root.lang = 'zh-Hans';
   // Beta notice (owner, 13 Nov 2026: published without a native reader's review; fixes come in through Report a problem).
   // "The Chinese translation is in beta; if something is wrong, tell us through Report a problem."

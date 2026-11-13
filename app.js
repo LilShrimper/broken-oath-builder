@@ -1277,9 +1277,11 @@
     const deadline = t0 + (cfg.seconds > 0 ? cfg.seconds : 80) * 1000;
     const lvOk = lv => cfg.ignoreLevel || !lv || lv <= (ch.level || 1);
     const useRunes = cfg.runes !== false, useLimited = cfg.limited !== false;
-    // Owner's request, 12 Nov 2026: cfg.noCore = never use the uniques the game data marks Core (uniques.json Core), including the one worn now.
+    // Owner's request, 13 Nov 2026 (was Core uniques, 12 Nov): cfg.noCore = never use a Core Touched base (item_bases.json Tags
+    // CoreTouched), including the item worn now. Core uniques stay in.
     const noCore = !!cfg.noCore;
-    const coreBan = it => noCore && !!it && it.rarity === 'Unique' && !!(GD.uniques[lc(it.unique)] || {}).Core;
+    const ctBan = b => noCore && !!b && (b.Tags || []).includes('CoreTouched');
+    const coreBan = it => !!it && ctBan(GD.bases[lc(it.base)]);
     // A limit the owner can set (12 Nov 2026): at most cfg.maxVows Vows on a red item. Not set: 6, as before.
     const lim = (v, max) => v == null || v === '' || !isFinite(+v) ? max : Math.max(0, Math.min(max, Math.round(+v)));
     const vowMax = lim(cfg.maxVows, VOW_MAX);
@@ -1380,7 +1382,7 @@
     };
     // Bases the character can use, newest rules first; bases that differ only in defences count once (they play the same).
     const baseCache = {};
-    const baseList = slot => baseCache[slot] || (baseCache[slot] = Object.values(GD.bases).filter(b => fitsSlot(b, slot) && lvOk(b.Level)));
+    const baseList = slot => baseCache[slot] || (baseCache[slot] = Object.values(GD.bases).filter(b => fitsSlot(b, slot) && lvOk(b.Level) && !ctBan(b)));
     const sig = b => JSON.stringify([b.Class, (b.Tags || []).filter(t => !/^(Armour|Evasion|EnergyShield|Defences)$/.test(t)).sort(), b.Implicits, b.DamageMin, b.DamageMax, b.AttacksPerSecond, b.Crit, b.bTwoHanded, b.Block]);
     const distinct = list => { const m = new Map(); for (const b of list) { const k = sig(b); const o = m.get(k); if (!o || (b.Level || 0) > (o.Level || 0)) m.set(k, b); } return [...m.values()]; };
 
@@ -1476,7 +1478,7 @@
       // Uniques
       const uniq = Object.values(GD.uniques).filter(u => {
         const b = GD.bases[lc(u.BaseId)];
-        return b && fitsSlot(b, slot) && okBase(b) && lvOk(u.Level || b.Level) && !taken.has(lc(u.Id)) && (useLimited || !u.Limited) && !(noCore && u.Core);
+        return b && fitsSlot(b, slot) && okBase(b) && lvOk(u.Level || b.Level) && !taken.has(lc(u.Id)) && (useLimited || !u.Limited) && !ctBan(b);
       });
       curPhase = phaseName(slot) + ': uniques';
       const scored = [];
@@ -7185,7 +7187,6 @@ window.BOCharacter = function (ctx) {
       if (ri) {
         e.stopPropagation();
         const ch0 = ctx.current(), i = +ri.dataset.rmitem, it0 = ch0 && ch0.items[i]; if (!it0) return;
-        if (!window.confirm('Remove ' + itemName(it0, it0.slot).name + ' from ' + ch0.name + '?\n\nYour save file is not changed. Use Save item in the item window first if you want to put it back on later.')) return;
         hide(); const ch = ctx.editable(); if (!ch) return;
         ch.items.splice(i, 1); ctx.commit(ch); render(); return;
       }
@@ -7787,7 +7788,9 @@ window.BOCharacter = function (ctx) {
     // 0.56.5
     'EvasionMore', 'EnergyShieldMore', 'LifeMore', 'BlockMore', 'TrapCount', 'OrbitRate', 'TickRate', 'SparkRate', 'BlockToDamage',
     // 11 Nov 2026 (from the game data and support texts; see each rule)
-    'LeechingMore', 'ChilledLightningMore', 'FocusVolley', 'FocusShare', 'OrbCount', 'OrbRate']);
+    'LeechingMore', 'ChilledLightningMore', 'FocusVolley', 'FocusShare', 'OrbCount', 'OrbRate',
+    // 13 Nov 2026: Sleepy's Continental Strap (switches.json r76.UNIQUES Every)
+    'PoisonBurst76']);
   // Skyfall second fall: "falls again 0.4 seconds later for X% of their Damage". The game caps the sum at
   // 100% (log 1 Nov: 190% of sources -> "second fall for 100%", "SkyfallSheet68 ... on the sheet (x2.00)")
   // and the second fall strikes each enemy once per cast (one boss hit per cast in every Guardian fight).
@@ -9914,8 +9917,21 @@ window.BOCharacter = function (ctx) {
         const stacks = Math.min(stacksRaw, cap);
         const m = A.bPoisonTakesDamageTaken ? dotTakenFor('Poison') : 1;
         poisonDps = stacks * perStack * m;
+        // Poison burst (Sleepy's Continental Strap, PoisonBurst76): "Every 12th Poison you or your Minions lay on an enemy
+        // bursts: {v}% of the Poison damage that enemy still has coming hits it at once". Evidence: the developer's
+        // switches.json r76.UNIQUES bOn = True, Every = 12 (game data b76+). Model (not log-checked yet): poisons are laid at
+        // `rate`, the stacks on the enemy are evenly spread in age, so on average each has half its duration left; a
+        // burst adds v% of that remaining damage and does not remove the stacks.
+        const burstPct = sumMod('PoisonBurst76', 'Flat');
+        let burstDps = 0;
+        if (burstPct > 0) {
+          const every = Math.max(1, ruleNum(GD, 'r76.UNIQUES.Every', 12));
+          burstDps = (rate / every) * (burstPct / 100) * stacks * perStack * dur / 2 * m;
+          poisonDps += burstDps;
+          res.notes.push('Poison burst: every ' + every + 'th poison bursts for ' + Math.round(burstPct) + '% of the poison still to come (~' + (rate / every).toFixed(2) + ' bursts/s) = +' + Math.round(burstDps).toLocaleString('en-US') + ' DPS. Model from the item text, not checked against the game yet.');
+        }
         const panelStacks = Math.min(rate * tipDur, A.PoisonMaxStacks);
-        ail.poison = { chance: pChance, eligible, duration: dur, tipDuration: tipDur, virulence: !!virulence, perStack, stacks, stacksRaw, cap, panelStacks, inc: pInc, more: pMore, dps: poisonDps, perHitTotal: perStack * dur };
+        ail.poison = { chance: pChance, eligible, duration: dur, tipDuration: tipDur, virulence: !!virulence, perStack, stacks, stacksRaw, cap, panelStacks, inc: pInc, more: pMore, dps: poisonDps, burstDps, burstPct, perHitTotal: perStack * dur };
         if (virulence) res.notes.push('Virulence (Dragonling): poisons last ' + dur.toFixed(2) + ' s in combat instead of the tooltip\'s ' + tipDur.toFixed(2) + ' s; Rares and Guardians hold up to ' + virulence.Cap + ' stacks. The skill panel DPS uses the tooltip duration, like the game.');
       }
       const igChance = clamp((hit.Fire ? A.IgniteChance : 0) + sumMod('IgniteChance', 'Flat'), 0, 100);
@@ -14198,7 +14214,7 @@ window.BOStartApp = function () {
       chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
       chk('vows', 'Vows on uniques', 'A red item takes up to 6 lines from rares at the cube; the best ones are added') +
-      chk('noCore', 'Never pick Core uniques', 'The search skips the uniques marked Core in the game data, and a Core unique you wear now is not kept either') +
+      chk('noCore', 'No Core Touched items', 'The search skips Core Touched bases, and a Core Touched item you wear now is not kept either') +
       chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') +
       '<label class="field inline gs-attn" title="The most Vows a unique (red) item may carry. Empty: 6"><span>Max Vows on uniques</span><input type="number" min="0" max="6" id="gsMaxVows" placeholder="6" value="' + (S_.maxVows === '' || S_.maxVows == null ? '' : S_.maxVows) + '"' + (GS.running || !S_.vows ? ' disabled' : '') + '></label>' +
       '<label class="field inline gs-attn" title="The most Riven mods the whole build may carry, counted over all items. 0 (the default): none. Empty: no limit"><span>Max Riven mods (total)</span><input type="number" min="0" max="99" id="gsMaxRiven" placeholder="no limit" value="' + (S_.maxRiven === '' || S_.maxRiven == null ? '' : S_.maxRiven) + '"' + (GS.running ? ' disabled' : '') + '></label>' +

@@ -1229,9 +1229,41 @@
 
   const lc = s => String(s == null ? '' : s).toLowerCase();
   const SINGLE = ['Helm', 'Chest', 'Gloves', 'Boots', 'Amulet', 'Ring1', 'Ring2', 'Belt', 'DwarvenRune'];
-  // A slot key is the slot name; 'DwarvenRune2' is the second Dwarven rune of a save that has two.
-  const realSlot = key => key === 'DwarvenRune2' ? 'DwarvenRune' : key;
+  // A slot key is the slot name; 'DwarvenRune2' is the second Dwarven rune of a save that has two; 'Idol0', 'Idol1' ... are the
+  // idols in the order they sit in the item list (a key past the last idol adds one).
+  const realSlot = key => key === 'DwarvenRune2' ? 'DwarvenRune' : /^Idol\d+$/.test(key) ? 'Idol' : key;
+  const nthOf = key => key === 'DwarvenRune2' ? 1 : /^Idol\d+$/.test(key) ? +key.slice(4) : 0;
   const baseSlot = key => /^Ring\d$/.test(key) ? 'Ring' : realSlot(key);
+  // The Dwarven Fossil's idol grid (fossil.js, creator.js): 5x5 without its corners, 21 cells. Idols never turn.
+  const GRID_N = 5;
+  const inGrid = (x, y) => x >= 0 && y >= 0 && x < GRID_N && y < GRID_N && !((x === 0 || x === GRID_N - 1) && (y === 0 || y === GRID_N - 1));
+  const GRID_CELLS = []; for (let y = 0; y < GRID_N; y++) for (let x = 0; x < GRID_N; x++) if (inGrid(x, y)) GRID_CELLS.push([x, y]);
+  // A layout of idol sizes [w, h] in the grid, or null when they do not fit (the same search as fossil.js; idols of one size are
+  // taken in cell order so equal idols are not tried twice, and a step cap keeps a hopeless set from running long).
+  function firstLayout(sizes) {
+    const order = sizes.map((s, i) => ({ i, w: s[0], h: s[1] })).sort((a, b) => b.w * b.h - a.w * a.h || b.w - a.w || b.h - a.h);
+    let area = 0; for (const o of order) area += o.w * o.h;
+    if (area > GRID_CELLS.length) return null;
+    const need = []; let a2 = 0; for (let k = order.length - 1; k >= 0; k--) { a2 += order[k].w * order[k].h; need[k] = a2; }
+    const used = new Set(), at = new Array(sizes.length); let steps = 0, found = null;
+    const go = (k, from) => {
+      if (found || steps > 200000) return;
+      if (k === order.length) { found = at.slice(); return; }
+      if (GRID_CELLS.length - used.size < need[k]) return;
+      steps++;
+      const { i, w, h } = order[k], same = k > 0 && order[k - 1].w === w && order[k - 1].h === h;
+      for (let c = same ? from : 0; c < GRID_CELLS.length && !found; c++) {
+        const [x, y] = GRID_CELLS[c], cells = [];
+        for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) cells.push([x + dx, y + dy]);
+        if (!cells.every(([cx, cy]) => inGrid(cx, cy) && !used.has(cx + ',' + cy))) continue;
+        cells.forEach(([cx, cy]) => used.add(cx + ',' + cy)); at[i] = [x, y];
+        go(k + 1, c + 1);
+        cells.forEach(([cx, cy]) => used.delete(cx + ',' + cy));
+      }
+    };
+    go(0, 0);
+    return found;
+  }
   const LIMIT = 3;      // prefixes and suffixes on a rare
   const VOW_MAX = 6;    // Vows on one red item (planner.js VOW_MAX)
   const MIN_GAIN = 1e-6;
@@ -1249,6 +1281,12 @@
     const lim = (v, max) => v == null || v === '' || !isFinite(+v) ? max : Math.max(0, Math.min(max, Math.round(+v)));
     const vowMax = lim(cfg.maxVows, VOW_MAX);
     const useVows = cfg.vows !== false && vowMax > 0;
+    // Owner's request, 12 Nov 2026: a cap on Riven mods for the whole build (not per item). Not set: no cap, as before. Riven lines
+    // already on items the search keeps count against it; the slot being filled sees every other slot's lines (the slots are
+    // re-filled in turn, so the cap holds for the set), though a slot filled earlier keeps its Riven lines once the cap is used up.
+    const rivenMax = lim(cfg.maxRiven, 999);
+    const isRiven = id => (GD.affixes[lc(id)] || {}).Kind === 'Riven';
+    const rivenOn = list => (list || []).filter(a => !a.id.startsWith('unique:') && isRiven(a.id)).length;
     let calcs = 0, lastYield = 0, curPhase = 'Starting', curP = 0, rush = false;
     const late = () => Date.now() > deadline;
     const prog = () => ({ phase: curPhase, p: curP });
@@ -1289,12 +1327,12 @@
     };
     // Replace (or, with null, remove) the item in a slot key; the item keeps its place in the list.
     const put = (items, key, it) => {
-      const s = realSlot(key), n = key === 'DwarvenRune2' ? 1 : 0; let c = -1, placed = false; const out = [];
+      const s = realSlot(key), n = nthOf(key); let c = -1, placed = false; const out = [];
       for (const i of items) { if (i.slot === s && ++c === n) { if (it) out.push(it); placed = true; } else out.push(i); }
       if (!placed && it) out.push(it);
       return out;
     };
-    const at = (items, key) => items.filter(i => i.slot === realSlot(key))[key === 'DwarvenRune2' ? 1 : 0] || null;
+    const at = (items, key) => items.filter(i => i.slot === realSlot(key))[nthOf(key)] || null;
     // A weapon skill only works with the weapon kinds it lists (skills.json WeaponKinds).
     const kinds = ((GD.skills[lc(mainSkill)] || {}).WeaponKinds || []).map(lc);
     const mainOk = b => !kinds.length || kinds.includes(lc(b.Class));
@@ -1331,7 +1369,9 @@
 
     // ---- the greedy fillers ----
     // Affixes on a rare (3 + 3) or Vows on a red item (6): the pick that adds the most DPS, again and again.
-    function* fillAffixes(items, slot, it, vow) {
+    // L: the line limits of a rare ({ type: per prefix / suffix, total }); an idol takes its own (magic 1 + 1, rare 3 + 3, at most N).
+    function* fillAffixes(items, slot, it, vow, L) {
+      L = L || { type: LIMIT, total: LIMIT * 2 };
       const base = baseOf(it), pool = [];
       for (const af of affixesFor(base)) {
         const ti = tierFor(af); if (ti < 0) continue;
@@ -1342,10 +1382,12 @@
       let v = V(put(items, slot, cur));
       const used = () => new Set(cur.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
       const count = t => cur.affixes.filter(a => (GD.affixes[lc(a.id)] || {}).Type === t).length;
-      const room = c => vow ? cur.affixes.filter(a => !a.id.startsWith('unique:')).length < vowMax : count(c.type) < LIMIT;
+      const outsideRiven = put(items, slot, null).reduce((n, i) => n + rivenOn(i.affixes), 0); // Riven lines on every other item
+      const rivenOk = (c, list) => !isRiven(c.a.id) || outsideRiven + rivenOn(list) < rivenMax;
+      const room = c => (vow ? cur.affixes.filter(a => !a.id.startsWith('unique:')).length < vowMax : count(c.type) < L.type && cur.affixes.length < L.total) && rivenOk(c, cur.affixes);
       const gains = new Map();
       let listed = null;
-      for (let step = 0; step < (vow ? vowMax : LIMIT * 2) && !late(); step++) {
+      for (let step = 0; step < (vow ? vowMax : L.total) && !late(); step++) {
         const u = used();
         let best = null, bv = v;
         for (const c of listed || pool) {
@@ -1367,7 +1409,7 @@
         const rest = cur.affixes.filter((_, j) => j !== i), u = new Set(rest.map(x => (GD.affixes[lc(x.id)] || {}).Group));
         let bestA = null;
         for (const c of listed) {
-          if (u.has(c.g) || c.a.id === a.id) continue;
+          if (u.has(c.g) || c.a.id === a.id || !rivenOk(c, rest)) continue;
           if (!vow && c.type !== (GD.affixes[lc(a.id)] || {}).Type) continue;
           const x = V(put(items, slot, { ...cur, affixes: rest.concat([c.a]) }));
           if (x > v * (1 + MIN_GAIN)) { v = x; bestA = c; }
@@ -1464,12 +1506,84 @@
     }
     const phaseName = slot => ({ MainHand: 'Weapon', OffHand: 'Off hand', Ring1: 'Ring 1', Ring2: 'Ring 2', DwarvenRune: 'Dwarven rune', DwarvenRune2: 'Dwarven rune 2' }[slot] || slot);
 
+    // ---- idols ----
+    // Owner's request, 12 Nov 2026: cfg.idolAffixes 1-6 = also choose the idols, each with up to that many lines. Empty / 0: the idols
+    // stay as they are. Rules, from the game data: the Fossil holds idols in a 5x5 grid without its corners (21 cells) and idols never
+    // turn, so a set is valid only when its sizes fit (firstLayout, the Fossil Planner's search); a magic idol holds 1 prefix + 1 suffix
+    // (cube_recipes.json Awakening: a magic idol becomes a rare one; saves: every magic idol has at most 1 + 1) and a rare 3 + 3
+    // (planner.js LIMIT), so 1-2 lines make a magic idol and 3-6 a rare one. The Cube's merge recipes (3 magic 1-cell idols into a 3-cell
+    // one) say a bigger idol is possible at any size. Idol lines roll by the idol's size (Idol1 ... Idol4, IdolGrand tags on the affixes) at
+    // the item level set above. Red idols (Unique) worn now stay and keep their cells; the other idols are chosen anew.
+    const idolN = cfg.idolAffixes === '' || cfg.idolAffixes == null ? 0 : Math.max(0, Math.min(6, Math.round(+cfg.idolAffixes) || 0));
+    const idolBases = idolN ? Object.values(GD.bases || {}).filter(b => b.Slot === 'Idol' && lvOk(b.Level)).map(b => ({ b, w: b.Width || 1, h: b.Height || 1 })) : [];
+    const IDOL_L = { type: idolN > 2 ? 3 : 1, total: idolN };
+    const idolOf = b => ({ slot: 'Idol', base: b.Id, rarity: idolN > 2 ? 'Rare' : 'Magic', unique: 'None', name: '', level: ilvl, quality: 0, affixes: [], runes: [] });
+    const sizeOfIdol = it => { const b = baseOf(it); return [(b && b.Width) || 1, (b && b.Height) || 1]; };
+    const idolCount = list => list.filter(i => i.slot === 'Idol').length;
+    // Greedy fill by value per cell (idol shapes are tried in the order of their last known gain per cell, and a shape is
+    // re-filled only when it comes up first: its gain can only fall as idols are added), then one swap pass that changes the
+    // shape of an idol. Every idol is added only where the sizes still fit the grid.
+    function* bestIdols(items) {
+      let fixed = items.filter(i => i.slot === 'Idol' && i.rarity === 'Unique');
+      if (!firstLayout(fixed.map(sizeOfIdol))) fixed = []; // the red idols worn now do not fit the grid (an odd save): leave them out
+      const rest = items.filter(i => i.slot !== 'Idol');
+      const build = list => rest.concat(fixed, list.map(m => m.it));
+      const sizesOf = list => fixed.map(sizeOfIdol).concat(list.map(m => [m.w, m.h]));
+      const mine = [];
+      const fill = function* (list, c) { // the best lines for a new idol of shape c, with `list` already placed
+        const cur = build(list);
+        return yield* fillAffixes(cur, 'Idol' + idolCount(cur), idolOf(c.b), false, IDOL_L);
+      };
+      const cand = idolBases.map(c => ({ ...c, eff: Infinity, stamp: -1, it: null, gain: 0 }));
+      let v = V(build(mine));
+      for (let iter = 0; iter < GRID_CELLS.length && !late(); iter++) {
+        const fit = cand.filter(c => firstLayout(sizesOf(mine).concat([[c.w, c.h]])));
+        let pick = null;
+        while (fit.length && !late()) {
+          fit.sort((a, b) => b.eff - a.eff);
+          const top = fit[0];
+          if (top.stamp === iter) { pick = top; break; }
+          const f = yield* fill(mine, top);
+          top.it = f.item; top.gain = f.v / v - 1; top.eff = top.gain / (top.w * top.h); top.stamp = iter;
+        }
+        if (!pick || !(pick.gain > MIN_GAIN)) break;
+        mine.push({ b: pick.b, w: pick.w, h: pick.h, it: pick.it }); v = V(build(mine));
+      }
+      // Swap pass: an idol of one shape for another shape (the freed cells may take a bigger or a smaller idol).
+      if (!rush && !late()) {
+        let tries = 0;
+        for (const kind of [...new Set(mine.map(m => m.b.Id))]) {
+          for (const c of cand) {
+            if (late() || tries >= 40 || c.b.Id === kind) continue;
+            const i = mine.map(m => m.b.Id).lastIndexOf(kind), others = mine.filter((_, j) => j !== i);
+            if (!firstLayout(sizesOf(others).concat([[c.w, c.h]]))) continue;
+            tries++;
+            const f = yield* fill(others, c);
+            if (f.v > v * (1 + MIN_GAIN)) { mine.splice(i, 1); mine.push({ b: c.b, w: c.w, h: c.h, it: f.item }); v = V(build(mine)); }
+          }
+        }
+        // cells the swaps freed may take one more
+        for (let again = 0; again < GRID_CELLS.length && !late(); again++) {
+          let best = null;
+          for (const c of cand) {
+            if (!firstLayout(sizesOf(mine).concat([[c.w, c.h]]))) continue;
+            const f = yield* fill(mine, c);
+            if (f.v > (best ? best.f.v : v) * (1 + MIN_GAIN)) best = { c, f };
+          }
+          if (!best) break;
+          mine.push({ b: best.c.b, w: best.c.w, h: best.c.h, it: best.f.item }); v = V(build(mine));
+        }
+      }
+      return { items: build(mine), v: V(build(mine)), layout: firstLayout(sizesOf(mine)), cells: sizesOf(mine).reduce((n, s) => n + s[0] * s[1], 0) };
+    }
+
     // ---- passes ----
     let items = (ch.items || []).map(i => i);
+    let idolLayout = null, idolCells = 0;
     const base0 = V(items);
     if (!goals.length || !(goals[0].base > 0) || !(base0 > 0)) return { error: 'This skill has no DPS to optimize.' };
     const SLOTS = SINGLE.concat(items.filter(i => i.slot === 'DwarvenRune').length > 1 ? ['DwarvenRune2'] : []);
-    const total = 1 + SLOTS.length;
+    const total = 1 + SLOTS.length + (idolN ? 1 : 0);
     let done = 0;
     const apply = (slot, r, tag) => { if (r.item !== at(items, slot)) items = put(items, slot, r.item); };
 
@@ -1512,8 +1626,15 @@
         const r = yield* bestFor(slot, items, null, K);
         apply(slot, r); done++;
       }
+      if (idolN && !late()) {
+        curPhase = 'Pass ' + (pass + 1) + ' · idols'; curP = (pass * total + done) / (PASSES * total); yield prog();
+        const r = yield* bestIdols(items);
+        // The first pass always takes the idols asked for (the setting is the rule, even when the idols worn now are better); later ones only when they gain.
+        if (pass === 0 || r.v > V(items) * (1 + MIN_GAIN)) { items = r.items; idolLayout = r.layout; idolCells = r.cells; }
+        done++;
+      }
       const after = V(items);
-      if (after < before * 1.002) break; // a pass that gains under 0.2% ends the search
+      if (!(idolN && pass === 0) && after < before * 1.002) break; // a pass that gains under 0.2% ends the search
     }
 
     // ---- result ----
@@ -1527,8 +1648,17 @@
       // gain: what this slot's pick adds over the item you wear now, with the rest of the set as found
       out.push({ slot, item: it, was, worth, changed, gain: changed ? value / (V(put(items, slot, was)) || value) - 1 : 0 });
     }
+    // One row per idol (the idols worn now and the idols chosen, side by side)
+    if (idolN) {
+      const was = (ch.items || []).filter(i => i.slot === 'Idol'), now = items.filter(i => i.slot === 'Idol');
+      for (let k = 0; k < Math.max(was.length, now.length); k++) {
+        const it = now[k] || null, w = was[k] || null, key = 'Idol' + k;
+        const changed = JSON.stringify(it) !== JSON.stringify(w);
+        out.push({ slot: 'Idol', label: 'Idol ' + (k + 1), item: it, was: w, worth: it ? 1 - V(put(items, key, null)) / value : 0, changed, gain: changed && it ? value / (V(put(items, key, w)) || value) - 1 : 0 });
+      }
+    }
     const skills = goals.map(gl => { const v = dpsOf(gl, items); return { id: gl.id, w: gl.w, base: gl.base, value: v, gain: gl.base > 0 ? v / gl.base - 1 : 0 }; });
-    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, skills, dropped, multi: multi && goals.length > 1,
+    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, idolN, idolCells, idolLayout, skills, dropped, multi: multi && goals.length > 1,
       scored, defWeight: defW, maxRes: wantRes, resTarget, def: scored ? { before: def0, after: cfg.defence(items) } : null };
   }
 
@@ -4695,7 +4825,10 @@ window.BOItemSearch = function (ctx) {
   const keep = () => { try { localStorage.setItem('bods:itemsearch', JSON.stringify(F)); } catch (e) { /* storage off */ } };
 
   // The level an entry sorts and filters by: a mod's level is the item level its lowest tier (or the picked tier) needs.
-  const levelOf = e => e.cat === 'mod' && F.tier && e.tiers.includes(F.tier) ? e.a.Tiers[+F.tier.slice(1) - 1].ILvl : e.level;
+  // The tier a mod's Tier filter points at: "T3" is the 3rd tier; a Riven or Mythic mod's label is its kind ("Riven"), which names
+  // no single tier (it crashed the page when saved in the filter, 12 Nov 2026), so -1: the lowest tier shows.
+  const tierIdx = e => { const m = F.tier && e.tiers.includes(F.tier) && /^T(\d+)$/.exec(F.tier); return m && +m[1] - 1 < e.a.Tiers.length ? +m[1] - 1 : -1; };
+  const levelOf = e => e.cat === 'mod' && tierIdx(e) >= 0 ? e.a.Tiers[tierIdx(e)].ILvl : e.level;
   function pick(stage) {
     const words = terms(F.q);
     const min = F.min === '' ? -Infinity : +F.min, max = F.max === '' ? Infinity : +F.max;
@@ -4801,7 +4934,7 @@ window.BOItemSearch = function (ctx) {
       if (w.Flavour) body += '<p class="is-flavour">' + esc(w.Flavour) + '</p>';
       if (e.tiers[0] !== 'Standard') badges.push(badge(e.tiers[0], 'tier ' + lc(e.tiers[0]).replace(/\W/g, '')));
     } else if (e.cat === 'mod') {
-      const a = e.a, on = F.tier && e.tiers.includes(F.tier) ? +F.tier.slice(1) - 1 : -1;
+      const a = e.a, on = tierIdx(e);
       ico = icon('mod', lc(a.Type));
       sub = a.Kind === 'Riven' ? 'Riven ' + lc(a.Type) : a.Kind === 'Mythic' ? 'Mythic line' : a.Type;
       body = '<p class="is-into">' + (a.Kind === 'Mythic' ? 'A Mythic line. The game data does not say which items it rolls on.' : 'Rolls on: ' + esc(e.slots.join(', ') || 'nothing') + (a.Kind === 'Riven' ? '. A Riven mod: one tier above the normal mod of the same kind.' : '')) + '</p>' +
@@ -4819,7 +4952,7 @@ window.BOItemSearch = function (ctx) {
     }
     const nb = addedBadge(e); if (nb) badges.unshift(nb);
     return '<article class="is-card cat-' + e.cat + '"><header>' + ico + '<div class="is-head"><b class="is-name">' + esc(e.name) + '</b><small>' + esc((e.cat === 'rune' ? (e.jewel ? 'Jewel' : 'Rune') : CAT_NAME[e.cat]) + ' · ' + sub) + '</small></div>' +
-      '<span class="is-lvl" title="' + (e.cat === 'mod' ? 'Item level the ' + (F.tier && e.tiers.includes(F.tier) ? F.tier : 'lowest') + ' tier needs' : 'Level') + '">' + (e.cat === 'mod' ? 'iLvl ' : 'Lvl ') + levelOf(e) + '</span></header>' +
+      '<span class="is-lvl" title="' + (e.cat === 'mod' ? 'Item level the ' + (tierIdx(e) >= 0 ? F.tier : 'lowest') + ' tier needs' : 'Level') + '">' + (e.cat === 'mod' ? 'iLvl ' : 'Lvl ') + levelOf(e) + '</span></header>' +
       body + (badges.length ? '<footer>' + badges.join('') + '</footer>' : '') + '</article>';
   }
 
@@ -4827,7 +4960,7 @@ window.BOItemSearch = function (ctx) {
   // picked tier's), its tags, where it rolls; on the right the tier count and the item levels it needs.
   const TAG_CLS = { physical: 'phys', fire: 'fire', cold: 'cold', lightning: 'light', chaos: 'chaos', elemental: 'elem' };
   function modRow(e) {
-    const GD = ctx.gd(), a = e.a, on = F.tier && e.tiers.includes(F.tier) ? +F.tier.slice(1) - 1 : -1, t = on >= 0 ? a.Tiers[on] : null;
+    const GD = ctx.gd(), a = e.a, on = tierIdx(e), t = on >= 0 ? a.Tiers[on] : null;
     const text = t ? rangeText(GD, a.Mod, t.Min, t.Max, t.Min2, t.Max2) : e.name;
     const ilvls = a.Tiers.map(x => x.ILvl || 1), lo = Math.min(...ilvls), hi = Math.max(...ilvls);
     const tags = (a.Mod.Tags || []).map(x => '<span class="is-tag ' + (TAG_CLS[lc(x)] || '') + '">' + esc(x) + '</span>').join('');
@@ -13492,7 +13625,7 @@ window.BOStartApp = function () {
   // ---------- Gear Set Sim (the second sub-tab of Item Compare) ----------
   // Searches every unique, Oathword and rare (best prefixes and damage suffixes) for the best gear for the selected
   // skill, with the tree, skills, supports and idols as they are (gearopt.js, run in slices so the page stays usable).
-  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxVows: '', layers: { es: true, armour: true, evasion: true, block: true } }, store.get('gearSim', {})) };
+  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxVows: '', maxRiven: '', idolAffixes: '', layers: { es: true, armour: true, evasion: true, block: true } }, store.get('gearSim', {})) };
   delete GS.set.maxLines; // a box that was on the page for one version (v255)
   GS.set.layers = Object.assign({ es: true, armour: true, evasion: true, block: true }, GS.set.layers || {});
   // Defence for the DPS / Defence slider and "Reach max resistances" (owner, 12 Nov 2026): an estimate, not a defensive sim.
@@ -13626,7 +13759,7 @@ window.BOStartApp = function () {
     // Skills ticked under "Also count" count too (their own supports), weighted as in the tree optimizer.
     const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
     const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
-    const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: (more.length ? 80 + 40 * Math.min(3, more.length) : 80) + (GS.set.prio > 0 || GS.set.maxRes ? 40 : 0) }, GS.set, { defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget() }));
+    const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: (more.length ? 80 + 40 * Math.min(3, more.length) : 80) + (GS.set.prio > 0 || GS.set.maxRes ? 40 : 0) + (GS.set.idolAffixes ? 60 : 0) }, GS.set, { defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget() }));
     renderCompare();
     const step = () => {
       if (job !== GS.job) return;
@@ -13665,15 +13798,15 @@ window.BOStartApp = function () {
     h += '<div class="headline small">' + stat('Your gear', num(r.base), '', '', esc(skillName) + ', total DPS') +
       stat('Best gear', num(r.value), '', 'main', esc(skillName) + ', total DPS') +
       stat('Change', (r.gain >= 0 ? '+' : '') + num(r.value - r.base) + ' DPS', '<div class="delta ' + (r.gain >= 0 ? 'up' : 'down') + '">' + pct(r.gain) + '</div>', '', 'found in ' + (r.ms / 1000).toFixed(1) + ' s' + (r.timedOut ? ' (stopped at the time limit)' : '')) + '</div>';
-    h += '<div class="cmp-actions"><button class="btn" type="button" data-gs="equip">Equip the best set</button><span class="hint">Puts every changed slot on ' + esc(st.ch.name) + ' in this page; idols and the tree stay.' + (st.ch.plan ? '' : ' Your save is never changed.') + '</span></div>';
+    h += '<div class="cmp-actions"><button class="btn" type="button" data-gs="equip">Equip the best set</button><span class="hint">Puts every changed slot on ' + esc(st.ch.name) + ' in this page; ' + (r.idolN ? 'the idols are replaced too (' + r.idolCells + ' of 21 Fossil cells used, a layout that fits) and the tree stays.' : 'idols and the tree stay.') + (st.ch.plan ? '' : ' Your save is never changed.') + '</span></div>';
     h += '<div class="table-wrap"><table class="tbl gs-table"><thead><tr><th>Slot</th><th>Your item</th><th>Best item</th><th title="' + (r.scored ? 'Score (DPS and defence, weighed as set)' : 'DPS') + ' this slot\'s pick adds over your current item, with the rest of the best set in place">Adds</th><th title="' + (r.scored ? 'Score' : 'DPS') + ' lost if this slot were left empty in the best set">Slot worth</th></tr></thead><tbody>' +
       r.slots.map(s => {
         const tip = s.item ? '<details class="gs-lines"><summary>Lines</summary><div class="cmp-tip pl-tip">' + g.tip(s.item, s.item.slot) + '</div></details>' : '';
         const si = r.slots.indexOf(s);
-        return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(gsSlotName(s.slot)) + '</td><td' + (s.was ? ' class="gs-hov" data-gs-tip="was:' + si + '"' : '') + '>' + gsItemLabel(s.was) + '</td><td' + (s.item ? ' class="gs-hov" data-gs-tip="item:' + si + '"' : '') + '>' + (s.changed ? '' : '<span class="meta">kept: </span>') + gsItemLabel(s.item) + tip + '</td><td>' +
+        return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(s.label || gsSlotName(s.slot)) + '</td><td' + (s.was ? ' class="gs-hov" data-gs-tip="was:' + si + '"' : '') + '>' + gsItemLabel(s.was) + '</td><td' + (s.item ? ' class="gs-hov" data-gs-tip="item:' + si + '"' : '') + '>' + (s.changed ? '' : '<span class="meta">kept: </span>') + gsItemLabel(s.item) + tip + '</td><td>' +
           (s.changed ? '<span class="' + (s.gain >= 0 ? 'up' : 'down') + '">' + pct(s.gain) + '</span>' : '<span class="meta">–</span>') + '</td><td>' + (s.item ? num(s.worth * 100, 1) + '%' : '–') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
-    h += '<p class="hint">Every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best, so this is the most the gear can give, not a drop you will see soon. Rares carry the prefixes and suffixes that add the most' + (r.scored ? '' : ' DPS') + ' and the best runes in their sockets' + (r.vowMax < 6 ? '; uniques carry at most ' + r.vowMax + ' Vow' + (r.vowMax === 1 ? '' : 's') + ', as set' : '') + '; a rare with every line at its top tier counts as a Flawless Rare in the sim. ' + (r.scored ? gsDefNote() + ' Attribute requirements,' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); attribute requirements,') + ' rune and item prices and drop chances are ignored. Idols, the tree and the supports stay as they are.</p>';
+    h += '<p class="hint">Every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best, so this is the most the gear can give, not a drop you will see soon. Rares carry the prefixes and suffixes that add the most' + (r.scored ? '' : ' DPS') + ' and the best runes in their sockets' + (r.vowMax < 6 ? '; uniques carry at most ' + r.vowMax + ' Vow' + (r.vowMax === 1 ? '' : 's') + ', as set' : '') + '; a rare with every line at its top tier counts as a Flawless Rare in the sim. ' + (r.scored ? gsDefNote() + ' Attribute requirements,' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); attribute requirements,') + ' rune and item prices and drop chances are ignored. ' + (r.idolN ? 'Idols are chosen too, each with up to ' + r.idolN + ' line' + (r.idolN === 1 ? '' : 's') + ', every line at its top tier for item level ' + r.ilvl + '; the tree and the supports stay as they are.' : 'Idols, the tree and the supports stay as they are.') + '</p>';
     return h + '</div>';
   }
   // Result headline when the search weighed defence: DPS, the EHP estimate and the resistances, before and after.
@@ -13696,13 +13829,18 @@ window.BOStartApp = function () {
     if (GS.res && GS.res.key !== key) GS.res = null;
     const chk = (f, label, tip) => '<label class="check-row" title="' + esc(tip) + '"><input type="checkbox" data-gs-set="' + f + '"' + (S_[f] ? ' checked' : '') + (GS.running ? ' disabled' : '') + '><span>' + label + '</span></label>';
     let h = '<div class="card gs-card"><div class="cmp-pick-head"><h2>Gear Set Sim</h2><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + (GS.running ? ' disabled' : '') + '>' + cmpSkillOptions() + '</select></label>' + (GS.running ? '' : cmpMultiHtml() + enemyBtn()) + '</span></div>' +
-      '<p class="hint">Finds the best gear for the selected skill' + (optExtra().length ? ' and the ' + optExtra().length + ' ticked under Also count (weighted)' : '') + ': every unique (with Vows), every Oathword, and rare items with the best prefixes and suffixes. Your passive tree, skills, supports and idols stay as they are.</p>' +
+      '<p class="hint">Finds the best gear for the selected skill' + (optExtra().length ? ' and the ' + optExtra().length + ' ticked under Also count (weighted)' : '') + ': every unique (with Vows), every Oathword, and rare items with the best prefixes and suffixes. Your passive tree, skills and supports stay as they are' + (S_.idolAffixes ? '; so do your red idols' : ', and so do your idols unless you pick idol lines below') + '.</p>' +
       '<div class="gs-controls"><label class="field inline" title="Item level of the rares: 84 and up gives the top tier of every line"><span>Item level</span><input type="number" min="1" max="100" id="gsIlvl" value="' + S_.ilvl + '"' + (GS.running ? ' disabled' : '') + '></label>' +
       chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
       chk('vows', 'Vows on uniques', 'A red item takes up to 6 lines from rares at the cube; the best ones are added') +
       chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') +
-      '<label class="field inline" title="The most Vows a unique (red) item may carry. Empty: 6"><span>Max Vows on uniques</span><input type="number" min="0" max="6" id="gsMaxVows" placeholder="6" value="' + (S_.maxVows === '' || S_.maxVows == null ? '' : S_.maxVows) + '"' + (GS.running || !S_.vows ? ' disabled' : '') + '></label>' + '</div>' +
+      '<label class="field inline" title="The most Vows a unique (red) item may carry. Empty: 6"><span>Max Vows on uniques</span><input type="number" min="0" max="6" id="gsMaxVows" placeholder="6" value="' + (S_.maxVows === '' || S_.maxVows == null ? '' : S_.maxVows) + '"' + (GS.running || !S_.vows ? ' disabled' : '') + '></label>' +
+      '<label class="field inline" title="The most Riven mods the whole build may carry, counted over all items. Empty: no limit. 0: none"><span>Max Riven mods (total)</span><input type="number" min="0" max="99" id="gsMaxRiven" placeholder="no limit" value="' + (S_.maxRiven === '' || S_.maxRiven == null ? '' : S_.maxRiven) + '"' + (GS.running ? ' disabled' : '') + '></label>' + '</div>' +
+      '<div class="gs-controls"><label class="field inline" title="Also choose the idols: how many lines each idol carries. Keep my idols leaves the idols as they are"><span>Optimize idols with</span><select id="gsIdol"' + (GS.running ? ' disabled' : '') + '><option value=""' + (S_.idolAffixes === '' || S_.idolAffixes == null ? ' selected' : '') + '>Keep my idols</option>' +
+        [1, 2, 3, 4, 5, 6].map(n => '<option value="' + n + '"' + (+S_.idolAffixes === n ? ' selected' : '') + '>' + n + ' affix' + (n === 1 ? '' : 'es') + ' per idol</option>').join('') + '</select></label></div>' +
+      '<p class="hint">Idols sit in the Dwarven Fossil, a 5 by 5 grid without its corners (21 cells), and they never turn. The search only picks a set of idol sizes that fits that grid, and only the lines an idol can hold: 1 or 2 lines make a magic idol (1 prefix, 1 suffix), 3 to 6 a rare idol (up to 3 and 3). Red idols you wear stay and keep their cells; all other idols are chosen again.</p>' +
+      '<p class="hint">Riven mods are rare-item lines one tier above the best normal tier of the same line (for example Life 146–167 instead of 120–139). They need item level 84 or more, take a normal prefix or suffix slot, and replace the normal line they match, so an item never holds both. The limit counts every Riven mod on the whole build.</p>' +
       '<div class="gs-controls gs-goal">' + gsPrioHtml(GS.running) + gsLayersHtml(GS.running) +
       chk('maxRes', 'Reach max resistances', 'Brings Fire, Cold and Lightning resistance to the target with the lines, runes and uniques that cost the least, then follows the slider with what is left. Nothing is spent on resistance past the target') +
       (S_.maxRes ? '<label class="field inline" title="Resistance to reach on each element. The game caps resistances at ' + gsResCap() + '%; set it higher to cover a resistance penalty"><span>Target %</span><input type="number" min="1" max="200" id="gsResTarget" value="' + gsResTarget() + '"' + (GS.running ? ' disabled' : '') + '></label>' +
@@ -13784,6 +13922,8 @@ window.BOStartApp = function () {
       if (t.dataset.gsSet) { GS.set[t.dataset.gsSet] = t.checked; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsPrio') { GS.set.prio = Math.max(0, Math.min(100, Math.round(+t.value / 10) * 10 || 0)); store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) clearOpt(); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsResTarget') { const v = Math.max(1, Math.min(200, Math.round(+t.value) || 0)); GS.set.resTarget = v === gsResCap() ? 0 : v; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsIdol') { GS.set.idolAffixes = t.value === '' ? '' : Math.max(1, Math.min(6, Math.round(+t.value) || 1)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsMaxRiven') { const v = String(t.value).trim(); GS.set.maxRiven = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(99, Math.round(+v))); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsMaxVows') { const v = String(t.value).trim(); GS.set.maxVows = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(6, Math.round(+v))); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsIlvl') { GS.set.ilvl = Math.max(1, Math.min(100, Math.round(+t.value) || 84)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'cmpFile') { if (t.files[0]) cmpReadImage(t.files[0]); return; }

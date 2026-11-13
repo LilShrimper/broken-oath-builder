@@ -32,6 +32,9 @@ window.PAGE_LANGS = {
     beta: '日本語訳は機械翻訳（DeepL）のベータ版です。誤りがあれば<button type="button" class="linkish">「問題を報告」</button>からお知らせください。' },
   ko: { html: 'ko', label: 'KO', word: '언어', name: '한국어', to: '한국어로 전환',
     beta: '한국어 번역은 기계 번역(DeepL)이며 베타 버전입니다. 잘못된 부분이 있으면 <button type="button" class="linkish">“문제 신고”</button>로 알려 주세요.' },
+  // Dutch (13 Nov 2026): page text written by Claude like the Chinese, not DeepL; not yet read by a native speaker.
+  nl: { html: 'nl', label: 'NL', word: 'Taal', name: 'Nederlands', to: 'Naar het Nederlands',
+    beta: 'De Nederlandse vertaling is in bèta en nog niet door een moedertaalspreker nagelezen. Klopt er iets niet, laat het ons weten via <button type="button" class="linkish">Probleem melden</button>.' },
   pl: { html: 'pl', label: 'PL', word: 'Język', name: 'Polski', to: 'Przełącz na polski',
     beta: 'Polskie tłumaczenie jest maszynowe (DeepL) i w wersji beta. Jeśli coś jest nie tak, daj nam znać przez <button type="button" class="linkish">„Zgłoś problem”</button>.' },
   pt: { html: 'pt-BR', label: 'PT', word: 'Idioma', name: 'Português (Brasil)', to: 'Mudar para português',

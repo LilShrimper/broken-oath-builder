@@ -3108,7 +3108,8 @@ window.BOPlanner = function (ctx) {
     p.supportGems = []; p.gems = p.gems.filter(g => used.has(g));
     p.gemLevels = Object.fromEntries(Object.entries(p.gemLevels).filter(([k]) => used.has(k)));
     p.items = p.items.map(it => [it.slot, it.base, it.rarity, it.unique && it.unique !== 'None' ? it.unique : 0, it.level || 0,
-      (it.affixes || []).map(a => { const fl = (a.crafted ? 1 : 0) + (a.oath ? 2 : 0) + (a.scar ? 4 : 0); return [a.id, a.tier || 0, r4(a.v), r4(a.v2)].concat(fl ? [fl] : []).join(','); }).join(';'), (it.runes || []).join(','), it.name || '', it.roll == null ? null : r4(it.roll)]);
+      (it.affixes || []).map(a => { const fl = (a.crafted ? 1 : 0) + (a.oath ? 2 : 0) + (a.scar ? 4 : 0); return [a.id, a.tier || 0, r4(a.v), r4(a.v2)].concat(fl ? [fl] : []).join(','); }).join(';'), (it.runes || []).join(','), it.name || '', it.roll == null ? null : r4(it.roll)]
+      .concat(it.slot === 'Idol' && Number.isInteger(it.gx) && Number.isInteger(it.gy) ? [it.gx + ',' + it.gy] : [])); // an idol's cell in the Fossil (character.js)
     return 'BOS1.' + (await toCode(p)).slice(5);
   }
   function unpackShare(p) {
@@ -3117,6 +3118,7 @@ window.BOPlanner = function (ctx) {
         affixes: r[5] ? r[5].split(';').map(a => { const [id, tier, v, v2, fl] = a.split(','); return Object.assign({ id, tier: +tier || 0, v: +v || 0, v2: +v2 || 0, crafted: !!(+fl & 1), oath: !!(+fl & 2) }, +fl & 4 ? { scar: true } : {}); }) : [],
         runes: r[6] ? r[6].split(',') : [] };
       if (r[8] != null) it.roll = r[8];
+      if (typeof r[9] === 'string' && /^\d,\d$/.test(r[9])) { it.gx = +r[9][0]; it.gy = +r[9][2]; }
       return it;
     });
     return p;
@@ -4090,13 +4092,13 @@ window.BOFossil = function (ctx) {
   const sizeText = s => s.w + 'x' + s.h;
 
   // ---------- state (kept in this browser only) ----------
-  const F = { idols: [], sel: null, msg: '', alt: null, charId: '' }; // idol: { uid, base, label, x, y }
+  const F = { idols: [], sel: null, msg: '', alt: null, charId: '' }; // idol: { uid, base, label, x, y, uniq } (uniq: the unique's id, for its own picture)
   let nextUid = 1;
   try {
     const s = JSON.parse(localStorage.getItem('bods:fossil') || 'null');
-    if (s && Array.isArray(s.idols)) F.idols = s.idols.filter(i => i && i.base && Number.isInteger(i.x) && Number.isInteger(i.y)).map(i => ({ uid: nextUid++, base: i.base, label: i.label || '', x: i.x, y: i.y }));
+    if (s && Array.isArray(s.idols)) F.idols = s.idols.filter(i => i && i.base && Number.isInteger(i.x) && Number.isInteger(i.y)).map(i => ({ uid: nextUid++, base: i.base, label: i.label || '', x: i.x, y: i.y, uniq: typeof i.uniq === 'string' ? i.uniq : '' }));
   } catch (e) { /* storage off or damaged */ }
-  const keep = () => { try { localStorage.setItem('bods:fossil', JSON.stringify({ idols: F.idols.map(({ base, label, x, y }) => ({ base, label, x, y })) })); } catch (e) { /* storage off */ } };
+  const keep = () => { try { localStorage.setItem('bods:fossil', JSON.stringify({ idols: F.idols.map(({ base, label, x, y, uniq }) => (uniq ? { base, label, x, y, uniq } : { base, label, x, y })) })); } catch (e) { /* storage off */ } };
 
   const dims = it => { const s = shape(it.base); return s ? [s.w, s.h] : [1, 1]; };
   const cellsOf = (x, y, w, h) => { const out = []; for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) out.push([x + dx, y + dy]); return out; };
@@ -4152,6 +4154,13 @@ window.BOFossil = function (ctx) {
 
   // ---------- view ----------
   const colorOf = s => s.w === s.h && s.w > 1 ? 4 : Math.min(3, s.w * s.h - 1);
+  // The game's own idol art (GD.itemIcons, as in itemsearch.js and character.js): the unique's picture, else the base's.
+  // The art has the idol's shape, so on the grid it fills the tile and the name moves to the hover title. A picture that
+  // does not load takes .has-art off its box, and the drawn tile or shape shows again.
+  const ART_DIR = window.SITE_VERSION && window.SITE_VERSION.local ? 'data/game-icons/site/' : (window.SITE_BASE || '') + 'ic/';
+  const artFile = (base, uniq) => { const m = ctx.gd().itemIcons || {}; return (uniq && (m.uniq || {})[lc(uniq)]) || (m.base || {})[lc(base)] || ''; };
+  const artImg = f => f ? '<span class="fo-art"><img src="' + ART_DIR + esc(f) + '.webp" alt="" draggable="false" loading="lazy" decoding="async" onerror="var b=this.closest(&quot;.has-art&quot;);if(b)b.classList.remove(&quot;has-art&quot;);this.parentNode.remove()"></span>' : '';
+  const miniArt = (s, uniq) => { const a = artImg(artFile(s.id || '', uniq)); return a ? '<span class="fo-thumb has-art">' + a + mini(s) + '</span>' : mini(s); };
   const mini = s => '<span class="fo-mini" style="--w:' + s.w + ';--h:' + s.h + '" aria-hidden="true">' + '<i></i>'.repeat(s.w * s.h) + '</span>';
   const ROOM = { here: ['fits', 'Fits in the free cells'], move: ['fits if moved', 'Fits if the other idols move'], '': ['no room', 'No layout has room for it'] };
 
@@ -4160,8 +4169,8 @@ window.BOFossil = function (ctx) {
     let h = '<div class="fo-grid" role="group" aria-label="Fossil grid, 5 by 5 without corners">';
     for (const [x, y] of CELLS) h += '<button type="button" class="fo-cell' + (used.has(key(x, y)) ? ' taken' : '') + '" data-x="' + x + '" data-y="' + y + '" style="grid-column:' + (x + 1) + ';grid-row:' + (y + 1) + '" aria-label="Cell ' + (x + 1) + ', row ' + (y + 1) + (used.has(key(x, y)) ? ', taken' : ', empty') + '"><span aria-hidden="true">' + runeAt(x, y) + '</span></button>';
     for (const it of F.idols) {
-      const s = shape(it.base) || { name: it.base, w: 1, h: 1 };
-      h += '<button type="button" class="fo-idol c' + colorOf(s) + (F.sel === it.uid ? ' sel' : '') + (s.w * s.h === 1 ? ' tiny' : '') + '" data-uid="' + it.uid + '" style="grid-column:' + (it.x + 1) + ' / span ' + s.w + ';grid-row:' + (it.y + 1) + ' / span ' + s.h + '" title="' + esc((it.label || s.name) + ' (' + sizeText(s) + ')') + '">' +
+      const s = shape(it.base) || { name: it.base, w: 1, h: 1 }, a = artImg(artFile(it.base, it.uniq));
+      h += '<button type="button" class="fo-idol c' + colorOf(s) + (F.sel === it.uid ? ' sel' : '') + (s.w * s.h === 1 ? ' tiny' : '') + (a ? ' has-art' : '') + '" data-uid="' + it.uid + '" style="grid-column:' + (it.x + 1) + ' / span ' + s.w + ';grid-row:' + (it.y + 1) + ' / span ' + s.h + '" title="' + esc((it.label || s.name) + ' (' + sizeText(s) + ')') + '" aria-label="' + esc((it.label || s.name) + ', ' + sizeText(s)) + '">' + a +
         '<b>' + sizeText(s) + '</b><span>' + esc(it.label || s.name.replace(/ Idol$/, '')) + '</span></button>';
     }
     return h + '</div>';
@@ -4176,7 +4185,7 @@ window.BOFossil = function (ctx) {
     h += '<div class="fo-wrap"><div class="card fo-side"><h2>Add idols</h2><div class="fo-shapes">';
     for (const s of all) {
       const room = roomFor(s), have = F.idols.filter(i => i.base === s.id).length;
-      h += '<button type="button" class="fo-shape' + (room ? '' : ' full') + '" data-add="' + s.id + '"' + (room ? '' : ' disabled') + ' title="' + ROOM[room][1] + '">' + mini(s) +
+      h += '<button type="button" class="fo-shape' + (room ? '' : ' full') + '" data-add="' + s.id + '"' + (room ? '' : ' disabled') + ' title="' + ROOM[room][1] + '">' + miniArt(s) +
         '<span class="fo-sname">' + esc(s.name) + '<small>' + sizeText(s) + (have ? ' · ' + have + ' placed' : '') + '</small></span>' +
         '<span class="fo-room ' + (room || 'none') + '">' + ROOM[room][0] + '</span><span class="fo-plus" aria-hidden="true">+</span></button>';
     }
@@ -4204,7 +4213,7 @@ window.BOFossil = function (ctx) {
     if (F.idols.length) {
       h += '<h3>Placed idols</h3><ul class="fo-list">' + F.idols.map(it => {
         const s = shape(it.base) || { name: it.base, w: 1, h: 1 };
-        return '<li class="' + (F.sel === it.uid ? 'sel' : '') + '"><button type="button" class="fo-pick" data-uid="' + it.uid + '">' + mini(s) + '<span>' + esc(it.label || s.name) + (it.label ? ' <small>' + esc(s.name) + '</small>' : '') + '</span><small>' + sizeText(s) + '</small></button>' +
+        return '<li class="' + (F.sel === it.uid ? 'sel' : '') + '"><button type="button" class="fo-pick" data-uid="' + it.uid + '">' + miniArt(s, it.uniq) + '<span>' + esc(it.label || s.name) + (it.label ? ' <small>' + esc(s.name) + '</small>' : '') + '</span><small>' + sizeText(s) + '</small></button>' +
           '<button type="button" class="fo-x" data-del="' + it.uid + '" aria-label="Remove ' + esc(it.label || s.name) + '">✕</button></li>';
       }).join('') + '</ul>';
     }
@@ -4252,10 +4261,10 @@ window.BOFossil = function (ctx) {
         const its = ch.items.filter(i => i.slot === 'Idol' && shape(lc(i.base)));
         F.idols = []; F.sel = null; F.alt = null;
         const u = it => it.rarity === 'Unique' && (ctx.gd().uniques || {})[lc(it.unique)];
-        const list = its.map(i => ({ base: lc(i.base), label: (u(i) || {}).Name || i.name || '' }));
+        const list = its.map(i => ({ base: lc(i.base), label: (u(i) || {}).Name || i.name || '', uniq: u(i) ? lc(i.unique) : '' }));
         const pos = firstLayout(list.map(i => { const s = shape(i.base); return [s.w, s.h]; }));
         if (!pos) return done(ch.name + '\'s idols do not fit together.');
-        F.idols = list.map((i, k) => ({ uid: nextUid++, base: i.base, label: i.label, x: pos[k][0], y: pos[k][1] }));
+        F.idols = list.map((i, k) => ({ uid: nextUid++, base: i.base, label: i.label, uniq: i.uniq, x: pos[k][0], y: pos[k][1] }));
         return done('Loaded ' + list.length + ' idols from ' + ch.name + '.');
       }
     });
@@ -4654,8 +4663,9 @@ window.BOBrewery = function (ctx) {
 // Item Search tab: every unique, Oathword, item base, item mod (affix), rune and jewel in the game data, with
 // filters (category, slot, type, tier, level range, text) and a sort (level low to high by default; "New this patch
 // first" puts what the latest game patch added on top, then the patch before it, and so on).
-// Display only: nothing here feeds the sim. Icons are generic line drawings per item type (ICONS below) until the
-// game's own item art can be used; runes and jewels draw their glyph from runes.json (Glyph, Color).
+// Display only: nothing here feeds the sim. Bases, uniques and runes show the game's own item art (GD.itemIcons, made
+// by tools/icon-extract + tools/icon-map.js; the developer OK'd it, owner 13 Nov 2026). Anything without art keeps the
+// line drawing of its item type (ICONS below); jewels have no art in the game and draw their glyph from runes.json.
 // Filters are kept in this browser (bods:itemsearch).
 // app.js calls BOItemSearch(ctx) and gets back { render }.
 window.BOItemSearch = function (ctx) {
@@ -4717,12 +4727,20 @@ window.BOItemSearch = function (ctx) {
   };
   const sprite = () => '<svg class="is-sprite" aria-hidden="true" width="0" height="0">' + Object.entries(ICONS).map(([k, d]) => '<symbol id="is-i-' + k + '" viewBox="0 0 24 24">' + d + '</symbol>').join('') + '</svg>';
   const icon = (key, cls, style) => '<span class="is-ico ' + (cls || '') + '"' + (style ? ' style="' + style + '"' : '') + ' title="' + esc(ICON_NAMES[key] || '') + '"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#is-i-' + key + '"/></svg></span>';
+  // The game's art for a base ('base'), unique ('uniq') or rune ('rune'), or '' when there is none. The local page reads
+  // the files where the tools wrote them; the site has them in ic/.
+  const ART_DIR = window.SITE_VERSION && window.SITE_VERSION.local ? 'data/game-icons/site/' : (window.SITE_BASE || '') + 'ic/';
+  function art(cat, id, cls, title) {
+    const m = (ctx.gd() || {}).itemIcons, f = m && m[cat] && m[cat][lc(id)];
+    return f ? '<span class="is-ico art ' + (cls || '') + '"' + (title ? ' title="' + esc(title) + '"' : '') + '><img src="' + ART_DIR + esc(f) + '.webp" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add(&quot;gone&quot;)"></span>' : '';
+  }
   // A rune's glyph (runes.json Glyph: strokes "x,y,x,y..." in a unit square, split by "|") on its stone; a jewel's
   // Glyph is its gem outline, filled with its colour.
   const rgb = c => c && c.R != null ? 'rgb(' + [c.R, c.G, c.B].map(v => Math.round(Math.max(0, Math.min(1, v)) * 255)).join(',') + ')' : '';
   function glyphIcon(r) {
     const col = rgb(r.Color) || 'currentColor';
     const strokes = String(r.Glyph || '').split('|').map(s => s.split(',').map(Number)).filter(a => a.length >= 4 && a.every(isFinite));
+    if (r.Kind !== 'jewel') { const a = art('rune', r.Id, 'rune', 'Rune'); if (a) return a; }
     if (r.Kind === 'jewel') {
       const pts = (strokes[0] || []).reduce((o, v, i) => (i % 2 ? o[o.length - 1].push(2 + v * 20) : o.push([2 + v * 20]), o), []);
       if (pts.length < 3) return icon('jewel', 'jewel', '--ic:' + col);
@@ -4927,14 +4945,14 @@ window.BOItemSearch = function (ctx) {
     let ico, sub = '', body = '', badges = [];
     if (e.cat === 'base') {
       const b = e.b;
-      ico = icon(e.icon, 'base');
+      ico = art('base', b.Id, 'base', ICON_NAMES[e.icon]) || icon(e.icon, 'base');
       sub = e.types[0] + (e.types[0] !== e.slots[0] ? ' · ' + e.slots[0] : '') + (b.bTwoHanded ? ' · Two-handed' : '');
       body = baseStats(GD, b) + implicits(GD, b);
       badges.push(badge(e.tiers[0], 'tier'));
       if (b.DropWeight === 0) badges.push(badge('Does not drop', 'muted'));
     } else if (e.cat === 'unique') {
       const u = e.u, b = e.b;
-      ico = icon(e.icon, 'unique');
+      ico = art('uniq', u.Id, 'unique', ICON_NAMES[e.icon]) || icon(e.icon, 'unique');
       sub = (b ? b.Name + ' · ' + baseType(b) : u.BaseId);
       body = implicits(GD, b) + '<ul class="is-lines unique">' + e.lines.map(t => li(t)).join('') + '</ul>' + (u.Flavour ? '<p class="is-flavour">' + esc(u.Flavour) + '</p>' : '');
       // Where it drops (grail.js dropText: Guardian chase / signature, the Core, or any item level).
@@ -5061,7 +5079,7 @@ window.BOItemSearch = function (ctx) {
   function render() {
     const el = $('#itemSearchPane'); if (!el || el.hidden) return;
     const GD = ctx.gd();
-    let h = sprite() + '<div class="cmp-intro"><div class="eyebrow">GAME DATA</div><h2>Item Search</h2><p>Every unique, Oathword, item base, item mod, rune and jewel in the current game data. Icons are placeholders by item type.</p></div>';
+    let h = sprite() + '<div class="cmp-intro"><div class="eyebrow">GAME DATA</div><h2>Item Search</h2><p>Every unique, Oathword, item base, item mod, rune and jewel in the current game data.</p></div>';
     if (!GD || !GD.bases) { el.innerHTML = h + '<div class="card"><p class="hint">Game data is still loading.</p></div>'; return; }
     entries();
     h += '<div class="card is-top" id="isControls">' + controls() + '</div><div id="isResults">' + results() + '</div>';
@@ -5097,7 +5115,7 @@ window.BOItemSearch = function (ctx) {
   }
 
   // For the Grail tab: the same icons.
-  const forGrail = { sprite, uniqueIcon: u => icon(baseIcon(ctx.gd().bases[lc(u.BaseId)]), 'unique'), wordIcon: () => icon('oathword', 'oathword') };
+  const forGrail = { sprite, uniqueIcon: u => art('uniq', u.Id, 'unique') || icon(baseIcon(ctx.gd().bases[lc(u.BaseId)]), 'unique'), wordIcon: () => icon('oathword', 'oathword') };
   // Hover tooltip for a unique anywhere on the page (FAQ tab): the Item Search card's lines in the .pl-tip look.
   function uniqueTip(id) {
     const GD = ctx.gd(), u = GD && GD.uniques[lc(id)]; if (!u) return '';
@@ -6883,27 +6901,193 @@ window.BOCharacter = function (ctx) {
     const word = planner.oathwordForItem(it, slot);
     return { name: u ? u.Name : word ? word.Name : (it.name || ((base && base.Name) || it.base)), base: (base && base.Name) || it.base, cls: u ? 'unique' : lc(it.rarity) };
   }
+  // The game's own art for an item (GD.itemIcons, as in itemsearch.js): its unique's picture, else its base's; '' when
+  // there is none. Every use sits in a .has-art box; a picture that does not load takes the class off, so the text layout returns.
+  const ART_DIR = window.SITE_VERSION && window.SITE_VERSION.local ? 'data/game-icons/site/' : (window.SITE_BASE || '') + 'ic/';
+  const artImg = f => f ? '<span class="is-ico art"><img src="' + ART_DIR + esc(f) + '.webp" alt="" draggable="false" loading="lazy" decoding="async" onerror="var b=this.closest(&quot;.has-art&quot;);if(b)b.classList.remove(&quot;has-art&quot;);this.parentNode.remove()"></span>' : '';
+  const baseArt = id => artImg(((ctx.gd().itemIcons || {}).base || {})[lc(id)]);
+  const uniqArt = u => artImg(((ctx.gd().itemIcons || {}).uniq || {})[lc(u.Id)] || ((ctx.gd().itemIcons || {}).base || {})[lc(u.BaseId)]);
+  const itemArt = it => { const m = ctx.gd().itemIcons || {}; return artImg((it.rarity === 'Unique' && (m.uniq || {})[lc(it.unique)]) || (m.base || {})[lc(it.base)]); };
+  const withArt = a => a ? ' has-art' : '';
+  // The × on a gear slot or idol: takes the item off this character (a plan, or the page's copy of a loaded save).
+  const rmItemBtn = (idx, name) => '<button class="ch-item-x" type="button" data-rmitem="' + idx + '" aria-label="Remove ' + esc(name) + '">×</button>';
   function slotCell(ch, slot) {
     const idx = ch.items.findIndex(i => i.slot === slot), it = ch.items[idx];
     const label = planner.slotName[slot] || slot;
     if (!it) return '<div class="ch-slot ch-slot-' + slot + ' empty" data-open="1" data-slot="' + slot + '" data-idx="-1" tabindex="0" role="button" aria-label="Pick an item for ' + esc(label) + '"><span class="ch-slot-label">' + esc(label) + '</span><span class="meta">empty · click to add</span></div>';
-    const n = itemName(it, slot);
-    return '<div class="ch-slot ch-slot-' + slot + ' ' + n.cls + '" data-open="1" data-tip="item" data-slot="' + slot + '" data-idx="' + idx + '" tabindex="0" role="button"><span class="ch-slot-label">' + esc(label) + '</span><b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + (it.level ? ' · ilvl ' + it.level : '') + '</span>' +
+    const n = itemName(it, slot), a = itemArt(it);
+    return '<div class="ch-slot ch-slot-' + slot + ' ' + n.cls + withArt(a) + '" data-open="1" data-tip="item" data-slot="' + slot + '" data-idx="' + idx + '" tabindex="0" role="button">' + rmItemBtn(idx, n.name) + '<span class="ch-slot-label">' + esc(label) + '</span>' + a + '<b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + (it.level ? ' · ilvl ' + it.level : '') + '</span>' +
       (it.runes && it.runes.length ? '<span class="ch-item-base">' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') + '</span>' : '') + '</div>';
   }
 
-  function gearCard(ch) {
+  // ---------- Idols: the Dwarven Fossil grid ----------
+  // 5x5 without its corners, 21 cells; idols never turn (fossil.js, creator.js). An idol's place is kept on the item as
+  // gx / gy (its top-left cell): read from a save's GridX / GridY, set here by a click or a drag, and sent along in plan
+  // codes and share links. Idols without a place (older plans, the Build tab, the gear search) take the first room.
+  const FN = 5;
+  const inFossil = (x, y) => x >= 0 && y >= 0 && x < FN && y < FN && !((x === 0 || x === FN - 1) && (y === 0 || y === FN - 1));
+  const FCELLS = []; for (let y = 0; y < FN; y++) for (let x = 0; x < FN; x++) if (inFossil(x, y)) FCELLS.push([x, y]);
+  const fk = (x, y) => x + ',' + y;
+  const FRUNES = ['ᚠᛉᛜ', 'ᚨᛁᛒᚠᚹ', 'ᚷᛈᛚᚨᛁ', 'ᚾᛏᛟᚷᛈ', 'ᛗᚦᚾ']; // the runes on the in-game grid (decoration, as on the Fossil Planner)
+  const fRune = (x, y) => [...FRUNES[y]][y === 0 || y === FN - 1 ? x - 1 : x] || '';
+  const idolDims = it => { const b = ctx.gd().bases[lc(it.base)]; return [(b && b.Width) || 1, (b && b.Height) || 1]; };
+  const fCells = (x, y, w, h) => { const out = []; for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) out.push([x + dx, y + dy]); return out; };
+  // Where every idol sits: at = item index -> [x, y], used = cell -> item index, out = idols with no room.
+  function idolLayout(ch) {
     const idols = ch.items.map((it, i) => ({ it, i })).filter(x => x.it.slot === 'Idol');
+    const used = new Map(), at = new Map();
+    const fits = (x, y, w, h, skip) => fCells(x, y, w, h).every(([cx, cy]) => inFossil(cx, cy) && (!used.has(fk(cx, cy)) || used.get(fk(cx, cy)) === skip));
+    const put = (i, x, y, w, h) => { at.set(i, [x, y]); for (const [cx, cy] of fCells(x, y, w, h)) used.set(fk(cx, cy), i); };
+    const take = i => { for (const [k, v] of [...used]) if (v === i) used.delete(k); at.delete(i); };
+    const free = [];
+    for (const { it, i } of idols) {
+      const [w, h] = idolDims(it);
+      if (Number.isInteger(it.gx) && Number.isInteger(it.gy) && fits(it.gx, it.gy, w, h)) put(i, it.gx, it.gy, w, h); else free.push({ i, w, h });
+    }
+    // The rest: biggest first, each in the first room; if that leaves one out, every way to fit them is tried.
+    free.sort((a, b) => b.w * b.h - a.w * a.h || b.w - a.w);
+    let out = [];
+    for (const f of free) { const s = FCELLS.find(([x, y]) => fits(x, y, f.w, f.h)); if (s) put(f.i, s[0], s[1], f.w, f.h); else out.push(f.i); }
+    if (out.length) {
+      free.forEach(f => take(f.i));
+      let steps = 0;
+      const go = k => {
+        if (k === free.length) return true;
+        const f = free[k];
+        for (const [x, y] of FCELLS) {
+          if (++steps > 200000) return false;
+          if (!fits(x, y, f.w, f.h)) continue;
+          put(f.i, x, y, f.w, f.h); if (go(k + 1)) return true; take(f.i);
+        }
+        return false;
+      };
+      if (go(0)) out = [];
+      else { free.forEach(f => take(f.i)); out = []; for (const f of free) { const s = FCELLS.find(([x, y]) => fits(x, y, f.w, f.h)); if (s) put(f.i, s[0], s[1], f.w, f.h); else out.push(f.i); } }
+    }
+    return { ch, idols, at, used, out, fits };
+  }
+  // Before an edit: write the shown places onto the idols, so the others stay put when one moves.
+  const pinIdols = (ch, L) => { for (const [i, p] of L.at) { ch.items[i].gx = p[0]; ch.items[i].gy = p[1]; } };
+  // A place for an idol of this size: the wanted cell, else a place that covers it, else the first room. skip = the idol it replaces.
+  function idolSpot(L, w, h, want, skip) {
+    if (want) {
+      if (L.fits(want[0], want[1], w, h, skip)) return want;
+      for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) if (L.fits(want[0] - dx, want[1] - dy, w, h, skip)) return [want[0] - dx, want[1] - dy];
+    }
+    return FCELLS.find(([x, y]) => L.fits(x, y, w, h, skip)) || null;
+  }
+  // Can idol idx go to x, y? 'ok', 'same' (where it is), 'swap' (trades places with an idol of the same size) or ''.
+  function canDrop(L, idx, x, y, copy) {
+    const it = L.ch.items[idx]; if (!it) return '';
+    const [w, h] = idolDims(it), me = L.at.get(idx);
+    if (!copy && me && me[0] === x && me[1] === y) return 'same';
+    if (L.fits(x, y, w, h, copy ? -1 : idx)) return 'ok';
+    if (copy || !me) return '';
+    const o = L.used.get(fk(x, y)); if (o == null || o === idx) return '';
+    const [ow, oh] = idolDims(L.ch.items[o]), p = L.at.get(o);
+    return ow === w && oh === h && p[0] === x && p[1] === y ? 'swap' : '';
+  }
+  function dropIdol(idx, x, y, copy) {
+    const ch = ctx.editable(); if (!ch) return false;
+    const L = idolLayout(ch), how = canDrop(L, idx, x, y, copy);
+    if (how !== 'ok' && how !== 'swap') return false;
+    pinIdols(ch, L);
+    const it = ch.items[idx];
+    if (copy) ch.items.push(Object.assign(copyOf(it), { gx: x, gy: y }));
+    else {
+      if (how === 'swap') { const o = ch.items[L.used.get(fk(x, y))]; o.gx = it.gx; o.gy = it.gy; }
+      it.gx = x; it.gy = y;
+    }
+    ctx.commit(ch); render(); return true;
+  }
+  function fossilHtml(ch, L) {
+    let h = '<div class="fo-grid ch-fossil" role="group" aria-label="Idols in the Dwarven Fossil, 5 by 5 without corners">';
+    for (const [x, y] of FCELLS) {
+      const taken = L.used.has(fk(x, y));
+      h += '<button type="button" class="fo-cell"' + (taken ? ' tabindex="-1" aria-hidden="true"' : ' data-open="1" data-slot="Idol" data-idx="-1" aria-label="Add an idol at column ' + (x + 1) + ', row ' + (y + 1) + '"') +
+        ' data-fx="' + x + '" data-fy="' + y + '" style="grid-column:' + (x + 1) + ';grid-row:' + (y + 1) + '"><span aria-hidden="true">' + fRune(x, y) + '</span></button>';
+    }
+    for (const [i, p] of L.at) {
+      const it = ch.items[i], n = itemName(it, 'Idol'), [w, hh] = idolDims(it), a = itemArt(it); // the art has the idol's own shape: it fills the tile, the name stays in the hover card
+      h += '<div class="ch-slot ch-idol ' + n.cls + (w * hh === 1 ? ' tiny' : '') + withArt(a) + '" data-open="1" data-tip="item" data-slot="Idol" data-idx="' + i + '" tabindex="0" role="button" aria-label="' + esc(n.name + ', ' + w + 'x' + hh + ', column ' + (p[0] + 1) + ', row ' + (p[1] + 1)) + '"' +
+        ' style="grid-column:' + (p[0] + 1) + ' / span ' + w + ';grid-row:' + (p[1] + 1) + ' / span ' + hh + '">' + rmItemBtn(i, n.name) + a + '<b class="ch-item-name">' + esc(n.name) + '</b>' + (n.name === n.base ? '' : '<span class="ch-item-base">' + esc(n.base) + '</span>') + '</div>';
+    }
+    h += '<div class="ch-fdrop" hidden></div></div>';
+    h += '<p class="hint">Click an empty cell to add an idol there, or an idol to edit it. Drag an idol to move it; hold Ctrl while dragging to copy it.</p>';
+    if (L.out.length) h += '<p class="hint bad">No room in the Fossil for ' + plural(L.out.length, 'idol') + ':</p><div class="ch-idols">' + L.out.map(i => {
+      const n = itemName(ch.items[i], 'Idol'), a = itemArt(ch.items[i]);
+      return '<div class="ch-slot ' + n.cls + withArt(a) + '" data-open="1" data-tip="item" data-slot="Idol" data-idx="' + i + '" tabindex="0" role="button">' + rmItemBtn(i, n.name) + a + '<b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + '</span></div>';
+    }).join('') + '</div>';
+    return h;
+  }
+
+  // Dragging an idol: a move, or a copy with Ctrl held when it is let go. A press that does not move is a click (opens the idol).
+  let DR = null, dragJust = false;
+  const dragGrid = () => document.querySelector('#characterPane .ch-fossil');
+  function dragDown(e) {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const t = e.target.closest && e.target.closest('.ch-fossil .ch-idol'); if (!t || e.target.closest('.ch-item-x')) return;
+    const ch = ctx.current(), idx = +t.dataset.idx, it = ch && ch.items[idx]; if (!it) return;
+    const [w, h] = idolDims(it), r = t.getBoundingClientRect(), lim = (v, n) => Math.max(0, Math.min(n - 1, v));
+    DR = { idx, w, h, el: t, pid: e.pointerId, x0: e.clientX, y0: e.clientY, ox: e.clientX - r.left, oy: e.clientY - r.top, bw: r.width, bh: r.height,
+      gcx: lim(Math.floor((e.clientX - r.left) / (r.width / w)), w), gcy: lim(Math.floor((e.clientY - r.top) / (r.height / h)), h), on: false, ghost: null, at: null, copy: false, L: null, px: e.clientX, py: e.clientY };
+  }
+  function dragMove(e) {
+    if (!DR || e.pointerId !== DR.pid) return;
+    if (!DR.on) {
+      if (Math.hypot(e.clientX - DR.x0, e.clientY - DR.y0) < 5) return;
+      const ch = ctx.current(); if (!ch || !DR.el.isConnected) { DR = null; return; }
+      DR.on = true; DR.L = idolLayout(ch); hide();
+      const g = DR.el.cloneNode(true); g.classList.add('ch-idol-ghost'); g.removeAttribute('style'); g.removeAttribute('tabindex');
+      const x = g.querySelector('.ch-item-x'); if (x) x.remove();
+      g.style.width = DR.bw + 'px'; g.style.height = DR.bh + 'px';
+      document.body.appendChild(g); DR.ghost = g;
+      DR.el.classList.add('dragging'); document.body.classList.add('ch-dragging');
+    }
+    e.preventDefault();
+    DR.px = e.clientX; DR.py = e.clientY; DR.copy = e.ctrlKey || e.metaKey;
+    dragShow();
+  }
+  function dragShow() {
+    const d = DR, grid = dragGrid(); if (!d || !d.on || !grid) return;
+    d.ghost.style.left = (d.px - d.ox) + 'px'; d.ghost.style.top = (d.py - d.oy) + 'px';
+    d.ghost.classList.toggle('copy', d.copy); d.el.classList.toggle('dragging', !d.copy);
+    // The cell under the pointer, from two cells' places on screen.
+    const a = grid.querySelector('.fo-cell[data-fx="1"][data-fy="0"]').getBoundingClientRect(), b = grid.querySelector('.fo-cell[data-fx="2"][data-fy="1"]').getBoundingClientRect();
+    const pw = b.left - a.left, ph = b.top - a.top;
+    const cx = Math.floor((d.px - (a.left - pw) + (pw - a.width) / 2) / pw), cy = Math.floor((d.py - a.top + (ph - a.height) / 2) / ph);
+    const box = grid.querySelector('.ch-fdrop');
+    d.at = cx >= 0 && cy >= 0 && cx < FN && cy < FN ? [cx - d.gcx, cy - d.gcy] : null;
+    const x1 = d.at ? Math.max(0, d.at[0]) : 0, x2 = d.at ? Math.min(FN, d.at[0] + d.w) : 0, y1 = d.at ? Math.max(0, d.at[1]) : 0, y2 = d.at ? Math.min(FN, d.at[1] + d.h) : 0;
+    if (!d.at || x1 >= x2 || y1 >= y2) { box.hidden = true; return; }
+    const how = canDrop(d.L, d.idx, d.at[0], d.at[1], d.copy);
+    box.hidden = how === 'same'; box.classList.toggle('no', !how);
+    box.style.gridColumn = (x1 + 1) + ' / ' + (x2 + 1); box.style.gridRow = (y1 + 1) + ' / ' + (y2 + 1);
+  }
+  function dragEnd(e, cancel) {
+    if (!DR || (e && e.pointerId != null && e.pointerId !== DR.pid)) return;
+    const d = DR; DR = null;
+    if (!d.on) return;
+    if (e && e.ctrlKey != null && !cancel) d.copy = e.ctrlKey || e.metaKey;
+    d.ghost.remove(); d.el.classList.remove('dragging'); document.body.classList.remove('ch-dragging');
+    const box = dragGrid() && dragGrid().querySelector('.ch-fdrop'); if (box) box.hidden = true;
+    dragJust = true; setTimeout(() => { dragJust = false; }, 0); // the click that follows a drag opens nothing
+    if (!cancel && d.at && dropIdol(d.idx, d.at[0], d.at[1], d.copy)) { const t = document.querySelector('#characterPane .ch-idol[data-idx="' + (d.copy ? ctx.current().items.length - 1 : d.idx) + '"]'); if (t) t.focus({ preventScroll: true }); }
+  }
+  function dragKey(e) {
+    if (!DR || !DR.on) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); return dragEnd(null, true); }
+    if (e.key === 'Control' || e.key === 'Meta') { DR.copy = e.type === 'keydown'; dragShow(); }
+  }
+
+  function gearCard(ch) {
+    const L = idolLayout(ch);
     const clip = LS.get('clip:gear', null), has = clip && Array.isArray(clip.items);
     let h = '<div class="card ch-gear"><div class="ch-skills-head"><h2>Gear</h2><span class="ch-acts">' +
       '<button class="btn small ghost" type="button" data-clip="copygear" title="Copies every item here (idols too), to paste on another character or plan"' + (ch.items.length ? '' : ' disabled') + '>Copy gear</button>' +
       '<button class="btn small ghost" type="button" data-clip="pastegear" title="' + esc(has ? 'Replaces the gear here with the ' + plural(clip.items.length, 'item') + ' copied from ' + clip.from : 'Use Copy gear on another character or plan first') + '"' + (has ? '' : ' disabled') + '>Paste gear</button></span></div><div class="ch-doll">' + SLOTS.map(s => slotCell(ch, s)).join('') + '</div>';
-    if (idols.length) h += '<h3>Idols <small>' + idols.length + '</small></h3><div class="ch-idols">' + idols.map(x => {
-      const n = itemName(x.it, 'Idol');
-      return '<div class="ch-slot ' + n.cls + '" data-open="1" data-tip="item" data-slot="Idol" data-idx="' + x.i + '" tabindex="0" role="button"><b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + '</span></div>';
-    }).join('') + '</div>';
-    else h += '<p class="hint">No idols.</p>';
-    return h + '<button class="btn small ghost" type="button" data-open="1" data-slot="Idol" data-idx="-1">Add an idol</button></div>';
+    h += '<h3>Idols <small>' + plural(L.idols.length, 'idol') + ' · ' + L.used.size + ' of ' + FCELLS.length + ' cells</small></h3>' + fossilHtml(ch, L);
+    return h + '</div>';
   }
 
   function skillsCard(ch) {
@@ -6915,11 +7099,16 @@ window.BOCharacter = function (ctx) {
       '<button class="btn small" type="button" id="chAddSkillBtn">Add skill</button></span>' +
       '<select id="chAddSkill" class="ch-addskill-sel" aria-hidden="true" tabindex="-1">' + planner.skillOpts('') + '</select></div>';
     if (!rs.length) h += '<p class="hint">No skills.</p>';
-    for (const r of rs) {
+    // The main skill (the one the Damage tab sims) goes first; the rest keep their order.
+    const main = lc(ch.mainSkill || (ctx.simSkill && ctx.simSkill()) || '');
+    const ordered = rs.filter(r => lc(r.skill) === main).concat(rs.filter(r => lc(r.skill) !== main));
+    for (const r of ordered) {
       const sk = gd.skills[lc(r.skill)], sups = r.sock ? r.sock.supports : [];
-      h += '<div class="ch-skill' + (ch.mainSkill === r.skill ? ' main' : '') + '"><div class="ch-skill-name" data-tip="skill" data-id="' + esc(r.skill) + '" tabindex="0">' + ctx.skillDot(r.skill) + '<b>' + esc(sk ? sk.Name : r.skill) + '</b>' +
-        '<span class="meta">level ' + (ch.gemLevels[r.skill] || 1) + (bar.has(r.skill) ? '' : ' · off the bar') + '</span>' +
-        '<button class="x ch-skill-x" type="button" data-rmskill="' + esc(r.skill) + '" aria-label="Remove ' + esc(sk ? sk.Name : r.skill) + '">×</button></div>' +
+      const canSim = sk && !(ctx.sim.dealsNoHits && ctx.sim.dealsNoHits(sk)) && ctx.supportSearch;
+      h += '<div class="ch-skill' + (lc(r.skill) === main ? ' main' : '') + '"><div class="ch-skill-name" data-tip="skill" data-id="' + esc(r.skill) + '" tabindex="0">' + ctx.skillDot(r.skill) + '<b>' + esc(sk ? sk.Name : r.skill) + '</b>' +
+        '<span class="meta">level ' + (ch.gemLevels[r.skill] || 1) + (bar.has(r.skill) ? '' : ' · off the bar') + (lc(r.skill) === main ? ' · main skill' : '') + '</span>' +
+        '<span class="ch-skill-acts">' + (canSim ? '<button class="btn small ghost ch-simsup" type="button" data-simsup="' + esc(r.skill) + '" title="Tries the support combinations for this skill at its gem level, against the enemy set on the Damage tab">Sim Supports</button>' : '') +
+        '<button class="x ch-skill-x" type="button" data-rmskill="' + esc(r.skill) + '" aria-label="Remove ' + esc(sk ? sk.Name : r.skill) + '">×</button></span></div>' +
         sups.map(id => '<div class="ch-sup" data-tip="sup" data-id="' + esc(id) + '" tabindex="0">' + ctx.gemDot(id) + esc((gd.supports[lc(id)] || { Name: id }).Name) + '</div>').join('') + '</div>';
     }
     return h + '</div>';
@@ -6982,8 +7171,24 @@ window.BOCharacter = function (ctx) {
   function bind(el) {
     if (el.dataset.bound) return; el.dataset.bound = '1';
     el.addEventListener('input', e => { if (e.target && e.target.id === 'chNotes') ctx.notes.set(e.target.value); });
+    el.addEventListener('pointerdown', dragDown);
+    document.addEventListener('pointermove', dragMove, { passive: false });
+    document.addEventListener('pointerup', e => dragEnd(e, false));
+    document.addEventListener('pointercancel', e => dragEnd(e, true));
+    document.addEventListener('keydown', dragKey, true); document.addEventListener('keyup', dragKey, true);
+    el.addEventListener('dragstart', e => { if (e.target.closest && e.target.closest('.ch-fossil')) e.preventDefault(); });
     el.addEventListener('click', e => {
+      if (dragJust) return;
       if (e.target.closest && e.target.closest('#chAddSkillBtn')) { hide(); const s = $('#chAddSkill'); if (s && ctx.current()) planner.openPicker(s); return; }
+      const ss = e.target.closest && e.target.closest('[data-simsup]'); if (ss) { hide(); return openSup(ss.dataset.simsup, ss); }
+      const ri = e.target.closest && e.target.closest('[data-rmitem]');
+      if (ri) {
+        e.stopPropagation();
+        const ch0 = ctx.current(), i = +ri.dataset.rmitem, it0 = ch0 && ch0.items[i]; if (!it0) return;
+        if (!window.confirm('Remove ' + itemName(it0, it0.slot).name + ' from ' + ch0.name + '?\n\nYour save file is not changed. Use Save item in the item window first if you want to put it back on later.')) return;
+        hide(); const ch = ctx.editable(); if (!ch) return;
+        ch.items.splice(i, 1); ctx.commit(ch); render(); return;
+      }
       const rm = e.target.closest && e.target.closest('[data-rmskill]');
       if (rm) {
         const ch0 = ctx.current(), id = rm.dataset.rmskill, sk = ctx.gd().skills[lc(id)], nm = sk ? sk.Name : id; if (!ch0) return;
@@ -6999,6 +7204,14 @@ window.BOCharacter = function (ctx) {
       const ch = ctx.editable(); if (ch && planner.addSkill(ch, e.target.value)) { ctx.commit(ch); render(); } else render();
     });
     el.addEventListener('keydown', e => { const s = e.target.closest && e.target.closest('.ch-slot[data-open]'); if (s && s === e.target && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openItem(s); } });
+    // Arrow keys move the focused idol one cell.
+    el.addEventListener('keydown', e => {
+      const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key], t = e.target;
+      if (!d || !t.classList || !t.classList.contains('ch-idol') || !t.closest('.ch-fossil') || !ctx.current()) return;
+      e.preventDefault();
+      const idx = +t.dataset.idx, p = idolLayout(ctx.current()).at.get(idx);
+      if (p && dropIdol(idx, p[0] + d[0], p[1] + d[1], false)) { hide(); const n = el.querySelector('.ch-idol[data-idx="' + idx + '"]'); if (n) n.focus({ preventScroll: true }); }
+    });
     el.addEventListener('mouseover', show); el.addEventListener('focusin', show);
     el.addEventListener('mouseleave', hide); el.addEventListener('focusout', hide);
     window.addEventListener('scroll', hide, { passive: true });
@@ -7054,7 +7267,19 @@ window.BOCharacter = function (ctx) {
   const savedAll = () => { const a = LS.get('savedItems', []); return Array.isArray(a) ? a.filter(s => s && s.id && s.item && s.item.base) : []; };
   const slotKind = slot => /^Ring\d$/.test(slot) ? 'Ring' : slot;
   const savedFor = slot => savedAll().filter(s => { const b = ctx.gd().bases[lc(s.item.base)]; return (b ? b.Slot : slotKind(s.item.slot)) === slotKind(slot); });
-  const sameItem = (a, b) => JSON.stringify(Object.assign({}, a, { slot: '' })) === JSON.stringify(Object.assign({}, b, { slot: '' }));
+  const bare = it => { const c = Object.assign({}, it, { slot: '' }); delete c.gx; delete c.gy; return c; }; // an idol's place in the Fossil is not part of the item
+  const sameItem = (a, b) => JSON.stringify(bare(a)) === JSON.stringify(bare(b));
+  // Puts an idol on: in place of old (keeping its cells when the new shape fits there), or as a new one at the clicked cell
+  // (M.pos) or the first room. False when the Fossil has no room for its shape.
+  function setIdol(ch, item, old) {
+    const L = idolLayout(ch), [w, h] = idolDims(item), oi = old ? M.idx : -1;
+    const spot = idolSpot(L, w, h, old ? L.at.get(oi) : M.pos, oi);
+    if (!spot) return false;
+    pinIdols(ch, L); item.gx = spot[0]; item.gy = spot[1];
+    if (old) ch.items[M.idx] = item; else { ch.items.push(item); M.idx = ch.items.length - 1; }
+    return true;
+  }
+  const noRoom = item => { const [w, h] = idolDims(item); return 'No room in the Fossil for the ' + itemName(item, 'Idol').base + ' (' + w + 'x' + h + '). Move or remove an idol first.'; };
   function itemLines(it) {
     const gd = ctx.gd(), u = it.rarity === 'Unique' && gd.uniques[lc(it.unique)], US = window.BOSim;
     return (it.affixes || []).map(a => {
@@ -7096,7 +7321,7 @@ window.BOCharacter = function (ctx) {
     lastFocus = el.closest('.ch-slot') || el;
     const it = idx >= 0 ? ctx.current().items[idx] : null;
     RD = { busy: '', r: null };
-    M = { slot, idx: it ? idx : -1, tab: it ? 'edit' : 'select', kind: 'basic', cat: '', q: '', word: '', msg: '' };
+    M = { slot, idx: it ? idx : -1, tab: it ? 'edit' : 'select', kind: 'basic', cat: '', q: '', word: '', msg: '', pos: el.dataset.fx != null ? [+el.dataset.fx, +el.dataset.fy] : null }; // pos: the Fossil cell clicked for a new idol
     if (!back) {
       back = document.createElement('div'); back.className = 'io-back'; back.setAttribute('role', 'dialog'); back.setAttribute('aria-modal', 'true'); back.setAttribute('aria-label', 'Item');
       back.addEventListener('mousedown', e => { if (e.target === back) closeItem(); });
@@ -7174,7 +7399,7 @@ window.BOCharacter = function (ctx) {
     const r = window.BOItemRead.parse(GD(), ctx.sim, text, { slot: M.slot, base: old && old.base, level: ch.level });
     if (!r.item) { RD.r = { error: typeof src === 'string' ? 'That text does not look like an item.' : 'No item text found in that image. Crop it to the tooltip and try again.' }; return renderItem(); }
     const item = Object.assign(r.item, { slot: M.slot });
-    if (M.slot === 'Idol') { if (old) ch.items[M.idx] = item; else { ch.items.push(item); M.idx = ch.items.length - 1; } }
+    if (M.slot === 'Idol') { if (!setIdol(ch, item, old)) { RD.r = { error: noRoom(item) }; return renderItem(); } }
     else { const i = ch.items.findIndex(x => x.slot === M.slot); if (i >= 0) ch.items[i] = item; else ch.items.push(item); }
     RD.r = r; M.tab = 'edit'; M.word = '';
     commit(ch);
@@ -7195,7 +7420,7 @@ window.BOCharacter = function (ctx) {
       side = '<nav class="io-side" aria-label="Item types"><button type="button" class="io-cat all' + (M.cat === '' ? ' on' : '') + '" data-io="cat" data-v="">All Items</button>' +
         (weapon ? '<span class="io-grp">One Handed</span>' + cats.filter(c => !c.two).map(btn).join('') + '<span class="io-grp">Two Handed</span>' + cats.filter(c => c.two).map(btn).join('') : cats.map(btn).join('')) + '</nav>';
     }
-    return '<div class="io-search"><input id="ioSearch" type="search" value="' + esc(M.q) + '" placeholder="Search everything" aria-label="Search items" autocomplete="off"></div>' +
+    return (M.msg ? '<p class="hint bad" role="status">' + esc(M.msg) + '</p>' : '') + '<div class="io-search"><input id="ioSearch" type="search" value="' + esc(M.q) + '" placeholder="Search everything" aria-label="Search items" autocomplete="off"></div>' +
       '<div class="io-sel' + (side ? '' : ' nosel') + '">' + side + '<div class="io-main" id="ioMain"></div></div>';
   }
   function baseLines(b) {
@@ -7210,7 +7435,7 @@ window.BOCharacter = function (ctx) {
     const range = (lo, hi) => lo == null ? '0' : lo === hi ? String(lo) : lo + '-' + hi;
     return (u.Mods || []).map((m, i) => window.BOSim.uniqueLineShown(u.Id, i, m)).map(m => m.Text ? m.Text.replace(/\{(0|v)\}/g, range(m.Min, m.Max)).replace(/\{1\}/g, range(m.Min2, m.Max2)) : m.Mod ? safe(() => G.modLine(m.Mod, m.Max, m.Max2)) : '').filter(Boolean);
   }
-  const card = (kind, id, name, cls, sub, lines) => '<button type="button" class="io-card ' + cls + '" data-io="pick" data-kind="' + kind + '" data-id="' + esc(id) + '"><b>' + esc(name) + '</b><span class="io-sub">' + esc(sub) + '</span>' +
+  const card = (kind, id, name, cls, sub, lines, a) => '<button type="button" class="io-card ' + cls + withArt(a) + '" data-io="pick" data-kind="' + kind + '" data-id="' + esc(id) + '">' + (a || '') + '<b>' + esc(name) + '</b><span class="io-sub">' + esc(sub) + '</span>' +
     lines.slice(0, 8).map(l => '<span class="io-line">' + esc(l) + '</span>').join('') + (lines.length > 8 ? '<span class="io-line meta">+' + (lines.length - 8) + ' more</span>' : '') + '</button>';
   function listFor() {
     const q = M.q.trim().toLowerCase(), has = (...s) => !q || s.join(' ').toLowerCase().includes(q);
@@ -7231,17 +7456,17 @@ window.BOCharacter = function (ctx) {
     let h = '<div class="io-kinds" role="tablist">' + kinds.map(k => '<button type="button" role="tab" class="io-kind' + (M.kind === k[0] ? ' on' : '') + '" data-io="kind" data-v="' + k[0] + '">' + k[1] + ' (' + k[2] + ')</button>').join('') + '</div>';
     const gd = GD();
     let cards = '';
-    if (M.kind === 'basic') cards = L.basic.map(b => card('basic', b.Id, b.Name, '', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), baseLines(b))).join('');
+    if (M.kind === 'basic') cards = L.basic.map(b => card('basic', b.Id, b.Name, '', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), baseLines(b), baseArt(b.Id))).join('');
     else if (M.kind === 'saved') cards = L.saved.map(s => {
       const n = itemName(s.item, M.slot);
-      return '<div class="io-saved">' + card('saved', s.id, n.name, n.cls, n.base + (n.cls === 'unique' ? '' : ' · ' + s.item.rarity) + ' · item level ' + (s.item.level || 1), itemLines(s.item)) +
+      return '<div class="io-saved">' + card('saved', s.id, n.name, n.cls, n.base + (n.cls === 'unique' ? '' : ' · ' + s.item.rarity) + ' · item level ' + (s.item.level || 1), itemLines(s.item), itemArt(s.item)) +
         '<button class="io-rm" type="button" data-io="delsaved" data-id="' + esc(s.id) + '" title="Delete this saved item" aria-label="Delete the saved ' + esc(n.name) + '">×</button></div>';
     }).join('');
-    else if (M.kind === 'unique') cards = L.uniques.map(u => { const b = gd.bases[lc(u.BaseId)]; return card('unique', u.Id, u.Name, 'unique', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), uniqueLines(u)); }).join('');
+    else if (M.kind === 'unique') cards = L.uniques.map(u => { const b = gd.bases[lc(u.BaseId)]; return card('unique', u.Id, u.Name, 'unique', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), uniqueLines(u), uniqArt(u)); }).join('');
     else if (M.word) {
       const w = G.oathwordsFor(M.slot, ctx.current()).find(x => lc(x.Id) === lc(M.word));
       h += '<div class="io-wordbar"><button type="button" class="btn small ghost" data-io="wordback">‹ All Oathwords</button><b>' + esc(w ? w.Name : '') + '</b><span class="meta">Pick a base item type</span></div>';
-      cards = w ? G.oathwordBases(M.slot, w, ctx.current()).filter(L.inCat).map(b => card('wbase', b.Id, b.Name, '', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), baseLines(b))).join('') : '';
+      cards = w ? G.oathwordBases(M.slot, w, ctx.current()).filter(L.inCat).map(b => card('wbase', b.Id, b.Name, '', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), baseLines(b), baseArt(b.Id))).join('') : '';
     } else cards = L.words.map(w => {
       const rn = (w.Runes || []).map(r => (gd.runes[lc(r)] || { Name: r }).Name);
       return card('word', w.Id, w.Name, 'rare', (n => n + (n === 1 ? ' base' : ' bases'))(G.oathwordBases(M.slot, w, ctx.current()).filter(L.inCat).length), ['Runes: ' + rn.join(' · ')]);
@@ -7255,7 +7480,7 @@ window.BOCharacter = function (ctx) {
     const ch = ctx.editable(); if (!ch || !M) return;
     const old = itemNow(ch);
     if (!keepLevel) item.level = (old && old.level) || ch.level;
-    if (M.slot === 'Idol') { if (old) ch.items[M.idx] = item; else { ch.items.push(item); M.idx = ch.items.length - 1; } }
+    if (M.slot === 'Idol') { if (!setIdol(ch, item, old)) { M.msg = noRoom(item); return renderItem(); } }
     else { const i = ch.items.findIndex(x => x.slot === M.slot); if (i >= 0) ch.items[i] = item; else ch.items.push(item); }
     M.tab = 'edit'; M.word = ''; M.msg = '';
     commit(ch);
@@ -7304,8 +7529,9 @@ window.BOCharacter = function (ctx) {
   function editHtml(ch, it) {
     const gd = GD(), base = gd.bases[lc(it.base)], n = itemName(it, M.slot), isU = it.rarity === 'Unique', u = isU && gd.uniques[lc(it.unique)];
     const word = planner.oathwordForItem(it, M.slot);
-    let h = '<div class="io-top"><div><span class="io-slotlabel">' + esc(planner.slotName[M.slot] || M.slot) + '</span><div class="io-name ' + n.cls + '">' + esc(n.name) + '</div><span class="meta">' + esc(n.base) + (word || u ? '' : ' · ' + it.rarity) + '</span></div>' +
-      '<div class="io-acts"><button class="btn small ghost" type="button" data-io="saveitem" title="Keeps this item in this browser. Put it on again from Select, under Saved, on any character or plan.">Save item</button><button class="btn small ghost" type="button" data-io="change">⟳ Change item</button><button class="btn small ghost" type="button" data-io="unequip">✕ ' + (M.slot === 'Idol' ? 'Remove' : 'Unequip') + '</button></div></div>';
+    const art = itemArt(it);
+    let h = '<div class="io-top"><div class="io-ident' + withArt(art) + '">' + art + '<div><span class="io-slotlabel">' + esc(planner.slotName[M.slot] || M.slot) + '</span><div class="io-name ' + n.cls + '">' + esc(n.name) + '</div><span class="meta">' + esc(n.base) + (word || u ? '' : ' · ' + it.rarity) + '</span></div></div>' +
+      '<div class="io-acts"><button class="btn small ghost" type="button" data-io="saveitem" title="Keeps this item in this browser. Put it on again from Select, under Saved, on any character or plan.">Save item</button>' + (M.slot === 'Idol' ? '<button class="btn small ghost" type="button" data-io="dupidol" title="Puts a copy of this idol in the first free room of the Fossil. Holding Ctrl while dragging an idol copies it too.">Duplicate</button>' : '') + '<button class="btn small ghost" type="button" data-io="change">⟳ Change item</button><button class="btn small ghost" type="button" data-io="unequip">✕ ' + (M.slot === 'Idol' ? 'Remove' : 'Unequip') + '</button></div></div>';
     if (M.msg) h += '<p class="hint pl-status" role="status">' + esc(M.msg) + '</p>';
     if (!isU) h += '<div class="io-row"><label class="field inline"><span>Rarity</span><select data-f="rarity">' + RAR.map(r => '<option' + (it.rarity === r ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></label>' +
       '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label></div>';
@@ -7376,8 +7602,8 @@ window.BOCharacter = function (ctx) {
     const b = e.target.closest && e.target.closest('[data-io]'); if (!b || !M) return;
     const act = b.dataset.io;
     if (act === 'close') return closeItem();
-    if (act === 'tab') { if (!b.disabled) { M.tab = b.dataset.v; renderItem(); } return; }
-    if (act === 'change') { M.tab = 'select'; M.word = ''; return renderItem(); }
+    if (act === 'tab') { if (!b.disabled) { M.tab = b.dataset.v; M.msg = ''; renderItem(); } return; }
+    if (act === 'change') { M.tab = 'select'; M.word = ''; M.msg = ''; return renderItem(); }
     if (act === 'cat') { M.cat = b.dataset.v; back.querySelectorAll('.io-cat').forEach(x => x.classList.toggle('on', x.dataset.v === M.cat)); return renderList(); }
     if (act === 'kind') { M.kind = b.dataset.v; M.word = ''; return renderList(); }
     if (act === 'wordback') { M.word = ''; return renderList(); }
@@ -7388,10 +7614,16 @@ window.BOCharacter = function (ctx) {
       const all = savedAll(), name = itemName(mine, M.slot).name;
       if (all.some(s => sameItem(s.item, mine))) M.msg = name + ' is already saved.';
       else if (all.length >= SAVED_MAX) M.msg = 'The saved list is full (' + SAVED_MAX + ' items): delete some under Select, Saved.';
-      else M.msg = LS.set('savedItems', [{ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), item: copyOf(mine) }].concat(all)) ? 'Saved ' + name + '. Put it on again with Change item, under Saved, on any character or plan.' : 'Could not save: this browser does not let the page store anything.';
+      else M.msg = LS.set('savedItems', [{ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), item: Object.assign(copyOf(bare(mine)), { slot: mine.slot }) }].concat(all)) ? 'Saved ' + name + '. Put it on again with Change item, under Saved, on any character or plan.' : 'Could not save: this browser does not let the page store anything.';
       return renderItem();
     }
     const ch = ctx.editable(), it = itemNow(ch); if (!ch || !it) return;
+    if (act === 'dupidol') {
+      const L = idolLayout(ch), [w, h] = idolDims(it), spot = idolSpot(L, w, h, null, -1);
+      if (!spot) { M.msg = noRoom(it); return renderItem(); }
+      pinIdols(ch, L); ch.items.push(Object.assign(copyOf(it), { gx: spot[0], gy: spot[1] }));
+      M.msg = 'Copied to column ' + (spot[0] + 1) + ', row ' + (spot[1] + 1) + '.'; return commit(ch);
+    }
     if (act === 'unequip') {
       if (M.slot === 'Idol') { ch.items.splice(M.idx, 1); ctx.commit(ch); render(); return closeItem(); }
       ch.items = ch.items.filter(i => i !== it); M.tab = 'select'; return commit(ch);
@@ -7417,7 +7649,100 @@ window.BOCharacter = function (ctx) {
     }
     commit(ch);
   }
-  return { render, hide, close: () => { if (M) closeItem(); } };
+  // ---------- Sim Supports: the support search for one skill, in a window like the item one ----------
+  // Same search as the Supports tab (app.js supportSearchFor), at the skill's gem level against the Damage tab's enemy.
+  // Use sockets a setup on this character (a plan, or the page's copy of a loaded save).
+  let SP = null, spBack = null, spFocus = null; // SP: { skill, pool, manaOk, pct, job, res, base, msg }
+  const supNm = id => (ctx.gd().supports[lc(id)] || { Name: id }).Name;
+  const fmt = x => ctx.num ? ctx.num(x) : Math.round(x).toLocaleString('en-US');
+  const fmtPct = x => ctx.pct ? ctx.pct(x) : (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + '%';
+  const sockOf = (ch, skill) => (ch.sockets || []).find(s => lc(s.skill) === lc(skill));
+  function openSup(skill, from) {
+    if (!ctx.current()) return;
+    spFocus = from || null;
+    if (SP && SP.job) SP.job.cancel();
+    SP = { skill, pool: 'all', manaOk: true, pct: 0, job: null, res: null, base: [], msg: '' };
+    if (!spBack) {
+      spBack = document.createElement('div'); spBack.className = 'io-back sp-back'; spBack.setAttribute('role', 'dialog'); spBack.setAttribute('aria-modal', 'true'); spBack.setAttribute('aria-label', 'Sim Supports');
+      spBack.addEventListener('mousedown', e => { if (e.target === spBack) closeSup(); });
+      spBack.addEventListener('click', onSpClick);
+      spBack.addEventListener('change', e => {
+        if (!SP) return;
+        if (e.target.dataset.sp === 'mana') SP.manaOk = e.target.checked;
+        else return;
+        runSup();
+      });
+      document.addEventListener('keydown', e => { if (SP && spBack && !spBack.hidden && e.key === 'Escape') { e.preventDefault(); closeSup(); } });
+      document.body.appendChild(spBack);
+    }
+    spBack.hidden = false; document.body.classList.add('io-open');
+    runSup();
+    const f = spBack.querySelector('.io-x'); if (f) f.focus({ preventScroll: true });
+  }
+  function closeSup() {
+    if (SP && SP.job) SP.job.cancel();
+    SP = null; if (spBack) spBack.hidden = true; document.body.classList.remove('io-open');
+    if (spFocus && spFocus.isConnected) spFocus.focus({ preventScroll: true });
+  }
+  function runSup() {
+    const ch = ctx.current(); if (!SP || !ch) return;
+    if (SP.job) SP.job.cancel();
+    const s = sockOf(ch, SP.skill);
+    SP.base = (s ? s.supports : []).map(lc); SP.res = null; SP.pct = 0; SP.msg = '';
+    const me = SP, job = ctx.supportSearch(SP.skill, { pool: SP.pool, manaOk: SP.manaOk }, p => { if (SP !== me) return; me.pct = p; const b = spBack.querySelector('#spProg'); if (b) b.textContent = 'Searching… ' + p + '%'; });
+    SP.job = job; renderSup();
+    job.done.then(r => { if (SP !== me || me.job !== job) return; me.job = null; me.res = r || { results: [], none: true }; renderSup(); });
+  }
+  function renderSup() {
+    if (!SP || !spBack) return;
+    const ch = ctx.current(); if (!ch) return closeSup();
+    const sk = ctx.gd().skills[lc(SP.skill)], name = sk ? sk.Name : SP.skill, R = SP.res;
+    const s = sockOf(ch, SP.skill), inUse = (s ? s.supports : []).map(lc);
+    const same = sup => sup.length === inUse.length && sup.every(id => inUse.includes(lc(id)));
+    let h = '<div class="io-win sp-win"><div class="io-head"><span class="sp-title">' + ctx.skillDot(SP.skill) + '<b>Sim Supports</b> · ' + esc(name) + '</span>' +
+      '<span class="io-slotname">level ' + (ch.gemLevels[SP.skill] || 1) + '</span><button class="io-x" type="button" data-sp="close" aria-label="Close">×</button></div><div class="io-body">';
+    h += '<div class="sp-opts"><div class="cmp-modes" role="group" aria-label="Supports to try">' +
+      ['all', 'owned'].map(v => '<button type="button" class="cmp-mode' + (SP.pool === v ? ' on' : '') + '" data-sp="pool" data-v="' + v + '" aria-pressed="' + (SP.pool === v) + '">' + (v === 'all' ? 'Every support' : 'Supports you own') + '</button>').join('') + '</div>' +
+      '<label class="sp-mana"><input type="checkbox" data-sp="mana"' + (SP.manaOk ? ' checked' : '') + '> Mana sustained</label>' +
+      '<button class="btn small ghost" type="button" data-sp="rerun"' + (SP.job ? ' disabled' : '') + '>Run again</button></div>';
+    h += '<p class="hint">Against the enemy set on the Damage tab. New supports are highlighted; struck-through ones come out. <b>Use</b> sockets that setup on this skill.</p>';
+    if (SP.msg) h += '<p class="hint pl-status" role="status">' + esc(SP.msg) + '</p>';
+    if (SP.job) h += '<p class="hint" id="spProg" role="status">Searching… ' + SP.pct + '%</p>';
+    else if (R && R.none) h += '<p class="hint bad">No support setup found for ' + esc(name) + (SP.manaOk ? ' that keeps your mana up. Untick Mana sustained to see the rest.' : '.') + '</p>';
+    else if (R) {
+      const cur = SP.base;
+      h += '<div class="support-results sp-results"><div class="optrow current"><span class="rank">now</span><span class="names">' + esc(cur.map(supNm).join(', ') || 'no supports') + '<span class="nums">' + fmt(R.current) + ' DPS · your setup when you searched</span></span>' +
+        (same(cur) ? '<span class="hint">in use</span>' : '<button class="btn small ghost" type="button" data-sp="use" data-i="-1">Back</button>') + '</div>';
+      R.results.forEach((x, i) => {
+        const sup = x.sup.map(lc), added = sup.filter(id => !cur.includes(id)), removed = cur.filter(id => !sup.includes(id));
+        h += '<div class="optrow"><span class="rank">' + (i + 1) + '</span><span class="names">' + sup.map(id => added.includes(id) ? '<span class="new">' + esc(supNm(id)) + '</span>' : esc(supNm(id))).join(', ') +
+          (removed.length ? ' <span class="gone">' + esc(removed.map(supNm).join(', ')) + '</span>' : '') +
+          '<span class="nums">' + fmt(x.v) + ' DPS (' + fmtPct(x.v / (R.current || 1) - 1) + ') · ' + (x.manaPerSec != null ? 'mana ' + fmt(x.manaPerSec) + '/s of ' + fmt(x.manaGain) : 'mana ×' + x.mana.toFixed(1)) + (x.notOwned.length ? ' · not owned: ' + esc(x.notOwned.map(supNm).join(', ')) : '') + '</span></span>' +
+          (same(x.sup) ? '<span class="hint">in use</span>' : '<button class="btn small" type="button" data-sp="use" data-i="' + i + '">Use</button>') + '</div>';
+      });
+      h += '</div><p class="hint">' + R.sockets + ' sockets · ' + R.poolSize + ' supports · ' + R.tried.toLocaleString('en-US') + ' setups tried' + (R.exact ? '' : ' (building up the best setup instead of trying them all)') + '.' +
+        (SP.manaOk && R.manaDropped ? ' ' + R.manaDropped.toLocaleString('en-US') + ' setups were skipped: they would run you dry within a minute of nonstop use.' : '') + '</p>';
+    }
+    spBack.innerHTML = h + '</div></div>';
+  }
+  function onSpClick(e) {
+    const b = e.target.closest && e.target.closest('button[data-sp]'); if (!b || !SP) return;
+    const act = b.dataset.sp;
+    if (act === 'close') return closeSup();
+    if (act === 'rerun') return runSup();
+    if (act === 'pool') { if (SP.pool !== b.dataset.v) { SP.pool = b.dataset.v; runSup(); } return; }
+    if (act === 'use') {
+      const i = +b.dataset.i, sup = i === -1 ? SP.base : SP.res && SP.res.results[i] && SP.res.results[i].sup; if (!sup) return;
+      const ch = ctx.editable(); if (!ch) return;
+      const gd = ctx.gd(), ids = sup.map(id => (gd.supports[lc(id)] || { Id: id }).Id);
+      let s = sockOf(ch, SP.skill); if (!s) { s = { skill: SP.skill, supports: [], conduit: '' }; ch.sockets.push(s); }
+      s.supports = ids;
+      SP.msg = 'Socketed on ' + ((gd.skills[lc(SP.skill)] || {}).Name || SP.skill) + ': ' + (ids.map(supNm).join(', ') || 'no supports') + '.';
+      ctx.commit(ch, { skills: true }); render(); renderSup();
+    }
+  }
+
+  return { render, hide, close: () => { if (M) closeItem(); if (SP) closeSup(); } };
 };
 
 ;
@@ -7603,7 +7928,8 @@ window.BOCharacter = function (ctx) {
     const S = R.Summary;
     return {
       id: S.ID, name: S.Name, classId: S.ClassId, level: S.Level, league: S.League, lastZone: S.LastZone,
-      items: (R.Items || []).filter(i => i.EquippedSlot && i.EquippedSlot !== 'None').map(i => ({
+      // gx / gy: an idol's cell in the Fossil grid (GridX / GridY), for the Character tab's idol grid only; no damage rule reads them.
+      items: (R.Items || []).filter(i => i.EquippedSlot && i.EquippedSlot !== 'None').map(i => Object.assign(i.EquippedSlot === 'Idol' && Number.isInteger(i.GridX) && Number.isInteger(i.GridY) ? { gx: i.GridX, gy: i.GridY } : {}, {
         slot: i.EquippedSlot, base: i.BaseID, rarity: i.Rarity, unique: i.UniqueID, name: i.Name, level: i.ItemLevel, quality: i.Quality || 0, grade: i.BaseGrade95 || 0,
         affixes: (i.Affixes || []).map(a => ({ id: a.AffixId, tier: a.Tier, v: a.Value, v2: a.Value2, crafted: !!a.bCrafted, oath: !!a.bOath83, scar: !!a.bScar93 })), runes: i.Runes || [], // scar: the line Unswearing added (not boosted on a Great / Flawless Rare, see collectMods)
       })),
@@ -12199,7 +12525,7 @@ window.BOStartApp = function () {
     const cur = O.baseSup; // compare with the setup you had when you searched
     const inUse = (st.supports || []).map(s => s.toLowerCase());
     const same = sup => sup.length === inUse.length && sup.every(id => inUse.includes(id));
-    let h = '<div class="card support-results"><h2>Best support setups <small>' + (O.target === 'panel' ? 'skill panel DPS' : 'configured enemy') + ' · ' + (O.pool === 'all' ? 'every support' : 'supports you own') + (O.manaOk ? ' · mana sustained' : '') + (O.pinnedN ? ' · ' + O.pinnedN + ' pinned' : '') + ' · ' + O.sockets + ' sockets · ' + O.tried.toLocaleString('en-US') + ' setups <button class="x" id="optClose" title="Close" style="background:none;border:0;color:var(--faint);cursor:pointer;font-size:16px">×</button></small></h2>';
+    let h = '<div class="card support-results"><h2>Best support setups <small>' + (O.target === 'panel' ? 'skill panel DPS' : 'configured enemy') + ' · ' + (O.pool === 'all' ? 'every support' : 'supports you own') + (O.manaOk ? ' · mana sustained' : '') + (O.pinnedN ? ' · ' + O.pinnedN + ' pinned' : '') + ' · ' + O.sockets + ' sockets · ' + O.tried.toLocaleString('en-US') + ' setups <button class="x close-x" id="optClose" aria-label="Close">×</button></small></h2>';
     if (O.running) h += '<p class="hint">Searching… ' + Math.round(O.tried / Math.max(1, O.total) * 100) + '% (' + O.poolSize + ' supports, ' + (O.exact ? O.total.toLocaleString('en-US') + ' combinations)' : O.combos.toLocaleString('en-US') + ' combinations: building up the best setup instead of trying them all)') + '</p>';
     else if (O.sig !== optSig()) h += '<p class="warn">Settings changed after this search. Run it again for picks that match them.</p>';
     h += '<div class="optrow current"><span class="rank">was</span><span class="names">' + esc(cur.map(supName).join(', ') || 'no supports') + '<span class="nums">' + num(O.currentValue) + ' · your setup when you searched</span></span>' +
@@ -14275,6 +14601,30 @@ window.BOStartApp = function () {
       };
       run(true);
   }); }
+  // "Sim Supports" on the Character tab: the same search, keeping the top setups for its window. opt: { pool: 'all' | 'owned', manaOk }.
+  // Returns { cancel, done: Promise<{ results, current, sockets, tried, exact, poolSize, manaDropped } | null> }.
+  function supportSearchFor(skill, opt, progress) {
+    let stop = false;
+    const done = new Promise(resolve => {
+      let job, cur;
+      try {
+        const o = comboOpts(); o.gemLevel = st.ch.gemLevels[skill] || undefined;
+        cur = S.calcSkill(GD, st.ch, skill, o);
+        if (!cur || cur.error || cur.unsupported) return resolve(null);
+        job = S.supportSearch(GD, st.ch, skill, o, { pool: opt.pool || 'all', target: 'enemy', keep: 8, manaOk: !!opt.manaOk, pinned: [], blocked: [] });
+      } catch (e) { return resolve(null); }
+      const tick = () => {
+        if (stop) return resolve(null);
+        const t = performance.now();
+        while (!job.done && performance.now() - t < 40) job.step(150);
+        if (!job.done) { progress(Math.round(job.tried / Math.max(1, job.total) * 100)); return setTimeout(tick, 0); }
+        const id = x => (GD.supports[String(x).toLowerCase()] || { Id: x }).Id;
+        resolve({ results: job.results.map(r => Object.assign({}, r, { sup: r.sup.map(id) })), current: cur.totalDps, sockets: job.sockets, tried: job.tried, exact: job.exact, poolSize: job.pool.length, manaDropped: job.manaDropped || 0 });
+      };
+      setTimeout(tick, 0);
+    });
+    return { cancel: () => { stop = true; }, done };
+  }
 
   // The Build tab (planner.js).
   // The belt card on the Character and Gear views: a slot opens its editor, the button goes to the Brewery tab.
@@ -14366,7 +14716,8 @@ window.BOStartApp = function () {
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '' });
   character = window.BOCharacter({
     beltCard: () => brewery ? brewery.beltCard() : '',
-    $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
+    $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, num, pct, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
+    supportSearch: supportSearchFor, simSkill: () => st.skill, // the main skill: the plan's own, or the one the Damage tab sims
     // Item overlay: edits go to a plan itself, or to a copy of a loaded character (as on the Build tab); the save file is never written.
     editable: buildEditable, commit: (ch, what) => { if (ch.plan) planChanged(ch, what || {}); else buildEdited(ch, what || {}); planner.render(); }, // the caller redraws the Character tab
     sheet: () => st.ch && st.skill ? S.calcSkill(GD, st.ch, st.skill, opts()) : null,

@@ -1558,6 +1558,31 @@ body.compare-page #controls { display: none; }
 .ch-item-base { font-size: 11px; color: var(--muted); }
 .ch-slot.magic .ch-item-name { color: #7c9cff; } .ch-slot.rare .ch-item-name { color: #f0d060; } .ch-slot.unique .ch-item-name { color: #e8893c; }
 .ch-idols { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+/* Idols in the Dwarven Fossil grid (character.js): the Fossil Planner's grid, with the character's own idols as tiles */
+.ch-fossil { position: relative; width: min(100%, 400px); margin: 6px 0 10px; }
+.ch-fossil .fo-cell::after { content: "+"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--dashboard-gold); font: 700 22px/1 system-ui, sans-serif; opacity: 0; }
+.ch-fossil .fo-cell[data-open]:hover, .ch-fossil .fo-cell[data-open]:focus-visible { border-color: var(--dashboard-gold); }
+.ch-fossil .fo-cell[data-open]:hover::after, .ch-fossil .fo-cell[data-open]:focus-visible::after { opacity: 1; }
+.ch-fossil .fo-cell[data-open]:hover span, .ch-fossil .fo-cell[data-open]:focus-visible span { opacity: 0; }
+.ch-slot.ch-idol { --c: var(--line); z-index: 1; min-height: 0; padding: 3px; gap: 1px; overflow-wrap: break-word; align-items: center; justify-content: center; text-align: center; border-color: color-mix(in srgb, var(--c) 70%, var(--line)); background: color-mix(in srgb, var(--c) 16%, var(--panel)); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ch-slot.ch-idol.magic { --c: #7c9cff; } .ch-slot.ch-idol.rare { --c: #f0d060; } .ch-slot.ch-idol.unique { --c: #e8893c; }
+.ch-slot.ch-idol:hover, .ch-slot.ch-idol:focus-visible { border-color: var(--dashboard-gold); z-index: 2; }
+.ch-idol .ch-item-name { font-size: 11.5px; line-height: 1.15; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.ch-idol .ch-item-base { font-size: 10.5px; line-height: 1.15; }
+.ch-idol.tiny .ch-item-name { font-size: 10.5px; }
+.ch-slot.ch-idol.magic .ch-item-name, .ch-slot.ch-idol.rare .ch-item-name, .ch-slot.ch-idol.unique .ch-item-name { color: var(--c); }
+.ch-idol.tiny .ch-item-base { display: none; }
+.ch-idol .ch-item-x { opacity: 0; }
+.ch-idol:hover .ch-item-x, .ch-idol:focus-within .ch-item-x { opacity: 1; }
+@media (hover: none) { .ch-idol .ch-item-x { opacity: 1; } }
+.ch-idol.dragging { opacity: .3; }
+.ch-slot.ch-idol.ch-idol-ghost { position: fixed; z-index: 1000; margin: 0; box-sizing: border-box; pointer-events: none; cursor: grabbing; border-color: var(--dashboard-gold); box-shadow: 0 8px 22px rgba(0,0,0,.45); opacity: .95; }
+.ch-idol-ghost.copy::after { content: "+ copy"; position: absolute; top: -9px; right: -9px; padding: 2px 6px; border-radius: 999px; background: var(--dashboard-gold); color: #14161f; font: 700 10px/1.2 system-ui, sans-serif; white-space: nowrap; }
+.ch-fdrop { z-index: 3; pointer-events: none; border: 2px solid var(--good); border-radius: 6px; background: color-mix(in srgb, var(--good) 22%, transparent); }
+.ch-fdrop.no { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 20%, transparent); }
+.ch-fdrop[hidden] { display: none; }
+body.ch-dragging, body.ch-dragging * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+:root[data-theme="light"] .ch-slot.ch-idol.magic { --c: #3f5fd0; } :root[data-theme="light"] .ch-slot.ch-idol.rare { --c: #a07a10; } :root[data-theme="light"] .ch-slot.ch-idol.unique { --c: #c0601c; }
 .ch-skill { padding: 9px 11px; margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--panel) 85%, var(--bg)); }
 .ch-skill.main { border-color: color-mix(in srgb, var(--dashboard-gold) 55%, var(--line)); }
 .ch-skill-name { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
@@ -1677,6 +1702,10 @@ body.io-open { overflow: hidden; }
 .is-ico { --ic: var(--muted); flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px; color: var(--ic);
   border: 1px solid color-mix(in srgb, var(--ic) 40%, var(--line)); background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--ic) 16%, var(--panel-2)), var(--panel-2)); }
 .is-ico svg { width: 32px; height: 32px; overflow: visible; fill: color-mix(in srgb, currentColor 16%, transparent); stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+/* The game's own item art: no tile behind it, the picture fits the box (tall weapons stay tall) */
+.is-ico.art { display: block; width: 52px; height: 52px; border: 0; background: none; border-radius: 0; overflow: hidden; }
+.is-ico.art img { display: block; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .4)); }
+.is-ico.art.gone { visibility: hidden; }
 .is-ico .glyph { fill: none; stroke-width: 1.7; }
 .is-ico.rune svg use { color: var(--muted); }
 .is-ico.jewel .is-gem { fill: color-mix(in srgb, currentColor 45%, transparent); }
@@ -1712,6 +1741,7 @@ body.io-open { overflow: hidden; }
 .is-rune { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; }
 .is-rune .is-ico { width: 26px; height: 26px; border-radius: 6px; }
 .is-rune .is-ico svg { width: 20px; height: 20px; }
+.is-rune .is-ico.art { width: 28px; height: 28px; }
 .is-plus { color: var(--faint); }
 .is-power { margin-top: 6px; }
 .is-power summary { cursor: pointer; color: var(--muted); font-size: 12px; }
@@ -1803,6 +1833,7 @@ body.io-open { overflow: hidden; }
 .gr-tile { position: relative; display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); min-width: 0; }
 .gr-tile .is-ico { width: 38px; height: 38px; }
 .gr-tile .is-ico svg { width: 28px; height: 28px; }
+.gr-tile .is-ico.art { width: 42px; height: 42px; }
 .gr-tile:not(.have):not(.held):not(.craft) .is-ico { filter: grayscale(1); opacity: .45; }
 .gr-tile:not(.have):not(.held):not(.craft) .gr-body b { color: var(--muted); }
 .gr-tile.have, .gr-tile.held { border-color: color-mix(in srgb, #e0896f 60%, var(--line)); background: color-mix(in srgb, #e0896f 9%, var(--panel-2)); }
@@ -2034,6 +2065,20 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 .ch-skill-x:hover, .ch-skill-x:focus-visible { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 
 /* Character tab: Copy / Paste buttons beside a card's title; saved items and extra lines in the item overlay */
+.ch-skill-acts { display: flex; align-items: center; gap: 4px; margin-left: auto; flex: none; }
+.ch-skill-acts .ch-skill-x { margin-left: 0; }
+/* The × on a gear slot or idol (character.js): top right of the box */
+.ch-slot { position: relative; }
+.ch-item-x { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 0; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--faint); font-size: 16px; line-height: 1; cursor: pointer; }
+.ch-item-x:hover, .ch-item-x:focus-visible { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--bg-2); outline: none; }
+.ch-slot .ch-item-x { top: -7px; right: -7px; border-radius: 50%; box-shadow: 0 1px 4px #0006; }
+/* Sim Supports window (character.js): the item window's frame */
+.sp-win { width: min(820px, 100%); height: auto; max-height: min(760px, 100%); }
+.sp-title { display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-size: 15px; }
+.sp-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.sp-opts .cmp-modes { margin: 0; }
+.sp-mana { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; cursor: pointer; }
+.sp-results { margin-top: 4px; }
 .ch-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .ch-gear .ch-skills-head { margin-bottom: 10px; }
 .io-saved { position: relative; display: grid; }
@@ -2070,3 +2115,69 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 /* Gear Set Sim: the Riven cap box is drawn to the eye because its default (0) hides a whole group of mods */
 .gs-controls .field.gs-attn { padding: 6px 10px; border: 1px solid var(--accent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); box-shadow: var(--glow); }
 .gs-attn-note { align-self: center; flex: 1 1 260px; font-size: .85em; color: var(--accent); }
+
+/* Close × on windows and panels (item, potion and Sim Supports windows, support results, tree node sheet, dragon panel):
+   the purple button look (.btn, as Configure Enemy). */
+.io-x, .close-x, .tree-sheet-x, .dragon-close { display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 1px solid transparent; border-radius: var(--radius-sm); background: linear-gradient(135deg, var(--accent-strong), var(--accent-2)); color: var(--accent-ink); line-height: 1; cursor: pointer; }
+.io-x:hover, .close-x:hover, .tree-sheet-x:hover, .dragon-close:hover { filter: brightness(1.1); color: var(--accent-ink); }
+.io-x:focus-visible, .close-x:focus-visible, .tree-sheet-x:focus-visible, .dragon-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: transparent; }
+.io-x { align-self: center; height: 34px; }
+.close-x { width: 26px; height: 26px; margin-left: 8px; font-size: 18px; vertical-align: middle; }
+.tree-sheet-x { width: 30px; height: 28px; }
+.dragon-close { width: 30px; height: 30px; }
+
+/* Remove × (skills, items and idols, affixes, saved items, Save Creator bar slots, Fossil idols): the same purple as the close ×.
+   Each keeps its own place; the selectors match the older rules' weight so these win. */
+.ch-item-x, .ch-skill-acts .ch-skill-x, .pl-skill > .pl-row > .x, .build-pane .x, .checklist .x, .fo-x, .io-rm, .cr-bar-slot .x {
+  display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 1px solid transparent; border-radius: 6px;
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent-2)); color: var(--accent-ink); line-height: 1; cursor: pointer; }
+.ch-item-x:hover, .ch-skill-acts .ch-skill-x:hover, .pl-skill > .pl-row > .x:hover, .build-pane .x:hover, .checklist .x:hover, .fo-x:hover, .io-rm:hover, .cr-bar-slot .x:hover,
+.ch-item-x:focus-visible, .ch-skill-acts .ch-skill-x:focus-visible, .pl-skill > .pl-row > .x:focus-visible, .build-pane .x:focus-visible, .checklist .x:focus-visible, .fo-x:focus-visible, .io-rm:focus-visible, .cr-bar-slot .x:focus-visible {
+  filter: brightness(1.1); background: linear-gradient(135deg, var(--accent-strong), var(--accent-2)); color: var(--accent-ink); border-color: transparent; }
+.ch-item-x:focus-visible, .ch-skill-acts .ch-skill-x:focus-visible, .pl-skill > .pl-row > .x:focus-visible, .build-pane .x:focus-visible, .checklist .x:focus-visible, .fo-x:focus-visible, .io-rm:focus-visible, .cr-bar-slot .x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ch-item-x { width: 20px; height: 20px; font-size: 14px; border-radius: 50%; }
+.ch-skill-acts .ch-skill-x { width: 26px; height: 26px; font-size: 17px; }
+.build-pane .x, .checklist .x, .cr-bar-slot .x { width: 22px; height: 22px; font-size: 15px; }
+.pl-skill > .pl-row > .x { width: 28px; height: 28px; font-size: 20px; }
+.fo-x { width: 24px; height: 24px; font-size: 12px; }
+.io-rm { width: 26px; height: 26px; font-size: 16px; }
+
+/* The game's item art on the Character tab: gear slots, the Fossil's idols, the item window (character.js artImg) */
+/* Gear slots: the picture sits under the slot's label; right of the text once the doll is wide enough for both */
+.ch-slot.has-art:not(.ch-idol) > .is-ico { width: 44px; height: 44px; margin: 2px 0; }
+.ch-doll { container-type: inline-size; }
+@container (min-width: 540px) {
+  .ch-slot.has-art { padding-right: 68px; }
+  .ch-slot.has-art > .is-ico.art { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 52px; height: 52px; margin: 0; }
+}
+.ch-slot.ch-idol.has-art { padding: 0; }
+.ch-idol.has-art > .is-ico { position: absolute; inset: 3px; width: auto; height: auto; pointer-events: none; }
+.ch-idol.has-art .ch-item-name, .ch-idol.has-art .ch-item-base { display: none; }
+.io-card.has-art { position: relative; padding-left: 74px; min-height: 72px; }
+.io-card.has-art > .is-ico { position: absolute; left: 11px; top: 10px; }
+.io-ident { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.io-ident > .is-ico.art { width: 64px; height: 64px; }
+
+/* The game's idol art on the Fossil Planner (fossil.js artImg): fills the tile on the grid, a small picture in the lists */
+.fo-art { display: block; min-width: 0; min-height: 0; }
+.fo-art img { display: block; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .4)); }
+.fo-idol.has-art { position: relative; padding: 0; border-width: 1px; border-color: color-mix(in srgb, var(--dashboard-gold) 45%, var(--line)); background: color-mix(in srgb, var(--dashboard-gold) 8%, var(--panel)); box-shadow: none; }
+.fo-idol.has-art > .fo-art { position: absolute; inset: 3px; }
+.fo-idol.has-art > b, .fo-idol.has-art > span:not(.fo-art) { display: none; }
+.fo-idol.has-art.sel { border-color: var(--dashboard-gold); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dashboard-gold) 55%, transparent), 0 6px 18px rgba(0,0,0,.35); }
+.fo-thumb { display: grid; place-items: center; justify-self: center; }
+.fo-thumb.has-art { width: 46px; height: 38px; }
+.fo-thumb.has-art > .fo-art { width: 100%; height: 100%; }
+.fo-thumb.has-art > .fo-mini { display: none; }
+
+/* Weapon, off hand and body armour: the picture takes most of the panel and the text is small under it; the hover card has the details */
+.ch-doll .ch-slot-MainHand.has-art, .ch-doll .ch-slot-OffHand.has-art, .ch-doll .ch-slot-Chest.has-art { padding: 3px 3px 6px; text-align: center; }
+.ch-doll .ch-slot-MainHand.has-art > .ch-slot-label, .ch-doll .ch-slot-OffHand.has-art > .ch-slot-label, .ch-doll .ch-slot-Chest.has-art > .ch-slot-label { position: absolute; top: 7px; left: 9px; z-index: 1; }
+.ch-doll .ch-slot-MainHand.has-art > .is-ico.art, .ch-doll .ch-slot-OffHand.has-art > .is-ico.art, .ch-doll .ch-slot-Chest.has-art > .is-ico.art { position: relative; right: auto; top: auto; transform: none; flex: 1 1 0; align-self: stretch; width: auto; height: auto; min-height: 120px; margin: 0 0 2px; }
+.ch-doll .ch-slot-MainHand.has-art > .is-ico.art img, .ch-doll .ch-slot-OffHand.has-art > .is-ico.art img, .ch-doll .ch-slot-Chest.has-art > .is-ico.art img { position: absolute; inset: 0; }
+.ch-slot-MainHand.has-art .ch-item-name, .ch-slot-OffHand.has-art .ch-item-name, .ch-slot-Chest.has-art .ch-item-name { font-size: 11.5px; line-height: 1.2; }
+.ch-slot-MainHand.has-art .ch-item-base, .ch-slot-OffHand.has-art .ch-item-base, .ch-slot-Chest.has-art .ch-item-base { font-size: 10px; line-height: 1.2; }
+/* Body armour is one row tall and its label is long: the label keeps its own line and the picture is a little lower */
+.ch-doll .ch-slot-Chest.has-art { padding-top: 6px; }
+.ch-doll .ch-slot-Chest.has-art > .ch-slot-label { position: static; text-align: left; padding-left: 6px; }
+.ch-doll .ch-slot-Chest.has-art > .is-ico.art { min-height: 92px; }

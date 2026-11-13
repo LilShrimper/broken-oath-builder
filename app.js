@@ -1,3 +1,152 @@
+// Page language (owner, 13 Nov 2026: Simplified Chinese first). The page is written in English; when Chinese is on, this
+// swaps the text of the rendered page for its Chinese from one dictionary (lang/zh.json, built by build.js):
+//   - the game's own names and texts (skills, supports, tree nodes, Oaths, uniques, affix names) from the public API's
+//     lang/zh-Hans.json, so they read as they do in the game;
+//   - the page's own words from src/lang/zh/*.json (ours).
+// It works on the finished page (text nodes and the title / placeholder / aria-label attributes), so the sim and the
+// render code stay in English and untouched; anything the dictionary lacks stays English.
+// A dictionary key is the English text with every number written as '#'; in the Chinese, '#' takes the numbers in order
+// and '{0}', '{1}' take them by place (when Chinese puts them in another order).
+// Which language: on the site the address (/zh/... pages set window.SITE_LANG = 'zh'); locally, localStorage.
+// window.I18N.missing holds the English it saw and could not translate (to find what the dictionary still lacks).
+(function () {
+  const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* off */ } } };
+  const routed = typeof window.SITE_BASE === 'string';
+  const lang = routed ? (window.SITE_LANG === 'zh' ? 'zh' : 'en') : (store.get('bods:lang') === 'zh' ? 'zh' : 'en');
+  const I = window.I18N = { lang, missing: new Set(), ready: Promise.resolve(), t: s => s };
+  const root = document.documentElement;
+  if (lang !== 'zh') return;
+  root.lang = 'zh-Hans';
+  // Beta notice (owner, 13 Nov 2026: published without a native reader's review; fixes come in through Report a problem).
+  // "The Chinese translation is in beta; if something is wrong, tell us through Report a problem."
+  {
+    const bar = document.querySelector('.view-bar');
+    if (bar) {
+      const n = document.createElement('p');
+      n.className = 'zh-beta notranslate';
+      n.innerHTML = '中文翻译为测试版，如有不准确之处，欢迎通过<button type="button" class="linkish">「报告问题」</button>反馈。';
+      n.querySelector('button').addEventListener('click', () => { const r = document.getElementById('reportBtn'); if (r) r.click(); });
+      bar.parentNode.insertBefore(n, bar);
+    }
+  }
+  root.classList.add('i18n-wait'); // hidden until the dictionary is in (at most 2.5 s), so English does not flash first
+  const reveal = () => root.classList.remove('i18n-wait');
+  setTimeout(reveal, 2500);
+
+  // A number, or a roll range "(10–20)" / "(-5–-3)" (unique items) taken as one number.
+  const NUM = /\(-?\d+(?:[.,]\d+)*[–-]-?\d+(?:[.,]\d+)*\)|\d+(?:[.,]\d+)*/g;
+  let D = null, DL = null;
+  const fill = (v, nums) => { let i = 0; return v.replace(/\{(\d)\}|#/g, (m, n) => n != null ? (nums[+n] != null ? nums[+n] : m) : (nums[i] != null ? nums[i++] : m)); };
+  function look(t) {
+    let v = D[t]; if (v != null) return v;
+    const nums = t.match(NUM);
+    if (nums) { const k = t.replace(NUM, '#'); v = D[k]; if (v == null) v = DL[k.toLowerCase()]; if (v != null) return fill(v, nums); }
+    v = DL[t.toLowerCase()]; return v != null ? v : null;
+  }
+  // Patterns: keys with slots. '{s}' holds a name the dictionary knows ("Block {s}" -> "屏蔽 {s}", the name translated
+  // too; the pattern only applies when it is); '{x}' holds any text, kept as is (a character's name).
+  let PATS = [];
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  function compile() {
+    PATS = Object.keys(D).filter(k => /\{[sx]\}/.test(k)).map(k => {
+      const src = '^' + k.split(/\{[sx]\}/).map(p => esc(p).replace(/#/g, '(' + NUM.source + ')')).join('(.+?)') + '$';
+      const kinds = []; k.replace(/#|\{[sx]\}/g, m => { kinds.push(m); return m; });
+      return { re: new RegExp(src, 'i'), kinds, v: D[k], lit: k.replace(/\{[sx]\}|#/g, '').length };
+    }).sort((a, b) => b.lit - a.lit); // the most specific (most fixed text) first
+  }
+  const EDGE = /^([\s(\[·•\-–—:,"'“‘|/]*)(.*?)([\s)\]·•:,.!?;"'”’…|/]*)$/s;
+  // The Chinese of one piece of text, or null: whole text, then (depth-limited) its parts.
+  function core(t, depth) {
+    let r = look(t); if (r != null) return r;
+    const m = EDGE.exec(t);
+    if (m && m[2] && m[2] !== t && /[A-Za-z]/.test(m[2])) { r = look(m[2]); if (r != null) return m[1] + r + m[3]; }
+    if (depth > 2) return null;
+    const sub = x => /[A-Za-z]/.test(x) ? core(x, depth + 1) : x;
+    for (const p of PATS) {
+      const g = p.re.exec(t); if (!g) continue;
+      const nums = [], names = [], free = [];
+      p.kinds.forEach((k, i) => (k === '#' ? nums : k === '{s}' ? names : free).push(g[i + 1]));
+      // A slot may hold a run of tag words ("Physical Melee"): each word known -> joined (物理近战).
+      const words = x => { const w = x.split(' '); if (w.length < 2 || w.length > 4) return null; const z = w.map(look); return z.every(y => y != null) ? z.join('') : null; };
+      const zhNames = names.map(x => { const y = sub(x); return y != null ? y : words(x); });
+      if (zhNames.some(x => x == null)) continue; // the slot is for names the dictionary knows; otherwise not this pattern
+      let ni = 0, fi = 0;
+      return fill(p.v, nums).replace(/\{([sx])\}/g, (m, k) => k === 's' ? zhNames[ni++] : free[fi++]);
+    }
+    // "A · B", "A (B)", "A: B": the parts one by one; at least one must have Chinese.
+    const parts = (sep, list, join) => { const out = list.map(x => sub(x)); return out.some((x, i) => x != null && x !== list[i]) ? out.map((x, i) => x != null ? x : list[i]).join(join) : null; };
+    if (t.includes(' · ')) { r = parts(' · ', t.split(' · '), ' · '); if (r != null) return r; }
+    let q = /^(.*\S) \(([^()]+)\)$/.exec(t);
+    if (q) { const a = sub(q[1]), b = sub(q[2]); if (a != null || b != null) return (a != null ? a : q[1]) + '（' + (b != null ? b : q[2]) + '）'; }
+    q = /^([^:]{1,40}): (.+)$/.exec(t);
+    if (q) { const a = sub(q[1]), b = sub(q[2]); if (a != null) return a + '：' + (b != null ? b : q[2]); }
+    return null;
+  }
+  function tr(s) {
+    if (!D || !s || !/[A-Za-z]/.test(s) || /[㐀-鿿]/.test(s)) return null; // no English, or already Chinese
+    const t = s.replace(/\s+/g, ' ').trim().replace(/\+-(?=\d)/g, '-'); // "+-5%": a negative roll the page prints with both signs
+    if (!t) return null;
+    const r = core(t, 0);
+    if (r == null) { if (I.missing.size < 20000 && t.length < 400) I.missing.add(t); return null; }
+    const lead = /^\s/.test(s) ? ' ' : '', trail = /\s$/.test(s) ? ' ' : '';
+    return lead + r + trail;
+  }
+  I.t = s => tr(s) || s;
+
+  const SKIP = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'CODE', 'PRE', 'KBD', 'NOSCRIPT']);
+  const ATTRS = ['title', 'data-title', 'placeholder', 'aria-label'];
+  const skipEl = el => { for (let e = el; e && e !== document.body; e = e.parentElement) { if (SKIP.has(e.tagName) || e.isContentEditable || (e.classList && e.classList.contains('notranslate')) || e.getAttribute('translate') === 'no') return true; } return false; };
+  function doText(n) { if (skipEl(n.parentElement)) return; const r = tr(n.nodeValue); if (r != null && r !== n.nodeValue) n.nodeValue = r; }
+  function doAttrs(el) {
+    if (skipEl(el)) return;
+    for (const a of ATTRS) { const v = el.getAttribute(a); if (v) { const r = tr(v); if (r != null && r !== v) el.setAttribute(a, r); } }
+    if (el.tagName === 'INPUT' && (el.type === 'button' || el.type === 'submit') && el.value) { const r = tr(el.value); if (r != null) el.value = r; }
+  }
+  function walk(node) {
+    if (node.nodeType === 3) return doText(node);
+    if (node.nodeType !== 1 || SKIP.has(node.tagName)) return;
+    doAttrs(node);
+    const w = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, { acceptNode: n => n.nodeType === 1 && SKIP.has(n.tagName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    for (let n = w.nextNode(); n; n = w.nextNode()) { if (n.nodeType === 3) doText(n); else doAttrs(n); }
+  }
+  const mo = new MutationObserver(list => {
+    for (const m of list) {
+      if (m.type === 'characterData') doText(m.target);
+      else if (m.type === 'attributes') doAttrs(m.target);
+      else for (const n of m.addedNodes) walk(n);
+    }
+  });
+  const titleEl = () => document.querySelector('title');
+  I.ready = fetch((window.SITE_BASE || '') + 'lang/zh.json', { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(d => {
+    D = d; DL = {};
+    for (const k in d) { const l = k.toLowerCase(); if (!(l in DL)) DL[l] = d[k]; }
+    compile();
+    walk(document.body);
+    mo.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+    // The tab title: "Skills · Broken Oath Builder" (app.js sets it on every tab change).
+    const doTitle = () => { const t = document.title, i = t.indexOf(' · '); const r = i > 0 ? tr(t.slice(0, i)) : tr(t); if (r != null) document.title = i > 0 ? r + t.slice(i) : r; };
+    doTitle(); if (titleEl()) new MutationObserver(doTitle).observe(titleEl(), { childList: true, characterData: true, subtree: true });
+  }).catch(e => { console.warn('Chinese text not loaded (' + e.message + '); the page stays in English.'); }).finally(reveal);
+})();
+
+// The language switch (sidebar foot, next to the theme button). On the site it goes to the same tab's address in the other
+// language (/zh/build/tree/ <-> /build/tree/), keeping the share code in the hash; locally it reloads.
+(function () {
+  const b = document.getElementById('langBtn'); if (!b) return;
+  const zh = window.I18N.lang === 'zh';
+  b.textContent = zh ? 'EN' : '中文';
+  b.title = zh ? 'Switch to English' : '切换到简体中文';
+  b.setAttribute('aria-label', b.title);
+  b.classList.add('notranslate');
+  b.addEventListener('click', () => {
+    try { localStorage.setItem('bods:lang', zh ? 'en' : 'zh'); } catch (e) { /* off */ }
+    if (typeof window.SITE_BASE !== 'string') return location.reload();
+    const rootPath = window.SITE_BASE, rel = location.pathname.slice(rootPath.length).replace(/^zh(\/|$)/, '');
+    location.href = rootPath + (zh ? '' : 'zh/') + rel + location.search + location.hash;
+  });
+})();
+
+;
 // Turns the game's Data folder into the compact game data (GD) the sim uses. Shared by build.js (Node)
 // and the public page (files picked in the browser).
 //   J(rel)        -> parsed JSON of a file under Data, e.g. J('Gameplay/skills.json')
@@ -14493,7 +14642,7 @@ window.BOStartApp = function () {
   function routeFromPath() {
     if (!ROUTING) return null;
     let p = location.pathname; try { p = decodeURIComponent(p); } catch (e) { /* keep as is */ }
-    const rel = p.slice(siteRoot().length).toLowerCase().replace(/\/+$/, '');
+    const rel = p.slice(siteRoot().length).toLowerCase().replace(/\/+$/, '').replace(/^zh(\/|$)/, ''); // zh/...: the Chinese pages (src/i18n.js)
     if (rel === 'build/gear') return 'character'; // the old Gear sub-tab: gear is edited on the Character tab now
     return Object.keys(ROUTES).find(k => ROUTES[k] === rel) || null;
   }
@@ -14508,7 +14657,7 @@ window.BOStartApp = function () {
     const key = tab === 'build' ? 'build:' + planner.subTab() : tab === 'skillscaling' && skillsView === 'minions' ? 'minions' : tab, route = ROUTES[key]; if (!route) return;
     document.title = ROUTE_TITLES[key] + ' · Broken Oath Builder';
     if (!ROUTING || !routingReady || noPush) return;
-    const url = siteRoot() + route + '/';
+    const url = siteRoot() + (window.SITE_LANG === 'zh' ? 'zh/' : '') + route + '/';
     if (location.pathname !== url) history.pushState(null, '', url + location.search);
   }
   window.addEventListener('popstate', () => {

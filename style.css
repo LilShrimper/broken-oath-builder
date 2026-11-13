@@ -66,6 +66,13 @@ h3 { font-size: 11.5px; margin: 14px 0 6px; color: var(--muted); text-transform:
 .nav-reset:focus-visible { outline: 2px solid var(--bad); outline-offset: 2px; }
 .nav-reset svg { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .theme-btn .i-moon { display: none; } :root[data-theme="light"] .theme-btn .i-sun { display: none; } :root[data-theme="light"] .theme-btn .i-moon { display: block; }
+/* Language switch (src/i18n.js): a text button the size of the icon buttons. Chinese: CJK fonts after the Latin ones, and the
+   page stays hidden until its dictionary is in (at most 2.5 s). */
+.lang-btn { font-size: 12px; font-weight: 600; line-height: 1; letter-spacing: 0; }
+:root.i18n-wait body { visibility: hidden; }
+.zh-beta { margin: 10px 0 0; padding: 7px 12px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--muted); font-size: 12.5px; }
+:root:lang(zh-Hans) body { font-family: Inter, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Hiragino Sans GB", system-ui, sans-serif; }
+:root:lang(zh-Hans) :is(h1, h2, h3, .configure-heading h2, .support-simulator-heading h2) { font-family: Georgia, "Noto Serif SC", "Source Han Serif SC", "Songti SC", "Microsoft YaHei", serif; }
 .toolbar { max-width: 1500px; margin: 14px auto 0; padding: 0 20px; }
 .top-controls { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
 .code-form { display: flex; gap: 6px; align-items: center; margin: 0; }
@@ -822,7 +829,7 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
 .code-import input { padding: 11px 12px; }
 .nav-end { flex-direction: column-reverse; align-items: flex-start; gap: 10px; margin: auto 0 0; padding: 12px 9px 0; border-top: 1px solid var(--line); }
 .nav-end .sub { display: block; max-width: 100%; white-space: normal; overflow-wrap: anywhere; font-size: 10px; line-height: 1.45; }
-.view-bar, .fight-check-banner { width: min(1500px, calc(100% - (var(--rail) + 40px))); margin-left: max(calc(var(--rail) + 20px), calc(var(--rail) + 20px + (100% - (var(--rail) + 1520px)) / 2)); margin-right: 20px; padding: 0; }
+.view-bar, .fight-check-banner, .zh-beta { width: min(1500px, calc(100% - (var(--rail) + 40px))); margin-left: max(calc(var(--rail) + 20px), calc(var(--rail) + 20px + (100% - (var(--rail) + 1520px)) / 2)); margin-right: 20px; padding: 0; }
 .toolbar { margin-top: 14px; }
 .fight-check-banner { margin-top: 12px; }
 .top-controls { align-items: end; gap: 10px; padding: 10px 12px; }
@@ -864,7 +871,7 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
   .nav-support { align-self: center; margin: 0; padding: 0; border: 0; }
   .nav-support .bmc-btn { height: 34px; padding: 0 10px; font-size: 13px; }
   .nav-support .bmc-btn svg { height: 20px !important; }
-  .view-bar, .data-old, .hero, .layout, .fight-check-banner { width: auto; max-width: none; margin: 10px 12px 0; }
+  .view-bar, .data-old, .hero, .layout, .fight-check-banner, .zh-beta { width: auto; max-width: none; margin: 10px 12px 0; }
   .toolbar { padding: 0; }
   .fight-check-banner { margin-top: 12px; }
   .layout { padding: 14px 0; }

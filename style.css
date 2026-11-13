@@ -2032,3 +2032,37 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 .ch-skill-x { margin-left: auto; flex: none; }
 .ch-skill-x { background: none; border: 1px solid transparent; border-radius: 6px; color: var(--faint); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 7px; }
 .ch-skill-x:hover, .ch-skill-x:focus-visible { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+
+/* Character tab: Copy / Paste buttons beside a card's title; saved items and extra lines in the item overlay */
+.ch-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.ch-gear .ch-skills-head { margin-bottom: 10px; }
+.io-saved { position: relative; display: grid; }
+.io-saved .io-card { padding-right: 34px; }
+.io-saved .io-rm { position: absolute; top: 6px; right: 6px; }
+.io-extra { color: var(--dashboard-gold); }
+/* The add-line lists have no background of their own, so their opened list needs one (it came out white in dark mode) */
+.io-add option, .io-add optgroup { background: var(--panel-2); color: var(--text); }
+.pl-continue { justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.pl-setup > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; cursor: pointer; }
+.pl-setup > summary h2 { margin: 0; }
+.pl-setup[open] > summary { margin-bottom: 12px; }
+
+/* Save Creator: the skill bar mapper (laid out like the in-game bar: mouse buttons over keys 3-5, the Ctrl bar below) */
+.cr-map h3 { margin: 18px 0 4px; }
+.cr-bar-skills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 12px; }
+.cr-bar-skill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.cr-bar-skill:hover, .cr-bar-skill:focus-visible { border-color: var(--dashboard-gold); outline: none; }
+.cr-bar-skill.on { border-color: var(--dashboard-gold); box-shadow: 0 0 0 1px var(--dashboard-gold); }
+.cr-bar-skills select { width: auto; max-width: 220px; padding: 6px 8px; font-size: 13px; }
+.cr-bar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; max-width: 760px;
+  grid-template-areas: '. . s0 s1 s2' 's3 s4 s5 s6 s7' 'lab lab lab lab lab' 's8 s9 s10 s11 s12'; }
+.cr-bar-label { grid-area: lab; margin-top: 6px; color: var(--faint); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.cr-bar-slot { position: relative; display: grid; min-width: 0; }
+.cr-bar-put { display: flex; flex-direction: column; gap: 2px; min-height: 54px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: color-mix(in srgb, var(--panel) 85%, var(--bg)); color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; min-width: 0; }
+.cr-bar-put:hover, .cr-bar-put:focus-visible { border-color: var(--dashboard-gold); outline: none; }
+.cr-bar-put small { color: var(--faint); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.cr-bar-put span { display: flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.cr-bar-put i { color: var(--faint); font-style: normal; }
+.cr-bar-slot.full .cr-bar-put { border-color: color-mix(in srgb, var(--dashboard-gold) 45%, var(--line)); padding-right: 26px; }
+.cr-bar-slot .x { position: absolute; top: 2px; right: 2px; }
+@media (max-width: 640px) { .cr-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: 's0 s1 s2' 's3 s4 s5' 's6 s7 .' 'lab lab lab' 's8 s9 s10' 's11 s12 .'; } }

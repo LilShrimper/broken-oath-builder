@@ -2024,7 +2024,10 @@ window.BOPlanner = function (ctx) {
     const classOpts = Object.values(GD.classes).map(c => opt(c.Id, c.Id, ch && c.Id === ch.classId)).join('');
     syncSubTabs(!!ch);
     hideItemTip();
-    let h = '<div class="card"><h2>' + (plan ? 'Build Planner Setup' : 'Build Planner') + '</h2>';
+    // A plan's setup (name, class, level, plan code) is the Start a New Plan page; on the Skills tab it is folded away under its title.
+    const fold = plan && !document.body.classList.contains('plan-page');
+    let h = fold ? '<details class="card pl-setup"' + (setupOpen ? ' open' : '') + '><summary><h2>Plan setup</h2><span class="hint">' + esc(ch.name + ' · ' + ch.classId + ' · level ' + ch.level) + ' · name, class, level, plan code</span></summary>'
+      : '<div class="card"><h2>' + (plan ? 'Build Planner Setup' : 'Build Planner') + '</h2>';
     if (!ch || !plan) {
       h += '<p class="hint">' + (ch ? 'Edit the skills below to see what they do to your damage; gear is edited on the Character tab (click a slot). Changes stay in this page until you leave it; use <b>Save as plan</b> to keep them. Your save is never changed.' : 'Load a character to see its current setup, or use <b>Plan a new build</b> to start from scratch.') + '</p>';
       if (ch) h += '<div class="pl-row"><button class="btn small" type="button" id="buildSavePlan" title="Keeps a copy of this build, edits included, as a plan in this browser. The save is not changed.">Save as plan</button>' +
@@ -2042,15 +2045,17 @@ window.BOPlanner = function (ctx) {
         '<button class="btn small ghost" type="button" data-act="del">Delete plan</button>' +
         '<span class="hint">Edits save in this browser as you go. The passive tree and the Dragonling (the dragon button) are on the Skill tree tab; the Damage tab shows what it does.</span></div>';
     }
-    if (status) h += '<p class="hint pl-status">' + esc(status) + '</p>';
+    if (status && !fold) h += '<p class="hint pl-status">' + esc(status) + '</p>';
     // Any code or link opens here as a plan: plan code, share link, planner link or BO1. build code.
     h += '<div class="pl-row pl-import"><label class="field inline grow"><span>Open a code or link</span><input type="text" id="plCode" placeholder="Paste a plan code, share link, planner link or build code" autocomplete="off" spellcheck="false" value="' + esc(codeDraft) + '"></label>' +
       '<button class="btn small" type="button" data-act="importcode"' + (importing ? ' disabled' : '') + '>' + (importing ? 'Opening…' : 'Open') + '</button></div>';
-    h += '</div>';
+    // Start a New Plan page only: on to the Character tab (gear, skills and the build at a glance) once the setup is filled in.
+    if (plan && !fold) h += '<div class="pl-row pl-continue"><span class="hint">Name, class and level set? Gear and skills are on the Character tab.</span><button class="btn" type="button" id="buildContinue">Continue</button></div>';
+    h += fold ? '</details>' + (status ? '<p class="hint pl-status">' + esc(status) + '</p>' : '') : '</div>';
     if (ch) h += skillsCard(ch, edit, dis); // the Dragonling tree is on the Skill tree tab (dragon button)
     el.innerHTML = h;
   }
-  let codeDraft = '', importing = false;
+  let codeDraft = '', importing = false, setupOpen = false; // setupOpen: the folded Plan setup on the Skills tab
   async function importCodeBox() {
     const text = codeDraft.trim();
     if (!text || importing) return;
@@ -2222,16 +2227,22 @@ window.BOPlanner = function (ctx) {
     const n = it.affixes.filter(a => !a.id.startsWith('unique:')).length;
     return esc((u ? u.Name + ' · ' : word ? word.Name + ' · ' : it.rarity + ' ') + (b ? b.Name : it.base)) + (u ? '' : n ? ' · ' + n + ' affix' + (n > 1 ? 'es' : '') : '') + (it.runes.length ? ' · ' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') : '');
   }
+  // Lines a rare holds on top of its 3 prefixes and 3 suffixes: the Cube's Oathsworn line (a 7th line) and a Scarred line (Unswear at the Forge).
+  const extraTag = a => a.oath ? 'Oathsworn' : a.scar ? 'Scarred' : '';
   const vowTag = n => { const sh = S.vowShare(GD, n); return 'Vow ' + (n + 1) + (sh < 1 ? ' · counts ' + Math.round(sh * 100) + '%' : ''); };
   // One affix: its type (P / S, or "Vow" on a unique), tier, numbers and text.
   function affixRow(it, a, ai, edit, dis, tag) {
     const af = GD.affixes[lc(a.id)], x = edit ? '<button class="x" type="button" title="Remove" data-act="rmaffix" data-ai="' + ai + '">×</button>' : '';
     if (!af) return '<div class="pl-affix"><span class="meta bad">Unknown affix ' + esc(a.id) + '</span>' + x + '</div>';
     const t = af.Tiers[a.tier] || af.Tiers[0], two = t && t.Min2 != null;
+    // Outside the tier's range: flagged, not refused (see character.js affixRow).
+    const lim = (lo, hi) => lo == null || hi == null ? '' : ' min="' + Math.min(lo, hi) + '" max="' + Math.max(lo, hi) + '" title="Rolls ' + lo + ' to ' + hi + '"';
+    const out = (x, lo, hi) => lo != null && hi != null && (x < Math.min(lo, hi) || x > Math.max(lo, hi));
+    const off = t && (out(a.v, t.Min, t.Max) || (two && out(a.v2, t.Min2, t.Max2)));
     return '<div class="pl-affix" data-ai="' + ai + '"><span class="pl-type" title="' + (tag ? tag + ' · ' : '') + af.Type + '">' + (tag ? tag[0] : af.Type[0]) + '</span>' +
       '<select data-f="tier"' + dis + '>' + af.Tiers.map((y, ti) => opt(ti, (af.Kind || 'T' + (ti + 1)) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')', ti === a.tier)).join('') + '</select>' +
-      '<input class="mini" type="number" step="any" data-f="v" value="' + a.v + '"' + dis + '>' + (two ? '<input class="mini" type="number" step="any" data-f="v2" value="' + a.v2 + '"' + dis + '>' : '') +
-      '<span class="pl-text">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(modLine(af.Mod, a.v, a.v2)) + (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') + '</span>' + x + '</div>';
+      '<input class="mini" type="number" step="any" data-f="v" value="' + a.v + '"' + (t ? lim(t.Min, t.Max) : '') + dis + '>' + (two ? '<input class="mini" type="number" step="any" data-f="v2" value="' + a.v2 + '"' + lim(t.Min2, t.Max2) + dis + '>' : '') +
+      '<span class="pl-text">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(modLine(af.Mod, a.v, a.v2)) + (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') + (off ? ' <span class="bad">outside its range</span>' : '') + '</span>' + x + '</div>';
   }
   function itemEditor(it, slot, idx, edit, dis, k = K) {
     const key = it ? idx : slot; // idols are found by index, other slots by name
@@ -2310,8 +2321,8 @@ window.BOPlanner = function (ctx) {
       }
     } else if (it.rarity !== 'Normal') {
       const all = affixesFor(base), used = new Set(it.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
-      const count = t => it.affixes.filter(a => (GD.affixes[lc(a.id)] || {}).Type === t).length;
-      it.affixes.forEach((a, ai) => { h += affixRow(it, a, ai, edit, dis); });
+      const count = t => it.affixes.filter(a => (GD.affixes[lc(a.id)] || {}).Type === t && !extraTag(a)).length;
+      it.affixes.forEach((a, ai) => { h += affixRow(it, a, ai, edit, dis, extraTag(a)); });
       const lim = LIMIT[it.rarity] || 0;
       const over = ['Prefix', 'Suffix'].filter(t => count(t) > lim);
       if (over.length) h += '<p class="hint bad">' + it.rarity + ' items hold ' + lim + ' prefix' + (lim > 1 ? 'es' : '') + ' and ' + lim + ' suffix' + (lim > 1 ? 'es' : '') + '.</p>';
@@ -2320,6 +2331,11 @@ window.BOPlanner = function (ctx) {
           .map(a => opt(a.Id, modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2) + (a.Kind ? ' · ' + a.Kind : '') + ' (' + a.Id + ')')).join('');
         h += '<label class="field"><span>Add an affix <span class="meta">' + count('Prefix') + '/' + lim + ' prefixes, ' + count('Suffix') + '/' + lim + ' suffixes; added at the top tier your item level allows</span></span><select data-f="addaffix"><option value="">Pick an affix…</option>' +
           '<optgroup label="Prefixes">' + grp('Prefix') + '</optgroup><optgroup label="Suffixes">' + grp('Suffix') + '</optgroup></select></label>';
+        // Extra lines on a rare (see character.js editHtml): the Oathsworn line and a Scarred line, one of each.
+        if (it.rarity === 'Rare' && slot !== 'Idol') for (const [x, label, why] of [['oath', 'Add the Oathsworn line', 'Cube recipe: a 7th line'], ['scar', 'Add a Scarred line', 'from Unswearing at the Forge']]) {
+          if (!it.affixes.some(a => a[x])) h += '<label class="field"><span>' + label + ' <span class="meta">' + why + '</span></span><select data-f="addaffix" data-x="' + x + '"><option value="">Pick an affix…</option>' +
+            '<optgroup label="Prefixes">' + grp('Prefix') + '</optgroup><optgroup label="Suffixes">' + grp('Suffix') + '</optgroup></select></label>';
+        }
       }
     }
     const rs = runeSlots(base);
@@ -2373,7 +2389,7 @@ window.BOPlanner = function (ctx) {
       ? ' <span class="pl-range">[' + span(r.Min, r.Max) + (r.Min2 != null ? ' / ' + span(r.Min2, r.Max2) : '') + ']</span>' : '';
     const roll = (tier, text, r) => '<li>' + (tier ? '<span class="pl-tier">' + tier + '</span> ' : '') + esc(text) + range(r) + '</li>';
     // Prefixes first, then suffixes; open slots (magic and rare) close each group as -Pre / -Suf.
-    const uniq = [], pre = [], suf = [], other = [], vows = []; // vows: affixes bound to a unique
+    const uniq = [], pre = [], suf = [], other = [], vows = [], extra = []; // vows: affixes bound to a unique; extra: a rare's Oathsworn / Scarred line
     let vi = 0;
     for (const a of it.affixes) {
       if (a.id.startsWith('unique:')) {
@@ -2383,7 +2399,8 @@ window.BOPlanner = function (ctx) {
       } else {
         const af = GD.affixes[lc(a.id)];
         if (!af) { other.push(li('Unknown affix ' + a.id, 'bad')); continue; }
-        (u ? vows : af.Type === 'Prefix' ? pre : af.Type === 'Suffix' ? suf : other).push(roll((u ? vowTag(vi++) + ' ' : '') + (af.Kind || 'T' + ((a.tier || 0) + 1)), modLine(af.Mod, a.v, a.v2), af.Tiers[a.tier] || af.Tiers[0]));
+        const xt = u ? '' : extraTag(a);
+        (u ? vows : xt ? extra : af.Type === 'Prefix' ? pre : af.Type === 'Suffix' ? suf : other).push(roll((u ? vowTag(vi++) + ' ' : '') + (af.Kind || 'T' + ((a.tier || 0) + 1)), modLine(af.Mod, a.v, a.v2) + (xt ? ' (' + xt + ')' : ''), af.Tiers[a.tier] || af.Tiers[0]));
       }
     }
     if (!u && it.rarity !== 'Normal') {
@@ -2391,7 +2408,7 @@ window.BOPlanner = function (ctx) {
       while (pre.length < lim) pre.push('<li class="pl-open">-Pre</li>');
       while (suf.length < lim) suf.push('<li class="pl-open">-Suf</li>');
     }
-    const lines = uniq.concat(vows, pre, suf, other);
+    const lines = uniq.concat(vows, pre, suf, extra, other);
     if (lines.length) h += '<ul>' + lines.join('') + '</ul>';
     if (word) {
       const twoHand = base && (base.bTwoHanded || (base.Tags || []).includes('TwoHand')), pm = twoHand && word.Power2H ? word.Power2H : 1;
@@ -2743,7 +2760,7 @@ window.BOPlanner = function (ctx) {
       case 'addaffix': {
         const af = GD.affixes[lc(v)]; if (!af) return render();
         const ti = topTier(af, it.level || ch.level), tt = af.Tiers[ti];
-        it.affixes.push({ id: af.Id, tier: ti, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); return done();
+        it.affixes.push(Object.assign({ id: af.Id, tier: ti, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }, t.dataset.x === 'oath' ? { oath: true } : t.dataset.x === 'scar' ? { scar: true } : {})); return done();
       }
       case 'tier': { const a = it.affixes[ai], af = GD.affixes[lc(a.id)], tt = af.Tiers[+v]; Object.assign(a, { tier: +v, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); return done(); }
       case 'v': it.affixes[ai].v = +v || 0; delete it.roll; return done(); // a hand-set unique line: no longer "rolls at N%"
@@ -2874,7 +2891,8 @@ window.BOPlanner = function (ctx) {
   });
   // Remember which item editors are open across re-renders.
   function onToggle(e) {
-    const d = e.target; if (!d.matches || !d.matches('details[data-item]')) return;
+    const d = e.target; if (d.matches && d.matches('details.pl-setup')) { setupOpen = d.open; return; }
+    if (!d.matches || !d.matches('details[data-item]')) return;
     if (d.open) K.openItems.add(d.dataset.item); else K.openItems.delete(d.dataset.item);
   }
   const el = pane();
@@ -2922,13 +2940,13 @@ window.BOPlanner = function (ctx) {
     p.supportGems = []; p.gems = p.gems.filter(g => used.has(g));
     p.gemLevels = Object.fromEntries(Object.entries(p.gemLevels).filter(([k]) => used.has(k)));
     p.items = p.items.map(it => [it.slot, it.base, it.rarity, it.unique && it.unique !== 'None' ? it.unique : 0, it.level || 0,
-      (it.affixes || []).map(a => { const fl = (a.crafted ? 1 : 0) + (a.oath ? 2 : 0); return [a.id, a.tier || 0, r4(a.v), r4(a.v2)].concat(fl ? [fl] : []).join(','); }).join(';'), (it.runes || []).join(','), it.name || '', it.roll == null ? null : r4(it.roll)]);
+      (it.affixes || []).map(a => { const fl = (a.crafted ? 1 : 0) + (a.oath ? 2 : 0) + (a.scar ? 4 : 0); return [a.id, a.tier || 0, r4(a.v), r4(a.v2)].concat(fl ? [fl] : []).join(','); }).join(';'), (it.runes || []).join(','), it.name || '', it.roll == null ? null : r4(it.roll)]);
     return 'BOS1.' + (await toCode(p)).slice(5);
   }
   function unpackShare(p) {
     p.items = (p.items || []).map(r => {
       const it = { slot: r[0], base: r[1], rarity: r[2], unique: r[3] || 'None', name: r[7] || '', level: r[4] || 0,
-        affixes: r[5] ? r[5].split(';').map(a => { const [id, tier, v, v2, fl] = a.split(','); return { id, tier: +tier || 0, v: +v || 0, v2: +v2 || 0, crafted: !!(+fl & 1), oath: !!(+fl & 2) }; }) : [],
+        affixes: r[5] ? r[5].split(';').map(a => { const [id, tier, v, v2, fl] = a.split(','); return Object.assign({ id, tier: +tier || 0, v: +v || 0, v2: +v2 || 0, crafted: !!(+fl & 1), oath: !!(+fl & 2) }, +fl & 4 ? { scar: true } : {}); }) : [],
         runes: r[6] ? r[6].split(',') : [] };
       if (r[8] != null) it.roll = r[8];
       return it;
@@ -3049,7 +3067,7 @@ window.BOCreator = function (ctx) {
   function toItem(s) {
     return { slot: slotFor(s), base: iget(s, 'BaseID'), rarity: iget(s, 'Rarity') || 'Normal', unique: iget(s, 'UniqueID') || 'None', name: iget(s, 'Name') || '',
       level: iget(s, 'ItemLevel') || 1, quality: iget(s, 'Quality') || 0, forged: iget(s, 'Forged79') || 0, runes: (iget(s, 'Runes') || { items: [] }).items.slice(),
-      affixes: (iget(s, 'Affixes') || { items: [] }).items.map(a => { const o = W.toPlain(a.props); return { id: o.AffixId, tier: o.Tier || 0, v: o.Value || 0, v2: o.Value2 || 0, crafted: !!o.bCrafted, oath: !!o.bOath83 }; }) };
+      affixes: (iget(s, 'Affixes') || { items: [] }).items.map(a => { const o = W.toPlain(a.props); return { id: o.AffixId, tier: o.Tier || 0, v: o.Value || 0, v2: o.Value2 || 0, crafted: !!o.bCrafted, oath: !!o.bOath83, scar: !!o.bScar93 }; }) }; // scar is read for display; makeAffix does not write it (an Unsworn item also needs the item's own Unsworn93 field)
   }
   function makeAffix(a) {
     const s = struct(AFFIX);
@@ -3646,6 +3664,48 @@ window.BOCreator = function (ctx) {
     return n;
   }
   const ruptureNow = () => Math.max(mval('BestML', 0) || 0, mval('RivenOpen', 0) || 0);
+
+  // ---------- skill bar ----------
+  // Record.Hotbar: 13 skill ids ("" = empty, "move" = move only). Which entry is which button: owner's screenshot of the
+  // in-game bar next to that character's save, 12 Nov 2026 (Samtest: Hotbar ["slash", "", "shuriken_fan", "shuriken_fan",
+  // "iaido_thrust", "", ...]; the bar shows Slash on the left mouse button, M5 empty, Shuriken Fan on the right mouse button
+  // and on key 1, Iaido Thrust on key 2): entries 0-2 are left click, M5 and right click, 3-7 are keys 1-5. Entries 8-12 are
+  // the Ctrl bar (planner.js BAR: 8 main + 5 Ctrl-bar); which key each of those five is has not been checked in game.
+  // The same skill can sit in two slots (Shuriken Fan above).
+  const BAR_SLOTS = ['Left click', 'M5', 'Right click', 'Key 1', 'Key 2', 'Key 3', 'Key 4', 'Key 5', 'Ctrl bar 1', 'Ctrl bar 2', 'Ctrl bar 3', 'Ctrl bar 4', 'Ctrl bar 5'];
+  const BAR_MAIN = 8;
+  const barName = id => id === 'move' ? 'Move only' : (GD.skills[lc(id)] || {}).Name || id;
+  const barNow = () => { const hb = arr(R(), 'Hotbar').slice(0, BAR_SLOTS.length); while (hb.length < BAR_SLOTS.length) hb.push(''); return hb; };
+  // Skills to place: the socketed ones and what is on the bar now (or was, since the save was loaded), then Move only.
+  function barSkills() {
+    C.barSeen = C.barSeen || new Set();
+    for (const id of barNow()) if (id && id !== 'move') C.barSeen.add(id);
+    const out = [];
+    for (const s of arr(R(), 'Sockets')) { const id = (getP(s.props, 'SkillId') || {}).v; if (id && !out.includes(id)) out.push(id); }
+    for (const id of C.barSeen) if (!out.includes(id)) out.push(id);
+    return out;
+  }
+  function setBar(i, id) {
+    const rec = R(), hb = arr(rec, 'Hotbar').slice();
+    // A shorter list (an old save with 8 entries) only grows when a Ctrl bar slot is used.
+    while (hb.length <= i) hb.push('');
+    if (i >= BAR_MAIN) while (hb.length < BAR_SLOTS.length) hb.push('');
+    hb[i] = id; setArr(rec, 'Hotbar', hb);
+    const onBar = new Set(hb), br = getP(rec, 'BarRemoved'); if (br) br.v.items = br.v.items.filter(x => !onBar.has(x)); // as a copied build does
+    changed('Skill bar, ' + BAR_SLOTS[i] + ': ' + (id ? barName(id) : 'empty') + '.');
+  }
+  function barHtml() {
+    const hb = barNow(), list = barSkills(), dot = id => id && id !== 'move' && ctx.skillDot ? ctx.skillDot(id) : '';
+    const chip = id => '<button type="button" class="cr-bar-skill' + (C.barPick === id ? ' on' : '') + '" data-cr="barpick" data-skill="' + esc(id) + '" aria-pressed="' + (C.barPick === id) + '">' + dot(id) + esc(barName(id)) + '</button>';
+    const owned = arr(R(), 'Gems').filter(id => GD.skills[lc(id)] && !list.includes(id)).sort((a, b) => barName(a).localeCompare(barName(b)));
+    const slot = i => '<div class="cr-bar-slot' + (hb[i] ? ' full' : '') + '" style="grid-area: s' + i + '"><button type="button" class="cr-bar-put" data-cr="barslot" data-i="' + i + '" title="' + esc(C.barPick ? 'Put ' + barName(C.barPick) + ' on ' + BAR_SLOTS[i] : 'Pick a skill above first') + '">' +
+      '<small>' + BAR_SLOTS[i].replace('Ctrl bar ', 'Ctrl ') + '</small><span>' + (hb[i] ? dot(hb[i]) + esc(barName(hb[i])) : '<i>empty</i>') + '</span></button>' +
+      (hb[i] ? '<button type="button" class="x" data-cr="barclear" data-i="' + i + '" aria-label="Clear ' + BAR_SLOTS[i] + '" title="Clear this slot">×</button>' : '') + '</div>';
+    return '<h3>Skill bar</h3><p class="hint">Click a skill, then the slot to put it on. A skill can sit on more than one slot; × empties a slot.</p>' +
+      '<div class="cr-bar-skills">' + (list.map(chip).join('') || '<span class="hint">No socketed skills yet: copy a build first, or pick a gem from the list.</span>') + chip('move') +
+      (owned.length ? '<select id="crBarMore" aria-label="Another skill gem"><option value="">Another skill gem…</option>' + owned.map(id => opt(id, barName(id))).join('') + '</select>' : '') + '</div>' +
+      '<div class="cr-bar">' + hb.slice(0, BAR_MAIN).map((x, i) => slot(i)).join('') + '<span class="cr-bar-label">Ctrl bar</span>' + hb.slice(BAR_MAIN).map((x, i) => slot(BAR_MAIN + i)).join('') + '</div>';
+  }
   function mapHtml() {
     const toggle = (key, label, detail) => '<label class="cr-toggle"><input type="checkbox" data-cr-fill="' + key + '"' + (C.fill[key] ? ' checked' : '') + '><span>' + label + '<small>' + detail + '</small></span></label>';
     let h = '<div class="card cr-map"><h2>QoL</h2><div class="cr-qol-top">';
@@ -3659,7 +3719,8 @@ window.BOCreator = function (ctx) {
       toggle('cube', 'Cube recipes unlocked', 'Unlocks the Oathstone Cube and every recipe') +
       toggle('gold', 'Gold', GOLD_FILL.toLocaleString('en-US')) +
       toggle('sigils', 'Sigils', SIGIL_FILL + ' of each tier ' + SIGIL_TIER + ' kind and ' + CORE_FILL + ' core sigils') + '</div>';
-    return h + '<p class="hint">Uncheck an option to leave those contents as they were before the addition. Crafting materials, cube recipes and sigils need an unlocked Rupture map. Gold and crafting materials here are the character’s copy; the shared offline wallet can overwrite them on load.</p></div>';
+    h += '<p class="hint">Uncheck an option to leave those contents as they were before the addition. Crafting materials, cube recipes and sigils need an unlocked Rupture map. Gold and crafting materials here are the character’s copy; the shared offline wallet can overwrite them on load.</p>';
+    return h + barHtml() + '</div>';
   }
 
   function render() {
@@ -3756,6 +3817,7 @@ window.BOCreator = function (ctx) {
       if (t.id === 'crBonus') { const v = Math.max(0, Math.round(+t.value) || 0); setV(rec, 'BonusPassivePoints', v); changed('Bonus passive points ' + v + '.'); return render(); }
       if (t.dataset.gem) { const l = setGemLevel(t.dataset.gem, t.value); C.manual.gems[t.dataset.gem] = l; changed(((GD.skills[lc(t.dataset.gem)] || GD.supports[lc(t.dataset.gem)] || {}).Name || t.dataset.gem) + ' gem level ' + l + '.'); return render(); }
       if (t.id === 'crBuild') { C.buildId = t.value; return render(); }
+      if (t.id === 'crBarMore') { if (t.value) { (C.barSeen = C.barSeen || new Set()).add(t.value); C.barPick = t.value; } return render(); }
       if (t.dataset.rcount != null) {
         const s = items()[+t.dataset.rcount]; if (!s) return;
         const c = Math.max(1, Math.min(RUNE_MAX, Math.round(+t.value) || 1)); iset(s, 'Count', c);
@@ -3791,6 +3853,9 @@ window.BOCreator = function (ctx) {
         try { changed(addRune(b.dataset.rune, box ? box.value : 1)); } catch (err) { C.err = err.message; }
         return render();
       }
+      if (act === 'barpick') { C.barPick = C.barPick === b.dataset.skill ? '' : b.dataset.skill; return render(); }
+      if (act === 'barslot') { if (!C.barPick) { C.msg = 'Pick a skill first, then the slot.'; return render(); } setBar(i, C.barPick); C.barPick = ''; return render(); }
+      if (act === 'barclear') { setBar(i, ''); return render(); }
       if (act === 'new') { startEdit(-1); return render(); }
       if (act === 'edit') { startEdit(i); return render(); }
       if (act === 'cancel') { C.edit = null; C.editIdx = -1; return render(); }
@@ -6633,6 +6698,14 @@ window.BOCharacter = function (ctx) {
   const lc = s => String(s == null ? '' : s).toLowerCase();
     // Paper-doll order: the grid areas are named in style.css (.ch-slot-<slot>).
   const SLOTS = ['MainHand', 'Helm', 'OffHand', 'Chest', 'Ring1', 'Gloves', 'Ring2', 'Amulet', 'Boots', 'Belt', 'DwarvenRune'];
+  // Kept in this browser: the saved items (item overlay, "Saved") and the copied gear / skills (Copy and Paste buttons).
+  const LS = {
+    get(k, d) { try { const v = localStorage.getItem('bods:' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('bods:' + k, JSON.stringify(v)); return true; } catch (e) { return false; } },
+  };
+  const copyOf = x => JSON.parse(JSON.stringify(x));
+  const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+  let note = null; // { id, text }: what the last Copy / Paste did, shown on that character's page
 
   function itemName(it, slot) {
     const gd = ctx.gd(), base = gd.bases[lc(it.base)], u = it.rarity === 'Unique' && gd.uniques[lc(it.unique)];
@@ -6650,7 +6723,10 @@ window.BOCharacter = function (ctx) {
 
   function gearCard(ch) {
     const idols = ch.items.map((it, i) => ({ it, i })).filter(x => x.it.slot === 'Idol');
-    let h = '<div class="card ch-gear"><h2>Gear</h2><div class="ch-doll">' + SLOTS.map(s => slotCell(ch, s)).join('') + '</div>';
+    const clip = LS.get('clip:gear', null), has = clip && Array.isArray(clip.items);
+    let h = '<div class="card ch-gear"><div class="ch-skills-head"><h2>Gear</h2><span class="ch-acts">' +
+      '<button class="btn small ghost" type="button" data-clip="copygear" title="Copies every item here (idols too), to paste on another character or plan"' + (ch.items.length ? '' : ' disabled') + '>Copy gear</button>' +
+      '<button class="btn small ghost" type="button" data-clip="pastegear" title="' + esc(has ? 'Replaces the gear here with the ' + plural(clip.items.length, 'item') + ' copied from ' + clip.from : 'Use Copy gear on another character or plan first') + '"' + (has ? '' : ' disabled') + '>Paste gear</button></span></div><div class="ch-doll">' + SLOTS.map(s => slotCell(ch, s)).join('') + '</div>';
     if (idols.length) h += '<h3>Idols <small>' + idols.length + '</small></h3><div class="ch-idols">' + idols.map(x => {
       const n = itemName(x.it, 'Idol');
       return '<div class="ch-slot ' + n.cls + '" data-open="1" data-tip="item" data-slot="Idol" data-idx="' + x.i + '" tabindex="0" role="button"><b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + '</span></div>';
@@ -6661,8 +6737,11 @@ window.BOCharacter = function (ctx) {
 
   function skillsCard(ch) {
     const gd = ctx.gd(), rs = planner.rows(ch), bar = new Set(ch.hotbar.filter(x => x && x !== 'move'));
-    let h = '<div class="card ch-skills"><div class="ch-skills-head"><h2>Skills</h2>' +
-      '<button class="btn small" type="button" id="chAddSkillBtn">Add skill</button>' +
+    const clip = LS.get('clip:skills', null), has = clip && Array.isArray(clip.sockets);
+    let h = '<div class="card ch-skills"><div class="ch-skills-head"><h2>Skills</h2><span class="ch-acts">' +
+      '<button class="btn small ghost" type="button" data-clip="copyskills" title="Copies the skills with their supports, gem levels and bar, to paste on another character or plan"' + (rs.length ? '' : ' disabled') + '>Copy skills</button>' +
+      '<button class="btn small ghost" type="button" data-clip="pasteskills" title="' + esc(has ? 'Replaces the skills here with the ones copied from ' + clip.from : 'Use Copy skills on another character or plan first') + '"' + (has ? '' : ' disabled') + '>Paste skills</button>' +
+      '<button class="btn small" type="button" id="chAddSkillBtn">Add skill</button></span>' +
       '<select id="chAddSkill" class="ch-addskill-sel" aria-hidden="true" tabindex="-1">' + planner.skillOpts('') + '</select></div>';
     if (!rs.length) h += '<p class="hint">No skills.</p>';
     for (const r of rs) {
@@ -6705,6 +6784,7 @@ window.BOCharacter = function (ctx) {
     const ch = ctx.current();
     let h = '<div class="cmp-intro results-heading"><div><div class="eyebrow">BUILD OVERVIEW</div><h2>Character</h2><p>The loaded character at a glance: gear by slot, skills with their supports and the notable passives. Click a gear slot to pick or edit an item; hover an item or gem for its details.</p></div>' + (ch && ctx.enemyBtn ? ctx.enemyBtn() : '') + '</div>';
     if (!ch) { el.innerHTML = h + '<div class="card"><p class="hint">No character loaded. Load a save, a build code or start a plan first.</p></div>'; return; }
+    if (note && note.id === ch.id) h += '<p class="hint pl-status" role="status">' + esc(note.text) + '</p>';
     el.innerHTML = h + '<div class="ch-cols"><div class="ch-col">' + gearCard(ch) + (ctx.beltCard ? ctx.beltCard() : '') + notesCard() + '</div><div class="ch-col">' + skillsCard(ch) + passivesCard(ch) + '</div></div>';
   }
 
@@ -6740,6 +6820,7 @@ window.BOCharacter = function (ctx) {
         hide(); const ch = ctx.editable(); if (!ch) return;
         planner.removeSkill(ch, id); ctx.commit(ch); render(); return;
       }
+      const c = e.target.closest && e.target.closest('[data-clip]'); if (c) return clipAct(c.dataset.clip);
       const s = e.target.closest && e.target.closest('[data-open]'); if (s) openItem(s);
     });
     el.addEventListener('change', e => {
@@ -6751,6 +6832,73 @@ window.BOCharacter = function (ctx) {
     el.addEventListener('mouseleave', hide); el.addEventListener('focusout', hide);
     window.addEventListener('scroll', hide, { passive: true });
   }
+  // ---------- Copy / Paste: a whole set of gear, or of skills, from one character or plan to another ----------
+  // The copy stays in this browser (so it also reaches another tab of the page). Pasting replaces what is there, on a plan
+  // itself or on the page's copy of a loaded character; the save file is never written.
+  function clipAct(act) {
+    const cur = ctx.current(); if (!cur) return;
+    hide();
+    const say = t => { note = { id: cur.id, text: t }; };
+    if (act === 'copygear') {
+      say(LS.set('clip:gear', { from: cur.name, items: copyOf(cur.items) }) ? 'Copied ' + plural(cur.items.length, 'item') + ' from ' + cur.name + '. Open another character or plan and use Paste gear.' : 'Could not copy: this browser does not let the page store anything.');
+      return render();
+    }
+    if (act === 'copyskills') {
+      const c = { from: cur.name, sockets: cur.sockets, hotbar: cur.hotbar, gems: cur.gems, gemLevels: cur.gemLevels, mainSkill: cur.mainSkill || '', supportGems: cur.supportGems || [] };
+      say(LS.set('clip:skills', copyOf(c)) ? 'Copied ' + plural(planner.rows(cur).length, 'skill') + ' from ' + cur.name + ' with their supports and gem levels. Open another character or plan and use Paste skills.' : 'Could not copy: this browser does not let the page store anything.');
+      return render();
+    }
+    if (act === 'pastegear') {
+      const c = LS.get('clip:gear', null); if (!c || !Array.isArray(c.items)) return render();
+      if (cur.items.length && !window.confirm('Replace all gear on ' + cur.name + ' (' + plural(cur.items.length, 'item') + ', idols included) with the ' + plural(c.items.length, 'item') + ' copied from ' + c.from + '?')) return;
+      const ch = ctx.editable(); if (!ch) return;
+      ch.items = copyOf(c.items);
+      say('Pasted ' + plural(c.items.length, 'item') + ' from ' + c.from + '.');
+      ctx.commit(ch); return render();
+    }
+    if (act === 'pasteskills') {
+      const c = LS.get('clip:skills', null); if (!c || !Array.isArray(c.sockets)) return render();
+      const had = planner.rows(cur).length;
+      if (had && !window.confirm('Replace the ' + plural(had, 'skill') + ' on ' + cur.name + ' with the ones copied from ' + c.from + '? Supports, gem levels and the skill bar are replaced too.')) return;
+      const ch = ctx.editable(); if (!ch) return;
+      const n = copyOf(c), gd = ctx.gd();
+      Object.assign(ch, { sockets: n.sockets, hotbar: n.hotbar || [], gems: n.gems || [], gemLevels: n.gemLevels || {}, mainSkill: n.mainSkill || '', supportGems: n.supportGems || [] });
+      // A support that does not fit its skill here (another class or weapon) cannot be socketed in the game: it is left out, as when a code is opened.
+      const dropped = [];
+      for (const s of ch.sockets) {
+        const sk = gd.skills[lc(s.skill)]; if (!sk) continue;
+        let fit; try { fit = new Set(ctx.sim.supportChoices(gd, ch, s.skill, { conduit: s.conduit }).map(x => x.id)); } catch (e) { continue; }
+        const keep = (s.supports || []).filter(id => fit.has(lc(id)) || !gd.supports[lc(id)]);
+        for (const id of s.supports || []) if (!keep.includes(id)) dropped.push(gd.supports[lc(id)].Name + ' (' + sk.Name + ')');
+        s.supports = keep;
+      }
+      say('Pasted ' + plural(planner.rows(ch).length, 'skill') + ' from ' + c.from + '.' + (dropped.length ? ' Left out because they do not fit their skill here: ' + dropped.join(', ') + '.' : ''));
+      ctx.commit(ch, ch.mainSkill ? { skills: true, select: ch.mainSkill } : { skills: true }); return render();
+    }
+  }
+
+  // ---------- Saved items: keep an item to put it back on later (say, to switch between two wands) ----------
+  // Kept in this browser, for every character and plan. An item is offered in the slots its base goes in.
+  const SAVED_MAX = 200;
+  const savedAll = () => { const a = LS.get('savedItems', []); return Array.isArray(a) ? a.filter(s => s && s.id && s.item && s.item.base) : []; };
+  const slotKind = slot => /^Ring\d$/.test(slot) ? 'Ring' : slot;
+  const savedFor = slot => savedAll().filter(s => { const b = ctx.gd().bases[lc(s.item.base)]; return (b ? b.Slot : slotKind(s.item.slot)) === slotKind(slot); });
+  const sameItem = (a, b) => JSON.stringify(Object.assign({}, a, { slot: '' })) === JSON.stringify(Object.assign({}, b, { slot: '' }));
+  function itemLines(it) {
+    const gd = ctx.gd(), u = it.rarity === 'Unique' && gd.uniques[lc(it.unique)], US = window.BOSim;
+    return (it.affixes || []).map(a => {
+      if (a.id.startsWith('unique:')) {
+        const ui = +a.id.slice(7), um = u && u.Mods[ui]; if (!um) return '';
+        const gv = US.uniqueLineValue(it.unique, ui, a.v), gv2 = US.uniqueLineValue(it.unique, ui, a.v2);
+        return (um.Text ? um.Text.replace(/\{(0|v)\}/g, gv).replace(/\{1\}/g, gv2) : safe(() => G.modLine(um.Mod, gv, gv2))).replace(/\+-/g, '-');
+      }
+      const af = gd.affixes[lc(a.id)];
+      return af ? safe(() => G.modLine(af.Mod, a.v, a.v2)) + (extraTag(a) ? ' (' + extraTag(a) + ')' : '') : '';
+    }).filter(Boolean).concat((it.runes || []).length ? ['Runes: ' + it.runes.map(r => (gd.runes[lc(r)] || { Name: r }).Name).join(' · ')] : []);
+  }
+  // Lines a rare holds on top of its 3 prefixes and 3 suffixes.
+  const extraTag = a => a.oath ? 'Oathsworn' : a.scar ? 'Scarred' : '';
+
   // ---------- Item overlay: click a gear slot to pick an item (Select tab) and set its affixes (Edit tab) ----------
   // Same rules and edits as the Build tab's gear boxes (planner.js gear helpers). Edits go to a plan itself or to a copy of a
   // loaded character; the save file is never written.
@@ -6777,7 +6925,7 @@ window.BOCharacter = function (ctx) {
     lastFocus = el.closest('.ch-slot') || el;
     const it = idx >= 0 ? ctx.current().items[idx] : null;
     RD = { busy: '', r: null };
-    M = { slot, idx: it ? idx : -1, tab: it ? 'edit' : 'select', kind: 'basic', cat: '', q: '', word: '' };
+    M = { slot, idx: it ? idx : -1, tab: it ? 'edit' : 'select', kind: 'basic', cat: '', q: '', word: '', msg: '' };
     if (!back) {
       back = document.createElement('div'); back.className = 'io-back'; back.setAttribute('role', 'dialog'); back.setAttribute('aria-modal', 'true'); back.setAttribute('aria-label', 'Item');
       back.addEventListener('mousedown', e => { if (e.target === back) closeItem(); });
@@ -6899,12 +7047,13 @@ window.BOCharacter = function (ctx) {
     const basic = G.basesFor(M.slot).filter(b => inCat(b) && has(b.Name, baseTypeName(b)));
     const uniques = G.uniquesFor(M.slot).filter(u => { const b = GD().bases[lc(u.BaseId)]; return inCat(b) && has(u.Name, baseTypeName(b), uniqueLines(u).join(' ')); });
     const words = G.oathwordsFor(M.slot).filter(w => has(w.Name, (w.Runes || []).join(' ')) && G.oathwordBases(M.slot, w).some(inCat)); // only words with a base in the chosen group
-    return { basic, uniques, words, inCat };
+    const saved = savedFor(M.slot).filter(s => { const b = GD().bases[lc(s.item.base)]; return (!b || inCat(b)) && has(itemName(s.item, M.slot).name, b ? b.Name : s.item.base, itemLines(s.item).join(' ')); });
+    return { basic, uniques, words, saved, inCat };
   }
   const GD = () => ctx.gd();
   function renderList() {
     const main = back && back.querySelector('#ioMain'); if (!main || !M) return;
-    const L = listFor(), kinds = [['basic', 'Basic', L.basic.length], ['unique', 'Unique', L.uniques.length], ['oathword', 'Oathword', L.words.length]]
+    const L = listFor(), kinds = [['basic', 'Basic', L.basic.length], ['unique', 'Unique', L.uniques.length], ['oathword', 'Oathword', L.words.length], ['saved', 'Saved', L.saved.length]]
       .filter(k => k[2] || k[0] === 'basic' || k[0] === M.kind);
     if (!kinds.some(k => k[0] === M.kind)) M.kind = 'basic';
     const total = ctx.current() && itemNow(ctx.current());
@@ -6912,6 +7061,11 @@ window.BOCharacter = function (ctx) {
     const gd = GD();
     let cards = '';
     if (M.kind === 'basic') cards = L.basic.map(b => card('basic', b.Id, b.Name, '', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), baseLines(b))).join('');
+    else if (M.kind === 'saved') cards = L.saved.map(s => {
+      const n = itemName(s.item, M.slot);
+      return '<div class="io-saved">' + card('saved', s.id, n.name, n.cls, n.base + (n.cls === 'unique' ? '' : ' · ' + s.item.rarity) + ' · item level ' + (s.item.level || 1), itemLines(s.item)) +
+        '<button class="io-rm" type="button" data-io="delsaved" data-id="' + esc(s.id) + '" title="Delete this saved item" aria-label="Delete the saved ' + esc(n.name) + '">×</button></div>';
+    }).join('');
     else if (M.kind === 'unique') cards = L.uniques.map(u => { const b = gd.bases[lc(u.BaseId)]; return card('unique', u.Id, u.Name, 'unique', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), uniqueLines(u)); }).join('');
     else if (M.word) {
       const w = G.oathwordsFor(M.slot).find(x => lc(x.Id) === lc(M.word));
@@ -6921,21 +7075,22 @@ window.BOCharacter = function (ctx) {
       const rn = (w.Runes || []).map(r => (gd.runes[lc(r)] || { Name: r }).Name);
       return card('word', w.Id, w.Name, 'rare', (n => n + (n === 1 ? ' base' : ' bases'))(G.oathwordBases(M.slot, w).filter(L.inCat).length), ['Runes: ' + rn.join(' · ')]);
     }).join('');
-    h += cards ? '<div class="io-cards">' + cards + '</div>' : '<p class="hint">Nothing matches.</p>';
+    h += cards ? '<div class="io-cards">' + cards + '</div>' : '<p class="hint">' + (M.kind === 'saved' ? 'No saved items for this slot. Open an item, then use Save item on its Edit tab.' : 'Nothing matches.') + '</p>';
     if (total) h += '<p class="hint">Picking an item replaces the one in this slot.</p>';
     main.innerHTML = h;
   }
 
-  function equip(item) {
+  function equip(item, keepLevel) {
     const ch = ctx.editable(); if (!ch || !M) return;
     const old = itemNow(ch);
-    item.level = (old && old.level) || ch.level;
+    if (!keepLevel) item.level = (old && old.level) || ch.level;
     if (M.slot === 'Idol') { if (old) ch.items[M.idx] = item; else { ch.items.push(item); M.idx = ch.items.length - 1; } }
     else { const i = ch.items.findIndex(x => x.slot === M.slot); if (i >= 0) ch.items[i] = item; else ch.items.push(item); }
-    M.tab = 'edit'; M.word = '';
+    M.tab = 'edit'; M.word = ''; M.msg = '';
     commit(ch);
   }
   function pick(kind, id) {
+    if (kind === 'saved') { const s = savedAll().find(x => x.id === id); if (s) equip(Object.assign(copyOf(s.item), { slot: M.slot }), true); return; }
     const gd = GD(), blank = (base, extra) => Object.assign({ slot: M.slot, base: base, rarity: M.slot === 'Idol' ? 'Magic' : 'Rare', unique: 'None', name: '', level: 0, affixes: [], runes: [] }, extra);
     if (kind === 'basic') { const b = gd.bases[lc(id)]; if (b) equip(blank(b.Id)); }
     else if (kind === 'unique') {
@@ -6949,28 +7104,38 @@ window.BOCharacter = function (ctx) {
   }
 
   // ----- Edit tab -----
-  function affixRow(it, a, ai, tag) {
+  function affixRow(it, a, ai, tag, after) {
     const af = GD().affixes[lc(a.id)];
     if (!af) return '<div class="io-aff" data-ai="' + ai + '"><span class="meta bad">Unknown affix ' + esc(a.id) + '</span><button class="io-rm" type="button" data-io="rmaffix" data-ai="' + ai + '" title="Remove">×</button></div>';
     const t = af.Tiers[a.tier] || af.Tiers[0], two = t && t.Min2 != null;
-    return '<div class="io-aff" data-ai="' + ai + '"><span class="io-afftext">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(safe(() => G.modLine(af.Mod, a.v, a.v2))) +
-      (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') + '</span>' +
+    // A value outside its tier's range is flagged, not refused (as on a unique's lines): an Unsworn item can be Twisted
+    // ("every value x0.8 to x1.2", forge.json Oathcinder), so a real line can sit outside the range.
+    const lim = (lo, hi) => lo == null || hi == null ? '' : ' min="' + Math.min(lo, hi) + '" max="' + Math.max(lo, hi) + '" title="Rolls ' + lo + ' to ' + hi + '"';
+    const out = (x, lo, hi) => lo != null && hi != null && (x < Math.min(lo, hi) || x > Math.max(lo, hi));
+    const off = t && (out(a.v, t.Min, t.Max) || (two && out(a.v2, t.Min2, t.Max2)));
+    return '<div class="io-aff" data-ai="' + ai + '"><span class="io-afftext">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(safe(() => G.modLine(af.Mod, a.v, a.v2))) + (af.Kind ? ' <span class="meta">(' + esc(af.Kind) + ')</span>' : '') + (after ? ' <span class="io-extra">(' + esc(after) + ')</span>' : '') +
+      (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') +
+      (off ? ' <span class="bad">outside this tier\'s range (' + t.Min + ' to ' + t.Max + (two ? ' / ' + t.Min2 + ' to ' + t.Max2 : '') + ')</span>' : '') + '</span>' +
       '<select data-f="tier" aria-label="Tier">' + af.Tiers.map((y, ti) => '<option value="' + ti + '"' + (ti === a.tier ? ' selected' : '') + '>T' + (ti + 1) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')</option>').join('') + '</select>' +
-      '<input class="mini" type="number" step="any" data-f="v" value="' + a.v + '" aria-label="Value">' + (two ? '<input class="mini" type="number" step="any" data-f="v2" value="' + a.v2 + '" aria-label="Second value">' : '') +
+      '<input class="mini" type="number" step="any" data-f="v" value="' + a.v + '" aria-label="Value"' + (t ? lim(t.Min, t.Max) : '') + '>' + (two ? '<input class="mini" type="number" step="any" data-f="v2" value="' + a.v2 + '" aria-label="Second value"' + lim(t.Min2, t.Max2) + '>' : '') +
       '<button class="io-rm" type="button" data-io="rmaffix" data-ai="' + ai + '" title="Remove">×</button></div>';
   }
-  function addSelect(it, base, type, label, isIdol) {
+  // type: 'Prefix' or 'Suffix', or '' for both (an extra line: flag 'oath' or 'scar'). Riven mods say so: they read like their twin with bigger numbers.
+  function addSelect(it, base, type, label, isIdol, flag) {
     const gd = GD(), used = new Set(it.affixes.map(a => (gd.affixes[lc(a.id)] || {}).Group));
     const all = isIdol ? Object.values(gd.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length) : G.affixesFor(base);
-    const opts = all.filter(a => a.Type === type && !used.has(a.Group)).map(a => ({ id: a.Id, t: safe(() => G.modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2)) })).sort((x, y) => x.t.localeCompare(y.t));
-    return '<select class="io-add" data-f="addaffix" aria-label="' + esc(label) + '"><option value="">&lt;' + esc(label) + '&gt;</option>' + opts.map(o => '<option value="' + esc(o.id) + '">' + esc(o.t) + '</option>').join('') + '</select>';
+    const opts = T => all.filter(a => a.Type === T && !used.has(a.Group)).map(a => ({ id: a.Id, t: safe(() => G.modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2)) + (a.Kind ? ' (' + a.Kind + ')' : '') })).sort((x, y) => x.t.localeCompare(y.t))
+      .map(o => '<option value="' + esc(o.id) + '">' + esc(o.t) + '</option>').join('');
+    return '<select class="io-add" data-f="addaffix"' + (flag ? ' data-x="' + flag + '"' : '') + ' aria-label="' + esc(label) + '"><option value="">&lt;' + esc(label) + '&gt;</option>' +
+      (type ? opts(type) : '<optgroup label="Prefixes">' + opts('Prefix') + '</optgroup><optgroup label="Suffixes">' + opts('Suffix') + '</optgroup>') + '</select>';
   }
   const section = (title, body) => '<div class="io-sec"><h4>' + title + '</h4>' + body + '</div>';
   function editHtml(ch, it) {
     const gd = GD(), base = gd.bases[lc(it.base)], n = itemName(it, M.slot), isU = it.rarity === 'Unique', u = isU && gd.uniques[lc(it.unique)];
     const word = planner.oathwordForItem(it, M.slot);
     let h = '<div class="io-top"><div><span class="io-slotlabel">' + esc(planner.slotName[M.slot] || M.slot) + '</span><div class="io-name ' + n.cls + '">' + esc(n.name) + '</div><span class="meta">' + esc(n.base) + (word || u ? '' : ' · ' + it.rarity) + '</span></div>' +
-      '<div class="io-acts"><button class="btn small ghost" type="button" data-io="change">⟳ Change item</button><button class="btn small ghost" type="button" data-io="unequip">✕ ' + (M.slot === 'Idol' ? 'Remove' : 'Unequip') + '</button></div></div>';
+      '<div class="io-acts"><button class="btn small ghost" type="button" data-io="saveitem" title="Keeps this item in this browser. Put it on again from Select, under Saved, on any character or plan.">Save item</button><button class="btn small ghost" type="button" data-io="change">⟳ Change item</button><button class="btn small ghost" type="button" data-io="unequip">✕ ' + (M.slot === 'Idol' ? 'Remove' : 'Unequip') + '</button></div></div>';
+    if (M.msg) h += '<p class="hint pl-status" role="status">' + esc(M.msg) + '</p>';
     if (!isU) h += '<div class="io-row"><label class="field inline"><span>Rarity</span><select data-f="rarity">' + RAR.map(r => '<option' + (it.rarity === r ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></label>' +
       '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label></div>';
     else h += '<div class="io-row"><label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label></div>';
@@ -7001,12 +7166,29 @@ window.BOCharacter = function (ctx) {
     } else {
       const lim = G.LIMIT[it.rarity] || 0, type = a => (gd.affixes[lc(a.id)] || {}).Type;
       for (const T of ['Prefix', 'Suffix']) {
-        const mine = it.affixes.map((a, ai) => ({ a, ai })).filter(x => type(x.a) === T);
+        const mine = it.affixes.map((a, ai) => ({ a, ai })).filter(x => type(x.a) === T && !extraTag(x.a));
         let body = mine.map(x => affixRow(it, x.a, x.ai)).join('');
         if (mine.length < lim) body += addSelect(it, base, T, 'Add ' + T);
         else if (!lim) body += '<div class="io-imp meta">Normal items have no affixes. Set the rarity to Magic or Rare.</div>';
         if (mine.length > lim) body += '<p class="hint bad">' + it.rarity + ' items hold ' + lim + ' ' + T.toLowerCase() + (lim === 1 ? '' : 'es') + '.</p>';
         h += section(T + 'es', body);
+      }
+      // Extra lines on a rare, on top of its 3 + 3. Oathsworn: cube_recipes.json rare_oathsworn ("a rare + a Tier V+ rune + 3 Core
+      // Embers ... the same rare + a 7th line, its Oathsworn line: a new mod at the top tier its item level allows"). Scarred:
+      // forge.json Oathcinder ("Unswears a rare, a red or a finished Oathword: ... Scarred 25% (one more line)").
+      // The sim reads the Oathsworn line by its own rule (formulas.md section 9: counts at x1, not graded). A Scarred line gets no
+      // Great / Flawless boost either (tooltip, 12 Nov 2026: sim.js collectMods).
+      // A rare can hold both, 8 lines: owner's test item, save read 12 Nov 2026 (plate_chest_7, item level 84, Oathsworn at the
+      // Cube first, then Unsworn): 6 rolled lines + str_flat with bOath83 + int_flat with bScar93, and Unsworn93 = 2 on the item.
+      // Saves mark the Scarred line with bScar93 (read in sim.js extractCharacter).
+      const extra = it.affixes.map((a, ai) => ({ a, ai })).filter(x => extraTag(x.a));
+      if ((it.rarity === 'Rare' && !isIdol) || extra.length) {
+        let body = extra.map(x => affixRow(it, x.a, x.ai, '', extraTag(x.a))).join('');
+        if (it.rarity === 'Rare' && !isIdol) {
+          if (!extra.some(x => x.a.oath)) body += addSelect(it, base, '', 'Add the Oathsworn line (Cube recipe: a 7th line)', false, 'oath');
+          if (!extra.some(x => x.a.scar)) body += addSelect(it, base, '', 'Add a Scarred line (from Unswearing at the Forge)', false, 'scar');
+        }
+        h += section('Extra lines', body);
       }
     }
     const rs = G.runeSlots(base);
@@ -7029,6 +7211,15 @@ window.BOCharacter = function (ctx) {
     if (act === 'kind') { M.kind = b.dataset.v; M.word = ''; return renderList(); }
     if (act === 'wordback') { M.word = ''; return renderList(); }
     if (act === 'pick') return pick(b.dataset.kind, b.dataset.id);
+    if (act === 'delsaved') { LS.set('savedItems', savedAll().filter(s => s.id !== b.dataset.id)); return renderList(); }
+    if (act === 'saveitem') {
+      const cur = ctx.current(), mine = cur && itemNow(cur); if (!mine) return;
+      const all = savedAll(), name = itemName(mine, M.slot).name;
+      if (all.some(s => sameItem(s.item, mine))) M.msg = name + ' is already saved.';
+      else if (all.length >= SAVED_MAX) M.msg = 'The saved list is full (' + SAVED_MAX + ' items): delete some under Select, Saved.';
+      else M.msg = LS.set('savedItems', [{ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), item: copyOf(mine) }].concat(all)) ? 'Saved ' + name + '. Put it on again with Change item, under Saved, on any character or plan.' : 'Could not save: this browser does not let the page store anything.';
+      return renderItem();
+    }
     const ch = ctx.editable(), it = itemNow(ch); if (!ch || !it) return;
     if (act === 'unequip') {
       if (M.slot === 'Idol') { ch.items.splice(M.idx, 1); ctx.commit(ch); render(); return closeItem(); }
@@ -7042,10 +7233,11 @@ window.BOCharacter = function (ctx) {
     if (!M || !f) return;
     const ch = ctx.editable(), it = ch && itemNow(ch); if (!it) return;
     const v = t.value, ai = +((t.closest('[data-ai]') || {}).dataset || {}).ai, gd = GD();
+    M.msg = '';
     switch (f) {
       case 'rarity': it.rarity = v; if (v === 'Normal') it.affixes = []; break;
       case 'ilvl': it.level = Math.max(1, Math.min(100, +v || 1)); break;
-      case 'addaffix': { const af = gd.affixes[lc(v)]; if (!af) return renderItem(); const ti = G.topTier(af, it.level || ch.level), tt = af.Tiers[ti]; it.affixes.push({ id: af.Id, tier: ti, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); break; }
+      case 'addaffix': { const af = gd.affixes[lc(v)]; if (!af) return renderItem(); const ti = G.topTier(af, it.level || ch.level), tt = af.Tiers[ti]; it.affixes.push(Object.assign({ id: af.Id, tier: ti, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }, t.dataset.x === 'oath' ? { oath: true } : t.dataset.x === 'scar' ? { scar: true } : {})); break; }
       case 'tier': { const a = it.affixes[ai], af = a && gd.affixes[lc(a.id)], tt = af && af.Tiers[+v]; if (!tt) return; Object.assign(a, { tier: +v, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); break; }
       case 'v': if (!it.affixes[ai]) return; it.affixes[ai].v = +v || 0; delete it.roll; break;
       case 'v2': if (!it.affixes[ai]) return; it.affixes[ai].v2 = +v || 0; delete it.roll; break;
@@ -7242,7 +7434,7 @@ window.BOCharacter = function (ctx) {
       id: S.ID, name: S.Name, classId: S.ClassId, level: S.Level, league: S.League, lastZone: S.LastZone,
       items: (R.Items || []).filter(i => i.EquippedSlot && i.EquippedSlot !== 'None').map(i => ({
         slot: i.EquippedSlot, base: i.BaseID, rarity: i.Rarity, unique: i.UniqueID, name: i.Name, level: i.ItemLevel, quality: i.Quality || 0, grade: i.BaseGrade95 || 0,
-        affixes: (i.Affixes || []).map(a => ({ id: a.AffixId, tier: a.Tier, v: a.Value, v2: a.Value2, crafted: !!a.bCrafted, oath: !!a.bOath83 })), runes: i.Runes || [],
+        affixes: (i.Affixes || []).map(a => ({ id: a.AffixId, tier: a.Tier, v: a.Value, v2: a.Value2, crafted: !!a.bCrafted, oath: !!a.bOath83, scar: !!a.bScar93 })), runes: i.Runes || [], // scar: the line Unswearing added (not boosted on a Great / Flawless Rare, see collectMods)
       })),
       passives: R.PassiveNodeIds || [], bonusPoints: R.BonusPassivePoints || 0, gems: R.Gems || [], gemLevels: R.GemLevels || {},
       sockets: (R.Sockets || []).map(s => ({ skill: s.SkillId, supports: (s.Supports || []).filter(Boolean), conduit: s.ConduitLink || '' })),
@@ -7447,8 +7639,15 @@ window.BOCharacter = function (ctx) {
           // Core Touched Astral Codex +2 (three Flawless Rares with a +2 line: boosted they would be 2.6; the Codex also holds an Othala rune at half
           // value, 0.5, which adds nothing), Cinderwick +1 (its Vow: 2 x 85% x half = 0.85), Stride of the First Oath +1. The sim had +10.
           const lvlLine = !!(af.Mod && af.Mod.Stat === 'SkillLevel');
-          const boost = rareBoost !== 1 && !lvlLine && !a.crafted && !a.oath && !/^mythic_/i.test(a.id) && !RARE_COUNT_STATS.has(af.Mod && af.Mod.Stat);
-          if (boost) sh *= rareBoost;
+          // The Scarred line (the line Unswearing adds, saves: bScar93) is not boosted either, and the boost is a 32-bit float. Tooltip + save,
+          // owner's test item, 12 Nov 2026 (Rare Titan Plate, item level 84, Base Grade 92, Oathsworn then Unsworn; every line tier 0): the six
+          // rolled lines show x1.3 (armour 306 -> 398, ES 49 -> 64, increased Armour 110 -> 143, minion life 40 -> 52, fire and cold resistance
+          // 45 -> 58), +50 Strength (Oathsworn) and +48 Intelligence (Scarred) show the save's values. 45 x 1.3 is 58.5 and the game shows 58:
+          // 1.3 as a float is 1.2999999523, so 58.4999979 rounds down (the earlier readings, 42 -> 55, 24 -> 31, 0.6 -> 0.8, come out the same).
+          // The item's Armour, 2,487 = (520 x 120.3% grade + 397.8) x (1 + 143%), fits too. NOT KNOWN: whether a Scarred line counts in the
+          // Great / Flawless grading (here it is top tier, so either way gives Flawless); it is still counted as a rolled line there.
+          const boost = rareBoost !== 1 && !lvlLine && !a.crafted && !a.oath && !a.scar && !/^mythic_/i.test(a.id) && !RARE_COUNT_STATS.has(af.Mod && af.Mod.Stat);
+          if (boost) sh *= Math.fround(rareBoost);
           const cnt = x => sh === 1 || !x ? x : Number.isInteger(x) ? (Math.round(x * sh) || (isVow ? Math.sign(x) : 0)) : Math.round(x * sh * 10) / 10;
           add(af.Mod, cnt(a.v), cnt(a.v2), label + (isVow ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
         }
@@ -13934,7 +14133,7 @@ window.BOStartApp = function () {
   });
   // The Save Creator tab (creator.js): edits an offline save and hands back a new file.
   creator = window.BOCreator({
-    GD, $, esc, planner, savePath: SAVE_PATH, sim: S,
+    GD, $, esc, planner, savePath: SAVE_PATH, sim: S, skillDot,
     chars: () => CHARS, importCode: importAnyCode, belt: id => brewery && brewery.belt(id),
     preview: ch => { addChars([ch], 'file', ch.id); showTab('damage'); saveTip('Showing ' + ch.name + ' as the Save Creator would write it. Your save file is unchanged until you put the new one in place.'); },
   });
@@ -13986,7 +14185,7 @@ window.BOStartApp = function () {
     beltCard: () => brewery ? brewery.beltCard() : '',
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
     // Item overlay: edits go to a plan itself, or to a copy of a loaded character (as on the Build tab); the save file is never written.
-    editable: buildEditable, commit: ch => { if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {}); planner.render(); }, // the caller redraws the Character tab
+    editable: buildEditable, commit: (ch, what) => { if (ch.plan) planChanged(ch, what || {}); else buildEdited(ch, what || {}); planner.render(); }, // the caller redraws the Character tab
     sheet: () => st.ch && st.skill ? S.calcSkill(GD, st.ch, st.skill, opts()) : null,
     passives: () => [...allocSet()].map(id => GD.nodes[id]),
     oaths: () => st.ch ? S.swornOaths(GD, st.ch) : [],
@@ -14000,6 +14199,7 @@ window.BOStartApp = function () {
   $('#buildPane').addEventListener('click', e => {
     if (e.target && e.target.id === 'buildResetSave') resetToSave();
     if (e.target && e.target.id === 'buildSavePlan') saveAsPlan();
+    if (e.target && e.target.id === 'buildContinue') { showTab('character'); window.scrollTo(0, 0); }
   });
   // Welcome banner buttons: the same actions as the toolbar's.
   document.querySelectorAll('[data-hero]').forEach(b => b.addEventListener('click', async () => {

@@ -241,9 +241,9 @@ window.PAGE_LANGS = {
     'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json', 'Gameplay/monster_affixes.json', 'Gameplay/monsters.json', 'Gameplay/oath_masteries.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Read when the folder has them; an older game folder without them still loads.
-  const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json', 'Items/quality_stones.json', 'Gameplay/league_rules.json'];
+  const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json', 'Items/quality_stones.json', 'Gameplay/league_rules.json', 'Gameplay/new_gems85.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 29; // 29: the game's rule numbers (rules.json, switches.json; Damage tab); 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 30; // 30: per-gem base poison chance (new_gems85.json; Damage tab); 29: the game's rule numbers (rules.json, switches.json; Damage tab); 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -505,6 +505,11 @@ window.PAGE_LANGS = {
     let trapPrice = {};
     try { const tp = J('Gameplay/trap_price95.json'); for (const [k, v] of Object.entries((tp && tp.prices) || {})) if (v > 0) trapPrice[k.toLowerCase()] = +v; } catch (e) { /* older game files: no price table */ }
 
+    // A gem's own base poison chance (new_gems85.json, public API game data 73: Viper Fang 100, Caustic Arrow 50). It takes
+    // the place of the general Ailments.PoisonChance (10) for that gem. Skill id -> percent.
+    const gemPoison = {};
+    try { for (const x of (J('Gameplay/new_gems85.json') || {}).gems || []) if (x && x.Id && x.PoisonChance > 0) gemPoison[x.Id.toLowerCase()] = +x.PoisonChance; } catch (e) { /* older game data: none */ }
+
     // The Tundra Desert wave arena (deep_wound93.json, in the game files since 0.56.8): display only, FAQ tab. Its reward rule
     // (1 + the week's 2 Oaths + at each break taken deeper DeepenReward + the picked Oath) was read off a run on 12 Nov 2026:
     // x1.55 (week Crowd + Horde, "reward +55%"), then +0.50, +0.50, +0.60, +0.60 after +25%, +25%, +35%, +35% Oaths.
@@ -519,7 +524,7 @@ window.PAGE_LANGS = {
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
       { skills, classes, supports, nodes, masteries, oaths, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice, rules: gameRules });
+        affixes, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice, gemPoison, rules: gameRules });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, OPTIONAL, SCHEMA };
@@ -10268,7 +10273,12 @@ window.BOCharacter = function (ctx) {
     if (A.bEnabled) {
       const poisonChanceStat = sumMod('PoisonChance', 'Flat');
       const hasPoison = !!hit.Poison;
-      let pChance = clamp((hasPoison ? A.PoisonChance : 0) + poisonChanceStat, 0, 100);
+      // A gem with its own base poison chance uses it instead of the general one (new_gems85.json PoisonChance, public API game
+      // data build 73: Viper Fang 100, Caustic Arrow 50; general Ailments.PoisonChance 10. Viper Fang's text agrees: "every stab
+      // lays a stack of poison"). Developer's data file, not yet checked against a tooltip or the log (13 Nov 2026).
+      const gemPChance = (GD.gemPoison || {})[lc(skillId)];
+      const basePChance = gemPChance != null ? gemPChance : A.PoisonChance;
+      let pChance = clamp((hasPoison ? basePChance : 0) + poisonChanceStat, 0, 100);
       // A PoisonChance stat also poisons with Physical (scaling.json Ailments doc).
       // The poisoning hit is the whole hit (the tooltip's 24,573/s a stack = 20% x the full average hit
       // x poison modifiers). Orbit's weaker spheres count as part-stacks, as the game's panel does.
@@ -11088,7 +11098,12 @@ window.BOCharacter = function (ctx) {
   // extraBase: physical added to the weapon's base roll (Rending Slam's share of max life), before local % lines.
   function weaponStats(GD, item, base, mods, use, extraBase) {
     const dmg = {}; DT.forEach(d => dmg[d] = [0, 0]);
-    if (!base || !base.DamageMin) { dmg.Physical = [2, 5]; return { name: 'Unarmed', dmg, aps: 1.2, crit: GD.scaling.Hero.CritBase }; }
+    // Unarmed: 12-27 physical at 1.6 attacks a second (was 2-5 at 1.2). The API's classes.json Unarmed block is empty.
+    // Proof: the game's Copy stats, 13 Nov 2026, build 73 (Spin_win, Warrior 45, no weapon, save taken the same moment).
+    // Bare Fists, Leap Slam and Cyclone all took exactly 4/3 the game's time per attack at 1.2 (so 1.6), and their hits
+    // back-solve to an unarmed base of 12.0-27.2 / 11.6-26.4 / 11.9-27.0 (Bare Fists gem 14: game 1,629-3,600).
+    // One hero level only: whether the base grows with level is not checked yet (a copy from Magetest, level 92, would say).
+    if (!base || !base.DamageMin) { dmg.Physical = [12, 27]; return { name: 'Unarmed', dmg, aps: 1.6, crit: GD.scaling.Hero.CritBase }; }
     const key = 'item:' + item.slot;
     let physInc = 0, asInc = 0, critInc = 0;
     const added = {}; DT.forEach(d => added[d] = [0, 0]);

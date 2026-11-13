@@ -195,8 +195,11 @@
     const monList = Array.isArray(MON) ? MON : Object.values(MON);
     // Each Guardian's own strong and weak element (guardian_resist95.json, public API game data build 70): +20 to one,
     // -20 to another, e.g. Anubis Poison +20, Fire -20. FAQ tab, and the sim when the player sets it in Configure Enemy
-    // (12 Nov 2026; how it adds to the colour variant and level resistance is not checked in a fight).
-    try { const gr = (J('Gameplay/guardian_resist95.json') || {}).guardians || {}; for (const [k, v] of Object.entries(gr)) { const g = guardians[k.replace(/^g_/, '')]; if (g) g.identity = v; } } catch (e) { /* older game files: none */ }
+    // (12 Nov 2026; adds to the colour variant and level resistance: in-game target frames, see src/sim.js).
+    // The file calls the Hellguard Captain g_hellguard (its card in the game log: "g_hellguard card says Fears Lightning";
+    // target frame 12 Nov 2026: "Resists Fire 70% · Weak to Lightning -10%").
+    const GR_ID = { hellguard: 'hellguard_captain' };
+    try { const gr = (J('Gameplay/guardian_resist95.json') || {}).guardians || {}; for (const [k, v] of Object.entries(gr)) { const id = k.replace(/^g_/, ''), g = guardians[GR_ID[id] || id]; if (g) g.identity = v; } } catch (e) { /* older game files: none */ }
     const minionMonsters = {};
     for (const s of Object.values(skills)) {
       const id = s.Minion && s.Minion.MonsterId, m = id && monList.find(x => x.Id === id);
@@ -6017,10 +6020,10 @@ window.BOFaq = function (ctx) {
     h += card('Guardians resist more', list([
       'A Guardian spawns as a colour variant with one element and resists that element more (usually 30–40%, Elysia 50%). The list is in <b>Monster Affixes</b>.',
       W.length ? 'From some Rupture levels it also has <b>Ward</b>: ' + W.map(w => '+' + w.resist + '% from Rupture ' + w.fromRL + ' (Gates from ' + w.gateFromRL + ')').join(', ') + ', to its own element only.' : '',
-      'These add to the level resistance. The sim caps the total at ' + (H.ResistHardCap || 85) + '% (an assumption: the game files give monsters no cap).',
+      'These add to the level resistance, and the total stops at 75% (checked on the target frame in the game, 12 Nov 2026).',
       arm.LessTakenPct ? 'The <b>Armoured</b> mod makes a Guardian take ' + arm.LessTakenPct + '% less damage.' : '',
       ew.ElementalLessTakenPct ? 'The <b>Elemental Ward</b> mod makes it take ' + ew.ElementalLessTakenPct + '% less elemental damage' + (ew.AilmentLessPct ? ', and ailments on it are ' + ew.AilmentLessPct + '% weaker' : '') + '.' : '',
-      gs0.some(g => g.identity) ? 'Each Guardian also has its own strong and weak element (+20% and -20% in the game data), whatever its colour. The table is in <b>Monster Affixes</b>. The sim counts it when you set it under Configure Enemy (pick the Guardian, or its strong and weak element).' : '',
+      gs0.some(g => g.identity) ? 'Each Guardian also has its own strong and weak element (+20% and -20% resistance), whatever its colour. They add to the rest, and the weak element can go below 0% (it then takes more damage). The game shows both under the life bar of the Guardian. The table is in <b>Monster Affixes</b>. The sim counts it when you set it under Configure Enemy (pick the Guardian, or its strong and weak element).' : '',
       'Best answer: use a second element, or one the Guardian does not resist.',
     ]));
     h += card('Lowering resistance', list([
@@ -6111,8 +6114,8 @@ window.BOFaq = function (ctx) {
       table(['Guardian', 'Variants (element, resistance)'], gs.map(g => ['<b>' + esc(g.name) + '</b>', g.variants.map(v => esc(v.name) + ' (' + esc(v.element) + ' ' + v.resist + '%)').join(' · ')])), 'the sim uses these');
     // Each Guardian's own strong / weak element (GD.guardians[id].identity, guardian_resist95.json). Display only.
     const idn = gs.filter(g => g.identity), side = (g, f) => Object.entries(g.identity).filter(([, v]) => f(v)).map(([el, v]) => esc(el) + ' ' + (v > 0 ? '+' : '') + v + '%').join(', ') || 'none';
-    if (idn.length) h += card('Guardian strong and weak elements', hint('Every Guardian resists one element more and another less, whatever colour it spawns as. From the game data; how it adds to the colour and level resistance has not been checked in a fight, so the sim does not count it yet.') +
-      table(['Guardian', 'Resists more', 'Resists less (use this)'], idn.slice().sort((a, b) => a.name.localeCompare(b.name)).map(g => ['<b>' + esc(g.name) + '</b>', side(g, v => v > 0), side(g, v => v < 0)])), 'not in the sim yet');
+    if (idn.length) h += card('Guardian strong and weak elements', hint('Every Guardian resists one element more and another less, whatever colour it spawns as. It adds to the colour and level resistance (checked in the game, 12 Nov 2026). The sim counts it when you set it under Configure Enemy.') +
+      table(['Guardian', 'Resists more', 'Resists less (use this)'], idn.slice().sort((a, b) => a.name.localeCompare(b.name)).map(g => ['<b>' + esc(g.name) + '</b>', side(g, v => v > 0), side(g, v => v < 0)])), 'set it in Configure Enemy');
     return h;
   }
 
@@ -9000,13 +9003,21 @@ window.BOCharacter = function (ctx) {
     const resist = {};
     for (const d of DT) resist[d] = o.enemyRes && o.enemyRes[d] != null ? o.enemyRes[d] : (d === 'Physical' ? 0 : Math.min(M.ResistMax, lvl * M.ResistPerLevel));
     // Guardian colour variant: extra resistance to its own element (bosses.json Variants, mostly 30-40%),
-    // plus the Ward tier from Rupture 60 / 80 (+25% / +35%). They add up (closest to the 1 Nov fights);
-    // ASSUMPTION: capped at the game's hard resistance cap (85%), as the files give monsters no cap.
+    // plus the Ward tier from Rupture 60 / 80 (+25% / +35%). They add up, and the total stops at 75%.
+    // PROVEN 12 Nov 2026 (build 72, in-game target frames + log, offline Magetest, resist lab build):
+    //   Ashen Wyrm (Ashen, Fire +50; strong Fire, weak Cold) ML 22, level 8: frame "Resists Fire 75% · Weak to Cold -12%"
+    //     = 8 + 50 + 20 = 78 shown 75, and 8 - 20 = -12. Log BossPain60 / ignite source hits: 12 Ember Bolt hits 498-745,
+    //     mean 625 (sim 2,417 x 0.25 = 604, range 462-746; at 78% none could pass 657, five did); 5 Frost Nova hits mean
+    //     1,224 (sim 1,101 x 1.12 = 1,233). So the weak element takes resistance below 0 and the cap is 75, not 85.
+    //   Hellguard Captain (Iron, Fire +40; strong Fire, weak Lightning) RL 28, level 10: frame "Resists Fire 70% ·
+    //     Weak to Lightning -10%" = 10 + 40 + 20 and 10 - 20: plain adding under the cap.
+    //   Ashen Wyrm RL 73, level 25 (capped): frame "Resists Fire 75% · Weak to Cold 5%" = 25 + 50 + 20 + Ward 25 -> 75.
+    const GUARDIAN_RES_CAP = 75;
     let guardian = null;
     // Each Guardian's own strong and weak element (public API game data build 70, guardian_resist.json: every Guardian has
     // one element at +20 and another at -20, e.g. Anubis Poison +20 / Fire -20; its "shift" block: strong 20, weak -20).
-    // Added on top of the level resistance like the colour variant below (same additive ASSUMPTION, not checked in a fight
-    // yet). Off unless the player picks them in Configure Enemy (owner's request, 12 Nov 2026).
+    // Added on top of the level resistance and the colour variant (proven, see the frames above).
+    // Off unless the player picks them in Configure Enemy (owner's request, 12 Nov 2026).
     const idPct = (() => { for (const g of Object.values(GD.guardians || {})) for (const v of Object.values(g.identity || {})) if (v > 0) return v; return 20; })();
     const identity = {};
     if (isBoss) for (const [E, sign] of [[o.guardianStrong, 1], [o.guardianWeak, -1]]) {
@@ -9015,17 +9026,17 @@ window.BOCharacter = function (ctx) {
     }
     if (Object.keys(identity).length) {
       guardian = { identity };
-      res.notes.push('Guardian strong / weak element: ' + Object.entries(identity).map(([E, v]) => E + ' ' + (v > 0 ? '+' : '') + v + '%').join(', ') + ' resistance (game data; how it stacks with the colour and Ward is not checked in a fight).');
+      res.notes.push('Guardian strong / weak element: ' + Object.entries(identity).map(([E, v]) => E + ' ' + (v > 0 ? '+' : '') + v + '%').join(', ') + ' resistance, added to its level resistance and colour (checked in the game, 12 Nov 2026).');
     }
     if (isBoss && o.guardianElement && DT.includes(o.guardianElement) && !(o.enemyRes && o.enemyRes[o.guardianElement] != null)) {
       const E = o.guardianElement;
       const variant = o.guardianVariantResist != null ? +o.guardianVariantResist : 40;
       const ward = o.guardianWard != null ? +o.guardianWard : wardAt(GD, lvl);
-      const cap = (GD.scaling.Hero || {}).ResistHardCap || 85;
-      resist[E] = Math.min(cap, resist[E] + variant + ward);
+      resist[E] = Math.min(GUARDIAN_RES_CAP, resist[E] + variant + ward);
       guardian = Object.assign(guardian || {}, { element: E, variant, ward, resist: resist[E] });
-      res.notes.push('Guardian element ' + E + ': its colour variant resists ' + E + ' ' + variant + '% more' + (ward ? ' and its Ward ' + ward + '% more' : '') + ' (' + resist[E] + '% in all, before penetration).');
+      res.notes.push('Guardian element ' + E + ': its colour variant resists ' + E + ' ' + variant + '% more' + (ward ? ' and its Ward ' + ward + '% more' : '') + ' (' + resist[E] + '% in all, before penetration; a Guardian resists at most ' + GUARDIAN_RES_CAP + '%).');
     }
+    for (const E of Object.keys(identity)) resist[E] = Math.min(GUARDIAN_RES_CAP, resist[E]);
     const pen = {}; DT.forEach(d => pen[d] = 0);
     for (const m of pickMods(mods, 'Penetration', 'Flat')) {
       const { types, conds } = splitTags(m.tags);

@@ -12,11 +12,11 @@
 // window.I18N.missing holds the English it saw and could not translate (to find what the dictionary still lacks).
 // The languages the page offers besides English (tools/i18n-dict.js LANGS has the same list for the build).
 window.PAGE_LANGS = {
-  zh: { html: 'zh-Hans', label: '中文', name: '简体中文', to: '切换到简体中文',
+  zh: { html: 'zh-Hans', label: '中文', word: '语言', name: '简体中文', to: '切换到简体中文',
     beta: '中文翻译为测试版，如有不准确之处，欢迎通过<button type="button" class="linkish">「报告问题」</button>反馈。' },
-  es: { html: 'es', label: 'ES', name: 'Español', to: 'Cambiar a español',
+  es: { html: 'es', label: 'ES', word: 'Idioma', name: 'Español', to: 'Cambiar a español',
     beta: 'La traducción al español está en beta. Si algo está mal, avísanos con <button type="button" class="linkish">Informar de un problema</button>.' },
-  ru: { html: 'ru', label: 'RU', name: 'Русский', to: 'Переключить на русский',
+  ru: { html: 'ru', label: 'RU', word: 'Язык', name: 'Русский', to: 'Переключить на русский',
     beta: 'Русский перевод в бета-версии. Если что-то не так, сообщите через <button type="button" class="linkish">«Сообщить о проблеме»</button>.' }
 };
 (function () {
@@ -147,14 +147,16 @@ window.PAGE_LANGS = {
   }).catch(e => { console.warn(L[lang].name + ' text not loaded (' + e.message + '); the page stays in English.'); }).finally(reveal);
 })();
 
-// The language switch (sidebar foot, next to the theme button): a small menu of the languages. On the site a choice goes to
+// The language switch (top right of the Tools bar, owner 13 Nov 2026): a small menu of the languages. On the site a choice goes to
 // the same tab's address in that language (/zh/build/tree/, /es/build/tree/, /build/tree/ ...), keeping the share code in
 // the hash; locally it reloads.
 (function () {
   const b = document.getElementById('langBtn'); if (!b) return;
   const L = window.PAGE_LANGS, cur = window.I18N.lang;
   const opts = [['en', 'English', 'Switch to English']].concat(Object.keys(L).map(k => [k, L[k].name, L[k].to]));
-  b.textContent = cur === 'en' ? 'EN' : L[cur].label;
+  const code = b.querySelector('.lang-code'), word = b.querySelector('.lang-word');
+  if (code) code.textContent = cur === 'en' ? 'EN' : L[cur].label; else b.textContent = cur === 'en' ? 'EN' : L[cur].label;
+  if (word) word.textContent = cur === 'en' ? 'Language' : L[cur].word;
   b.title = 'Language · 语言 · Idioma · Язык';
   b.setAttribute('aria-label', b.title);
   b.setAttribute('aria-haspopup', 'true'); b.setAttribute('aria-expanded', 'false');
@@ -182,7 +184,7 @@ window.PAGE_LANGS = {
     }
     document.body.appendChild(menu);
     const r = b.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
-    menu.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+    menu.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + 'px';
     menu.style.top = (r.top - h - 6 > 8 ? r.top - h - 6 : r.bottom + 6) + 'px';
     b.setAttribute('aria-expanded', 'true');
     (menu.querySelector('.on') || menu.querySelector('button')).focus();

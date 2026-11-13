@@ -12,7 +12,7 @@
 <meta property="og:url" content="https://lilshrimper.github.io/broken-oath-builder/es/build/damage/"><meta property="og:image" content="https://lilshrimper.github.io/broken-oath-builder/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=277">
+<link rel="stylesheet" href="../../../style.css?v=278">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -66,7 +66,6 @@
           <svg viewBox="0 0 24 24" aria-hidden="true" class="i-sun"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>
           <svg viewBox="0 0 24 24" aria-hidden="true" class="i-moon"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
         </button>
-        <button class="icon-btn lang-btn notranslate" id="langBtn" type="button">中文</button>
         <button class="icon-btn" id="reportBtn" type="button" title="Report a problem (no account needed)" aria-label="Report a problem">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4zM12 8v3.5M12 13.6v.1"/></svg>
         </button>
@@ -76,6 +75,7 @@
 </header>
 <div class="view-bar">
     <div class="view-bar-title">Tools</div>
+    <div class="main-tabs-wrap">
     <nav class="tabs main-tabs" role="tablist" aria-label="Views">
       <button class="tab" type="button" role="tab" data-tab="build" aria-selected="false" aria-label="Build Planner">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M6 17V8l6-4 6 4v9M9 17v-5h6v5"/></svg><span>Build Planner</span>
@@ -111,6 +111,11 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1 1-1.1 1.8M12 17h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18"/></svg><span>FAQ / Game Mechanics</span>
       </button>
     </nav>
+    <!-- Language menu (src/i18n.js): top right of the Tools bar (owner, 13 Nov 2026). -->
+    <button class="lang-pick notranslate" id="langBtn" type="button">
+      <span class="lang-code">EN</span><span class="lang-word">Language</span>
+    </button>
+    </div>
     <div class="build-summary" id="buildSummary" hidden aria-label="Build summary">
       <div class="bs-cell bs-wide"><span class="bs-label">Character name</span><b id="bsClass">–</b><small id="bsSpell"></small></div>
       <div class="bs-cell" title="Total DPS of the selected skill against the enemy set on the Damage tab"><span class="bs-label">Boss DPS (est)</span><b id="bsDps">–</b></div>
@@ -530,7 +535,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":277,"at":"2026-11-13T19:00:35.128Z"};
+window.SITE_VERSION = {"v":278,"at":"2026-11-13T19:07:25.501Z"};
 window.SITE_LANG = 'es';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -539,6 +544,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp","T":64,"cols":10,"rows":9,"idx":{"ar
 window.CLASS_ICONS = {"src":"icons/classes.webp","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../../app.js?v=277"></script>
+<script src="../../../app.js?v=278"></script>
 </body>
 </html>

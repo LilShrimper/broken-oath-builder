@@ -17,7 +17,31 @@ window.PAGE_LANGS = {
   es: { html: 'es', label: 'ES', word: 'Idioma', name: 'Español', to: 'Cambiar a español',
     beta: 'La traducción al español está en beta. Si algo está mal, avísanos con <button type="button" class="linkish">Informar de un problema</button>.' },
   ru: { html: 'ru', label: 'RU', word: 'Язык', name: 'Русский', to: 'Переключить на русский',
-    beta: 'Русский перевод в бета-версии. Если что-то не так, сообщите через <button type="button" class="linkish">«Сообщить о проблеме»</button>.' }
+    beta: 'Русский перевод в бета-версии. Если что-то не так, сообщите через <button type="button" class="linkish">«Сообщить о проблеме»</button>.' },
+  // Owner, 13 Nov 2026: our page text by DeepL (tools/deepl-fill.js), game names from the game's own files; the notice
+  // says it is machine translation. Danish, Finnish, Swedish and Dutch wait for next month's DeepL quota.
+  cs: { html: 'cs', label: 'CS', word: 'Jazyk', name: 'Čeština', to: 'Přepnout do češtiny',
+    beta: 'Český překlad je strojový (DeepL) a ve verzi beta. Pokud je něco špatně, dejte nám vědět přes <button type="button" class="linkish">„Nahlásit problém“</button>.' },
+  de: { html: 'de', label: 'DE', word: 'Sprache', name: 'Deutsch', to: 'Auf Deutsch umschalten',
+    beta: 'Die deutsche Übersetzung ist maschinell (DeepL) und in der Beta. Wenn etwas falsch ist, sag uns über <button type="button" class="linkish">„Ein Problem melden“</button> Bescheid.' },
+  fr: { html: 'fr', label: 'FR', word: 'Langue', name: 'Français', to: 'Passer en français',
+    beta: 'La traduction française est automatique (DeepL) et en bêta. Si quelque chose ne va pas, signalez-le avec <button type="button" class="linkish">« Signaler un problème »</button>.' },
+  it: { html: 'it', label: 'IT', word: 'Lingua', name: 'Italiano', to: 'Passa all’italiano',
+    beta: 'La traduzione italiana è automatica (DeepL) e in beta. Se qualcosa non va, faccelo sapere con <button type="button" class="linkish">«Segnala un problema»</button>.' },
+  ja: { html: 'ja', label: 'JA', word: '言語', name: '日本語', to: '日本語に切り替え',
+    beta: '日本語訳は機械翻訳（DeepL）のベータ版です。誤りがあれば<button type="button" class="linkish">「問題を報告」</button>からお知らせください。' },
+  ko: { html: 'ko', label: 'KO', word: '언어', name: '한국어', to: '한국어로 전환',
+    beta: '한국어 번역은 기계 번역(DeepL)이며 베타 버전입니다. 잘못된 부분이 있으면 <button type="button" class="linkish">“문제 신고”</button>로 알려 주세요.' },
+  pl: { html: 'pl', label: 'PL', word: 'Język', name: 'Polski', to: 'Przełącz na polski',
+    beta: 'Polskie tłumaczenie jest maszynowe (DeepL) i w wersji beta. Jeśli coś jest nie tak, daj nam znać przez <button type="button" class="linkish">„Zgłoś problem”</button>.' },
+  pt: { html: 'pt-BR', label: 'PT', word: 'Idioma', name: 'Português (Brasil)', to: 'Mudar para português',
+    beta: 'A tradução para o português é automática (DeepL) e está em beta. Se algo estiver errado, avise-nos em <button type="button" class="linkish">“Relatar um problema”</button>.' },
+  tr: { html: 'tr', label: 'TR', word: 'Dil', name: 'Türkçe', to: 'Türkçeye geç',
+    beta: 'Türkçe çeviri makine çevirisidir (DeepL) ve beta aşamasındadır. Bir hata görürsen <button type="button" class="linkish">“Sorun bildir”</button> ile bize haber ver.' },
+  uk: { html: 'uk', label: 'UK', word: 'Мова', name: 'Українська', to: 'Перейти на українську',
+    beta: 'Український переклад машинний (DeepL) і в бета-версії. Якщо щось не так, повідомте нам через <button type="button" class="linkish">«Повідомити про проблему»</button>.' },
+  vi: { html: 'vi', label: 'VI', word: 'Ngôn ngữ', name: 'Tiếng Việt', to: 'Chuyển sang tiếng Việt',
+    beta: 'Bản dịch tiếng Việt là bản dịch máy (DeepL) và đang ở giai đoạn beta. Nếu có gì sai, hãy cho chúng tôi biết qua <button type="button" class="linkish">“Báo cáo sự cố”</button>.' }
 };
 (function () {
   const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* off */ } } };
@@ -27,7 +51,7 @@ window.PAGE_LANGS = {
   const I = window.I18N = { lang, missing: new Set(), ready: Promise.resolve(), t: s => s };
   const root = document.documentElement;
   if (lang === 'en') return;
-  const CJK = lang === 'zh';
+  const CJK = lang === 'zh' || lang === 'ja'; // written without spaces between words
   // Opening a zh/ (es/, ru/) page with no choice made yet counts as choosing that language: the plain address then sends
   // this visitor there too (build.js's head script on English pages). Choosing English stores 'en' and stops that.
   if (routed && !store.get('bods:lang')) store.set('bods:lang', lang);
@@ -100,7 +124,7 @@ window.PAGE_LANGS = {
     return null;
   }
   function tr(s) {
-    if (!D || !s || !/[A-Za-z]/.test(s) || /[㐀-鿿Ѐ-ӿ]/.test(s)) return null; // no English, or already Chinese / Russian
+    if (!D || !s || !/[A-Za-z]/.test(s) || /[㐀-鿿Ѐ-ӿ぀-ヿ가-힯]/.test(s)) return null; // no English, or already Chinese / Japanese / Korean / Cyrillic
     const t = s.replace(/\s+/g, ' ').trim().replace(/\+-(?=\d)/g, '-'); // "+-5%": a negative roll the page prints with both signs
     if (!t || OUT.has(t)) return null; // already ours
     const r = core(t, 0);
@@ -177,7 +201,7 @@ window.PAGE_LANGS = {
     for (const [code, name, to] of opts) {
       const o = document.createElement('button');
       o.type = 'button'; o.setAttribute('role', 'menuitemradio'); o.setAttribute('aria-checked', String(code === cur));
-      o.textContent = name; o.title = to; o.lang = code === 'zh' ? 'zh-Hans' : code;
+      o.textContent = name; o.title = to; o.lang = code === 'en' ? 'en' : L[code].html;
       if (code === cur) o.classList.add('on');
       o.addEventListener('click', () => { close(); if (code !== cur) go(code); });
       menu.appendChild(o);
@@ -14783,7 +14807,7 @@ window.BOStartApp = function () {
   function routeFromPath() {
     if (!ROUTING) return null;
     let p = location.pathname; try { p = decodeURIComponent(p); } catch (e) { /* keep as is */ }
-    const rel = p.slice(siteRoot().length).toLowerCase().replace(/\/+$/, '').replace(/^(zh|es|ru)(\/|$)/, ''); // zh/, es/, ru/...: the translated pages (src/i18n.js PAGE_LANGS)
+    const rel = p.slice(siteRoot().length).toLowerCase().replace(/\/+$/, '').replace(new RegExp('^(' + Object.keys(window.PAGE_LANGS || {}).join('|') + ')(/|$)'), ''); // zh/, es/, de/...: the translated pages (src/i18n.js PAGE_LANGS)
     if (rel === 'build/gear') return 'character'; // the old Gear sub-tab: gear is edited on the Character tab now
     return Object.keys(ROUTES).find(k => ROUTES[k] === rel) || null;
   }

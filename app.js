@@ -19,11 +19,15 @@ window.PAGE_LANGS = {
   ru: { html: 'ru', label: 'RU', word: 'Язык', name: 'Русский', to: 'Переключить на русский',
     beta: 'Русский перевод в бета-версии. Если что-то не так, сообщите через <button type="button" class="linkish">«Сообщить о проблеме»</button>.' },
   // Owner, 13 Nov 2026: our page text by DeepL (tools/deepl-fill.js), game names from the game's own files; the notice
-  // says it is machine translation. Danish, Finnish, Swedish and Dutch wait for next month's DeepL quota.
+  // says it is machine translation. Danish, Finnish and Swedish added the same way 13 Nov 2026 (owner).
   cs: { html: 'cs', label: 'CS', word: 'Jazyk', name: 'Čeština', to: 'Přepnout do češtiny',
     beta: 'Český překlad je strojový (DeepL) a ve verzi beta. Pokud je něco špatně, dejte nám vědět přes <button type="button" class="linkish">„Nahlásit problém“</button>.' },
+  da: { html: 'da', label: 'DA', word: 'Sprog', name: 'Dansk', to: 'Skift til dansk',
+    beta: 'Den danske oversættelse er maskinoversat (DeepL) og i beta. Hvis noget er forkert, så sig det via <button type="button" class="linkish">„Rapporter et problem“</button>.' },
   de: { html: 'de', label: 'DE', word: 'Sprache', name: 'Deutsch', to: 'Auf Deutsch umschalten',
     beta: 'Die deutsche Übersetzung ist maschinell (DeepL) und in der Beta. Wenn etwas falsch ist, sag uns über <button type="button" class="linkish">„Ein Problem melden“</button> Bescheid.' },
+  fi: { html: 'fi', label: 'FI', word: 'Kieli', name: 'Suomi', to: 'Vaihda suomeksi',
+    beta: 'Suomenkielinen käännös on konekäännös (DeepL) ja beta-vaiheessa. Jos jokin on väärin, kerro siitä <button type="button" class="linkish">”Ilmoita ongelmasta”</button>-painikkeella.' },
   fr: { html: 'fr', label: 'FR', word: 'Langue', name: 'Français', to: 'Passer en français',
     beta: 'La traduction française est automatique (DeepL) et en bêta. Si quelque chose ne va pas, signalez-le avec <button type="button" class="linkish">« Signaler un problème »</button>.' },
   it: { html: 'it', label: 'IT', word: 'Lingua', name: 'Italiano', to: 'Passa all’italiano',
@@ -39,6 +43,8 @@ window.PAGE_LANGS = {
     beta: 'Polskie tłumaczenie jest maszynowe (DeepL) i w wersji beta. Jeśli coś jest nie tak, daj nam znać przez <button type="button" class="linkish">„Zgłoś problem”</button>.' },
   pt: { html: 'pt-BR', label: 'PT', word: 'Idioma', name: 'Português (Brasil)', to: 'Mudar para português',
     beta: 'A tradução para o português é automática (DeepL) e está em beta. Se algo estiver errado, avise-nos em <button type="button" class="linkish">“Relatar um problema”</button>.' },
+  sv: { html: 'sv', label: 'SV', word: 'Språk', name: 'Svenska', to: 'Byt till svenska',
+    beta: 'Den svenska översättningen är maskinöversatt (DeepL) och i beta. Om något är fel, säg till via <button type="button" class="linkish">”Rapportera ett problem”</button>.' },
   tr: { html: 'tr', label: 'TR', word: 'Dil', name: 'Türkçe', to: 'Türkçeye geç',
     beta: 'Türkçe çeviri makine çevirisidir (DeepL) ve beta aşamasındadır. Bir hata görürsen <button type="button" class="linkish">“Sorun bildir”</button> ile bize haber ver.' },
   uk: { html: 'uk', label: 'UK', word: 'Мова', name: 'Українська', to: 'Перейти на українську',

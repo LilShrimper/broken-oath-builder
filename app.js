@@ -7064,10 +7064,15 @@ window.BOCharacter = function (ctx) {
   // The game's own art for an item (GD.itemIcons, as in itemsearch.js): its unique's picture, else its base's; '' when
   // there is none. Every use sits in a .has-art box; a picture that does not load takes the class off, so the text layout returns.
   const ART_DIR = window.SITE_VERSION && window.SITE_VERSION.local ? 'data/game-icons/site/' : (window.SITE_BASE || '') + 'ic/';
-  const artImg = f => f ? '<span class="is-ico art"><img src="' + ART_DIR + esc(f) + '.webp" alt="" draggable="false" loading="lazy" decoding="async" onerror="var b=this.closest(&quot;.has-art&quot;);if(b)b.classList.remove(&quot;has-art&quot;);this.parentNode.remove()"></span>' : '';
+  // big: the slot shows the picture large (weapon, off hand, body armour), so it asks for the 384 px copy (ic/lg, named in
+  // GD.itemIcons.lg) and falls back to the small one if that does not load.
+  const BIG_SLOTS = { MainHand: 1, OffHand: 1, Chest: 1 };
+  const artImg = (f, big) => { if (!f) return '';
+    const lg = big && ((ctx.gd().itemIcons || {}).lg || []).includes(f), small = ART_DIR + esc(f) + '.webp';
+    return '<span class="is-ico art"><img src="' + (lg ? ART_DIR + 'lg/' + esc(f) + '.webp' : small) + '" alt="" draggable="false" loading="lazy" decoding="async" onerror="' + (lg ? 'if(!this.dataset.s){this.dataset.s=1;this.src=&quot;' + small + '&quot;;return}' : '') + 'var b=this.closest(&quot;.has-art&quot;);if(b)b.classList.remove(&quot;has-art&quot;);this.parentNode.remove()"></span>'; };
   const baseArt = id => artImg(((ctx.gd().itemIcons || {}).base || {})[lc(id)]);
   const uniqArt = u => artImg(((ctx.gd().itemIcons || {}).uniq || {})[lc(u.Id)] || ((ctx.gd().itemIcons || {}).base || {})[lc(u.BaseId)]);
-  const itemArt = it => { const m = ctx.gd().itemIcons || {}; return artImg((it.rarity === 'Unique' && (m.uniq || {})[lc(it.unique)]) || (m.base || {})[lc(it.base)]); };
+  const itemArt = (it, big) => { const m = ctx.gd().itemIcons || {}; return artImg((it.rarity === 'Unique' && (m.uniq || {})[lc(it.unique)]) || (m.base || {})[lc(it.base)], big); };
   const withArt = a => a ? ' has-art' : '';
   // The × on a gear slot or idol: takes the item off this character (a plan, or the page's copy of a loaded save).
   const rmItemBtn = (idx, name) => '<button class="ch-item-x" type="button" data-rmitem="' + idx + '" aria-label="Remove ' + esc(name) + '">×</button>';
@@ -7075,7 +7080,7 @@ window.BOCharacter = function (ctx) {
     const idx = ch.items.findIndex(i => i.slot === slot), it = ch.items[idx];
     const label = planner.slotName[slot] || slot;
     if (!it) return '<div class="ch-slot ch-slot-' + slot + ' empty" data-open="1" data-slot="' + slot + '" data-idx="-1" tabindex="0" role="button" aria-label="Pick an item for ' + esc(label) + '"><span class="ch-slot-label">' + esc(label) + '</span><span class="meta">empty · click to add</span></div>';
-    const n = itemName(it, slot), a = itemArt(it);
+    const n = itemName(it, slot), a = itemArt(it, BIG_SLOTS[slot]);
     return '<div class="ch-slot ch-slot-' + slot + ' ' + n.cls + withArt(a) + '" data-open="1" data-tip="item" data-slot="' + slot + '" data-idx="' + idx + '" tabindex="0" role="button">' + rmItemBtn(idx, n.name) + '<span class="ch-slot-label">' + esc(label) + '</span>' + a + '<b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + (it.level ? ' · ilvl ' + it.level : '') + '</span>' +
       (it.runes && it.runes.length ? '<span class="ch-item-base">' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') + '</span>' : '') + '</div>';
   }
@@ -10043,6 +10048,9 @@ window.BOCharacter = function (ctx) {
     const golemB = golemBlessing(GD, ch, sk, o);
     const golemTaken = golemB && golemB.stat === 'EnemyTaken' ? 1 + golemB.v / 100 : 1;
     if (golemTaken !== 1) res.notes.push('Your ' + golemB.name + ' makes enemies near it take ' + golemB.v + '% more damage (counted as if it is always within 9 m of the enemy).');
+    // Different damage-taken sources MULTIPLY. Log 13 Nov 2026 (Nectest, normal monster, PoisonTaken63): Death Sentence
+    // alone 450.2 = 360.2 (x1.2499), venom golem alone 314.5 = 292.6 (x1.0749), both on one monster 786.2 = 585.1 and
+    // 1848.9 = 1375.9 (x1.3437) = 1.25 x 1.075 (1.34375); added would be 1.325. Only lines inside one curse add (above).
     const extraTaken = (1 + (o.extraTakenPct || 0) / 100) * (1 + markPct / 100) * golemTaken;
     // Maim (support): the skill's hits make the enemy take X% more Physical damage from you. The game's skill
     // panel counts it on the physical part of the hit, not on the bleed (Split Shot tooltip 1 Nov: 1,140 DPS =

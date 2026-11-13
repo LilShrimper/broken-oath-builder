@@ -239,7 +239,7 @@ window.PAGE_LANGS = {
     }
 
     // Which classes a gem is at home in (gem_homes.json): any other class is asked more of its attribute (sim.js gemPlayLevel).
-    try { for (const h of J('Gameplay/gem_homes.json').homes || []) { const k = skills[String(h.Id).toLowerCase()]; if (k) k.HomeClasses = h.HomeClasses || []; } } catch (e) { /* older game data has no gem_homes.json */ }
+    try { for (const h of J('Gameplay/gem_homes.json').homes || []) { const k = skills[String(h.Id).toLowerCase()]; if (k) { k.HomeClasses = h.HomeClasses || []; if (h.StarterClasses) k.StarterClasses = h.StarterClasses; } } } catch (e) { /* older game data has no gem_homes.json */ }
 
     const classes = {}, classAnims = {};
     for (const c of [...J('Gameplay/classes.json').classes, ...parts('classes.json').flatMap(p => p.classes)]) {
@@ -8056,7 +8056,7 @@ window.BOCharacter = function (ctx) {
 
   // Stats that only matter for defence, economy or utility: never shown as "not modelled".
   const NON_DAMAGE = new Set(['Life', 'Mana', 'EnergyShield', 'Armour', 'Evasion', 'Defences', 'Block', 'Resist', 'MaxResist',
-    'LifeRegen', 'LifeRegenPct', 'ManaRegen', 'LifeLeech', 'ManaLeech', 'LifeOnKill', 'LifeOnKillPct', 'ManaOnKill', 'ManaOnHit', 'LifeOnBlock',
+    'LifeRegen', 'LifeRegenPct', 'ManaRegen', 'MinionReservation', 'LifeLeech', 'ManaLeech', 'LifeOnKill', 'LifeOnKillPct', 'ManaOnKill', 'ManaOnHit', 'LifeOnBlock',
     'MoveSpeed', 'GoldFind', 'ItemRarity', 'EsRecharge', 'EsRechargeDelay', 'DamageTaken', 'PhysTakenAsElemental', 'ManaCost',
     'Reservation', 'StunKnockback', 'Str', 'Dex', 'Int', 'Attributes', 'MinionLife', 'TotemLife', 'ChannelCostLess', 'Area',
     'Chains', 'Pierce', 'Fork', 'ChillEffect', 'FreezeDuration', 'SkillDuration', 'CurseLimit', 'MinionCap', 'MinionSpeed',
@@ -8071,7 +8071,7 @@ window.BOCharacter = function (ctx) {
     'AuraDrainLess', 'PoisonSpreadOnKill', 'HeraldKillRadius',
     'DexLife']); // Wind Dancer: "+{v} to maximum Life for every 10 Dexterity" (statText)
   // Stats this model uses.
-  const HANDLED = new Set(['MinionOneKind', 'StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
+  const HANDLED = new Set(['MinionOneKind', 'RepeatOwnDamage', 'StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
     'Cooldown', 'Repeats', 'Projectiles', 'Penetration', 'SkillLevel', 'PoisonChance', 'PoisonDamage', 'IgniteChance', 'IgniteDamage', 'BleedChance', 'BleedDamage',
     'DotMulti', 'AilmentDuration', 'CurseEffect', 'Str', 'Dex', 'Int', 'Attributes', 'GrantSupport', 'SkyfallRepeat', 'OrbitCount',
     'ShockChance', 'ShockEffect', 'ShockStacks', 'ArmourMore', 'LowLifeMore', 'CullingStrike', 'Keystone', 'BrandCount', 'IntSpellMore',
@@ -8095,7 +8095,10 @@ window.BOCharacter = function (ctx) {
   // (BONUS_FADE_ADDED, the Ballista fit below) until a log shows whether it moved with spells.
   const BONUS_FULL_LEVELS = 5, BONUS_FADE_SPELL = 1.06, BONUS_FADE_MINION = 1.08, BONUS_FADE_ATTACK = 1.01, BONUS_FADE_ADDED = 1.04;
   // 0.56.8: attacks keep their full per-level bonus (6% more) past +5; before it only x1.01.
-  const attackFade = (GD, G) => is0568(GD) ? (G.BonusLevelAttackMore > 1 ? G.BonusLevelAttackMore : 1.06) : BONUS_FADE_ATTACK;
+  // Data build 73: BonusLevelAttackMore dropped to 1.03 (scaling.json), but the developer's formulas.md (archive v1/static/b73,
+  // section 8, read 13 Nov 2026) keeps levels past +5 at BonusFadeAttack = 1.06: "BonusLevelAttackMore ^ min(Bonus, BonusFadeFrom)
+  // x BonusFadeAttack ^ max(0, Bonus - BonusFadeFrom)". Not yet seen in a tooltip.
+  const attackFade = (GD, G) => is073(GD) ? 1.06 : is0568(GD) ? (G.BonusLevelAttackMore > 1 ? G.BonusLevelAttackMore : 1.06) : BONUS_FADE_ATTACK;
   const bonusSplit = bonus => [Math.min(bonus, BONUS_FULL_LEVELS), Math.max(0, bonus - BONUS_FULL_LEVELS)];
   // Patch 0.56.0 (developer's patch notes, Discord 6 Nov 2026 21:28 UTC). Its rules below switch on with game data
   // newer than Steam build 26474163 (0.55.2), or, for game files a player loads (no build number), files dated
@@ -8151,6 +8154,15 @@ window.BOCharacter = function (ctx) {
   // Switches on with data newer than build 26604566.
   const LAST_BUILD_0569 = 26604566;
   const is070 = GD => GD.steamBuild ? +GD.steamBuild > LAST_BUILD_0569 : false;
+  // Patch 72 and Patch 73 (developer's patch notes, Discord 12 Nov 2026 7:00 PM and 13 Nov 2026 2:37 PM local). The public
+  // API served neither until game data build 73 (13 Nov 2026 20:45 UTC); GD.steamBuild stays the snapshot's build, so these
+  // read the API's game data build (GD.apiBuild). Game files loaded straight from the game count from the day of the notes.
+  const apiBuildAtLeast = (GD, n, day) => GD.apiBuild ? +GD.apiBuild >= n : String(GD.filesAt || '') >= day;
+  const is072 = GD => apiBuildAtLeast(GD, 72, '2026-11-13T01');
+  const is073 = GD => apiBuildAtLeast(GD, 73, '2026-11-13T20');
+  // Patch 73 notes: "On a Guardian only your strongest damage taken effect counts". The game data carries it as a switch
+  // (scaling.json Meta.bGuardianStrongestTaken: false in build 70, true in build 73), read from there when present.
+  const guardianStrongestTaken = GD => { const v = ((GD.scaling || {}).Meta || {}).bGuardianStrongestTaken; return v != null ? !!v : is073(GD); };
   // Knee: m <= 8 stays; above it 8 x 1.41^log2(m/8). Not applied to minion sheets (minionSheet is separate).
   // A number from the game's own rules (GD.rules: the public API's game-data/rules.json and the archive's switches.json,
   // keyed "section.key"), or the given default when the data has none (older game data).
@@ -9806,9 +9818,30 @@ window.BOCharacter = function (ctx) {
     // 0.56.5 (Spell Echo / Repeat / Afterimage / Multistrike texts, build 26543267): "Repeats from a support gem and from
     // your gear or passive tree stack, but the repeats from the smaller of the two deal 50% less damage." Kept as a
     // damage share (repeatWeight) on the repeats; a tie halves the gear/tree ones.
-    let repSup = 0, repGear = 0;
-    if (!noEcho && !cocNoEcho) for (const m of pickMods(mods, 'Repeats', 'Flat')) if (applies(ctx, m)) { repeats += m.v; use(m); if (String(m.key || '').startsWith('support:')) repSup += m.v; else repGear += m.v; }
+    let repSup = 0, repGear = 0; const repByKey = {};
+    if (!noEcho && !cocNoEcho) for (const m of pickMods(mods, 'Repeats', 'Flat')) if (applies(ctx, m)) { repeats += m.v; use(m); if (String(m.key || '').startsWith('support:')) { repSup += m.v; repByKey[m.key] = (repByKey[m.key] || 0) + m.v; } else repGear += m.v; }
     let repeatWeight = is0565(GD) && repSup > 0 && repGear > 0 ? (1 + Math.max(repSup, repGear) + 0.5 * Math.min(repSup, repGear)) / (1 + repeats) : 1;
+    // Patch 73 (developer's patch notes, Discord 13 Nov 2026: "Multistrike, Afterimage and Repeat never lower your damage"; the
+    // three support texts in API game data build 73: "If your gear or tree already repeats the skill, this gem's less damage hits
+    // only its own repeats", stat RepeatOwnDamage: Multistrike -56, Afterimage -20, Repeat -40). With gear or tree repeats, the
+    // gem's Damage "less" (counted in every hit above) is taken back off and its own repeats deal RepeatOwnDamage less instead,
+    // on top of the 0.56.5 smaller-set 50% (a tie halves the gear/tree ones, as above). Without gear repeats nothing changes.
+    // From the notes and texts only: not yet seen in a tooltip or the log.
+    if (is073(GD) && repSup > 0 && repGear > 0) {
+      let undo = 1, own = 0, plain = 0;
+      for (const [key, n] of Object.entries(repByKey)) {
+        const ownMods = pickMods(mods, 'RepeatOwnDamage', 'More').filter(m => m.key === key);
+        if (!ownMods.length) { plain += n; continue; }
+        for (const m of pickMods(mods, 'Damage', 'More')) if (m.key === key && !(m.tags || []).length) undo *= 1 + m.v / 100;
+        const f = ownMods.reduce((p, m) => p * (1 + m.v / 100), 1);
+        own += n * f; ownMods.forEach(m => use(m));
+      }
+      if (undo !== 1) {
+        const supHalf = repSup < repGear ? 0.5 : 1, gearHalf = supHalf === 1 ? 0.5 : 1;
+        repeatWeight = (1 + repGear * gearHalf + (own + plain) * supHalf) / (1 + repeats) / undo;
+        res.notes.push('Repeats (patch 73): your gear or tree already repeats this skill, so the support\'s less damage hits only its own repeats.');
+      }
+    }
     // A Ballista prices its repeats its own way (developer's formulas.md in the public API archive, v1/static/b70, section 3,
     // read 12 Nov 2026: "repeats = clamp(Repeats, 0, 8) extra shots per volley; repeats 1-2 at full, 3+ at 50%. Sheet DPS for a
     // ballista: shot * count_eff(totems) * (1 + RepeatsEff(repeats)) / interval"). Used in place of the support / gear stack
@@ -10107,6 +10140,20 @@ window.BOCharacter = function (ctx) {
     let maimPct = 0;
     for (const m of pickMods(mods, 'MaimOnHit', 'Flat')) if (applies(ctx, m)) { maimPct += m.v; use(m); }
     if (maimPct) res.notes.push('Maim: the enemy takes ' + maimPct + '% more Physical damage from your hits (the game\'s skill panel counts it too).');
+    // Patch 73 (developer's patch notes, Discord 13 Nov 2026 2:37 PM local): "On a Guardian only your strongest damage taken
+    // effect counts." So on a Guardian from data build 73 the sources above (each curse, Marks, the venom golem, Maim, the
+    // Configure Enemy extra) no longer multiply: the biggest one alone counts. Lines inside one curse still add (one effect).
+    // Shock stays outside (the notes of Patch 72 make it a stronger hit, not a taken effect): not checked in the game yet.
+    const strongestTaken = isBoss && guardianStrongestTaken(GD); // scaling.json Meta.bGuardianStrongestTaken (true from data build 73)
+    const takenOf = (d, phys) => {
+      const parts = [...activeCurses.map(r => 1 + (r.taken + (d ? r.elem[d] || 0 : 0)) / 100), 1 + (o.extraTakenPct || 0) / 100, 1 + markPct / 100, golemTaken];
+      if (phys) parts.push(1 + maimPct / 100);
+      return strongestTaken ? Math.max(1, ...parts) : parts.reduce((a, b) => a * b, 1);
+    };
+    if (strongestTaken) {
+      const n = activeCurses.filter(r => r.taken > 0 || Object.values(r.elem).some(v => v > 0)).length + (o.extraTakenPct > 0) + (markPct > 0) + (golemTaken > 1) + (maimPct > 0);
+      if (n > 1) res.notes.push('Guardian: only your strongest damage taken effect counts (patch 73), so of your ' + n + ' sources only the biggest is counted here.');
+    }
     const enemy = { level: lvl, rarity, resist, pen, armour, guardian, curses: curseRows, activeCurses: activeCurses.map(r => r.id), curseEffInc };
     res.enemy = enemy;
     const mitig = {};
@@ -10122,7 +10169,7 @@ window.BOCharacter = function (ctx) {
         k = (1 - dr / 100) * (1 - effRes / 100);
         mitig.armourReduction = dr;
       }
-      mitig[d] = { effRes, k, taken: takenFor(activeCurses, d) * extraTaken * (d === 'Physical' ? 1 + maimPct / 100 : 1) };
+      mitig[d] = { effRes, k, taken: takenOf(d, d === 'Physical') };
     }
     res.mitig = mitig;
     let hitDpsVs = 0; const byType = {};
@@ -10142,7 +10189,7 @@ window.BOCharacter = function (ctx) {
     // Ticks are not reduced by resistance (the log: "tick 23520 = 47039.7/s x 0.5, poison taken x1.00");
     // they are raised by damage taken.
     let shockF = 1; // set below once the ailment modifiers are read; shocks raise all damage taken
-    const dotTakenFor = d => (o.dotElementTaken ? mitig[d].taken : takenFor(activeCurses.map(r => ({ taken: r.taken, elem: {} })), undefined) * extraTaken) * shockF;
+    const dotTakenFor = d => (o.dotElementTaken ? mitig[d].taken : takenOf(undefined, false)) * shockF;
     let dotMulti = 0;
     for (const m of pickMods(mods, 'DotMulti', 'Flat')) { dotMulti += m.v; use(m); }
     const sumMod = (stat, mode) => { let s = mode === 'More' ? 1 : 0; for (const m of pickMods(mods, stat, mode)) if (applies(ctx, m)) { s = mode === 'More' ? s * (1 + m.v / 100) : s + m.v; use(m); } return s; };
@@ -10384,8 +10431,11 @@ window.BOCharacter = function (ctx) {
     let chillMore = 0; for (const m of pickMods(mods, 'ChilledLightningMore', 'Flat')) if (applies(ctx, m)) { chillMore += m.v; use(m); }
     // 0.56.9 (patch notes 11/12 Nov 2026): chill and freeze need a hit that is at least 25% cold, unless the hero has 30% or more increased
     // freeze duration or chill effect, or any shatter. Not log-checked.
+    // Patch 72 (patch notes, Discord 12 Nov 2026 7:00 PM local): "Any cold damage chills again, more cold means a stronger chill";
+    // switches.json b73 r95.META.bColdShare69 = False ("False = 68 rule"). So from data build 72 the 25% floor is gone.
+    const coldFloor = is0569(GD) && !(is072(GD) && String(((GD.rules || {})['r95.META.bColdShare69'] || {}).value != null ? GD.rules['r95.META.bColdShare69'].value : GD.rules && GD.rules['r95.META.bColdShare69']).toLowerCase() === 'false');
     let chillOk = byType.Cold > 0;
-    if (chillOk && is0569(GD)) {
+    if (chillOk && coldFloor) {
       const tot = Object.values(byType).reduce((x, y) => x + (+y || 0), 0);
       let ce = 0; for (const st of ['ChillEffect', 'FreezeDuration']) for (const m of pickMods(mods, st, 'Inc')) if (applies(ctx, m)) ce = Math.max(ce, m.v);
       const shat = (res.supports || []).some(x => x.ok && /shatter/i.test(x.id));
@@ -10460,11 +10510,19 @@ window.BOCharacter = function (ctx) {
       // build 71): Vampire Dash gem 16 + 1 with Swift Step "mana_cost 9.24" = 7 x 1.1 x 1.20 (level 16); at level 17 it
       // would be 9.55. The sheet's number is before the Clarity refund (res.mana.listed).
       const cut = (G.ManaCostAtGemLevel || [])[(res.gem ? res.gem.own : L) - 1] || 1;
-      const cost = sk.ManaCost * cut * mult * Math.max(0, 1 + costInc / 100) * (res.coc ? 0.5 : 1) * (1 - refund / 100);
+      // Patch 73 (developer's patch notes, Discord 13 Nov 2026: "Skills from another class cost 1.5 times the mana. Orbiting
+      // Hammers, Pyre of Faith and Unholy Void hold 30% of your mana while on (their own class pays a third of that)" and "mana
+      // leech refills up to 8% of your mana a second"). Numbers from switches.json (archive b73, r98.META): bEcon74,
+      // fOffClassMana74 1.5, fPersistPct74 30, fPersistHomeMult74 0.35 ("signature class", gem_homes StarterClasses),
+      // fManaLeechRate98 8. Another class = not in the gem's HomeClasses (the gem play-level rule). Not seen in game yet.
+      const econ = is073(GD) && (GD.rules || {})['r98.META.bEcon74'] !== false && String(((GD.rules || {})['r98.META.bEcon74'] || {}).value || '').toLowerCase() !== 'false';
+      const offClassCost = econ && sk.HomeClasses && ch.classId && !sk.HomeClasses.some(c => lc(c) === lc(ch.classId)) ? ruleNum(GD, 'r98.META.fOffClassMana74', 1.5) : 1;
+      const cost = sk.ManaCost * cut * mult * offClassCost * Math.max(0, 1 + costInc / 100) * (res.coc ? 0.5 : 1) * (1 - refund / 100);
       const spend = cost * res.speed.usesPerSec;
       let onHit = 0; for (const m of pickMods(mods, 'ManaOnHit', 'Flat')) if (applies(ctx, m)) onHit += m.v;
       let leech = 0; for (const m of pickMods(mods, 'ManaLeech', 'Flat')) if (applies(ctx, m)) leech += m.v;
-      const leechGain = Math.min(leech / 100 * hitDpsVs, max * (H.LeechRatePct || 20) / 100);
+      const leechCap = econ ? ruleNum(GD, 'r98.META.fManaLeechRate98', 8) : (H.LeechRatePct || 20);
+      const leechGain = Math.min(leech / 100 * hitDpsVs, max * leechCap / 100);
       const gain = regen + onHit * hitsPerSec + leechGain;
       let reserved = 0; const resInc = inc('Reservation');
       for (const b of Object.values(GD.blessings)) {
@@ -10474,9 +10532,18 @@ window.BOCharacter = function (ctx) {
         const lvl = blessingGemLevel(GD, ch, b, mods, o, tryLvl);
         reserved += Math.round(((b.ReserveFlat || 0) + (b.ReserveFlatPerLevel || 0) * (lvl - 1) + (b.ReservePct || 0) / 100 * max) * Math.max(0, 1 + resInc / 100));
       }
+      // Patch 73 toggles (see econ above): each of these on the bar holds 30% of max mana, a third-ish (x0.35) for its signature
+      // class. Reservation lines are not applied to it (unknown whether they count).
+      let toggleHeld = 0;
+      if (econ) for (const tid of ['orbiting_hammers', 'pyre_of_faith', 'unholy_void']) {
+        const ts = GD.skills[tid]; if (!ts || !ch.hotbar.some(h => lc(h) === tid) || (o.off && o.off.has('toggle:' + tid))) continue;
+        const home = (ts.StarterClasses || []).some(c => lc(c) === lc(ch.classId || ''));
+        toggleHeld += Math.round(max * ruleNum(GD, 'r98.META.fPersistPct74', 30) / 100 * (home ? ruleNum(GD, 'r98.META.fPersistHomeMult74', 0.35) : 1));
+      }
+      reserved += toggleHeld;
       const pool = Math.max(0, max - reserved), deficit = spend - gain;
       const lasts = deficit > 0 ? pool / deficit : Infinity;
-      res.mana = { max, reserved, pool, regen, cost, listed: refund < 100 ? cost / (1 - refund / 100) : cost, mult, costInc, cut, refund, spend, onHit: onHit * hitsPerSec, leech: leechGain, gain, sustained: deficit <= 0, lasts, ok: lasts >= 60 };
+      res.mana = { max, reserved, toggleHeld, offClassCost, leechCap, pool, regen, cost, listed: refund < 100 ? cost / (1 - refund / 100) : cost, mult, costInc, cut, refund, spend, onHit: onHit * hitsPerSec, leech: leechGain, gain, sustained: deficit <= 0, lasts, ok: lasts >= 60 };
     } else res.mana = { skip: skipMana };
 
     // Lines that matched this skill but that the model does not use.
@@ -10676,7 +10743,17 @@ window.BOCharacter = function (ctx) {
       const k = base * (1 + incFor(d) / 100);
       hit[d] = { min: scaled[d][0] * k, max: scaled[d][1] * k }; hit[d].avg = (hit[d].min + hit[d].max) / 2; avg += hit[d].avg;
     }
-    const chance = H.SpellCritBase || 6, multi = H.CritMultiBase || 150, critFactor = 1 + chance / 100 * (multi / 100 - 1);
+    // Minion crit lines (Patch 72 notes, Discord 12 Nov 2026 7:00 PM local: "Soul Harvest gives minions crit chance and crit
+    // multiplier"; API game data build 73: Soul Harvest (deathknell_n1) CritChance Inc 40 + CritMulti Flat 15 tagged Minion, and the
+    // new minion_crit / minion_crit_multi suffixes). Read as increased crit chance on the minions' base chance and + to their
+    // multiplier, the player's crit rule; not yet seen in the log's PetSheet68.
+    let mCritInc = 0, mCritMulti = 0;
+    for (const m of mods) if (!m.local && (m.stat === 'CritChance' && m.mode === 'Inc' || m.stat === 'CritMulti' && m.mode === 'Flat') && splitTags(m.tags).conds.some(c => lc(c) === 'minion') && fit(m)) {
+      if (m.stat === 'CritChance') mCritInc += m.v; else mCritMulti += m.v;
+      use(m, 'minion crit');
+    }
+    const chance = Math.min(100, (H.SpellCritBase || 6) * (1 + mCritInc / 100)), multi = (H.CritMultiBase || 150) + mCritMulti, critFactor = 1 + chance / 100 * (multi / 100 - 1);
+    if (mCritInc || mCritMulti) res.notes.push('Minion crit: ' + chance.toFixed(1) + '% chance, x' + (multi / 100).toFixed(2) + ' (your minion crit lines on the base ' + (H.SpellCritBase || 6) + '% and x' + ((H.CritMultiBase || 150) / 100).toFixed(1) + '). Not checked against the game yet.');
     // How many stand at once: the gem's Cap, one more every CountEvery gem levels or at PerLevels, + MinionCap lines.
     let alive = (mi.Cap || mi.Count || 1) + (mi.CountEvery ? Math.floor((L - 1) / mi.CountEvery) : 0) + (mi.PerLevels || []).filter(l => L >= l).length;
     // The Grave Golem is one at a time ("Only one answers at a time"): +minion lines do not add golems (the log's
@@ -10775,7 +10852,9 @@ window.BOCharacter = function (ctx) {
     }
     let curseK = 1;
     if (activeCurses.length && avg > 0) {
-      curseK = Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTot * activeCurses.reduce((p, r) => p * (1 + (r.taken + (r.elem[d] || 0)) / 100), 1), 0);
+      // Patch 73 notes (13 Nov 2026): on a Guardian only the strongest damage taken effect counts (see takenOf above).
+      const one = isBoss && guardianStrongestTaken(GD);
+      curseK = Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTot * activeCurses.reduce((p, r) => one ? Math.max(p, 1 + (r.taken + (r.elem[d] || 0)) / 100) : p * (1 + (r.taken + (r.elem[d] || 0)) / 100), 1), 0);
       res.notes.push('Curses on minion blows: ' + activeCurses.map(r => r.name).join(' + ') + ' make the enemy take x' + curseK.toFixed(3) + ' on these hits. Counted in the vs-enemy DPS only (not the game\'s panel number, which comes before curses, nor the enemy\'s resistances). Checked only in direction against a Guardian fight on 11 Nov 2026.');
     }
     res.enemy = { level: o.enemyLevel || ch.level, rarity, curses: curseRows, activeCurses: activeCurses.map(r => r.id), curseEffInc: curseInc };
@@ -11830,9 +11909,9 @@ window.BOStartApp = function () {
     if (m.skip) return '<h3>Mana</h3><p class="hint">Not counted: ' + esc(m.skip) + '.</p>';
     const back = [num(m.regen, 1) + ' regen'].concat(m.onHit ? [num(m.onHit, 1) + ' on hit'] : [], m.leech ? [num(m.leech, 1) + ' leech'] : []).join(' + ');
     const lasts = m.sustained ? 'sustained' : m.lasts >= 600 ? 'lasts 10+ min of nonstop use' : 'lasts ' + num(m.lasts, 0) + ' s of nonstop use';
-    return '<h3>Mana</h3><dl class="kv">' + kv('Cost a use', num(m.cost, 1) + (m.mult > 1.001 ? ' (supports ×' + num(m.mult, 2) + ')' : '') + (m.refund ? ', ' + m.refund + '% refunded (Int)' : '')) +
+    return '<h3>Mana</h3><dl class="kv">' + kv('Cost a use', num(m.cost, 1) + (m.mult > 1.001 ? ' (supports ×' + num(m.mult, 2) + ')' : '') + (m.offClassCost > 1 ? ' (another class ×' + num(m.offClassCost, 1) + ')' : '') + (m.refund ? ', ' + m.refund + '% refunded (Int)' : '')) +
       kv('Spent / gained a second', '<span class="' + (m.sustained ? 'good' : m.ok ? '' : 'bad') + '">' + num(m.spend, 1) + ' / ' + num(m.gain, 1) + ' · ' + lasts + '</span>', true) +
-      kv('Gained from', back) + kv('Mana to spend', num(m.pool, 0) + ' of ' + num(m.max, 0) + (m.reserved ? ' (' + num(m.reserved, 0) + ' reserved by Vows and Heralds)' : '')) + '</dl>' +
+      kv('Gained from', back) + kv('Mana to spend', num(m.pool, 0) + ' of ' + num(m.max, 0) + (m.reserved ? ' (' + num(m.reserved, 0) + ' reserved by Vows and Heralds' + (m.toggleHeld ? ', ' + num(m.toggleHeld, 0) + ' of it held by toggles' : '') + ')' : '')) + '</dl>' +
       (m.ok ? '' : '<p class="hint bad">This skill alone runs you dry in about ' + num(m.lasts, 0) + ' s of nonstop use. Other skills on the bar spend more.</p>');
   }
 

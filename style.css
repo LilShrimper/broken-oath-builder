@@ -2066,3 +2066,7 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 .cr-bar-slot.full .cr-bar-put { border-color: color-mix(in srgb, var(--dashboard-gold) 45%, var(--line)); padding-right: 26px; }
 .cr-bar-slot .x { position: absolute; top: 2px; right: 2px; }
 @media (max-width: 640px) { .cr-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: 's0 s1 s2' 's3 s4 s5' 's6 s7 .' 'lab lab lab' 's8 s9 s10' 's11 s12 .'; } }
+
+/* Gear Set Sim: the Riven cap box is drawn to the eye because its default (0) hides a whole group of mods */
+.gs-controls .field.gs-attn { padding: 6px 10px; border: 1px solid var(--accent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); box-shadow: var(--glow); }
+.gs-attn-note { align-self: center; flex: 1 1 260px; font-size: .85em; color: var(--accent); }

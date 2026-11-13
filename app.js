@@ -1277,6 +1277,9 @@
     const deadline = t0 + (cfg.seconds > 0 ? cfg.seconds : 80) * 1000;
     const lvOk = lv => cfg.ignoreLevel || !lv || lv <= (ch.level || 1);
     const useRunes = cfg.runes !== false, useLimited = cfg.limited !== false;
+    // Owner's request, 12 Nov 2026: cfg.noCore = never use the uniques the game data marks Core (uniques.json Core), including the one worn now.
+    const noCore = !!cfg.noCore;
+    const coreBan = it => noCore && !!it && it.rarity === 'Unique' && !!(GD.uniques[lc(it.unique)] || {}).Core;
     // A limit the owner can set (12 Nov 2026): at most cfg.maxVows Vows on a red item. Not set: 6, as before.
     const lim = (v, max) => v == null || v === '' || !isFinite(+v) ? max : Math.max(0, Math.min(max, Math.round(+v)));
     const vowMax = lim(cfg.maxVows, VOW_MAX);
@@ -1459,7 +1462,7 @@
       const mainB = baseOf(at(items, 'MainHand'));
       // The off hand's weapon must be a kind the skill can use too (a one-hander, so it is never a bow / staff here).
       const okBase = b => (!filter || filter(b)) && ((slot !== 'MainHand' && !(slot === 'OffHand' && oneHandWeapon(b))) || mainOk(b));
-      let best = { item: keepIt, v: keepIt && okBase(baseOf(keepIt)) ? V(items) : 0 };
+      let best = { item: keepIt, v: keepIt && okBase(baseOf(keepIt)) && !coreBan(keepIt) ? V(items) : 0 };
       const offer = (it, v) => { if (v > best.v * (1 + MIN_GAIN)) best = { item: it, v }; };
       // A candidate in this slot; the other hand is cleared when it can't be held with it.
       const trial = it => {
@@ -1473,7 +1476,7 @@
       // Uniques
       const uniq = Object.values(GD.uniques).filter(u => {
         const b = GD.bases[lc(u.BaseId)];
-        return b && fitsSlot(b, slot) && okBase(b) && lvOk(u.Level || b.Level) && !taken.has(lc(u.Id)) && (useLimited || !u.Limited);
+        return b && fitsSlot(b, slot) && okBase(b) && lvOk(u.Level || b.Level) && !taken.has(lc(u.Id)) && (useLimited || !u.Limited) && !(noCore && u.Core);
       });
       curPhase = phaseName(slot) + ': uniques';
       const scored = [];
@@ -2042,14 +2045,31 @@ window.BOPlanner = function (ctx) {
     return list.length ? '<optgroup label="' + label + '">' + list.map(s => opt(s.Id, s.Name, lc(s.Id) === lc(sel))).join('') + '</optgroup>' : '';
   }).join('');
   const supportList = Object.values(GD.supports).sort(byName);
-  const basesFor = slot => Object.values(GD.bases).filter(b => b.Slot === baseSlot(slot)).sort((a, b) => (a.Level || 0) - (b.Level || 0) || byName(a, b));
-  const uniquesFor = slot => Object.values(GD.uniques).filter(u => { const b = GD.bases[lc(u.BaseId)]; return b && b.Slot === baseSlot(slot); }).sort(byName);
-  const oathwordBases = (slot, word) => {
+  // Dual wielding (owner, 12 Nov 2026): the off hand also takes a one-handed weapon (a wand, say). Keep in step with gearopt.js.
+  const oneHandWeapon = b => !!b && b.Slot === 'MainHand' && !(b.bTwoHanded || (b.Tags || []).includes('TwoHand')) && (b.Tags || []).includes('OneHand') && b.DamageMin > 0;
+  const fitsSlot = (b, slot) => b.Slot === baseSlot(slot) || (baseSlot(slot) === 'OffHand' && oneHandWeapon(b));
+  // Hands (owner, 12 Nov 2026): a two-hander takes no off hand; a quiver goes with a bow only; a one-hander takes a shield, a tome or another
+  // one-handed weapon. Same rule as gearopt.js offOk. With ch given, the off-hand lists only show what fits the weapon worn in the main hand.
+  const twoH = b => !!b && (b.bTwoHanded || (b.Tags || []).includes('TwoHand'));
+  const handOk = (main, off) => !main || !off || (off.Class === 'Quiver' ? main.Class === 'Bow' : oneHandWeapon(off) ? oneHandWeapon(main) : !twoH(main));
+  const mainOf = ch => { const m = ch && (ch.items || []).find(i => i.slot === 'MainHand'); return m && GD.bases[lc(m.base)]; };
+  const handFit = (slot, ch) => baseSlot(slot) === 'OffHand' && ch ? (b => handOk(mainOf(ch), b)) : (() => true);
+  // After any change: an off hand the main hand can't hold is taken off. Returns a sentence about it ('' when nothing changed).
+  const fixHands = ch => {
+    const main = (ch.items || []).find(i => i.slot === 'MainHand'), off = (ch.items || []).find(i => i.slot === 'OffHand');
+    if (!main || !off || handOk(GD.bases[lc(main.base)], GD.bases[lc(off.base)])) return '';
+    ch.items = ch.items.filter(i => i !== off);
+    const mb = GD.bases[lc(main.base)] || {}, ob = GD.bases[lc(off.base)] || {};
+    return 'The off hand (' + (ob.Name || off.base) + ') was taken off: ' + (ob.Class === 'Quiver' ? 'a quiver only goes with a bow' : twoH(mb) ? 'a ' + (mb.TypeName || mb.Class) + ' is two-handed, so it takes no off hand' : 'it cannot be held with a ' + (mb.TypeName || mb.Class)) + '.';
+  };
+  const basesFor = (slot, ch) => Object.values(GD.bases).filter(b => fitsSlot(b, slot) && handFit(slot, ch)(b)).sort((a, b) => (a.Level || 0) - (b.Level || 0) || byName(a, b));
+  const uniquesFor = (slot, ch) => Object.values(GD.uniques).filter(u => { const b = GD.bases[lc(u.BaseId)]; return b && fitsSlot(b, slot) && handFit(slot, ch)(b); }).sort(byName);
+  const oathwordBases = (slot, word, ch) => {
     const allowed = new Set((word && word.Bases || []).map(lc));
     // The base must take the word's tag and have room for all its runes (Kindling and Sunder skip the weapons with fewer sockets).
-    return basesFor(slot).filter(b => [b.Class, b.Slot, ...(b.Tags || [])].some(tag => tag && allowed.has(lc(tag))) && runeSlots(b) >= ((word && word.Runes) || []).length);
+    return basesFor(slot, ch).filter(b => [b.Class, b.Slot, ...(b.Tags || [])].some(tag => tag && allowed.has(lc(tag))) && runeSlots(b) >= ((word && word.Runes) || []).length);
   };
-  const oathwordsFor = slot => (GD.runewords || []).filter(w => oathwordBases(slot, w).length).sort(byName);
+  const oathwordsFor = (slot, ch) => (GD.runewords || []).filter(w => oathwordBases(slot, w, ch).length).sort(byName);
   const oathwordByRunes = (slot, runes) => (GD.runewords || []).find(w =>
     w.Runes.map(lc).join(',') === (runes || []).map(lc).join(',') && oathwordBases(slot, w).length);
   const oathwordForItem = (it, slot) => {
@@ -2831,6 +2851,7 @@ window.BOPlanner = function (ctx) {
   // One edit in an item box. ch is anything holding items (a character, or the Item Compare tab's own item);
   // done() after a change, render() to redraw only.
   function gearChange(ch, t, k, done, render) {
+    const done0 = done; done = (...a) => { const m = fixHands(ch); if (m) status = m; return done0(...a); };
     const f = t.dataset.f, v = t.value;
     const { it, slot, key } = itemOf(ch, t); if (!slot) return;
     k.openItems.add(String(key));
@@ -3101,7 +3122,7 @@ window.BOPlanner = function (ctx) {
     return p;
   }
   // The item editor for the Item Compare tab (app.js): its own state from gear.newKit(true), edits on its own holder.
-  const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, affixesFor,
+  const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, affixesFor, fixHands, handOk,
     // for the Character tab's item overlay (character.js)
     oathwordsFor, oathwordBases, rollUnique, topTier, runeSlots, runeList, modLine, LIMIT, VOW_MAX };
   // Take a skill, its supports and its bar slot out of a character (Build tab ×, Character tab ×).
@@ -7106,7 +7127,7 @@ window.BOCharacter = function (ctx) {
     else { const s = lastFocus && lastFocus.dataset && lastFocus.dataset.slot; const n = s && document.querySelector('#characterPane .ch-slot[data-slot="' + s + '"]'); if (n) n.focus({ preventScroll: true }); }
   }
   // After an edit: save it through the app (which redraws the page behind), then redraw the overlay.
-  function commit(ch) { ctx.commit(ch); render(); renderItem(); }
+  function commit(ch) { const m = G.fixHands ? G.fixHands(ch) : ''; if (m) note = { id: ch.id, text: m }; ctx.commit(ch); render(); renderItem(); }
 
   function renderItem() {
     if (!M || !back) return;
@@ -7161,7 +7182,7 @@ window.BOCharacter = function (ctx) {
 
   // ----- Select tab -----
   function categories() {
-    const bases = G.basesFor(M.slot), cats = new Map();
+    const bases = G.basesFor(M.slot, ctx.current()), cats = new Map();
     for (const b of bases) { const k = catOf(b); if (k && !cats.has(k)) cats.set(k, { name: k, two: !!b.bTwoHanded || (b.Tags || []).includes('TwoHand') }); }
     const rank = n => { const i = DEF_ORDER.indexOf(n); return i < 0 ? 99 : i; };
     return [...cats.values()].sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
@@ -7194,9 +7215,9 @@ window.BOCharacter = function (ctx) {
   function listFor() {
     const q = M.q.trim().toLowerCase(), has = (...s) => !q || s.join(' ').toLowerCase().includes(q);
     const inCat = b => !M.cat || catOf(b) === M.cat;
-    const basic = G.basesFor(M.slot).filter(b => inCat(b) && has(b.Name, baseTypeName(b)));
-    const uniques = G.uniquesFor(M.slot).filter(u => { const b = GD().bases[lc(u.BaseId)]; return inCat(b) && has(u.Name, baseTypeName(b), uniqueLines(u).join(' ')); });
-    const words = G.oathwordsFor(M.slot).filter(w => has(w.Name, (w.Runes || []).join(' ')) && G.oathwordBases(M.slot, w).some(inCat)); // only words with a base in the chosen group
+    const basic = G.basesFor(M.slot, ctx.current()).filter(b => inCat(b) && has(b.Name, baseTypeName(b)));
+    const uniques = G.uniquesFor(M.slot, ctx.current()).filter(u => { const b = GD().bases[lc(u.BaseId)]; return inCat(b) && has(u.Name, baseTypeName(b), uniqueLines(u).join(' ')); });
+    const words = G.oathwordsFor(M.slot, ctx.current()).filter(w => has(w.Name, (w.Runes || []).join(' ')) && G.oathwordBases(M.slot, w, ctx.current()).some(inCat)); // only words with a base in the chosen group
     const saved = savedFor(M.slot).filter(s => { const b = GD().bases[lc(s.item.base)]; return (!b || inCat(b)) && has(itemName(s.item, M.slot).name, b ? b.Name : s.item.base, itemLines(s.item).join(' ')); });
     return { basic, uniques, words, saved, inCat };
   }
@@ -7218,12 +7239,12 @@ window.BOCharacter = function (ctx) {
     }).join('');
     else if (M.kind === 'unique') cards = L.uniques.map(u => { const b = gd.bases[lc(u.BaseId)]; return card('unique', u.Id, u.Name, 'unique', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), uniqueLines(u)); }).join('');
     else if (M.word) {
-      const w = G.oathwordsFor(M.slot).find(x => lc(x.Id) === lc(M.word));
+      const w = G.oathwordsFor(M.slot, ctx.current()).find(x => lc(x.Id) === lc(M.word));
       h += '<div class="io-wordbar"><button type="button" class="btn small ghost" data-io="wordback">‹ All Oathwords</button><b>' + esc(w ? w.Name : '') + '</b><span class="meta">Pick a base item type</span></div>';
-      cards = w ? G.oathwordBases(M.slot, w).filter(L.inCat).map(b => card('wbase', b.Id, b.Name, '', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), baseLines(b))).join('') : '';
+      cards = w ? G.oathwordBases(M.slot, w, ctx.current()).filter(L.inCat).map(b => card('wbase', b.Id, b.Name, '', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), baseLines(b))).join('') : '';
     } else cards = L.words.map(w => {
       const rn = (w.Runes || []).map(r => (gd.runes[lc(r)] || { Name: r }).Name);
-      return card('word', w.Id, w.Name, 'rare', (n => n + (n === 1 ? ' base' : ' bases'))(G.oathwordBases(M.slot, w).filter(L.inCat).length), ['Runes: ' + rn.join(' · ')]);
+      return card('word', w.Id, w.Name, 'rare', (n => n + (n === 1 ? ' base' : ' bases'))(G.oathwordBases(M.slot, w, ctx.current()).filter(L.inCat).length), ['Runes: ' + rn.join(' · ')]);
     }).join('');
     h += cards ? '<div class="io-cards">' + cards + '</div>' : '<p class="hint">' + (M.kind === 'saved' ? 'No saved items for this slot. Open an item, then use Save item on its Edit tab.' : 'Nothing matches.') + '</p>';
     if (total) h += '<p class="hint">Picking an item replaces the one in this slot.</p>';
@@ -7248,7 +7269,7 @@ window.BOCharacter = function (ctx) {
       const item = blank(u.BaseId, { rarity: 'Unique', unique: u.Id, name: u.Name }); G.rollUnique(item, 0.5); equip(item);
     } else if (kind === 'word') { M.word = id; renderList(); }
     else if (kind === 'wbase') {
-      const w = G.oathwordsFor(M.slot).find(x => lc(x.Id) === lc(M.word)), b = gd.bases[lc(id)];
+      const w = G.oathwordsFor(M.slot, ctx.current()).find(x => lc(x.Id) === lc(M.word)), b = gd.bases[lc(id)];
       if (w && b) equip(blank(b.Id, { runes: w.Runes.slice() }));
     }
   }
@@ -13642,7 +13663,7 @@ window.BOStartApp = function () {
   // ---------- Gear Set Sim (the second sub-tab of Item Compare) ----------
   // Searches every unique, Oathword and rare (best prefixes and damage suffixes) for the best gear for the selected
   // skill, with the tree, skills, supports and idols as they are (gearopt.js, run in slices so the page stays usable).
-  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxVows: '', maxRiven: '', rareSockets: 3, idolAffixes: '', layers: { es: true, armour: true, evasion: true, block: true } }, store.get('gearSim', {})) };
+  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxVows: '', maxRiven: 0, noCore: false, rareSockets: 3, idolAffixes: '', layers: { es: true, armour: true, evasion: true, block: true } }, store.get('gearSim', {})) };
   delete GS.set.maxLines; // a box that was on the page for one version (v255)
   GS.set.layers = Object.assign({ es: true, armour: true, evasion: true, block: true }, GS.set.layers || {});
   // Defence for the DPS / Defence slider and "Reach max resistances" (owner, 12 Nov 2026): an estimate, not a defensive sim.
@@ -13851,9 +13872,11 @@ window.BOStartApp = function () {
       chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
       chk('vows', 'Vows on uniques', 'A red item takes up to 6 lines from rares at the cube; the best ones are added') +
+      chk('noCore', 'Never pick Core uniques', 'The search skips the uniques marked Core in the game data, and a Core unique you wear now is not kept either') +
       chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') +
-      '<label class="field inline" title="The most Vows a unique (red) item may carry. Empty: 6"><span>Max Vows on uniques</span><input type="number" min="0" max="6" id="gsMaxVows" placeholder="6" value="' + (S_.maxVows === '' || S_.maxVows == null ? '' : S_.maxVows) + '"' + (GS.running || !S_.vows ? ' disabled' : '') + '></label>' +
-      '<label class="field inline" title="The most Riven mods the whole build may carry, counted over all items. Empty: no limit. 0: none"><span>Max Riven mods (total)</span><input type="number" min="0" max="99" id="gsMaxRiven" placeholder="no limit" value="' + (S_.maxRiven === '' || S_.maxRiven == null ? '' : S_.maxRiven) + '"' + (GS.running ? ' disabled' : '') + '></label>' + '</div>' +
+      '<label class="field inline gs-attn" title="The most Vows a unique (red) item may carry. Empty: 6"><span>Max Vows on uniques</span><input type="number" min="0" max="6" id="gsMaxVows" placeholder="6" value="' + (S_.maxVows === '' || S_.maxVows == null ? '' : S_.maxVows) + '"' + (GS.running || !S_.vows ? ' disabled' : '') + '></label>' +
+      '<label class="field inline gs-attn" title="The most Riven mods the whole build may carry, counted over all items. 0 (the default): none. Empty: no limit"><span>Max Riven mods (total)</span><input type="number" min="0" max="99" id="gsMaxRiven" placeholder="no limit" value="' + (S_.maxRiven === '' || S_.maxRiven == null ? '' : S_.maxRiven) + '"' + (GS.running ? ' disabled' : '') + '></label>' +
+        (+S_.maxRiven === 0 && S_.maxRiven !== '' ? '<span class="gs-attn-note">Riven mods are off (0). Raise this number to let the search use them, or clear the box for no limit.</span>' : '') + '</div>' +
       '<div class="gs-controls"><label class="field inline" title="The most sockets a rare item is planned with. A two-hander can roll 4, but only about 12% of rares do (3 and 2 are the common cases). Oathwords keep their own number of sockets"><span>Sockets on rares</span><select id="gsRareSock"' + (GS.running || !S_.runes ? ' disabled' : '') + '>' +
         [[3, 'Up to 3 (default)'], [4, 'Up to 4 (two-handers)'], [2, 'Up to 2'], [1, 'Up to 1'], [0, 'None']].map(([n, l]) => '<option value="' + n + '"' + (+S_.rareSockets === n ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></label>' +
         '<label class="field inline" title="Also choose the idols: how many lines each idol carries. Keep my idols leaves the idols as they are"><span>Optimize idols with</span><select id="gsIdol"' + (GS.running ? ' disabled' : '') + '><option value=""' + (S_.idolAffixes === '' || S_.idolAffixes == null ? ' selected' : '') + '>Keep my idols</option>' +

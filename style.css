@@ -2193,7 +2193,7 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 .ch-doll .ch-slot-MainHand.has-art, .ch-doll .ch-slot-OffHand.has-art, .ch-doll .ch-slot-Chest.has-art { padding: 3px 3px 6px; text-align: center; }
 .ch-doll .ch-slot-MainHand.has-art > .ch-slot-label, .ch-doll .ch-slot-OffHand.has-art > .ch-slot-label, .ch-doll .ch-slot-Chest.has-art > .ch-slot-label { position: absolute; top: 7px; left: 9px; z-index: 1; }
 .ch-doll .ch-slot-MainHand.has-art > .is-ico.art, .ch-doll .ch-slot-OffHand.has-art > .is-ico.art, .ch-doll .ch-slot-Chest.has-art > .is-ico.art { position: relative; right: auto; top: auto; transform: none; flex: 1 1 0; align-self: stretch; width: auto; height: auto; min-height: 120px; margin: 0 0 2px; }
-.ch-doll .ch-slot-MainHand.has-art > .is-ico.art img, .ch-doll .ch-slot-OffHand.has-art > .is-ico.art img, .ch-doll .ch-slot-Chest.has-art > .is-ico.art img { position: absolute; inset: 0; }
+.ch-doll .ch-slot-MainHand.has-art > .is-ico.art img, .ch-doll .ch-slot-OffHand.has-art > .is-ico.art img, .ch-doll .ch-slot-Chest.has-art > .is-ico.art img { position: absolute; inset: 0; margin: auto; width: calc(var(--art, 1) * 100%); height: calc(var(--art, 1) * 100%); }
 .ch-slot-MainHand.has-art .ch-item-name, .ch-slot-OffHand.has-art .ch-item-name, .ch-slot-Chest.has-art .ch-item-name { font-size: 11.5px; line-height: 1.2; }
 .ch-slot-MainHand.has-art .ch-item-base, .ch-slot-OffHand.has-art .ch-item-base, .ch-slot-Chest.has-art .ch-item-base { font-size: 10px; line-height: 1.2; }
 /* Body armour is one row tall and its label is long: the label keeps its own line and the picture is a little lower */

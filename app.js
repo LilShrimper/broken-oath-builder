@@ -7067,6 +7067,10 @@ window.BOCharacter = function (ctx) {
   // big: the slot shows the picture large (weapon, off hand, body armour), so it asks for the 384 px copy (ic/lg, named in
   // GD.itemIcons.lg) and falls back to the small one if that does not load.
   const BIG_SLOTS = { MainHand: 1, OffHand: 1, Chest: 1 };
+  // How much of a big slot the picture takes, by the base's Class (owner, 13 Nov 2026: a wand or a tome drawn as large as
+  // a staff looks wrong). Two-handers and body armour fill the slot; anything not listed does too.
+  const ART_SCALE = { OneHandSword: .8, OneHandAxe: .8, OneHandMace: .8, Dagger: .65, Wand: .65, Claw: .65, Fist: .65, Shield: .8, Quiver: .75, Tome: .6 };
+  const artScale = (it, slot) => { const b = BIG_SLOTS[slot] && ctx.gd().bases[lc(it.base)], k = b && ART_SCALE[b.Class]; return k ? ' style="--art:' + k + '"' : ''; };
   const artImg = (f, big) => { if (!f) return '';
     const lg = big && ((ctx.gd().itemIcons || {}).lg || []).includes(f), small = ART_DIR + esc(f) + '.webp';
     return '<span class="is-ico art"><img src="' + (lg ? ART_DIR + 'lg/' + esc(f) + '.webp' : small) + '" alt="" draggable="false" loading="lazy" decoding="async" onerror="' + (lg ? 'if(!this.dataset.s){this.dataset.s=1;this.src=&quot;' + small + '&quot;;return}' : '') + 'var b=this.closest(&quot;.has-art&quot;);if(b)b.classList.remove(&quot;has-art&quot;);this.parentNode.remove()"></span>'; };
@@ -7081,7 +7085,7 @@ window.BOCharacter = function (ctx) {
     const label = planner.slotName[slot] || slot;
     if (!it) return '<div class="ch-slot ch-slot-' + slot + ' empty" data-open="1" data-slot="' + slot + '" data-idx="-1" tabindex="0" role="button" aria-label="Pick an item for ' + esc(label) + '"><span class="ch-slot-label">' + esc(label) + '</span><span class="meta">empty · click to add</span></div>';
     const n = itemName(it, slot), a = itemArt(it, BIG_SLOTS[slot]);
-    return '<div class="ch-slot ch-slot-' + slot + ' ' + n.cls + withArt(a) + '" data-open="1" data-tip="item" data-slot="' + slot + '" data-idx="' + idx + '" tabindex="0" role="button">' + rmItemBtn(idx, n.name) + '<span class="ch-slot-label">' + esc(label) + '</span>' + a + '<b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + (it.level ? ' · ilvl ' + it.level : '') + '</span>' +
+    return '<div class="ch-slot ch-slot-' + slot + ' ' + n.cls + withArt(a) + '"' + (a ? artScale(it, slot) : '') + ' data-open="1" data-tip="item" data-slot="' + slot + '" data-idx="' + idx + '" tabindex="0" role="button">' + rmItemBtn(idx, n.name) + '<span class="ch-slot-label">' + esc(label) + '</span>' + a + '<b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + (it.level ? ' · ilvl ' + it.level : '') + '</span>' +
       (it.runes && it.runes.length ? '<span class="ch-item-base">' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') + '</span>' : '') + '</div>';
   }
 

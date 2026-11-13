@@ -194,8 +194,8 @@
     const MON = J('Gameplay/monsters.json').monsters || [];
     const monList = Array.isArray(MON) ? MON : Object.values(MON);
     // Each Guardian's own strong and weak element (guardian_resist95.json, public API game data build 70): +20 to one,
-    // -20 to another, e.g. Anubis Poison +20, Fire -20. Display only (FAQ tab): the sim does not use it yet (how it adds to
-    // the colour variant and level resistance is not checked in a fight; resistance changes wait for the owner's tests).
+    // -20 to another, e.g. Anubis Poison +20, Fire -20. FAQ tab, and the sim when the player sets it in Configure Enemy
+    // (12 Nov 2026; how it adds to the colour variant and level resistance is not checked in a fight).
     try { const gr = (J('Gameplay/guardian_resist95.json') || {}).guardians || {}; for (const [k, v] of Object.entries(gr)) { const g = guardians[k.replace(/^g_/, '')]; if (g) g.identity = v; } } catch (e) { /* older game files: none */ }
     const minionMonsters = {};
     for (const s of Object.values(skills)) {
@@ -6020,7 +6020,7 @@ window.BOFaq = function (ctx) {
       'These add to the level resistance. The sim caps the total at ' + (H.ResistHardCap || 85) + '% (an assumption: the game files give monsters no cap).',
       arm.LessTakenPct ? 'The <b>Armoured</b> mod makes a Guardian take ' + arm.LessTakenPct + '% less damage.' : '',
       ew.ElementalLessTakenPct ? 'The <b>Elemental Ward</b> mod makes it take ' + ew.ElementalLessTakenPct + '% less elemental damage' + (ew.AilmentLessPct ? ', and ailments on it are ' + ew.AilmentLessPct + '% weaker' : '') + '.' : '',
-      gs0.some(g => g.identity) ? 'Each Guardian also has its own strong and weak element (+20% and -20% in the game data), whatever its colour. The table is in <b>Monster Affixes</b>. The sim does not count this yet.' : '',
+      gs0.some(g => g.identity) ? 'Each Guardian also has its own strong and weak element (+20% and -20% in the game data), whatever its colour. The table is in <b>Monster Affixes</b>. The sim counts it when you set it under Configure Enemy (pick the Guardian, or its strong and weak element).' : '',
       'Best answer: use a second element, or one the Guardian does not resist.',
     ]));
     h += card('Lowering resistance', list([
@@ -6700,7 +6700,7 @@ window.BOCharacter = function (ctx) {
     const el = $('#characterPane'); if (!el || el.hidden) return;
     bind(el);
     const ch = ctx.current();
-    let h = '<div class="cmp-intro"><div class="eyebrow">BUILD OVERVIEW</div><h2>Character</h2><p>The loaded character at a glance: gear by slot, skills with their supports and the notable passives. Click a gear slot to pick or edit an item; hover an item or gem for its details.</p></div>';
+    let h = '<div class="cmp-intro results-heading"><div><div class="eyebrow">BUILD OVERVIEW</div><h2>Character</h2><p>The loaded character at a glance: gear by slot, skills with their supports and the notable passives. Click a gear slot to pick or edit an item; hover an item or gem for its details.</p></div>' + (ch && ctx.enemyBtn ? ctx.enemyBtn() : '') + '</div>';
     if (!ch) { el.innerHTML = h + '<div class="card"><p class="hint">No character loaded. Load a save, a build code or start a plan first.</p></div>'; return; }
     el.innerHTML = h + '<div class="ch-cols"><div class="ch-col">' + gearCard(ch) + (ctx.beltCard ? ctx.beltCard() : '') + notesCard() + '</div><div class="ch-col">' + skillsCard(ch) + passivesCard(ch) + '</div></div>';
   }
@@ -9003,13 +9003,27 @@ window.BOCharacter = function (ctx) {
     // plus the Ward tier from Rupture 60 / 80 (+25% / +35%). They add up (closest to the 1 Nov fights);
     // ASSUMPTION: capped at the game's hard resistance cap (85%), as the files give monsters no cap.
     let guardian = null;
+    // Each Guardian's own strong and weak element (public API game data build 70, guardian_resist.json: every Guardian has
+    // one element at +20 and another at -20, e.g. Anubis Poison +20 / Fire -20; its "shift" block: strong 20, weak -20).
+    // Added on top of the level resistance like the colour variant below (same additive ASSUMPTION, not checked in a fight
+    // yet). Off unless the player picks them in Configure Enemy (owner's request, 12 Nov 2026).
+    const idPct = (() => { for (const g of Object.values(GD.guardians || {})) for (const v of Object.values(g.identity || {})) if (v > 0) return v; return 20; })();
+    const identity = {};
+    if (isBoss) for (const [E, sign] of [[o.guardianStrong, 1], [o.guardianWeak, -1]]) {
+      if (!E || !DT.includes(E) || (o.enemyRes && o.enemyRes[E] != null) || identity[E] != null) continue;
+      identity[E] = sign * idPct; resist[E] += identity[E];
+    }
+    if (Object.keys(identity).length) {
+      guardian = { identity };
+      res.notes.push('Guardian strong / weak element: ' + Object.entries(identity).map(([E, v]) => E + ' ' + (v > 0 ? '+' : '') + v + '%').join(', ') + ' resistance (game data; how it stacks with the colour and Ward is not checked in a fight).');
+    }
     if (isBoss && o.guardianElement && DT.includes(o.guardianElement) && !(o.enemyRes && o.enemyRes[o.guardianElement] != null)) {
       const E = o.guardianElement;
       const variant = o.guardianVariantResist != null ? +o.guardianVariantResist : 40;
       const ward = o.guardianWard != null ? +o.guardianWard : wardAt(GD, lvl);
       const cap = (GD.scaling.Hero || {}).ResistHardCap || 85;
       resist[E] = Math.min(cap, resist[E] + variant + ward);
-      guardian = { element: E, variant, ward, resist: resist[E] };
+      guardian = Object.assign(guardian || {}, { element: E, variant, ward, resist: resist[E] });
       res.notes.push('Guardian element ' + E + ': its colour variant resists ' + E + ' ' + variant + '% more' + (ward ? ' and its Ward ' + ward + '% more' : '') + ' (' + resist[E] + '% in all, before penetration).');
     }
     const pen = {}; DT.forEach(d => pen[d] = 0);
@@ -10387,7 +10401,7 @@ window.BOStartApp = function () {
 
   const st = {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0 },
-    enemyLevel: null, rarity: 'boss', gElem: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: false, enemyLife: null, graveCall: false, flashfire: false, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
+    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: false, enemyLife: null, graveCall: false, flashfire: false, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
     penFloor: false, opt: null, optJob: null, last: null,
     keepSup: new Set(), blockSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
   };
@@ -10589,7 +10603,7 @@ window.BOStartApp = function () {
     for (const d of DT) if (st.res[d] !== '' && st.res[d] != null && isFinite(+st.res[d])) res[d] = +st.res[d];
     return Object.assign({
       off: st.off, vowbreak: st.vowbreak, tryHeralds: st.tryHeralds, charges: st.charges, supportsOverride: st.supports, gemLevel: st.gemLevel || undefined,
-      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: st.enemyHallowedGround, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire,
+      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: st.enemyHallowedGround, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire,
       projOnTarget: +st.projOnTarget || undefined, totemCount: st.totemCount > 0 ? +st.totemCount : undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, castsPerSecOverride: st.cps > 0 ? +st.cps : undefined, penFloor: st.penFloor,
       conduit: st.conduit == null ? undefined : st.conduit,
       coc: st.coc === false ? false : undefined, cocSource: typeof st.coc === 'string' ? st.coc : undefined,
@@ -10768,6 +10782,12 @@ window.BOStartApp = function () {
     // Curses
     const isBoss = st.rarity === 'boss';
     $('#guardianRow').hidden = !isBoss; $('#guardianElement').value = st.gElem || '';
+    // Strong / weak element: the Guardian list comes from the game data (only those with one), sorted by name.
+    $('#guardianIdRow').hidden = !isBoss;
+    const who = $('#guardianWho');
+    if (who.options.length < 2) Object.entries(GD.guardians || {}).filter(([, g]) => g.identity).sort((a, b) => String(a[1].name).localeCompare(b[1].name))
+      .forEach(([id, g]) => who.add(new Option(g.name || id, id)));
+    who.value = st.gWho || ''; $('#guardianStrong').value = st.gStrong || ''; $('#guardianWeak').value = st.gWeak || '';
     $('#curseList').innerHTML = Object.values(GD.curses).filter(c => c.Kind !== 'Ailment').map(c => {
       const cs = st.curses[c.Id] || { on: false, dread: 0 };
       const row = (r.enemy && r.enemy.curses || []).find(x => x.id === c.Id);
@@ -11095,7 +11115,7 @@ window.BOStartApp = function () {
 
   // The enemy the sim runs against, in a few words (button tooltips).
   const enemyLabel = () => 'level ' + (st.enemyLevel || (st.ch ? st.ch.level : '')) + ' ' + ({ normal: 'Normal monster', magic: 'Magic monster', rare: 'Rare', boss: 'Guardian' + (st.gElem ? ' (' + st.gElem + ')' : '') }[st.rarity] || 'enemy');
-  const enemyBtn = cls => '<button class="btn small ghost enemy-cfg' + (cls ? ' ' + cls : '') + '" type="button" data-enemy-cfg title="Now: ' + esc(enemyLabel()) + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9.5 11.5h.01M14.5 11.5h.01M10 19v2M14 19v2"/></svg>Configure Enemy</button>';
+  const enemyBtn = cls => '<button class="btn small enemy-cfg' + (cls ? ' ' + cls : '') + '" type="button" data-enemy-cfg title="Now: ' + esc(enemyLabel()) + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9.5 11.5h.01M14.5 11.5h.01M10 19v2M14 19v2"/></svg>Configure Enemy</button>';
   function resultsHeading(r) {
     return '<div class="results-heading"><div><div class="eyebrow">BUILD RESULTS</div><h2>Damage Analysis</h2>' +
       '<p>' + esc(st.ch.name) + ' · ' + esc(r.skill.Name) + ' · performance against a level ' + ((r.enemy && r.enemy.level) || st.enemyLevel || st.ch.level) + ' ' + ({ normal: 'normal monster', magic: 'Magic monster', rare: 'Rare', boss: 'Guardian' }[st.rarity] || 'enemy') + '</p></div>' + enemyBtn() + '</div>';
@@ -11742,7 +11762,7 @@ window.BOStartApp = function () {
   const supName = id => (GD.supports[String(id).toLowerCase()] || { Name: id }).Name;
   function optSig() {
     const o = opts();
-    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.enemyLife, o.graveCall, o.flashfire, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
+    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.enemyLife, o.graveCall, o.flashfire, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
       off: [...st.off].filter(k => !k.startsWith('support:')).sort(), vb: [...st.vowbreak].sort(), th: o.tryHeralds, ch: o.charges, po: o.potions });
   }
   function runSearch() {
@@ -11840,6 +11860,15 @@ window.BOStartApp = function () {
   $('#enemyLevel').addEventListener('input', e => { st.enemyLevel = +e.target.value || null; render(); });
   $('#enemyRarity').addEventListener('change', e => { st.rarity = e.target.value; render(); });
   $('#guardianElement').addEventListener('change', e => { st.gElem = e.target.value; render(); });
+  $('#guardianWho').addEventListener('change', e => {
+    const g = (GD.guardians || {})[e.target.value], idn = (g && g.identity) || {};
+    st.gWho = e.target.value;
+    st.gStrong = Object.keys(idn).find(k => idn[k] > 0) || ''; st.gWeak = Object.keys(idn).find(k => idn[k] < 0) || '';
+    render();
+  });
+  // Set by hand: no longer a named Guardian.
+  $('#guardianStrong').addEventListener('change', e => { st.gStrong = e.target.value; st.gWho = ''; render(); });
+  $('#guardianWeak').addEventListener('change', e => { st.gWeak = e.target.value; st.gWho = ''; render(); });
   $('#extraTaken').addEventListener('input', e => { st.extraTaken = e.target.value; render(); });
   $('#enemyLife').addEventListener('input', e => { st.enemyLife = e.target.value === '' ? null : +e.target.value; render(); });
   $('#flashfire').addEventListener('change', e => { st.flashfire = e.target.checked; render(); });
@@ -13944,7 +13973,7 @@ window.BOStartApp = function () {
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '' });
   character = window.BOCharacter({
     beltCard: () => brewery ? brewery.beltCard() : '',
-    $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats,
+    $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
     // Item overlay: edits go to a plan itself, or to a copy of a loaded character (as on the Build tab); the save file is never written.
     editable: buildEditable, commit: ch => { if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {}); planner.render(); }, // the caller redraws the Character tab
     sheet: () => st.ch && st.skill ? S.calcSkill(GD, st.ch, st.skill, opts()) : null,

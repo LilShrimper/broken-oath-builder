@@ -1,33 +1,45 @@
-// Page language (owner, 13 Nov 2026: Simplified Chinese first). The page is written in English; when Chinese is on, this
-// swaps the text of the rendered page for its Chinese from one dictionary (lang/zh.json, built by build.js):
+// Page language (owner, 13 Nov 2026: Simplified Chinese first, then Spanish and Russian). The page is written in English;
+// when another language is on, this swaps the text of the rendered page for that language from one dictionary
+// (lang/<code>.json, built by build.js):
 //   - the game's own names and texts (skills, supports, tree nodes, Oaths, uniques, affix names) from the public API's
-//     lang/zh-Hans.json, so they read as they do in the game;
-//   - the page's own words from src/lang/zh/*.json (ours).
+//     language file (lang/zh-Hans.json, es-ES.json, ru.json), so they read as they do in the game;
+//   - the page's own words from src/lang/<code>/*.json (ours).
 // It works on the finished page (text nodes and the title / placeholder / aria-label attributes), so the sim and the
 // render code stay in English and untouched; anything the dictionary lacks stays English.
-// A dictionary key is the English text with every number written as '#'; in the Chinese, '#' takes the numbers in order
-// and '{0}', '{1}' take them by place (when Chinese puts them in another order).
-// Which language: on the site the address (/zh/... pages set window.SITE_LANG = 'zh'); locally, localStorage.
+// A dictionary key is the English text with every number written as '#'; in the translation, '#' takes the numbers in
+// order and '{0}', '{1}' take them by place (when the language puts them in another order).
+// Which language: on the site the address (/zh/, /es/, /ru/ pages set window.SITE_LANG); locally, localStorage.
 // window.I18N.missing holds the English it saw and could not translate (to find what the dictionary still lacks).
+// The languages the page offers besides English (tools/i18n-dict.js LANGS has the same list for the build).
+window.PAGE_LANGS = {
+  zh: { html: 'zh-Hans', label: '中文', name: '简体中文', to: '切换到简体中文',
+    beta: '中文翻译为测试版，如有不准确之处，欢迎通过<button type="button" class="linkish">「报告问题」</button>反馈。' },
+  es: { html: 'es', label: 'ES', name: 'Español', to: 'Cambiar a español',
+    beta: 'La traducción al español está en beta. Si algo está mal, avísanos con <button type="button" class="linkish">Informar de un problema</button>.' },
+  ru: { html: 'ru', label: 'RU', name: 'Русский', to: 'Переключить на русский',
+    beta: 'Русский перевод в бета-версии. Если что-то не так, сообщите через <button type="button" class="linkish">«Сообщить о проблеме»</button>.' }
+};
 (function () {
   const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* off */ } } };
   const routed = typeof window.SITE_BASE === 'string';
-  const lang = routed ? (window.SITE_LANG === 'zh' ? 'zh' : 'en') : (store.get('bods:lang') === 'zh' ? 'zh' : 'en');
+  const L = window.PAGE_LANGS, want = routed ? window.SITE_LANG : store.get('bods:lang');
+  const lang = want && L[want] ? want : 'en';
   const I = window.I18N = { lang, missing: new Set(), ready: Promise.resolve(), t: s => s };
   const root = document.documentElement;
-  if (lang !== 'zh') return;
-  // Opening a zh/ page with no choice made yet counts as choosing Chinese: the plain address then sends this visitor to
-  // zh/ too (build.js's head script on English pages). The EN button stores 'en' and stops that.
-  if (routed && !store.get('bods:lang')) store.set('bods:lang', 'zh');
-  root.lang = 'zh-Hans';
+  if (lang === 'en') return;
+  const CJK = lang === 'zh';
+  // Opening a zh/ (es/, ru/) page with no choice made yet counts as choosing that language: the plain address then sends
+  // this visitor there too (build.js's head script on English pages). Choosing English stores 'en' and stops that.
+  if (routed && !store.get('bods:lang')) store.set('bods:lang', lang);
+  root.lang = L[lang].html;
   // Beta notice (owner, 13 Nov 2026: published without a native reader's review; fixes come in through Report a problem).
-  // "The Chinese translation is in beta; if something is wrong, tell us through Report a problem."
+  // "The translation is in beta; if something is wrong, tell us through Report a problem."
   {
     const bar = document.querySelector('.view-bar');
     if (bar) {
       const n = document.createElement('p');
       n.className = 'zh-beta notranslate';
-      n.innerHTML = '中文翻译为测试版，如有不准确之处，欢迎通过<button type="button" class="linkish">「报告问题」</button>反馈。';
+      n.innerHTML = L[lang].beta;
       n.querySelector('button').addEventListener('click', () => { const r = document.getElementById('reportBtn'); if (r) r.click(); });
       bar.parentNode.insertBefore(n, bar);
     }
@@ -39,6 +51,8 @@
   // A number, or a roll range "(10–20)" / "(-5–-3)" (unique items) taken as one number.
   const NUM = /\(-?\d+(?:[.,]\d+)*[–-]-?\d+(?:[.,]\d+)*\)|\d+(?:[.,]\d+)*/g;
   let D = null, DL = null;
+  // Text this script wrote (Spanish uses Latin letters too, so "already translated" cannot be told by the script alone).
+  const OUT = new Set();
   const fill = (v, nums) => { let i = 0; return v.replace(/\{(\d)\}|#/g, (m, n) => n != null ? (nums[+n] != null ? nums[+n] : m) : (nums[i] != null ? nums[i++] : m)); };
   function look(t) {
     let v = D[t]; if (v != null) return v;
@@ -70,7 +84,7 @@
       const nums = [], names = [], free = [];
       p.kinds.forEach((k, i) => (k === '#' ? nums : k === '{s}' ? names : free).push(g[i + 1]));
       // A slot may hold a run of tag words ("Physical Melee"): each word known -> joined (物理近战).
-      const words = x => { const w = x.split(' '); if (w.length < 2 || w.length > 4) return null; const z = w.map(look); return z.every(y => y != null) ? z.join('') : null; };
+      const words = x => { const w = x.split(' '); if (w.length < 2 || w.length > 4) return null; const z = w.map(look); return z.every(y => y != null) ? z.join(CJK ? '' : ' ') : null; };
       const zhNames = names.map(x => { const y = sub(x); return y != null ? y : words(x); });
       if (zhNames.some(x => x == null)) continue; // the slot is for names the dictionary knows; otherwise not this pattern
       let ni = 0, fi = 0;
@@ -80,18 +94,19 @@
     const parts = (sep, list, join) => { const out = list.map(x => sub(x)); return out.some((x, i) => x != null && x !== list[i]) ? out.map((x, i) => x != null ? x : list[i]).join(join) : null; };
     if (t.includes(' · ')) { r = parts(' · ', t.split(' · '), ' · '); if (r != null) return r; }
     let q = /^(.*\S) \(([^()]+)\)$/.exec(t);
-    if (q) { const a = sub(q[1]), b = sub(q[2]); if (a != null || b != null) return (a != null ? a : q[1]) + '（' + (b != null ? b : q[2]) + '）'; }
+    if (q) { const a = sub(q[1]), b = sub(q[2]); if (a != null || b != null) return (a != null ? a : q[1]) + (CJK ? '（' : ' (') + (b != null ? b : q[2]) + (CJK ? '）' : ')'); }
     q = /^([^:]{1,40}): (.+)$/.exec(t);
-    if (q) { const a = sub(q[1]), b = sub(q[2]); if (a != null) return a + '：' + (b != null ? b : q[2]); }
+    if (q) { const a = sub(q[1]), b = sub(q[2]); if (a != null) return a + (CJK ? '：' : ': ') + (b != null ? b : q[2]); }
     return null;
   }
   function tr(s) {
-    if (!D || !s || !/[A-Za-z]/.test(s) || /[㐀-鿿]/.test(s)) return null; // no English, or already Chinese
+    if (!D || !s || !/[A-Za-z]/.test(s) || /[㐀-鿿Ѐ-ӿ]/.test(s)) return null; // no English, or already Chinese / Russian
     const t = s.replace(/\s+/g, ' ').trim().replace(/\+-(?=\d)/g, '-'); // "+-5%": a negative roll the page prints with both signs
-    if (!t) return null;
+    if (!t || OUT.has(t)) return null; // already ours
     const r = core(t, 0);
     if (r == null) { if (I.missing.size < 20000 && t.length < 400) I.missing.add(t); return null; }
     const lead = /^\s/.test(s) ? ' ' : '', trail = /\s$/.test(s) ? ' ' : '';
+    if (OUT.size < 50000) OUT.add(r.replace(/\s+/g, ' ').trim());
     return lead + r + trail;
   }
   I.t = s => tr(s) || s;
@@ -120,7 +135,7 @@
     }
   });
   const titleEl = () => document.querySelector('title');
-  I.ready = fetch((window.SITE_BASE || '') + 'lang/zh.json', { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(d => {
+  I.ready = fetch((window.SITE_BASE || '') + 'lang/' + lang + '.json', { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(d => {
     D = d; DL = {};
     for (const k in d) { const l = k.toLowerCase(); if (!(l in DL)) DL[l] = d[k]; }
     compile();
@@ -129,24 +144,52 @@
     // The tab title: "Skills · Broken Oath Builder" (app.js sets it on every tab change).
     const doTitle = () => { const t = document.title, i = t.indexOf(' · '); const r = i > 0 ? tr(t.slice(0, i)) : tr(t); if (r != null) document.title = i > 0 ? r + t.slice(i) : r; };
     doTitle(); if (titleEl()) new MutationObserver(doTitle).observe(titleEl(), { childList: true, characterData: true, subtree: true });
-  }).catch(e => { console.warn('Chinese text not loaded (' + e.message + '); the page stays in English.'); }).finally(reveal);
+  }).catch(e => { console.warn(L[lang].name + ' text not loaded (' + e.message + '); the page stays in English.'); }).finally(reveal);
 })();
 
-// The language switch (sidebar foot, next to the theme button). On the site it goes to the same tab's address in the other
-// language (/zh/build/tree/ <-> /build/tree/), keeping the share code in the hash; locally it reloads.
+// The language switch (sidebar foot, next to the theme button): a small menu of the languages. On the site a choice goes to
+// the same tab's address in that language (/zh/build/tree/, /es/build/tree/, /build/tree/ ...), keeping the share code in
+// the hash; locally it reloads.
 (function () {
   const b = document.getElementById('langBtn'); if (!b) return;
-  const zh = window.I18N.lang === 'zh';
-  b.textContent = zh ? 'EN' : '中文';
-  b.title = zh ? 'Switch to English' : '切换到简体中文';
+  const L = window.PAGE_LANGS, cur = window.I18N.lang;
+  const opts = [['en', 'English', 'Switch to English']].concat(Object.keys(L).map(k => [k, L[k].name, L[k].to]));
+  b.textContent = cur === 'en' ? 'EN' : L[cur].label;
+  b.title = 'Language · 语言 · Idioma · Язык';
   b.setAttribute('aria-label', b.title);
+  b.setAttribute('aria-haspopup', 'true'); b.setAttribute('aria-expanded', 'false');
   b.classList.add('notranslate');
-  b.addEventListener('click', () => {
-    try { localStorage.setItem('bods:lang', zh ? 'en' : 'zh'); } catch (e) { /* off */ }
+  const go = code => {
+    try { localStorage.setItem('bods:lang', code); } catch (e) { /* off */ }
     if (typeof window.SITE_BASE !== 'string') return location.reload();
-    const rootPath = window.SITE_BASE, rel = location.pathname.slice(rootPath.length).replace(/^zh(\/|$)/, '');
-    location.href = rootPath + (zh ? '' : 'zh/') + rel + location.search + location.hash;
+    const rootPath = window.SITE_BASE, rel = location.pathname.slice(rootPath.length).replace(new RegExp('^(' + Object.keys(L).join('|') + ')(/|$)'), '');
+    location.href = rootPath + (code === 'en' ? '' : code + '/') + rel + location.search + location.hash;
+  };
+  let menu = null;
+  const close = () => { if (menu) { menu.remove(); menu = null; b.setAttribute('aria-expanded', 'false'); } };
+  b.addEventListener('click', e => {
+    e.stopPropagation();
+    if (menu) return close();
+    menu = document.createElement('div');
+    menu.className = 'lang-menu notranslate'; menu.setAttribute('role', 'menu');
+    for (const [code, name, to] of opts) {
+      const o = document.createElement('button');
+      o.type = 'button'; o.setAttribute('role', 'menuitemradio'); o.setAttribute('aria-checked', String(code === cur));
+      o.textContent = name; o.title = to; o.lang = code === 'zh' ? 'zh-Hans' : code;
+      if (code === cur) o.classList.add('on');
+      o.addEventListener('click', () => { close(); if (code !== cur) go(code); });
+      menu.appendChild(o);
+    }
+    document.body.appendChild(menu);
+    const r = b.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
+    menu.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+    menu.style.top = (r.top - h - 6 > 8 ? r.top - h - 6 : r.bottom + 6) + 'px';
+    b.setAttribute('aria-expanded', 'true');
+    (menu.querySelector('.on') || menu.querySelector('button')).focus();
   });
+  document.addEventListener('click', e => { if (menu && !menu.contains(e.target)) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && menu) { close(); b.focus(); } });
+  addEventListener('resize', close);
 })();
 
 ;
@@ -14659,7 +14702,7 @@ window.BOStartApp = function () {
   function routeFromPath() {
     if (!ROUTING) return null;
     let p = location.pathname; try { p = decodeURIComponent(p); } catch (e) { /* keep as is */ }
-    const rel = p.slice(siteRoot().length).toLowerCase().replace(/\/+$/, '').replace(/^zh(\/|$)/, ''); // zh/...: the Chinese pages (src/i18n.js)
+    const rel = p.slice(siteRoot().length).toLowerCase().replace(/\/+$/, '').replace(/^(zh|es|ru)(\/|$)/, ''); // zh/, es/, ru/...: the translated pages (src/i18n.js PAGE_LANGS)
     if (rel === 'build/gear') return 'character'; // the old Gear sub-tab: gear is edited on the Character tab now
     return Object.keys(ROUTES).find(k => ROUTES[k] === rel) || null;
   }
@@ -14674,7 +14717,7 @@ window.BOStartApp = function () {
     const key = tab === 'build' ? 'build:' + planner.subTab() : tab === 'skillscaling' && skillsView === 'minions' ? 'minions' : tab, route = ROUTES[key]; if (!route) return;
     document.title = ROUTE_TITLES[key] + ' · Broken Oath Builder';
     if (!ROUTING || !routingReady || noPush) return;
-    const url = siteRoot() + (window.SITE_LANG === 'zh' ? 'zh/' : '') + route + '/';
+    const url = siteRoot() + (window.SITE_LANG && window.PAGE_LANGS && window.PAGE_LANGS[window.SITE_LANG] ? window.SITE_LANG + '/' : '') + route + '/';
     if (location.pathname !== url) history.pushState(null, '', url + location.search);
   }
   window.addEventListener('popstate', () => {

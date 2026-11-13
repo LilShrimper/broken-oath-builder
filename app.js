@@ -2532,7 +2532,7 @@ window.BOPlanner = function (ctx) {
       const w = S.weaponStats(GD, item, base, mods);
       let avg = 0;
       for (const d of S.DT) { const [lo, hi] = w.dmg[d]; if (hi > 0) { out.push({ key: 'base|dmg|' + d, text: d + ' Damage: {0}-{1}', v: Math.round(lo), v2: Math.round(hi) }); avg += (lo + hi) / 2; } }
-      out.push({ key: 'base|aps', text: 'Attacks per second: {0}', v: r2(w.aps) }, { key: 'base|crit', text: 'Critical Strike Chance: {0}%', v: r2(w.crit) }, { key: 'base|dps', text: 'Weapon damage per second: {0}', v: Math.round(avg * w.aps) });
+      out.push({ key: 'base|aps', text: 'Attacks per second: {0}', v: r2(w.aps) }, { key: 'base|crit', text: 'Critical Strike Chance: {0}%', v: r2(w.crit) }, { key: 'base|dps', text: 'Weapon DPS: {0}', v: Math.round(avg * w.aps) });
     }
     const sum = (f) => mods.filter(f).reduce((a, m) => a + m.v, 0);
     for (const [s, name] of [['Armour', 'Armour'], ['Evasion', 'Evasion Rating'], ['EnergyShield', 'Energy Shield']]) {
@@ -4924,6 +4924,8 @@ window.BOItemSearch = function (ctx) {
     if (b.DamageMin != null) out.push(['Damage', b.DamageMin + '–' + b.DamageMax]);
     if (b.AttacksPerSecond) out.push(['Attacks per second', fmt(b.AttacksPerSecond)]);
     if (b.Crit != null) out.push(['Critical strike chance', fmt(b.Crit) + '%']);
+    // Same rounding as the planner's item tooltip ("Weapon DPS"): average hit x attacks per second.
+    if (b.DamageMin != null && b.AttacksPerSecond) out.push(['DPS', String(Math.round((b.DamageMin + b.DamageMax) / 2 * b.AttacksPerSecond))]);
     if (b.Armour) out.push(['Armour', b.Armour]);
     if (b.Evasion) out.push(['Evasion', b.Evasion]);
     if (b.EnergyShield) out.push(['Energy shield', b.EnergyShield]);

@@ -2879,7 +2879,7 @@ window.BOPlanner = function (ctx) {
     if (sk.ActionSpeed && !sk.CastTime) lines.push('Attack speed: ' + sk.ActionSpeed + ' per second');
     if (sk.Projectiles) lines.push('Projectiles: ' + sk.Projectiles);
     if (sk.Chains) lines.push('Chains: ' + sk.Chains);
-    if (sk.Strikes) lines.push('Strikes: ' + sk.Strikes);
+    if (sk.Strikes) lines.push('Strikes: ' + (typeof sk.Strikes === 'object' ? sk.Strikes.Count : sk.Strikes)); // skills.json Strikes is { Count, Interval, ... }
     if (sk.WeaponKinds && sk.WeaponKinds.length) lines.push('Weapons: ' + sk.WeaponKinds.join(', '));
     if (ok && r.speed && r.speed.usesPerSec) lines.push('Uses per second: ' + fmt(r.speed.usesPerSec, 2));
     if (lines.length) h += '<ul class="pl-tip-base">' + lines.map(li).join('') + '</ul>';
@@ -4917,7 +4917,7 @@ window.BOBrewery = function (ctx) {
 };
 
 ;
-// Item Search tab: every unique, Oathword, item base, item mod (affix), rune and jewel in the game data, with
+// Item Search tab: every unique, Oathword, item base, item mod (affix), rune, jewel, skill gem and support gem in the game data, with
 // filters (category, slot, type, tier, level range, text) and a sort (level low to high by default; "New this patch
 // first" puts what the latest game patch added on top, then the patch before it, and so on).
 // Display only: nothing here feeds the sim. Bases, uniques and runes show the game's own item art (GD.itemIcons, made
@@ -5049,6 +5049,17 @@ window.BOItemSearch = function (ctx) {
     return rangeText(GD, um.Mod, um.Min, um.Max, um.Min2, um.Max2);
   }
 
+  // Skill and support gems (owner, 14 Nov 2026): their Slot / Type / Tier filters read as Class / Tag / Colour (supports:
+  // Works with / Excludes / Colour), they have no level, and the icon is the game's skill tile (GEM_ICONS through
+  // ctx.skillDot) or, for supports and tiles the sheet lacks, a gem in its colour.
+  const GEM_CATS = { skill: 1, support: 1 };
+  const GEM_COLOR = { Str: 'Red', Dex: 'Green', Int: 'Purple' }, SKILL_COLOR = { Str: 'Red', Dex: 'Green', Int: 'Blue' };
+  const COLOR_VAR = { Red: 'var(--gem-str)', Green: 'var(--gem-dex)', Purple: 'var(--gem-int)', Blue: 'var(--gem-blue)' };
+  const LABELS = { skill: ['Class', 'Any class', 'Tag', 'Any tag', 'Colour', 'Any colour'], support: ['Works with', 'Any skill', 'Excludes', 'Any', 'Colour', 'Any colour'] };
+  const skillKind = sk => sk.Kind === 'Weapon' ? 'Weapon skill' : 'Skill gem';
+  const skillTags = sk => (sk.Tags || []).concat(sk.DamageType && !(sk.Tags || []).includes(sk.DamageType) ? [sk.DamageType] : []);
+  const gemIcon = col => icon('jewel', 'gemstone', '--ic:' + (COLOR_VAR[col] || 'var(--muted)'));
+
   // ---------- the list (built once per game data) ----------
   let cacheFor = null, ALL = [], NEWEST = 0, ADDED_DAY = {};
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -5113,6 +5124,20 @@ window.BOItemSearch = function (ctx) {
       ALL.push({ cat: 'rune', id: r.Id, name: r.Name, level: r.Level || 1, slots: ['Weapon', 'Off-hand', 'Helm', 'Chest'], types: [jewel ? 'Jewel' : 'Rune'],
         tiers: ['Tier ' + (r.Tier || 1)], tierSort: r.Tier || 1, icon: jewel ? 'jewel' : 'rune', r, jewel, text: [r.Name, jewel ? 'Jewel' : 'Rune', ...lines].join(' ') });
     }
+    // Skill gems (Gem kind) and weapon skills sold as gems (Weapon kind, as the planner's skillDot); not basic attacks or Move.
+    for (const sk of Object.values(GD.skills || {})) {
+      if (!['Gem', 'Weapon'].includes(sk.Kind)) continue;
+      const col = SKILL_COLOR[sk.Attribute];
+      ALL.push({ cat: 'skill', id: sk.Id, name: sk.Name, level: 0, slots: uniqSorted(sk.HomeClasses || []), types: uniqSorted(skillTags(sk)),
+        tiers: col ? [col] : [], tierSort: 0, sk, color: col,
+        text: [sk.Name, skillKind(sk), sk.Description, ...skillTags(sk), ...(sk.HomeClasses || [])].join(' ') });
+    }
+    for (const sd of Object.values(GD.supports || {})) {
+      const col = GEM_COLOR[sd.Attribute];
+      ALL.push({ cat: 'support', id: sd.Id, name: sd.Name || sd.Id, level: 0, slots: uniqSorted(sd.RequiresAnyTag || []), types: uniqSorted(sd.ExcludeTags || []),
+        tiers: col ? [col] : [], tierSort: 0, sd, color: col,
+        text: [sd.Name, 'Support gem', sd.Description, ...(sd.RequiresAnyTag || [])].join(' ') });
+    }
     // Flavour and lore text is left out of the search on purpose: it matched things like "fire" in "Light a fire".
     for (const e of ALL) e.text = norm(e.text);
     // The Steam build each entry first appeared in (GD.itemAdded, written by build.js from tools/item-added.js); 0 = it was
@@ -5126,14 +5151,14 @@ window.BOItemSearch = function (ctx) {
   }
 
   // ---------- filters ----------
-  const CATS = [['unique', 'Uniques'], ['oathword', 'Oathwords'], ['base', 'Item bases'], ['mod', 'Item mods'], ['rune', 'Runes & jewels'], ['all', 'All']];
-  const CAT_NAME = { unique: 'Unique', oathword: 'Oathword', base: 'Item base', mod: 'Item mod', rune: 'Rune' };
+  const CATS = [['unique', 'Uniques'], ['oathword', 'Oathwords'], ['base', 'Item bases'], ['mod', 'Item mods'], ['rune', 'Runes & jewels'], ['skill', 'Skill gems'], ['support', 'Support gems'], ['all', 'All']];
+  const CAT_NAME = { unique: 'Unique', oathword: 'Oathword', base: 'Item base', mod: 'Item mod', rune: 'Rune', skill: 'Skill gem', support: 'Support gem' };
   // affix: Prefix / Suffix (Item mods only). sortBy: the sort picked in each category; sort is the current one.
   const BLANK = { cat: 'unique', q: '', slot: '', type: '', tier: '', affix: '', min: '', max: '', sort: 'level', sortBy: {}, secrets: false, craft: false }; // craft: Oathwords you can make or hold
   let F = Object.assign({}, BLANK, { sortBy: {} }), shown = PAGE;
   try { const s = JSON.parse(localStorage.getItem('bods:itemsearch') || 'null'); if (s && typeof s === 'object') for (const k of Object.keys(BLANK)) if (s[k] != null && typeof s[k] === typeof BLANK[k]) F[k] = s[k]; } catch (e) { /* storage off */ }
   // Runes & jewels open on the upgrade path, the rest on level; a sort picked in a category stays with it.
-  const sortFor = cat => F.sortBy[cat] || (cat === 'rune' ? 'path' : 'level');
+  const sortFor = cat => F.sortBy[cat] || (cat === 'rune' ? 'path' : cat === 'skill' || cat === 'support' ? 'name' : 'level');
   F.sort = sortFor(F.cat);
   const keep = () => { try { localStorage.setItem('bods:itemsearch', JSON.stringify(F)); } catch (e) { /* storage off */ } };
 
@@ -5155,7 +5180,7 @@ window.BOItemSearch = function (ctx) {
       if (F.tier && !e.tiers.includes(F.tier)) return false;
       if (F.cat === 'mod' && F.affix && e.affixType !== F.affix) return false;
       if (F.cat === 'oathword' && F.craft) { const inv = owned(); if (inv && inv.loaded) { const s = ctx.owned().wordStatus(e.w, inv); if (!s.held.length && !(s.craftable && (!e.secret || F.secrets))) return false; } }
-      const lv = levelOf(e); if (lv < min || lv > max) return false;
+      const lv = levelOf(e); if (!GEM_CATS[e.cat] && (lv < min || lv > max)) return false; // gems have no level
       if (words.length) { const t = ' ' + e.text + (e.runeText && (!e.secret || F.secrets) ? ' ' + norm(e.runeText) : '') + ' '; if (!words.every(w => t.includes(' ' + w))) return false; }
       return true;
     });
@@ -5201,8 +5226,8 @@ window.BOItemSearch = function (ctx) {
   const implicits = (GD, b) => b && (b.Implicits || []).length ? '<ul class="is-lines implicit">' + b.Implicits.map(m => li(plain(GD, m))).join('') + '</ul>' : '';
   // Patch history (owner, 13 Nov 2026): every card and mod row folds out its changes from the Recent Patch data
   // (patches.js), closed by default and filled in when opened (the site fetches that file only then).
-  const HIST_SEC = { base: 'bases', unique: 'uniques', oathword: 'runewords', mod: 'affixes', rune: 'runes' };
-  const idOf = e => (e.b && e.cat === 'base' ? e.b : e.u || e.w || e.a || e.r || {}).Id;
+  const HIST_SEC = { base: 'bases', unique: 'uniques', oathword: 'runewords', mod: 'affixes', rune: 'runes', skill: 'skills', support: 'supports' };
+  const idOf = e => (e.b && e.cat === 'base' ? e.b : e.u || e.w || e.a || e.r || e.sk || e.sd || {}).Id;
   const histBox = e => ctx.patches && HIST_SEC[e.cat] && idOf(e) ? '<details class="is-hist" data-hist="' + esc(HIST_SEC[e.cat] + ':' + idOf(e)) + '"><summary>Patch history</summary><div class="is-hist-body"></div></details>' : '';
   function fillHist(d) {
     const P = ctx.patches && ctx.patches(), body = d.querySelector('.is-hist-body'); if (!P || !body) return;
@@ -5267,6 +5292,31 @@ window.BOItemSearch = function (ctx) {
         '<table class="is-tiers"><thead><tr><th>Tier</th><th>Name</th><th>Item level</th><th>Roll</th></tr></thead><tbody>' +
         a.Tiers.map((t, i) => '<tr' + (i === on ? ' class="on"' : '') + '><td>' + (a.Kind || 'T' + (i + 1)) + '</td><td>' + esc(t.Name || '') + '</td><td>' + (t.ILvl || 1) + '</td><td>' + rng(t.Min, t.Max) + (t.Min2 != null ? ' / ' + rng(t.Min2, t.Max2) : '') + '</td></tr>').join('') + '</tbody></table>';
       badges.push(a.Kind ? badge(a.Kind, 'tier ' + lc(a.Kind)) : badge(a.Tiers.length + ' tiers', 'muted'));
+    } else if (e.cat === 'skill') {
+      const sk = e.sk, chip = t => '<span class="is-tag ' + (TAG_CLS[lc(t)] || '') + '">' + esc(t) + '</span>';
+      const dot = ctx.skillDot ? ctx.skillDot(sk.Id) : '';
+      ico = /gem-ico/.test(dot) ? '<span class="is-ico gem">' + dot + '</span>' : gemIcon(e.color);
+      sub = e.color || '';
+      const desc = sk.Description ? (ctx.skillDesc ? ctx.skillDesc(sk, 1) : sk.Description) : '';
+      const lines = [];
+      if (sk.ManaCost != null) lines.push('Mana cost: ' + sk.ManaCost + ' at gem level 1');
+      if (sk.Cooldown) lines.push('Cooldown: ' + sk.Cooldown + ' s');
+      if (sk.CastTime) lines.push('Cast time: ' + sk.CastTime + ' s');
+      if (sk.ActionSpeed && !sk.CastTime) lines.push('Attack speed: ' + sk.ActionSpeed + ' per second');
+      if (sk.Projectiles) lines.push('Projectiles: ' + sk.Projectiles);
+      if (sk.Chains) lines.push('Chains: ' + sk.Chains);
+      if (sk.Strikes) lines.push('Strikes: ' + (typeof sk.Strikes === 'object' ? sk.Strikes.Count : sk.Strikes)); // skills.json Strikes is { Count, Interval, ... }
+      if (sk.WeaponKinds && sk.WeaponKinds.length) lines.push('Weapons: ' + sk.WeaponKinds.map(w => w.replace(/([a-z])([A-Z])/g, '$1 $2')).join(', '));
+      body = '<p class="is-chips">' + skillTags(sk).map(chip).join('') + '</p>' + (desc ? '<p class="is-desc">' + esc(desc) + '</p>' : '') +
+        (lines.length ? '<ul class="is-lines gemline">' + lines.map(t => li(t)).join('') + '</ul>' : '') +
+        (e.slots.length ? '<p class="is-into is-chips"><span>' + (e.slots.length > 1 ? 'Home classes:' : 'Home class:') + '</span>' + e.slots.map(c => '<span class="is-tag">' + esc(c) + '</span>').join('') + '</p>' : '');
+    } else if (e.cat === 'support') {
+      const sd = e.sd, chip = t => '<span class="is-tag">' + esc(t) + '</span>';
+      ico = gemIcon(e.color);
+      sub = (e.color || 'Support') + (sd.ManaMultiplier && sd.ManaMultiplier !== 1 ? ' · mana ×' + fmt(sd.ManaMultiplier) : '');
+      body = (sd.Description ? '<p class="is-desc">' + esc(sd.Description) + '</p>' : '') +
+        ((sd.RequiresAnyTag || []).length ? '<p class="is-into is-chips"><span>Supports:</span>' + sd.RequiresAnyTag.map(chip).join('') + '</p>' : '<p class="is-into">Supports any skill</p>') +
+        ((sd.ExcludeTags || []).length ? '<p class="is-into is-chips"><span>Not for:</span>' + sd.ExcludeTags.map(chip).join('') + '</p>' : '');
     } else {
       const r = e.r;
       ico = glyphIcon(r);
@@ -5277,8 +5327,8 @@ window.BOItemSearch = function (ctx) {
       if (n != null) badges.push(badge(n ? 'You have ' + n + ' (' + inv.runeWhere[lc(r.Id)].join(', ') + ')' : 'You have none', n ? 'held' : 'muted'));
     }
     const nb = addedBadge(e); if (nb) badges.unshift(nb);
-    return '<article class="is-card cat-' + e.cat + '"><header>' + ico + '<div class="is-head"><b class="is-name">' + esc(e.name) + '</b><small>' + esc((e.cat === 'rune' ? (e.jewel ? 'Jewel' : 'Rune') : CAT_NAME[e.cat]) + ' · ' + sub) + '</small></div>' +
-      '<span class="is-lvl" title="' + (e.cat === 'mod' ? 'Item level the ' + (tierIdx(e) >= 0 ? F.tier : 'lowest') + ' tier needs' : 'Level') + '">' + (e.cat === 'mod' ? 'iLvl ' : 'Lvl ') + levelOf(e) + '</span></header>' +
+    return '<article class="is-card cat-' + e.cat + '"><header>' + ico + '<div class="is-head"><b class="is-name">' + esc(e.name) + '</b><small>' + (GEM_CATS[e.cat] ? [e.cat === 'skill' ? skillKind(e.sk) : CAT_NAME[e.cat]].concat(sub ? sub.split(' · ') : []).map(t => '<span>' + esc(t) + '</span>').join(' · ') : esc((e.cat === 'rune' ? (e.jewel ? 'Jewel' : 'Rune') : CAT_NAME[e.cat]) + (sub ? ' · ' + sub : ''))) + '</small></div>' +
+      (GEM_CATS[e.cat] ? '' : '<span class="is-lvl" title="' + (e.cat === 'mod' ? 'Item level the ' + (tierIdx(e) >= 0 ? F.tier : 'lowest') + ' tier needs' : 'Level') + '">' + (e.cat === 'mod' ? 'iLvl ' : 'Lvl ') + levelOf(e) + '</span>') + '</header>' +
       body + histBox(e) + (badges.length ? '<footer>' + badges.join('') + '</footer>' : '') + '</article>';
   }
 
@@ -5306,9 +5356,12 @@ window.BOItemSearch = function (ctx) {
   function controls() {
     const all = entries();
     const counts = {}; for (const e of all) counts[e.cat] = (counts[e.cat] || 0) + 1;
-    const slots = uniqSorted(pick('slot').flatMap(e => e.slots), SLOT_ORDER);
+    // In All, the Slot and Type lists are the items' only (a gem's class or tag is no item slot).
+    const itemsOnly = e => F.cat !== 'all' || !GEM_CATS[e.cat];
+    const L = LABELS[F.cat] || ['Slot', 'Any slot', 'Type', 'Any type', 'Tier', 'Any tier'];
+    const slots = uniqSorted(pick('slot').filter(itemsOnly).flatMap(e => e.slots), SLOT_ORDER);
     if (F.slot && !slots.includes(F.slot)) F.slot = '';
-    const types = uniqSorted(pick('type').flatMap(e => e.types));
+    const types = uniqSorted(pick('type').filter(itemsOnly).flatMap(e => e.types));
     if (F.type && !types.includes(F.type)) F.type = '';
     const tierList = pick('tier'), tiers = [...new Set(tierList.flatMap(e => e.tiers))];
     const tierRank = t => { const e = tierList.find(x => x.tiers.includes(t)); return /^T\d+$/.test(t) ? +t.slice(1) : /^Tier \d+$/.test(t) ? +t.slice(5) : e ? 50 + e.tierSort : 99; };
@@ -5317,19 +5370,19 @@ window.BOItemSearch = function (ctx) {
     if (!tierOk || (F.tier && !tiers.includes(F.tier))) F.tier = '';
     const mods = F.cat === 'mod';
     if (!mods) F.affix = '';
-    const sorts = (F.cat === 'rune' ? [['path', 'Upgrade path']] : []).concat([['level', 'Level, low to high'], ['leveldesc', 'Level, high to low'], ['name', 'Name, A to Z']], NEWEST ? [['new', 'New this patch first']] : [], mods ? [['affix', 'Prefixes, then suffixes']] : F.cat === 'all' ? [['cat', 'Category']] : []);
-    if (!sorts.some(s => s[0] === F.sort)) F.sort = 'level';
+    const sorts = (F.cat === 'rune' ? [['path', 'Upgrade path']] : []).concat(GEM_CATS[F.cat] ? [['name', 'Name, A to Z']] : [['level', 'Level, low to high'], ['leveldesc', 'Level, high to low'], ['name', 'Name, A to Z']], NEWEST ? [['new', 'New this patch first']] : [], mods ? [['affix', 'Prefixes, then suffixes']] : F.cat === 'all' ? [['cat', 'Category']] : []);
+    if (!sorts.some(s => s[0] === F.sort)) F.sort = sorts[0][0];
     return '<div class="is-cats" role="group" aria-label="Category">' + CATS.map(([k, t]) => '<button type="button" class="is-cat' + (F.cat === k ? ' active' : '') + '" data-cat="' + k + '" aria-pressed="' + (F.cat === k) + '">' + esc(t) + ' <small>' + (k === 'all' ? all.length : counts[k] || 0) + '</small></button>').join('') + '</div>' +
       '<div class="is-filters' + (mods ? ' with-affix' : '') + '">' +
       field('Search', '<input type="text" id="isQ" enterkeyhint="search" placeholder="Name or mod text, e.g. critical, life, &quot;fire damage&quot;" value="' + esc(F.q) + '" autocomplete="off">', 'grow') +
-      field('Slot', '<select id="isSlot">' + opt('', 'Any slot', !F.slot) + slots.map(s => opt(s, s, F.slot === s)).join('') + '</select>') +
-      field('Type', '<select id="isType">' + opt('', 'Any type', !F.type) + types.map(s => opt(s, s, F.type === s)).join('') + '</select>') +
-      field('Tier', '<select id="isTier"' + (tierOk ? '' : ' disabled title="Pick a category first: each one has its own tiers"') + '>' + opt('', tierOk ? 'Any tier' : 'Pick a category', !F.tier) + (tierOk ? tiers.map(s => opt(s, s, F.tier === s)).join('') : '') + '</select>') +
+      field(L[0], '<select id="isSlot">' + opt('', L[1], !F.slot) + slots.map(s => opt(s, s, F.slot === s)).join('') + '</select>') +
+      field(L[2], '<select id="isType">' + opt('', L[3], !F.type) + types.map(s => opt(s, s, F.type === s)).join('') + '</select>') +
+      field(L[4], '<select id="isTier"' + (tierOk ? '' : ' disabled title="Pick a category first: each one has its own tiers"') + '>' + opt('', tierOk ? L[5] : 'Pick a category', !F.tier) + (tierOk ? tiers.map(s => opt(s, s, F.tier === s)).join('') : '') + '</select>') +
       (mods ? field('Prefix / suffix', '<select id="isAffix">' + opt('', 'Both', !F.affix) + opt('Prefix', 'Prefixes only', F.affix === 'Prefix') + opt('Suffix', 'Suffixes only', F.affix === 'Suffix') + '</select>') : '') +
-      field('Level', '<span class="is-range"><input type="number" id="isMin" min="0" max="200" placeholder="min" value="' + esc(F.min) + '"><span>–</span><input type="number" id="isMax" min="0" max="200" placeholder="max" value="' + esc(F.max) + '"></span>') +
+      (GEM_CATS[F.cat] ? '' : field('Level', '<span class="is-range"><input type="number" id="isMin" min="0" max="200" placeholder="min" value="' + esc(F.min) + '"><span>–</span><input type="number" id="isMax" min="0" max="200" placeholder="max" value="' + esc(F.max) + '"></span>')) +
       field('Sort', '<select id="isSort">' + sorts.map(([k, t]) => opt(k, t, F.sort === k)).join('') + '</select>') +
       // The public site's data has no secret Oathwords (build.js leaves them out), so the box has nothing to show there.
-      '</div><div class="is-opts">' + ((ctx.gd().runewords || []).some(w => w.Secret) ? '<label class="check-row"><input type="checkbox" id="isSecrets"' + (F.secrets ? ' checked' : '') + '><span>Show secret recipes <span class="meta">Runes of the Oathwords the game hides behind riddles</span></span></label>' : '') +
+      '</div><div class="is-opts">' + (!GEM_CATS[F.cat] && (ctx.gd().runewords || []).some(w => w.Secret) ? '<label class="check-row"><input type="checkbox" id="isSecrets"' + (F.secrets ? ' checked' : '') + '><span>Show secret recipes <span class="meta">Runes of the Oathwords the game hides behind riddles</span></span></label>' : '') +
       (F.cat === 'oathword' ? (owned() && owned().loaded ? '<label class="check-row"><input type="checkbox" id="isCraft"' + (F.craft ? ' checked' : '') + '><span>Craftable or held only <span class="meta">Runes from your ' + esc(ctx.owned().leagueName(owned().league)) + ' stash and bags</span></span></label>'
         : '<span class="meta">Load your saves folder to see which Oathwords you can make.</span>') : '') +
       '<button type="button" class="btn ghost" id="isReset">Clear filters</button></div>';
@@ -5349,7 +5402,7 @@ window.BOItemSearch = function (ctx) {
   function render() {
     const el = $('#itemSearchPane'); if (!el || el.hidden) return;
     const GD = ctx.gd();
-    let h = sprite() + '<div class="cmp-intro"><div class="eyebrow">GAME DATA</div><h2>Item Search</h2><p>Every unique, Oathword, item base, item mod, rune and jewel in the current game data.</p></div>';
+    let h = sprite() + '<div class="cmp-intro"><div class="eyebrow">GAME DATA</div><h2>Item Search</h2><p>Every unique, Oathword, item base, item mod, rune, jewel, skill gem and support gem in the current game data.</p></div>';
     if (!GD || !GD.bases) { el.innerHTML = h + '<div class="card"><p class="hint">Game data is still loading.</p></div>'; return; }
     entries();
     h += '<div class="card is-top" id="isControls">' + controls() + '</div><div id="isResults">' + results() + '</div>';
@@ -8902,14 +8955,23 @@ window.BOCharacter = function (ctx) {
         }
       }
       const weaponSlot = it.slot === 'MainHand' || it.slot === 'OffHand';
+      const halfLevels = {};
       for (const r of it.runes) {
         const rd = GD.runes[lc(r)]; if (!rd) { notes.push('Unknown rune ' + r); continue; }
         // Runes give half value in magic, rare or red (unique) items; only white items keep full value. Tooltips 9 Nov 2026
         // (rare Dread Edge: Perthro 16% crit / +6% multi = half of 32% / +12%) and 10 Nov 2026 (rare helm Grave Brow: "Isa in this
         // socket: 50% effect", +21 ES = half of 42). With it Shrimpmage's max ES is 6,157 vs the character panel's 6,159.
         const rs = it.rarity && it.rarity !== 'Normal' ? 0.5 : 1;
-        for (const m of (weaponSlot ? rd.Weapon : rd.Armour) || []) add(m, (m.Value || 0) * rs, (m.Value2 || 0) * rs, label + ' · rune ' + rd.Name + (rs < 1 ? ' (half value)' : ''), key);
+        // Halved gem levels add up per item and the item's total rounds up to a whole level. In-game tooltips 14 Nov 2026,
+        // "Plays at level 29 (+9 from gear and passives)" on two characters: Rangtest's Starfall Bow (+2 line, one Othala)
+        // shows +3; Samtest's Voidfists (+2 line, two Othala) shows +3 and its Sigilfang (+1 line, one Othala) shows +2.
+        // So one halved Othala (0.5) gives +1 and two give +1, not +2.
+        for (const m of (weaponSlot ? rd.Weapon : rd.Armour) || []) {
+          if (m.Stat === 'SkillLevel' && rs < 1) { const k = (m.Tags || []).join('+'); (halfLevels[k] = halfLevels[k] || { m, sum: 0, names: [] }).sum += (m.Value || 0) * rs; halfLevels[k].names.push(rd.Name); continue; }
+          add(m, (m.Value || 0) * rs, (m.Value2 || 0) * rs, label + ' · rune ' + rd.Name + (rs < 1 ? ' (half value)' : ''), key);
+        }
       }
+      for (const h of Object.values(halfLevels)) add(h.m, Math.ceil(h.sum - 1e-9), 0, label + ' · rune ' + h.names.join(' + ') + ' (half value, rounded up)', key);
       if (rw) {
         for (const mm of rw.Mods) add(mm.Mod, mm.Mod.Value, mm.Mod.Value2, label + ' · runeword ' + rw.Name, key);
         // Power lines count Power2H times on a two-handed base (the game logs Poison gems at +3 from
@@ -9835,7 +9897,16 @@ window.BOCharacter = function (ctx) {
     // ----- speed -----
     let speedInc = 0, speedMore = 1;
     const speedStat = isAttack ? 'AttackSpeed' : 'CastSpeed';
+    // A passive tree "less Attack Speed" line with NO tag does not slow attacks in the game; the lines tagged Attack do.
+    // In-game Lightning Arrow tooltips 14 Nov 2026 (Rangtest, Starfall Bow 1.42, Dex 1,064, 49.5% increased from tree,
+    // gloves and Dragonling): 2.49 attacks / 2.86 uses a second with Oath of the Snare (AttackSpeed More -10, no tag)
+    // taken, and the same 2.49 / 2.86 with it removed (it would be 2.76 / 3.18 had it counted). 2.49 = 1.42 x 2.559 x
+    // 0.8 (One Breath) x 0.9 (Thousand Feathers) x 0.95 (Held Breath), all three tagged Attack; Bastion's Reckoning's
+    // -10 (no tag, also taken) cannot be in it either (2.24). The third such line, Oath of the Long Night, follows the
+    // same pattern unseen. Cast speed lines are left alone: not checked.
+    const untaggedTreeLess = m => isAttack && m.key === 'passives' && m.mode === 'More' && m.v < 0 && !(m.tags || []).length;
     for (const m of pickMods(mods, speedStat)) if (applies(ctx, m)) {
+      if (untaggedTreeLess(m)) { use(m, 'not applied to attacks by the game'); continue; }
       if (m.mode === 'Inc') speedInc += m.v; else if (m.mode === 'More') speedMore *= 1 + m.v / 100; use(m);
     }
     if (isAttack) speedInc += per10('Dex', 'DexAttackSpeedPer10');
@@ -15621,7 +15692,7 @@ window.BOStartApp = function () {
   // The Item Search tab (itemsearch.js): uniques, Oathwords, bases, mods, runes and jewels from the game data.
   grail = window.BOGrail({ $, esc, gd: () => GD, current: () => st.ch, icons: () => itemSearch,
     onChange: () => { if (!$('#itemSearchPane').hidden) itemSearch.render(); } });
-  itemSearch = window.BOItemSearch({ $, esc, gd: () => GD, owned: () => grail, patches: () => patches });
+  itemSearch = window.BOItemSearch({ $, esc, gd: () => GD, owned: () => grail, patches: () => patches, skillDot, skillDesc: (sk, lv) => planner.skillDesc(sk, lv) });
   // The Ladder tab (ladder.js): public ladders and top builds from the Broken Oath public API, read only through the
   // share worker's cache (/api/). ?ladderapi=local points it at `wrangler dev` on port 8787 for testing.
   // Recent Patch tab hover tooltips: what an entry does in the current game data, in the page's .pl-tip look (the Build tab's

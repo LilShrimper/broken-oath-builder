@@ -1777,6 +1777,14 @@ body.io-open { overflow: hidden; }
 :root[data-theme="light"] .is-lines.unique, :root[data-theme="light"] .is-lines.oathword { color: #2f5fb0; }
 .is-lines .none { color: var(--faint); }
 .is-flavour { margin: 8px 0 0; color: var(--faint); font-style: italic; font-size: 12px; }
+/* Skill and support gems (Item Search) */
+.is-ico.gem { display: block; width: 44px; height: 44px; border: 0; background: none; }
+.is-ico.gem .gem-ico { display: block; width: 44px; height: 44px; margin: 0; border-radius: 8px; }
+.is-ico.gemstone { color: var(--ic); }
+.is-ico.gemstone svg { fill: color-mix(in srgb, currentColor 35%, transparent); }
+.is-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 2px 0 6px; }
+.is-desc { margin: 6px 0; color: var(--text); line-height: 1.45; }
+.is-lines.gemline { color: var(--muted); padding-top: 6px; border-top: 1px solid var(--line); }
 .is-stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0 0 6px; }
 .is-stats dt { color: var(--muted); }
 .is-stats dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }

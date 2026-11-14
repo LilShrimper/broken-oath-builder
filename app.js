@@ -245,7 +245,7 @@ window.PAGE_LANGS = {
       if (s.Channel) o.Channel = pick(s.Channel, ['CostPerSec', 'Tick', 'MoveMult', 'bStrike', 'StrikeScale']);
       if (s.Orb && typeof s.Orb === 'object') o.Orb = pick(s.Orb, ['Duration', 'Interval', 'Max', 'ExplodeScale']); // Winter Orb: icicle clock and the closing burst
       if (s.Minion) o.Minion = pick(s.Minion, ['MonsterId', 'Count', 'Cap', 'CountEvery', 'PerLevels', 'DamageMult', 'AttackEvery', 'Affinity', 'AffinityDamage', 'AffinityCap', 'LevelDamage', 'GolemAuras']);
-      if (s.Ground) o.Ground = pick(s.Ground, ['Duration', 'Tick', 'TickScale', 'Radius']);
+      if (s.Ground) o.Ground = pick(s.Ground, ['Duration', 'Tick', 'TickScale', 'Radius', 'HallowedTakenPct', 'HallowedCrit']); // Hallowed*: the ground's damage taken and crit (Consecrated Ground, Hallowed Slam)
       if (s.Totem) o.Totem = typeof s.Totem === 'object' ? Object.assign({ on: true }, pick(s.Totem, ['Kind', 'Interval', 'Duration', 'Max', 'PerLevels', 'Effectiveness'])) : true;
       if (s.Rain) o.Rain = pick(s.Rain, ['Delay', 'Waves', 'Interval', 'Arrows']);
       if (s.Brand) { o.Brand = true; if (typeof s.Brand === 'object') { o.BrandDuration = s.Brand.Duration; o.BrandMax = s.Brand.Max; } } // duration and max: the tooltip of Venom/Rime/Ember shows {BrandLife}, not a number
@@ -2618,19 +2618,30 @@ window.BOPlanner = function (ctx) {
 
   // Supports as toggle chips, laid out like the Damage tab's support picker: every support that fits
   // the skill, socketed ones lit; the ones that only help against packs sit in their own group.
+  // Pin (socketed) keeps a support in every setup Sim Supports tries; block (not socketed) keeps the search off it.
+  // Shared per skill with the Damage tab's picker (app.js marksFor).
+  const PIN = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M9.8 1.2l5 5-1.6.4-2.6 2.6.4 3.5-1.4 1.4-2.9-2.9L3.2 15l-1.1-.3-.1-1.1 3.8-3.8L2.9 6.9l1.4-1.4 3.5.4 2.6-2.6z"/></svg>';
+  const BLOCK = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.8 12.2l8.4-8.4" stroke="currentColor" stroke-width="1.8"/></svg>';
   function supChips(ch, r, sups, slots, lvl, edit) {
     const inSet = new Set(sups.map(lc));
+    const marks = edit && ctx.supMarks ? ctx.supMarks(r.skill) : null, canSim = marks && GD.skills[lc(r.skill)] && !S.dealsNoHits(GD.skills[lc(r.skill)]);
+    const nPin = canSim ? [...marks.pin].filter(id => inSet.has(id)).length : 0, nBlk = canSim ? marks.block.size : 0;
     const choices = GD.skills[lc(r.skill)] ?S.supportChoices(GD, ch, r.skill, { conduit: r.sock && r.sock.conduit }) : [];
     const known = new Set(choices.map(c => c.id));
     const strays = [...inSet].filter(id => !known.has(id)).map(id => ({ id, name: (GD.supports[id] || { Name: id }).Name }));
     const tag = c => {
-      const on = inSet.has(c.id);
-      return '<span class="sup' + (on ? ' on' : '') + '"><button type="button" class="sup-name"' + (edit ? ' data-act="togsup"' : ' disabled') + ' data-sup="' + esc(c.id) + '" aria-pressed="' + on + '">' + ctx.gemDot(c.id) + esc(c.name) + '</button></span>';
+      const on = inSet.has(c.id), kept = canSim && on && marks.pin.has(c.id), blk = canSim && !on && marks.block.has(c.id);
+      return '<span class="sup' + (on ? ' on' : '') + (blk ? ' blocked' : '') + '"><button type="button" class="sup-name"' + (edit ? ' data-act="togsup"' : ' disabled') + ' data-sup="' + esc(c.id) + '" aria-pressed="' + on + '">' + ctx.gemDot(c.id) + esc(c.name) + '</button>' +
+        (canSim && on ? '<button type="button" class="sup-pin' + (kept ? ' kept' : '') + '" data-act="suppin" data-sup="' + esc(c.id) + '" aria-pressed="' + kept + '" aria-label="' + (kept ? 'Unpin ' : 'Pin ') + esc(c.name) + '" title="' + (kept ? 'Pinned: every setup Sim Supports tries keeps it' : 'Pin: keep it in every setup Sim Supports tries') + '">' + PIN + '</button>' : '') +
+        (canSim && !on ? '<button type="button" class="sup-block' + (blk ? ' kept' : '') + '" data-act="supblock" data-sup="' + esc(c.id) + '" aria-pressed="' + blk + '" aria-label="' + (blk ? 'Unblock ' : 'Block ') + esc(c.name) + '" title="' + (blk ? 'Blocked: Sim Supports never picks it. Click to allow it again' : 'Block: Sim Supports never picks it') + '">' + BLOCK + '</button>' : '') + '</span>';
     };
     const main = choices.filter(c => !c.packOnly), more = choices.filter(c => c.packOnly);
     const moreOn = more.some(c => inSet.has(c.id));
     return '<div class="sup-picker pl-sups">' +
       '<span class="meta' + (sups.length > slots ? ' bad' : '') + '">' + sups.length + ' / ' + slots + ' support sockets at gem level ' + lvl + (edit ? ' · click a support to socket it or take it out' : '') + '</span>' +
+      // Own spans so each translates on its own (i18n.js works per text node).
+      (nPin || nBlk ? ' <span class="meta">' + [nPin ? nPin + ' pinned' : '', nBlk ? nBlk + ' blocked' : ''].filter(Boolean).join(' · ') + '</span>' : '') +
+      (canSim ? ' <span class="meta">Pin one to keep it in every setup Sim Supports tries, or block one so it never picks it.</span>' : '') +
       '<div class="sup-row">' + strays.concat(main).map(tag).join('') + '</div>' +
       (more.length ? '<details class="sup-more"' + (moreOn ? ' open' : '') + '><summary>Packs and extras <span class="meta">(' + more.length + ', no damage against one enemy)</span></summary><div class="sup-row">' + more.map(tag).join('') + '</div></details>' : '') +
       '</div>';
@@ -3238,6 +3249,13 @@ window.BOPlanner = function (ctx) {
     if (act === 'importcode') return importCodeBox();
     if (!ctx.current()) return;
     if (act === 'resetlinks') { status = ''; return ctx.resetLinks(); }
+    if (act === 'suppin' || act === 'supblock') {
+      // Search settings, not a build edit: the plan or save stays as it is.
+      const r0 = b.closest('[data-skill]'), m = r0 && ctx.supMarks ? ctx.supMarks(r0.dataset.skill) : null; if (!m) return;
+      const id = lc(b.dataset.sup), set = act === 'suppin' ? m.pin : m.block;
+      if (set.has(id)) set.delete(id); else { set.add(id); if (act === 'supblock') m.pin.delete(id); }
+      return render();
+    }
     const ch = ctx.editable();
     if (act === 'dnode') {
       const r = dToggle(ch, b.dataset.id);
@@ -3268,7 +3286,9 @@ window.BOPlanner = function (ctx) {
     if (act === 'togsup') {
       // Same rules as the Damage tab's picker: one shape support at a time, no more than the sockets allow.
       const id = lc(b.dataset.sup), sd = GD.supports[id] || {}, s = ensureSocket(ch, skill);
-      if (s.supports.some(x => lc(x) === id)) { s.supports = s.supports.filter(x => lc(x) !== id); status = ''; return done({ skills: true }); }
+      const m = ctx.supMarks ? ctx.supMarks(skill) : null;
+      if (s.supports.some(x => lc(x) === id)) { s.supports = s.supports.filter(x => lc(x) !== id); if (m) m.pin.delete(id); status = ''; return done({ skills: true }); }
+      if (m) m.block.delete(id); // socketing a blocked support by hand allows it again
       const SHAPES = ['orbit', 'rain_support', 'trap_support', 'totem_support'];
       const swap = SHAPES.includes(id) ? s.supports.find(x => SHAPES.includes(lc(x))) : null;
       const slots = S.socketsFor(GD, ch, skill, ch.gemLevels[skill] || 1);
@@ -8547,6 +8567,10 @@ window.BOCharacter = function (ctx) {
       '<label class="sp-mana"><input type="checkbox" data-sp="mana"' + (SP.manaOk ? ' checked' : '') + '> Mana sustained</label>' +
       '<button class="btn small ghost" type="button" data-sp="rerun"' + (SP.job ? ' disabled' : '') + '>Run again</button></div>';
     h += '<p class="hint">Against the enemy set on the Damage tab. New supports are highlighted; struck-through ones come out. <b>Use</b> sockets that setup on this skill.</p>';
+    const mk = ctx.supMarks ? ctx.supMarks(SP.skill) : null, pins = mk ? [...mk.pin].filter(id => inUse.includes(id)) : [], blks = mk ? [...mk.block] : [];
+    // Each label and name in its own span, so each translates on its own (i18n.js works per text node).
+    const names = ids => ids.map(id => '<span>' + esc(supNm(id)) + '</span>').join(', ');
+    if (pins.length || blks.length) h += '<p class="hint">' + (pins.length ? '<span>Pinned, in every setup:</span> ' + names(pins) + '<br>' : '') + (blks.length ? '<span>Blocked, never picked:</span> ' + names(blks) + '<br>' : '') + '<span>Change these on the skill\'s support chips.</span></p>';
     if (SP.msg) h += '<p class="hint pl-status" role="status">' + esc(SP.msg) + '</p>';
     if (SP.job) h += '<p class="hint" id="spProg" role="status">Searching… ' + SP.pct + '%</p>';
     else if (R && R.none) h += '<p class="hint bad">No support setup found for ' + esc(name) + (SP.manaOk ? ' that keeps your mana up. Untick Mana sustained to see the rest.' : '.') + '</p>';
@@ -9970,19 +9994,34 @@ window.BOCharacter = function (ctx) {
       if (m.mode === 'Flat') critFlat += m.v; else if (m.mode === 'Inc') critInc += m.v; else if (m.mode === 'More') critMore *= 1 + m.v / 100; use(m);
     }
     for (const m of pickMods(mods, 'CritMulti', 'Flat')) if (applies(ctx, m)) { multi += m.v; use(m); }
-    const critChance = clamp((baseCrit + critFlat) * (1 + critInc / 100) * critMore, 0, 95);
+    // Hallowed ground's crit chance ("Enemy on Hallowed Ground" ticked) is added AFTER the formula, as plain points.
+    // Game log (Samtest, Training Post, Consecrated Ground off-class = +4): 14 Nov 2026 12:46, Wheeling Axe 62 -> 66 on the
+    // ground (12:46:24) -> 62 after it ended (12:46:31); 00:02 the same night, Wheeling Axe 77 -> 81 and Glacial Shards
+    // 62 -> 66. The same +4 on baselines 15 apart: inside the formula Samtest's increased crit would have multiplied it.
+    // Which ground's crit counts when several are up is not proven: the biggest crit is taken (the damage taken side is
+    // strongest-only, see hallowBest). The 95% cap is kept on the total (not checked).
+    const hallowSrc = o.enemyHallowedGround ? hallowedSources(GD, ch, mods) : [];
+    const hallowCrit = hallowSrc.reduce((b, s) => Math.max(b, s.crit || 0), 0);
+    const critBase = clamp((baseCrit + critFlat) * (1 + critInc / 100) * critMore, 0, 95);
+    const critChance = hallowCrit ? Math.min(95, critBase + hallowCrit) : critBase;
     multi = Math.max(100, multi);
     // Elemental Overload (keystone, tooltip 9 Nov 2026): "Critical strikes grant 60% more elemental damage for 8 seconds.
     // Price: Your critical strike multiplier is 100%." The data line has no stat mods, only the text.
     const overload = !!(ch.passives && ch.passives.includes('elemental_overload'));
     if (overload) multi = 100;
-    // Inevitable Judgement tooltip (6 Nov 2026): on Hallowed Ground, critical strikes keep twice their critical
-    // bonus. Double only the bonus over a normal hit (e.g. 150% -> 200%), not the full critical multiplier.
+    // Inevitable Judgement: on hallowed ground, critical strikes keep 1.5x their critical bonus (only the bonus over a
+    // normal hit: 150% -> 175%) and non-critical hits deal 10% less. Game log 14 Nov 2026 12:31 (Palatest, Training
+    // Post, every hit on hallowed ground): "Asc72: InevitableJudgement(hallowed) leap_slam ...: x1.00 (crit bonus x1.5,
+    // crit-only x1.00, non-crit x0.90)"; game data build 73 dragonling.json Tree.Rules71.InevitableJudgement
+    // {CritBonusMult 1.5, NonCritLess 10} and its text. The 6 Nov tooltip's "twice" is out of date. Read from the data.
+    const ijRule = ((GD.dragon || {}).rules || {}).InevitableJudgement || {};
+    const ijBonus = ijRule.CritBonusMult != null ? +ijRule.CritBonusMult : 1.5, ijNonCrit = 1 - (ijRule.NonCritLess != null ? +ijRule.NonCritLess : 10) / 100;
     const hallowedCritBonus = ascFlag('Asc71_InevitableJudgement') && !!o.enemyHallowedGround;
-    const effectiveMulti = hallowedCritBonus ? 100 + (multi - 100) * 2 : multi;
-    const critFactor = 1 + critChance / 100 * (effectiveMulti / 100 - 1);
+    const effectiveMulti = hallowedCritBonus ? 100 + (multi - 100) * ijBonus : multi;
+    const nonCritMult = hallowedCritBonus ? ijNonCrit : 1;
+    const critFactor = (1 - critChance / 100) * nonCritMult + critChance / 100 * effectiveMulti / 100;
     res.crit = { base: baseCrit, chance: critChance, multi: effectiveMulti, factor: critFactor, inc: critInc };
-    if (hallowedCritBonus) res.notes.push('Inevitable Judgement: critical strikes on this enemy keep twice their critical bonus (' + multi + '% becomes ' + effectiveMulti + '% critical damage).');
+    if (hallowedCritBonus) res.notes.push('Inevitable Judgement: on this enemy your critical strikes keep ' + ijBonus + 'x their critical bonus (' + multi + '% becomes ' + +effectiveMulti.toFixed(1) + '% critical damage) and your non-critical hits deal ' + Math.round((1 - ijNonCrit) * 100) + '% less.');
 
     // ----- speed -----
     let speedInc = 0, speedMore = 1;
@@ -10755,6 +10794,21 @@ window.BOCharacter = function (ctx) {
     // alone 450.2 = 360.2 (x1.2499), venom golem alone 314.5 = 292.6 (x1.0749), both on one monster 786.2 = 585.1 and
     // 1848.9 = 1375.9 (x1.3437) = 1.25 x 1.075 (1.34375); added would be 1.325. Only lines inside one curse add (above).
     const extraTaken = (1 + (o.extraTakenPct || 0) / 100) * (1 + markPct / 100) * golemTaken;
+    // Hallowed ground ("Enemy on Hallowed Ground" ticked): the strongest of your hallowed grounds, on hits, multiplied on
+    // top of the curses (outside the Guardian "only the strongest counts" choice). Game log 14 Nov 2026 12:41 (Palatest,
+    // RL 85 brass_colossus, 172 s, Consecrated Ground cast 38 times, Sanctuary on every skill, Hallowed Verdict from
+    // every Skyfall): "SheetX98: guardian_fight ... shock_x 1.05 ground_x 1.16 curse_x 1.34", and the GuardianTaken59
+    // lines name only Woe/Sentence and Mark/Banner, so the ground is not in that choice. With the three nearly always up,
+    // stacking would give about 1.40 (add) or 1.45 (multiply); 1.16 is under Consecrated Ground's own 1.20, so only the
+    // strongest ground counts. Shown on a Guardian; off Guardians the same rule is assumed (not checked). Hits only:
+    // Consecrated Ground says "from every hit". The ground's crit chance is in the crit section (hallowSrc is set there).
+    const hallowBest = hallowSrc.reduce((b, s) => s.taken > (b ? b.taken : 0) ? s : b, null);
+    const groundTaken = hallowBest ? 1 + hallowBest.taken / 100 : 1;
+    res.hallowed = { sources: hallowSrc, best: hallowBest, taken: groundTaken, crit: hallowCrit, critBefore: critBase };
+    if (o.enemyHallowedGround) res.notes.push(hallowBest
+      ? 'Hallowed ground: the enemy takes ' + +hallowBest.taken.toFixed(1) + '% more damage from your hits (' + hallowBest.name + (hallowBest.half ? ', half outside the Paladin' : '') + '). Only your strongest hallowed ground counts, on top of your curses (game log 14 Nov, on a Guardian).' +
+        (hallowCrit ? ' Your hits on it get +' + +hallowCrit.toFixed(1) + '% critical strike chance, added after your increased crit (' + +critBase.toFixed(1) + '% becomes ' + +critChance.toFixed(1) + '%).' : '')
+      : 'Hallowed ground: none of your skills or Dragonling nodes makes hallowed ground, so no extra damage taken is counted.');
     // Maim (support): the skill's hits make the enemy take X% more Physical damage from you. The game's skill
     // panel counts it on the physical part of the hit, not on the bleed (Split Shot tooltip 1 Nov: 1,140 DPS =
     // hits x1.10 + 216 bleeding). Counted on hits only here too.
@@ -10803,7 +10857,7 @@ window.BOCharacter = function (ctx) {
     res.mitig = mitig;
     let hitDpsVs = 0; const byType = {};
     for (const d of Object.keys(hit)) {
-      const v = hit[d].avg * critFactor * hitsPerSec * perHitFactor * mitig[d].k * mitig[d].taken;
+      const v = hit[d].avg * critFactor * hitsPerSec * perHitFactor * mitig[d].k * mitig[d].taken * groundTaken;
       byType[d] = v; hitDpsVs += v;
     }
     res.hitDpsByType = byType;
@@ -11624,6 +11678,29 @@ window.BOCharacter = function (ctx) {
     return { total: parts.reduce((a, p) => a + p.n, 0), parts };
   }
 
+  // Hallowed ground this character can make, each with its damage taken and crit: skill grounds (skills.json
+  // Ground.HallowedTakenPct / HallowedCrit: Consecrated Ground 20 / 8, Hallowed Slam 8) and dragon nodes (dragonling.json
+  // Tree.Rules71 TakenPct / Crit: Hallowed Verdict, Sanctuary, Consecrated Bulwark, 10 / 10 each). A skill's ground outside
+  // its home class is halved: switches r98.META sHallowHome74 "Paladin", fHallowOff74 0.5, and the game log
+  // "Econ74: hallowed ground x0.50 for Samurai" / "x1.00 for Paladin" (14 Nov 2026). A skill counts when it is on the
+  // bar or in a socket; a dragon node when its flag is in the build.
+  function hallowedSources(GD, ch, mods) {
+    const out = [];
+    const home = String((GD.rules || {})['r98.META.sHallowHome74'] || 'Paladin').toLowerCase();
+    const off = lc(ch.classId || '') === home ? 1 : ruleNum(GD, 'r98.META.fHallowOff74', 0.5);
+    const ids = new Set([...(ch.hotbar || []), ...(ch.sockets || []).map(s => s.skill)].filter(Boolean).map(lc));
+    for (const id of ids) {
+      const g = (GD.skills[id] || {}).Ground;
+      if (g && g.HallowedTakenPct > 0) out.push({ name: GD.skills[id].Name, taken: g.HallowedTakenPct * off, crit: (g.HallowedCrit || 0) * off, half: off !== 1 });
+    }
+    const rules = (GD.dragon || {}).rules || {};
+    const flags = new Set(); for (const m of mods || []) if (m.stat === 'Dragonling') (m.tags || []).forEach(t => flags.add(t));
+    for (const [k, r] of Object.entries(rules)) if (r && r.TakenPct > 0 && flags.has('Asc71_' + k)) {
+      out.push({ name: k.replace(/([a-z])([A-Z])/g, '$1 $2'), taken: r.TakenPct, crit: r.Crit || 0, half: false });
+    }
+    return out;
+  }
+
   // The Grave Golem's blessing: its element comes from the supports in its sockets (the first non-physical element
   // they add or convert to). Fire: 12.5% more minion damage; Lightning: 15% faster minions; the others do not
   // change minion damage. Needs the golem gem on the bar.
@@ -12166,7 +12243,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
+  const api = { hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
     // The share at which a support works on minion skills despite "Minion" in its ExcludeTags (0 = it does not), for tooltips.
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -12416,7 +12493,7 @@ window.BOStartApp = function () {
   }
 
   function selectSkill(id) {
-    st.skill = id; st.gemLevel = null; st.supports = null; st.keepSup = new Set(); st.supMsg = ''; st.pinned = null; st.hps = null; st.cps = null; st.totemCount = null; stopSearch(); st.opt = null;
+    st.skill = id; st.gemLevel = null; st.supports = null; st.keepSup = marksFor(id).pin; st.blockSup = marksFor(id).block; st.supMsg = ''; st.pinned = null; st.hps = null; st.cps = null; st.totemCount = null; stopSearch(); st.opt = null;
     $('#skillSelect').value = id; $('#optSkill').value = id; renderOptMulti(); $('#skillGem').innerHTML = skillDot(id); $('#gemLevel').value = ''; $('#hpsOverride').value = ''; st.ingame = null;
     if (st.ch) store.set('skill:' + st.ch.id, id);
     const sk = GD.skills[String(id).toLowerCase()];
@@ -12616,7 +12693,8 @@ window.BOStartApp = function () {
     }).join('') || '<li class="hint">Every Herald is already on your bar.</li>';
     // Fight toggles only when this build can use them (still shown if already ticked)
     const dragonFlags = new Set(); try { S.collectMods(GD, ch, opts()).mods.forEach(m => { if (m.stat === 'Dragonling') (m.tags || []).forEach(t => dragonFlags.add(t)); }); } catch (e) { /* keep them hidden */ }
-    $('#rowHallowed').hidden = !(dragonFlags.has('Asc71_InevitableJudgement') || st.enemyHallowedGround);
+    let hallowSrc = []; try { hallowSrc = S.hallowedSources(GD, ch, S.collectMods(GD, ch, opts()).mods); } catch (e) { /* keep the box hidden */ }
+    $('#rowHallowed').hidden = !(dragonFlags.has('Asc71_InevitableJudgement') || hallowSrc.length || st.enemyHallowedGround);
     $('#rowFlashfire').hidden = !(dragonFlags.has('Asc71_Flashfire') || st.flashfire);
     $('#rowGraveCall').hidden = !(r.minion || st.graveCall);
     // Curses
@@ -12660,6 +12738,10 @@ window.BOStartApp = function () {
   const PIN = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M9.8 1.2l5 5-1.6.4-2.6 2.6.4 3.5-1.4 1.4-2.9-2.9L3.2 15l-1.1-.3-.1-1.1 3.8-3.8L2.9 6.9l1.4-1.4 3.5.4 2.6-2.6z"/></svg>';
   const BLOCK = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.8 12.2l8.4-8.4" stroke="currentColor" stroke-width="1.8"/></svg>';
   const SUP_HINT = 'Click a support to socket it or take it out. Pin one to keep it in every setup the search tries, or block one so the search never picks it.';
+  // Pinned and blocked supports, per skill: the Damage tab's picker, the Build tab's chips (and the Character tab's skill window)
+  // and both Sim Supports share them. A pin only counts while that support is socketed.
+  function marksFor(skill) { const m = marksFor.m || (marksFor.m = {}), k = String(skill || '').toLowerCase(); return m[k] || (m[k] = { pin: new Set(), block: new Set() }); }
+  function pinsIn(skill, sups) { const on = new Set((sups || []).map(x => String(x).toLowerCase())); return [...marksFor(skill).pin].filter(id => on.has(id)); }
   function supSockets() { const h = conduitHostNow(st.conduit); return h ? S.socketsFor(GD, st.ch, h.skill) : S.socketsFor(GD, st.ch, st.skill, st.gemLevel || undefined); }
   function renderSupportSkillSelect() {
     const skillSelect = $('#supportSkillSelect');
@@ -12677,10 +12759,10 @@ window.BOStartApp = function () {
     const choices = S.supportChoices(GD, st.ch, st.skill, opts());
     const known = new Set(choices.map(c => c.id));
     const n = supSockets(), used = [...inSet].length;
-    for (const id of [...st.keepSup]) if (!inSet.has(id)) st.keepSup.delete(id);
-    $('#supportCount').textContent = used + ' / ' + n + ' sockets' + (st.keepSup.size ? ' · ' + st.keepSup.size + ' pinned' : '') + (st.blockSup.size ? ' · ' + st.blockSup.size + ' blocked' : '');
+    const pinned = [...st.keepSup].filter(id => inSet.has(id)).length; // a pin on a support not socketed here waits (the Build tab may have it in)
+    $('#supportCount').textContent = used + ' / ' + n + ' sockets' + (pinned ? ' · ' + pinned + ' pinned' : '') + (st.blockSup.size ? ' · ' + st.blockSup.size + ' blocked' : '');
     const tag = c => {
-      const on = inSet.has(c.id), s = status[c.id], bad = on && s && !s.ok, kept = st.keepSup.has(c.id), blk = st.blockSup.has(c.id);
+      const on = inSet.has(c.id), s = status[c.id], bad = on && s && !s.ok, kept = on && st.keepSup.has(c.id), blk = st.blockSup.has(c.id);
       return '<span class="sup' + (on ? ' on' : '') + (bad ? ' bad' : '') + (blk ? ' blocked' : '') + '"><button type="button" class="sup-name" data-sup="' + esc(c.id) + '" aria-pressed="' + on + '">' + gemDot(c.id) + esc(c.name) + '</button>' +
         (on && !bad ? '<button type="button" class="sup-pin' + (kept ? ' kept' : '') + '" data-pin="' + esc(c.id) + '" aria-pressed="' + kept + '" aria-label="' + (kept ? 'Unpin ' : 'Pin ') + esc(c.name) + '" title="' + (kept ? 'Pinned: every setup the search tries keeps it' : 'Pin: keep it in every setup the search tries') + '">' + PIN + '</button>' : '') +
         (!on ? '<button type="button" class="sup-block' + (blk ? ' kept' : '') + '" data-block="' + esc(c.id) + '" aria-pressed="' + blk + '" aria-label="' + (blk ? 'Unblock ' : 'Block ') + esc(c.name) + '" title="' + (blk ? 'Blocked: the search never picks it. Click to allow it again' : 'Block: the search never picks it') + '">' + BLOCK + '</button>' : '') + '</span>';
@@ -13143,7 +13225,7 @@ window.BOStartApp = function () {
     let gearCandidates, supportJob, treeJob;
     try {
       gearCandidates = gearUpgradeCandidates(st.ch);
-      supportJob = S.supportSearch(GD, st.ch, st.skill, opts(), { pool: 'all', target: 'enemy', keep: 40, manaOk: true, pinned: [...st.keepSup], blocked: [...st.blockSup] });
+      supportJob = S.supportSearch(GD, st.ch, st.skill, opts(), { pool: 'all', target: 'enemy', keep: 40, manaOk: true, pinned: pinsIn(st.skill, st.supports), blocked: [...st.blockSup] });
       treeJob = BOTreeOpt.optimize(GD, S, st.ch, st.skill, opts(), {
         keepDefence: $('#optKeepDef').checked,
         allowKeystones: $('#optKeys').checked,
@@ -13618,7 +13700,7 @@ window.BOStartApp = function () {
     const o = opts(), pool = $('#optPool').checked ? 'owned' : 'all', target = $('#optTarget').value, manaOk = $('#optMana').checked;
     const cur = S.calcSkill(GD, st.ch, st.skill, o);
     if (cur.unsupported || cur.error) return;
-    const job = S.supportSearch(GD, st.ch, st.skill, o, { pool, target, keep: 12, manaOk, pinned: [...st.keepSup], blocked: [...st.blockSup] });
+    const job = S.supportSearch(GD, st.ch, st.skill, o, { pool, target, keep: 12, manaOk, pinned: pinsIn(st.skill, st.supports), blocked: [...st.blockSup] });
     st.optJob = job;
     st.optHide = false;
     st.opt = { skill: st.skill, pool, target, manaOk, pinnedN: job.pinned.length, sig: optSig(), running: true, tried: 0, total: job.total, exact: job.exact, combos: job.combos, sockets: job.sockets, poolSize: job.pool.length, results: job.results, currentValue: target === 'panel' ? cur.panelDps : cur.totalDps, baseSup: (st.supports || []).map(s => s.toLowerCase()) };
@@ -15741,7 +15823,7 @@ window.BOStartApp = function () {
         let job;
         try {
           const o = comboOpts(); o.gemLevel = st.ch.gemLevels[skill] || undefined;
-          job = S.supportSearch(GD, st.ch, skill, o, { pool: 'all', target: 'enemy', keep: 1, manaOk, pinned: [], blocked: [] });
+          job = S.supportSearch(GD, st.ch, skill, o, { pool: 'all', target: 'enemy', keep: 1, manaOk, pinned: pinsIn(skill, ((st.ch.sockets || []).find(x => String(x.skill).toLowerCase() === String(skill).toLowerCase()) || {}).supports), blocked: [...marksFor(skill).block] });
         } catch (e) { return resolve(null); }
         const tick = () => {
           const t = performance.now();
@@ -15765,7 +15847,7 @@ window.BOStartApp = function () {
         const o = comboOpts(); o.gemLevel = st.ch.gemLevels[skill] || undefined;
         cur = S.calcSkill(GD, st.ch, skill, o);
         if (!cur || cur.error || cur.unsupported) return resolve(null);
-        job = S.supportSearch(GD, st.ch, skill, o, { pool: opt.pool || 'all', target: 'enemy', keep: 8, manaOk: !!opt.manaOk, pinned: [], blocked: [] });
+        job = S.supportSearch(GD, st.ch, skill, o, { pool: opt.pool || 'all', target: 'enemy', keep: 8, manaOk: !!opt.manaOk, pinned: pinsIn(skill, ((st.ch.sockets || []).find(x => String(x.skill).toLowerCase() === String(skill).toLowerCase()) || {}).supports), blocked: [...marksFor(skill).block] });
       } catch (e) { return resolve(null); }
       const tick = () => {
         if (stop) return resolve(null);
@@ -15774,7 +15856,7 @@ window.BOStartApp = function () {
         if (!job.done) { progress(Math.round(job.tried / Math.max(1, job.total) * 100)); return setTimeout(tick, 0); }
         const id = x => (GD.supports[String(x).toLowerCase()] || { Id: x }).Id;
         // Nothing keeps the mana up: show the setups anyway, marked, instead of an empty window (as bestSupportsFor falls back).
-        if (!job.results.length && opt.manaOk && !job.again) { const o2 = comboOpts(); o2.gemLevel = st.ch.gemLevels[skill] || undefined; const dropped = job.manaDropped || 0; job = S.supportSearch(GD, st.ch, skill, o2, { pool: opt.pool || 'all', target: 'enemy', keep: 8, manaOk: false, pinned: [], blocked: [] }); job.again = true; job.manaAll = dropped; return setTimeout(tick, 0); }
+        if (!job.results.length && opt.manaOk && !job.again) { const o2 = comboOpts(); o2.gemLevel = st.ch.gemLevels[skill] || undefined; const dropped = job.manaDropped || 0; job = S.supportSearch(GD, st.ch, skill, o2, { pool: opt.pool || 'all', target: 'enemy', keep: 8, manaOk: false, pinned: pinsIn(skill, ((st.ch.sockets || []).find(x => String(x.skill).toLowerCase() === String(skill).toLowerCase()) || {}).supports), blocked: [...marksFor(skill).block] }); job.again = true; job.manaAll = dropped; return setTimeout(tick, 0); }
         resolve({ results: job.results.map(r => Object.assign({}, r, { sup: r.sup.map(id) })), current: cur.totalDps, sockets: job.sockets, tried: job.tried, exact: job.exact, poolSize: job.pool.length, manaDropped: job.manaDropped || 0, manaNone: !!job.again });
       };
       setTimeout(tick, 0);
@@ -15791,7 +15873,7 @@ window.BOStartApp = function () {
   document.addEventListener('keydown', e => { const t = e.target; if ((e.key === 'Enter' || e.key === ' ') && t && t.dataset && t.dataset.bwSlot != null) { e.preventDefault(); brewery.openSlot(+t.dataset.bwSlot); } });
   planner = window.BOPlanner({
     beltCard: () => brewery ? brewery.beltCard() : '',
-    GD, S, $, esc, gemDot, skillDot, confirm: confirmInPage, importCode: text => importAnyCode(text), bestSupports: bestSupportsFor,
+    GD, S, $, esc, gemDot, skillDot, confirm: confirmInPage, importCode: text => importAnyCode(text), bestSupports: bestSupportsFor, supMarks: marksFor,
     // A plan code carries the plan's tree tabs too (when it has more than one).
     withTabs: ch => {
       const t = ch === st.chOrig ? treeTabs() : null;
@@ -15915,7 +15997,7 @@ window.BOStartApp = function () {
   character = window.BOCharacter({
     beltCard: () => brewery ? brewery.beltCard() : '',
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, num, pct, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
-    supportSearch: supportSearchFor, simSkill: () => st.skill, // the main skill: the plan's own, or the one the Damage tab sims
+    supportSearch: supportSearchFor, supMarks: marksFor, simSkill: () => st.skill, // the main skill: the plan's own, or the one the Damage tab sims
     // The skill window: one skill's sheet against the Damage tab's enemy, the patch history, and a way to its tab.
     skillSheet: id => { if (!st.ch) return null; const o = comboOpts(); o.gemLevel = st.ch.gemLevels[id] || undefined; return S.calcSkill(GD, st.ch, id, o); },
     patches: () => patches, showTab: t => showTab(t),

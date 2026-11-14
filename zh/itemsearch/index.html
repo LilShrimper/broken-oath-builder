@@ -12,7 +12,7 @@
 <meta property="og:url" content="https://lilshrimper.github.io/broken-oath-builder/zh/itemsearch/"><meta property="og:image" content="https://lilshrimper.github.io/broken-oath-builder/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
-<link rel="stylesheet" href="../../style.css?v=295">
+<link rel="stylesheet" href="../../style.css?v=296">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -349,7 +349,7 @@
         <p class="hint enemy-life-note">Enemy life sets the size of Shock: lower life means a bigger Shock. Blank = the sim's estimate.</p>
       </div>
       <div class="enemy-toggles">
-        <label class="check" id="rowHallowed" title="Inevitable Judgement: critical strikes keep twice their critical bonus" hidden><input type="checkbox" id="enemyHallowedGround"><span>Enemy on Hallowed Ground</span></label>
+        <label class="check" id="rowHallowed" title="The enemy stands on your hallowed ground: your strongest one makes it take more damage from your hits. Inevitable Judgement: critical strikes keep 1.5x their critical bonus, non-critical hits deal 10% less" hidden><input type="checkbox" id="enemyHallowedGround"><span>Enemy on Hallowed Ground</span></label>
         <label class="check" id="rowFlashfire" title="Flashfire: Fire hits in the 2 s after a Flame Dash deal 40% more. Counts it as always up." hidden><input type="checkbox" id="flashfire"><span>Flame Dash just used</span></label>
         <label class="check" id="rowGraveCall" title="Minions: 30% more damage and 20% faster for 4 s after each cast. The game's panel leaves it out." hidden><input type="checkbox" id="graveCall"><span>Grave Call active</span></label>
       </div>
@@ -539,7 +539,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":295,"at":"2026-11-14T17:05:05.926Z"};
+window.SITE_VERSION = {"v":296,"at":"2026-11-14T18:11:28.313Z"};
 window.SITE_LANG = 'zh';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -548,6 +548,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=14188d03","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../app.js?v=295"></script>
+<script src="../../app.js?v=296"></script>
 </body>
 </html>

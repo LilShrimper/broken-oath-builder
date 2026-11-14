@@ -11424,7 +11424,7 @@ window.BOCharacter = function (ctx) {
       engAdded.push(m.src.replace(/^Support · /, '') + ' ' + (m.v * g).toFixed(1) + '-' + (m.v2 * g).toFixed(1) + ' ' + st.types.join('/'));
       use(m, 'minion');
     }
-    if (engAdded.length) res.notes.push('Added to each minion hit: ' + engAdded.join(', ') + ' (half the support\'s numbers, grown with the gem like the minions\' own damage; the growth is a reading of the support\'s text, not checked in game). Penetration, poisons and the DoT multiplier are not counted for minions.');
+    if (engAdded.length) res.notes.push('Added to each minion hit: ' + engAdded.join(', ') + ' (half the support\'s numbers, grown with the gem like the minions\' own damage; the growth is a reading of the support\'s text, not checked in game). Its poisons and DoT multiplier are counted under Minion poison; its penetration is not counted for minions.');
     // More lines: the summon's own supports only (your own damage lines do not reach minions). Ruthless (made into
     // an averaged Physical more line in calcSkill) is kept out of the hit: the game's panel shows the hit without it
     // and counts it in the DPS only (Grave Golem 2 Nov: 248-454 with or without it, DPS 2,015 -> 2,325).
@@ -11698,6 +11698,70 @@ window.BOCharacter = function (ctx) {
       res.notes.push('Your army: ' + army.parts.map(p => p.n + ' ' + p.name).join(', ') + ' (' + army.total + ' in all' + (army.total > ARMY_TOTAL ? ', at most ' + ARMY_TOTAL + ' stand: past that your oldest go, counted here as each kind losing its share' : '') + ').' + (armyK < 1 ? ' Past ' + ARMY_FULL + ' each minion adds half a minion of damage, so every blow deals x' + armyK.toFixed(3) + ' (' + armyBodies(standing).toFixed(1) + ' minions of damage from ' + standing + ').' : ''));
     }
     res.minion.army = army ? { total: army.total, k: armyK } : null;
+    // Minion poison, and Sleepy's Continental Strap's burst on it (PoisonBurst76: "Every 12th Poison you or your Minions lay on
+    // an enemy bursts: {v}% of the Poison damage that enemy still has coming hits it at once"). Minions lay ailments
+    // (scaling.json Ailments.bMinionAilments; the log marks each burst "(minion)"). One enemy holds one pool of stacks from the
+    // whole army, so each summon's sheet takes its share of the army's poison.
+    // Game log 14 Nov 2026 (Shrimpskelemage: 11 Skeletons, 8 Mages, 8 Zombies, Grave Golem, each with Venom + Added Poison;
+    // belt roll 30%), Training Post, 20 s (18:17:55-18:18:15):
+    //   "AilmentStats: ... poisons 10062 ... dot 241850187" -> "poisons 13013 ... dot 393483473" = 148 poisons/s, 7.58M/s;
+    //   "Uniques76: summary ... poison bursts 1477 (437129934 damage)" -> "1723 (571664138 damage)" = 12.3 bursts/s (148 / 12:
+    //   poisons past the stack cap count too), 6.73M/s, so plain poison about 0.85M/s;
+    //   "Uniques76: poison burst #1400 on training_post - poison 1260 of this enemy, 40 stacks hold 1326159 still coming,
+    //   30% = 397848 queued (minion)" and "#1600 ... 40 stacks hold 999955 still coming, 30% = 299987 queued".
+    //   The counted burst damage is the queued amount x the enemy's damage taken (12.3/s x about 350k x 1.56 = 6.7M/s).
+    // The rules below give, for that army: 143 poisons/s, 40 stacks, plain poison 0.61M/s and 1.13M held before damage taken
+    // (the log: 148, 40, about 0.55M, 1.0-1.33M), burst 4.0M/s before damage taken (the log: about 4.3M). They are:
+    //   chance: the general PoisonChance (10) + the summon gem's own supports (Venom 25). Your own chance lines (Black Blood,
+    //     the belt's) are left out: with them the rate would be 204/s or more;
+    //   a stack: (Physical + Poison of the blow, with crit) x PoisonFracPerSec x (1 + the gem's supports' DoT Multiplier), Added
+    //     Poison's -40 at its half strength on minions (switches: engine supports "fit Minion skills at Share of their
+    //     numbers"); at full strength the three numbers come out 15-30% low. Your own Poison lines are left out;
+    //   past the cap the strongest stacks stay (the Golem's first): with the oldest replaced instead, plain poison would be a
+    //     third of the log's;
+    //   time left: what the stacks hold / plain poison a second = about 2 s in the log, the whole PoisonSeconds: at 148 a second
+    //     into 40 places every stack is fresh. Counted as PoisonSeconds - (cap / rate) / 2, half of it while under the cap.
+    // A fit on one army and one 20 s test: not checked with one kind alone, on a Guardian, or with Virulence (not counted).
+    {
+      const A = GD.scaling.Ailments || {};
+      let pChance = 0, dotMulti = 0;
+      const elig = ((hit.Poison ? hit.Poison.avg : 0) + (hit.Physical ? hit.Physical.avg : 0)) * critFactor;
+      if (A.bEnabled && A.bMinionAilments && hit.Poison && elig > 0) {
+        pChance = A.PoisonChance || 0;
+        for (const m of mods) {
+          if (!String(m.key || '').startsWith('support:')) continue;
+          if (m.stat === 'PoisonChance' && m.mode === 'Flat') { pChance += m.v; use(m, 'minion poison chance'); }
+          else if (m.stat === 'DotMulti' && m.mode === 'Flat') { dotMulti += m.v; use(m, 'minion poison'); }
+        }
+        pChance = clamp(pChance, 0, 100);
+      }
+      const row = { name: sk.Name, lay: hitsPerSec * pChance / 100, stack: elig * (A.PoisonFracPerSec || 0) * Math.max(0, 1 + dotMulti / 100) * armyK };
+      res.minion.poisonRow = row;
+      const rows = [row].concat(army && !oneKind ? army.parts.map(p => p.poison).filter(p => p && p.lay > 0) : []).filter(p => p.lay > 0 && p.stack > 0);
+      if (row.lay > 0 && row.stack > 0 && !o.armyProbe) {
+        const dur = A.PoisonSeconds || 2, cap = A.PoisonMaxStacks || 40;
+        const R = rows.reduce((a, p) => a + p.lay, 0);
+        let left = cap, plain = 0, mine = 0, myStacks = 0;
+        for (const p of rows.slice().sort((a, b) => b.stack - a.stack)) {
+          const n = Math.min(left, p.lay * dur); left -= n; plain += n * p.stack;
+          if (p === row) { mine = n * p.stack; myStacks = n; }
+        }
+        const stacks = cap - left;
+        const remain = R * dur > cap ? dur - cap / R / 2 : dur / 2;
+        const one = isBoss && guardianStrongestTaken(GD);
+        const taken = A.bPoisonTakesDamageTaken ? activeCurses.reduce((p, r) => one ? Math.max(p, 1 + (r.taken + (r.elem.Poison || 0)) / 100) : p * (1 + (r.taken + (r.elem.Poison || 0)) / 100), 1) : 1;
+        const poisonDps = mine * taken;
+        let burstPct = 0; for (const m of pickMods(mods, 'PoisonBurst76', 'Flat')) { burstPct += m.v; use(m, 'minion poison burst'); }
+        const every = Math.max(1, ruleNum(GD, 'r76.UNIQUES.Every', 12));
+        const burstAll = burstPct > 0 ? R / every * burstPct / 100 * plain * remain * taken : 0;
+        const burstDps = burstAll * row.lay / R;
+        res.poisonDps = poisonDps + burstDps;
+        res.totalDps += res.poisonDps;
+        res.ailments.poison = { chance: pChance, eligible: elig, duration: dur, tipDuration: dur, virulence: false, perStack: row.stack, stacks: myStacks, stacksRaw: row.lay * dur, cap, panelStacks: myStacks, inc: 0, more: 1, dps: res.poisonDps, burstDps, burstPct, perHitTotal: row.stack * dur, army: { rate: R, stacks, plain: plain * taken, hold: plain * remain, burst: burstAll, kinds: rows.length } };
+        res.notes.push('Minion poison: ' + Math.round(pChance) + '% of blows poison (' + row.lay.toFixed(1) + ' a second), each stack ' + Math.round(row.stack).toLocaleString('en-US') + ' a second for ' + dur + ' s. ' + (rows.length > 1 ? 'Your whole army lays ' + R.toFixed(0) + ' a second on one enemy' : 'That is ' + R.toFixed(0) + ' a second on one enemy') + (R * dur > cap ? ', more than its ' + cap + ' stacks can hold: the strongest stay, ' + myStacks.toFixed(1) + ' of them from ' + sk.Name : ', ' + myStacks.toFixed(1) + ' stacks from ' + sk.Name) + ' = ' + Math.round(poisonDps).toLocaleString('en-US') + ' DPS. Not in the game\'s panel. Fitted to one Training Post test (game log, 14 Nov 2026).');
+        if (burstPct > 0) res.notes.push('Poison burst: every ' + every + 'th poison the army lays (' + (R / every).toFixed(1) + ' bursts a second) hits for ' + Math.round(burstPct) + '% of the ' + Math.round(plain * remain).toLocaleString('en-US') + ' the stacks still hold = ' + Math.round(burstAll).toLocaleString('en-US') + ' DPS for the whole army, ' + Math.round(burstDps).toLocaleString('en-US') + ' of it counted here (' + sk.Name + '\'s share of the poisons laid). The Training Post log gave about the same (14 Nov 2026).');
+      }
+    }
     if (ruthK > 1) res.notes.push('Ruthless: every third blow deals ' + Math.round(ruthPct * 3) + '% more physical damage, averaged into the DPS (x' + ruthK.toFixed(3) + '); the hit above leaves it out, as the game\'s panel does.');
     return res;
   }
@@ -11726,7 +11790,7 @@ window.BOCharacter = function (ctx) {
       seen.add(k);
       const r = calcSkill(GD, ch, id, Object.assign({}, o, { armyProbe: true }));
       const n = r.minion ? r.minion.alive : (k.Minion.GolemAuras ? 1 : (k.Minion.Cap || k.Minion.Count || 1));
-      parts.push({ name: k.Name, n });
+      parts.push({ name: k.Name, n, poison: r.minion ? r.minion.poisonRow : null }); // its poisons, for the army's shared stacks
     }
     return { total: parts.reduce((a, p) => a + p.n, 0), parts };
   }

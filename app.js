@@ -506,7 +506,7 @@ window.PAGE_LANGS = {
     // Keys are "section.key" (r87.SPARKS.PerBody). A game folder has neither file: the sim then uses its own defaults.
     const gameRules = {};
     const ruleVal = v => v === 'True' ? true : v === 'False' ? false : v !== '' && v != null && isFinite(+v) ? +v : v;
-    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA)$/;
+    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE)$/;
     try { for (const s of (J('Gameplay/switches.json') || {}).switches || []) if (RULE_SECTIONS.test(s.section)) gameRules[s.section + '.' + s.key] = ruleVal(s.value); } catch (e) { /* not served */ }
     try { for (const [k, v] of Object.entries((J('Gameplay/rules.json') || {}).values || {})) gameRules[k] = ruleVal(v && v.value); } catch (e) { /* older game data */ }
     let trapPrice = {};
@@ -2697,7 +2697,7 @@ window.BOPlanner = function (ctx) {
       return h + '<p class="hint">Choose a base item type compatible with ' + esc(chosenWord.Name) + '.</p></div></details>';
     }
     const base = GD.bases[lc(it.base)];
-    if (base) for (const m of base.Implicits || []) h += '<div class="meta">Implicit: ' + esc(modLine(m)) + '</div>';
+    if (base) for (const m of (base.Implicits || []).concat(base.FamilyLine ? [base.FamilyLine] : [])) h +='<div class="meta">Implicit: ' + esc(modLine(m)) + '</div>';
     const bsl = baseStats(it, slot);
     if (bsl.length) h += '<div class="meta pl-base-stats">' + esc(bsl.map(baseLine).join(' · ')) + '</div>';
     if (it.rarity === 'Unique') {
@@ -2781,11 +2781,13 @@ window.BOPlanner = function (ctx) {
       out.push({ key: 'base|aps', text: 'Attacks per second: {0}', v: r2(w.aps) }, { key: 'base|crit', text: 'Critical Strike Chance: {0}%', v: r2(w.crit) }, { key: 'base|dps', text: 'Weapon DPS: {0}', v: Math.round(avg * w.aps) });
     }
     const sum = (f) => mods.filter(f).reduce((a, m) => a + m.v, 0);
+    // Base Grade scales the base defence before the item's flat lines, as in the sim's defenceTotal (sim.js gradeMult).
+    // Owner's tooltip 14 Nov 2026: Saint's Mail, grade 48 (98%), base 135 + 196 flat, +81% = 595 Armour, ES 41 = 73.
+    const gm = S.gradeMult ? S.gradeMult(it.grade) : 1;
     for (const [s, name] of [['Armour', 'Armour'], ['Evasion', 'Evasion Rating'], ['EnergyShield', 'Energy Shield']]) {
       const flat = sum(m => m.stat === s && m.mode === 'Flat'), inc = sum(m => m.mode === 'Inc' && (m.stat === s || m.stat === 'Defences'));
-      if (base[s] || flat) out.push({ key: 'base|' + s, text: name + ': {0}', v: Math.round(((base[s] || 0) + flat) * (1 + inc / 100)) });
-    }
-    if (base.Block) out.push({ key: 'base|block', text: 'Chance to Block: {0}%', v: base.Block });
+      if (base[s] || flat) out.push({ key: 'base|' + s, text: name + ': {0}', v: Math.round(((base[s] || 0) * gm + flat) * (1 + inc / 100)) });
+    }    if (base.Block) out.push({ key: 'base|block', text: 'Chance to Block: {0}%', v: base.Block });
     return out;
   }
   const baseLine = x => x.text.replace('{0}', x.v).replace('{1}', x.v2);
@@ -2795,8 +2797,10 @@ window.BOPlanner = function (ctx) {
     let h = '<b>' + esc(u ? u.Name : word ? word.Name : it.rarity + ' ' + ((base && base.Name) || it.base)) + '</b>';
     h += '<span class="pl-tip-sub">' + esc(SLOT_NAME[slot] + (u || word ? ' · ' + ((base && base.Name) || it.base) : '') + ' · item level ' + (it.level || 1)) + '</span>';
     const bs = baseStats(it, slot);
-    if (bs.length) h += '<ul class="pl-tip-base">' + bs.map(x => li(baseLine(x))).join('') + '</ul>';
-    const imp = (base && base.Implicits) || [];
+    // The game's wording: "Base Grade: 48, 98% of the base".
+    const grade = it.grade > 0 && base && (base.Armour || base.Evasion || base.EnergyShield || base.DamageMin) && S.gradeMult ? li('Base Grade: ' + it.grade + ', ' + Math.round(S.gradeMult(it.grade) * 100) + '% of the base', 'meta') : '';
+    if (bs.length || grade) h += '<ul class="pl-tip-base">' + bs.map(x => li(baseLine(x))).join('') + grade + '</ul>';
+    const imp = base ? (base.Implicits || []).concat(base.FamilyLine ? [base.FamilyLine] : []) : []; // FamilyLine: src/gamedata.js
     if (imp.length) h += '<ul class="pl-tip-imp">' + imp.map(m => li(modLine(m))).join('') + '</ul>';
     // Each roll: its tier (affixes) on the left, the tier's roll range on the right.
     const span = (lo, hi) => lo + (lo < 0 || hi < 0 ? ' – ' : '-') + hi; // -25 – -15 reads better than -25--15
@@ -2915,7 +2919,10 @@ window.BOPlanner = function (ctx) {
     const lines = [];
     if (sd.ManaMultiplier && sd.ManaMultiplier !== 1) lines.push('Mana multiplier: ' + Math.round(sd.ManaMultiplier * 100) + '%');
     if (sd.RequiresAnyTag && sd.RequiresAnyTag.length) lines.push('Supports: ' + sd.RequiresAnyTag.join(', ') + ' skills');
-    if (sd.ExcludeTags && sd.ExcludeTags.length) lines.push('Not for: ' + sd.ExcludeTags.join(', ') + ' skills');
+    const engShare = window.BOSim && BOSim.minionEngineShare ? BOSim.minionEngineShare(GD, id) : 0;
+    const exTags = (sd.ExcludeTags || []).filter(t => !(engShare && t === 'Minion'));
+    if (exTags.length) lines.push('Not for: ' + exTags.join(', ') + ' skills');
+    if (engShare) lines.push('Minion skills: works at ' + (engShare === 0.5 ? 'half' : Math.round(engShare * 100) + '%') + ' strength');
     if (lines.length) h += '<ul class="pl-tip-base">' + lines.map(li).join('') + '</ul>';
     return h;
   }
@@ -5091,7 +5098,7 @@ window.BOItemSearch = function (ctx) {
       const sp = special(b), t = baseTier[b.Id];
       ALL.push({ cat: 'base', id: b.Id, name: b.Name, level: b.Level || 1, slots: [slotName(b.Slot)], types: [baseType(b)],
         tiers: [sp || 'T' + t], tierSort: sp ? 100 : t, icon: baseIcon(b), b,
-        text: [b.Name, baseType(b), slotName(b.Slot), ...(b.Implicits || []).map(m => plain(GD, m))].join(' ') });
+        text: [b.Name, baseType(b), slotName(b.Slot), ...allImp(b).map(m => plain(GD, m))].join(' ') });
     }
     for (const u of Object.values(GD.uniques || {})) {
       const b = GD.bases[lc(u.BaseId)];
@@ -5134,7 +5141,9 @@ window.BOItemSearch = function (ctx) {
     }
     for (const sd of Object.values(GD.supports || {})) {
       const col = GEM_COLOR[sd.Attribute];
-      ALL.push({ cat: 'support', id: sd.Id, name: sd.Name || sd.Id, level: 0, slots: uniqSorted(sd.RequiresAnyTag || []), types: uniqSorted(sd.ExcludeTags || []),
+      // Engine supports work on minion skills at half strength (sim.js MINION_ENGINE), though the data still excludes Minion.
+      const exShown = (sd.ExcludeTags || []).filter(t => !(t === 'Minion' && S && S.minionEngineShare && S.minionEngineShare(GD, sd.Id)));
+      ALL.push({ cat: 'support', id: sd.Id, name: sd.Name || sd.Id, level: 0, slots: uniqSorted(sd.RequiresAnyTag || []), types: uniqSorted(exShown), exShown,
         tiers: col ? [col] : [], tierSort: 0, sd, color: col,
         text: [sd.Name, 'Support gem', sd.Description, ...(sd.RequiresAnyTag || [])].join(' ') });
     }
@@ -5223,7 +5232,8 @@ window.BOItemSearch = function (ctx) {
     return '<p class="is-upgrade">' + (n ? '<b>' + n + ' ' + esc(r.Name) + '</b>' + (gold ? ' + <b class="gold">' + gold.toLocaleString('en-US') + ' gold</b>' : '') + ' upgrades into ' : 'Upgrades into ') +
       '<span class="is-rune">' + glyphIcon(next) + '<b>' + esc(next.Name) + '</b></span></p>';
   }
-  const implicits = (GD, b) => b && (b.Implicits || []).length ? '<ul class="is-lines implicit">' + b.Implicits.map(m => li(plain(GD, m))).join('') + '</ul>' : '';
+  const allImp = b => b ? (b.Implicits || []).concat(b.FamilyLine ? [b.FamilyLine] : []) : []; // FamilyLine: src/gamedata.js
+  const implicits = (GD, b) => allImp(b).length ? '<ul class="is-lines implicit">' + allImp(b).map(m => li(plain(GD, m))).join('') + '</ul>' : '';
   // Patch history (owner, 13 Nov 2026): every card and mod row folds out its changes from the Recent Patch data
   // (patches.js), closed by default and filled in when opened (the site fetches that file only then).
   const HIST_SEC = { base: 'bases', unique: 'uniques', oathword: 'runewords', mod: 'affixes', rune: 'runes', skill: 'skills', support: 'supports' };
@@ -5316,7 +5326,7 @@ window.BOItemSearch = function (ctx) {
       sub = (e.color || 'Support') + (sd.ManaMultiplier && sd.ManaMultiplier !== 1 ? ' · mana ×' + fmt(sd.ManaMultiplier) : '');
       body = (sd.Description ? '<p class="is-desc">' + esc(sd.Description) + '</p>' : '') +
         ((sd.RequiresAnyTag || []).length ? '<p class="is-into is-chips"><span>Supports:</span>' + sd.RequiresAnyTag.map(chip).join('') + '</p>' : '<p class="is-into">Supports any skill</p>') +
-        ((sd.ExcludeTags || []).length ? '<p class="is-into is-chips"><span>Not for:</span>' + sd.ExcludeTags.map(chip).join('') + '</p>' : '');
+        ((e.exShown || []).length ? '<p class="is-into is-chips"><span>Not for:</span>' + e.exShown.map(chip).join('') + '</p>' : '');
     } else {
       const r = e.r;
       ico = glyphIcon(r);
@@ -5445,7 +5455,7 @@ window.BOItemSearch = function (ctx) {
     const GD = ctx.gd(), u = GD && GD.uniques[lc(id)]; if (!u) return '';
     const b = GD.bases[lc(u.BaseId)], li = t => '<li>' + esc(t) + '</li>';
     let h = '<b>' + esc(u.Name) + '</b><span class="pl-tip-sub">' + esc('Unique · ' + (b ? b.Name + ' · ' + baseType(b) : u.BaseId) + (u.Level ? ' · level ' + u.Level : '')) + '</span>';
-    const imp = (b && b.Implicits) || [];
+    const imp = b ? (b.Implicits || []).concat(b.FamilyLine ? [b.FamilyLine] : []) : [];
     if (imp.length) h += '<ul class="pl-tip-imp">' + imp.map(m => li(plain(GD, m))).join('') + '</ul>';
     h += '<ul class="pl-tip-base">' + (u.Mods || []).map((m, i) => li(uniqueLine(GD, S.uniqueLineShown(u.Id, i, m)))).join('') + '</ul>';
     if (u.Flavour) h += '<span class="pl-tip-desc pl-tip-flavour">' + esc(u.Flavour) + '</span>';
@@ -8200,7 +8210,7 @@ window.BOCharacter = function (ctx) {
     if (b.DamageMin) { out.push('Damage ' + b.DamageMin + '-' + b.DamageMax); if (b.AttacksPerSecond) out.push('Base attack rate ' + b.AttacksPerSecond); if (b.Crit) out.push('Base crit ' + b.Crit + '%'); }
     for (const [k, n] of [['Armour', 'Armour'], ['Evasion', 'Evasion'], ['EnergyShield', 'Energy Shield']]) if (b[k]) out.push(n + ' ' + b[k]);
     if (b.Block) out.push('Block ' + b.Block + '%');
-    for (const m of b.Implicits || []) { const t = safe(() => G.modLine(m)); if (t) out.push(t); }
+    for (const m of (b.Implicits || []).concat(b.FamilyLine ? [b.FamilyLine] : [])) { const t = safe(() => G.modLine(m)); if (t) out.push(t); }
     return out;
   }
   function uniqueLines(u) {
@@ -8667,6 +8677,12 @@ window.BOCharacter = function (ctx) {
   // the Totem, Ballista and Spark caps, the extra Totem and Trap shares, the Totem echo and the Vow skill-level share. Each default
   // is the value the sim used before, proven where its own comment says so.
   const ruleNum = (GD, key, def) => { const v = (GD.rules || {})[key]; const n = typeof v === 'object' && v ? +v.value : +v; return v != null && isFinite(n) ? n : def; };
+  // An on/off switch from the game's rules (true/false or "True"/"False"), or the given default when the data has none.
+  const bSwitch = (GD, key, def) => { const v = (GD.rules || {})[key]; const x = v && typeof v === 'object' ? v.value : v; return x == null ? !!def : String(x).toLowerCase() === 'true'; };
+  // The red Siege Line rune raises the shared limits by one (6 -> 7 Ballistas, 10 -> 11 Totems). Developer's rule file (API build 73
+  // switches.json, r92.BUGSE.bSiegeLift92 True): "the red Siege Line rune raises the shared totals (6 to 7 Ballistas, 10 to 11
+  // Totems) in play, sheet DPS and tooltips" (player report: "with this rune the Ballista limit should be 7, it caps at 6"). Not checked.
+  const siegeLift = (GD, mods) => bSwitch(GD, 'r92.BUGSE.bSiegeLift92', is073(GD)) && mods.some(m => m.stat === 'TotemCount' && /Siege Line/i.test(m.src || '')) ? 1 : 0;
   const moreKnee = m => m <= 8 ? m : 8 * Math.pow(1.41, Math.log2(m / 8));
   // 0.56.5 count rule (Multiple Totems and Trap Support texts, build 26543267): "each past the first adds 80% of one's
   // damage, and each past the sixth adds 20%" (Totems and Ballistas of one skill); Traps "90% ... past your sixth 40%".
@@ -8890,7 +8906,7 @@ window.BOCharacter = function (ctx) {
       // The base's family line (src/gamedata.js FamilyLine, base_implicits95.json): never boosted by Great / Flawless (the owner's
       // tooltips, 13 Nov 2026: Doom Clutch, a Great rare, shows its 7% melee line unboosted). On uniques: not checked yet.
       if (base && base.FamilyLine) add(base.FamilyLine, base.FamilyLine.Value, 0, label + ' · family line', key);
-      else notes.push('Unknown item base ' + it.base + ' on ' + it.slot);
+      if (!base) notes.push('Unknown item base ' + it.base + ' on ' + it.slot);
       let vowN = 0;
       // Idols never get the Great / Flawless boost: the owner's Dwarven Fossil panel (9 Nov 2026) shows +76% critical
       // multiplier and totems 43% faster from idols rolled 22+18+18+18 and 13+10+10+10, the unboosted values (boosted they
@@ -8950,7 +8966,11 @@ window.BOCharacter = function (ctx) {
           // Great / Flawless grading (here it is top tier, so either way gives Flawless); it is still counted as a rolled line there.
           const boost = rareBoost !== 1 && !lvlLine && !a.crafted && !a.oath && !a.scar && !/^mythic_/i.test(a.id) && !RARE_COUNT_STATS.has(af.Mod && af.Mod.Stat);
           if (boost) sh *= Math.fround(rareBoost);
-          const cnt = x => sh === 1 || !x ? x : Number.isInteger(x) ? (Math.round(x * sh) || (isVow ? Math.sign(x) : 0)) : Math.round(x * sh * 10) / 10;
+          // Boosted resistance lines stay unrounded: the character sheet adds an item's lines first and rounds the item's total.
+          // Owner's sheet tooltips, 14 Nov 2026 (Spin_win, level 51): Doom Knot (Flawless, +15% fire and +4% all) shows +25% under
+          // Fire (19.49999 + 5.2 = 24.7) and +5% under Cold; Items +81% fire and +71% cold come out only this way (line by line:
+          // 80 / 71; the whole sum rounded: 81 / 72). The page rounds per item (src/app.js defenceCore).
+          const cnt = x => sh === 1 || !x ? x : boost && af.Mod && af.Mod.Stat === 'Resist' ? x * sh : Number.isInteger(x) ? (Math.round(x * sh) || (isVow ? Math.sign(x) : 0)) : Math.round(x * sh * 10) / 10;
           add(af.Mod, cnt(a.v), cnt(a.v2), label + (isVow ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
         }
       }
@@ -9099,6 +9119,24 @@ window.BOCharacter = function (ctx) {
     return Math.floor(b);
   }
 
+  // Str / Dex / Int: class base + per level, + flat lines, x (1 + % lines). `use` marks the lines as counted (calcSkill).
+  function attrsFrom(GD, ch, mods, use) {
+    const cls = GD.classes[lc(ch.classId)] || {}, attr = {};
+    for (const a of ['Str', 'Dex', 'Int']) {
+      let flat = (cls[a] || 0) + (cls[a + 'PerLevel'] || 0) * Math.max(0, ch.level - 1);
+      let inc = 0;
+      for (const m of mods) {
+        if (m.stat === a || m.stat === 'Attributes') {
+          if (m.mode === 'Flat') { flat += m.v; if (use) use(m); } else if (m.mode === 'Inc') { inc += m.v; if (use) use(m); }
+        }
+      }
+      // Rounded to the nearest point, not down. Character panel, 12 Nov 2026 (Nectest, Necromancer level 100: 0.5 / 1.5 / 2.5
+      // a level): Str 76, Dex 179, Int 738 where the sums are 75.5, 178.5 and 737.5; Magetest's 904.2 shows 904, so it is
+      // rounding and not rounding up. With Int 738 the sheet's Energy Shield is 9,024, the panel's number.
+      attr[a] = Math.round(flat * (1 + inc / 100));
+    }
+    return attr;
+  }
   function blessingGemLevel(GD, ch, blessing, mods, opt, tryLevel) {
     // Fight-only observation override. 10 Nov 23:49 to 11 Nov 00:04 log:
     // both Heralds repeatedly swear at 28 while gear predicts 30. Keeping the
@@ -9107,7 +9145,15 @@ window.BOCharacter = function (ctx) {
     const logged = opt.blessingLevels && opt.blessingLevels[blessing.Id];
     if (Number.isInteger(logged) && logged > 0) return logged;
     const sk = GD.skills[lc(blessing.Skill)];
-    const own = tryLevel || ch.gemLevels[blessing.Skill] || 1;
+    let own = tryLevel || ch.gemLevels[blessing.Skill] || 1;
+    // A Vow or Herald gem also plays at the highest level the hero's attributes meet, and gear levels add on top, as for
+    // damage skills (gemPlayLevel). Owner's sheet tooltip, 14 Nov 2026 (Spin_win, Warrior 51, Int 112): Vow of the Bulwark,
+    // gem 16 with +1 from gear, gives "Vows and charges +25%" to each resistance = level 16 (10 + 1 a level); level 16 asks
+    // 113 Int, so the gem plays at 15, + 1 = 16. Without the rule the sim gave level 17 (+26%).
+    if (sk && !tryLevel) {
+      const play = gemPlayLevel(GD, sk, ch, attrsFrom(GD, ch, mods), own);
+      if (play && play.level < own) own = play.level;
+    }
     return own + (sk ? levelBonus(sk, tryLevel ? sk.Kind === 'Gem' : ch.gems.includes(blessing.Skill) || sk.Kind === 'Gem', mods) : 0);
   }
 
@@ -9361,7 +9407,9 @@ window.BOCharacter = function (ctx) {
       // 5 Nov (gem 20+11, Rupture 145): Trap Support and Skyfall Support shown active, "Scales with ... Trap,
       // Skyfall", log "summon_ballista delivery Totem transform Trap of [Trap,Skyfall]"; the hit ranges fit only
       // with Trap's 50% more and the Trap/Skyfall lines counted.
-      const ex = (sd.ExcludeTags || []).filter(t => !(totemAttack && lc(t) === 'totem' && ['trap_support', 'skyfall'].includes(lc(id))));
+      const ex = exTagsFor(sd, sk, GD).filter(t => !(totemAttack && lc(t) === 'totem' && ['trap_support', 'skyfall'].includes(lc(id))));
+      // An engine support on a minion skill: its minions carry it at the rule's share (r74.MINIONENG, see MINION_ENGINE).
+      const engShare = minionEngine(GD, sd, sk) ? minionEngShare(GD) : 0;
       const ok = (!req.length || req.some(t => ctx.tags.has(lc(t)))) && !ex.some(t => ctx.tags.has(lc(t))) && !noFit(sd, sk);
       // In a Conduit, a support that only fits the channel (Faster Attacks on Cyclone) still works there:
       // it changes the channel's ticks, which sets the cast rate below.
@@ -9372,9 +9420,11 @@ window.BOCharacter = function (ctx) {
       if (hostTags && !granted && !fitsHost) { res.supports.push({ id, key, name: sd.Name, ok: false, why: 'cannot be socketed in ' + host.name + ' (needs ' + req.join(' or ') + ')', desc: sd.Description }); continue; }
       const onHost = !ok && fitsHost && !granted;
       if (onHost) { res.supports.push({ id, key, name: sd.Name + ' (on ' + host.name + ')', ok: true, hostOnly: true, why: '', desc: 'Works on ' + host.name + ' itself; for this spell it only matters through ' + host.name + '\'s ticks. ' + sd.Description }); continue; }
-      res.supports.push({ id, key, name: sd.Name + (granted ? ' (granted)' : ''), granted, ok, why: ok ? '' : noHitMiss(sd, sk) ? 'no effect: ' + sk.Name + ' deals no hits' : brandTrapMiss(sd, sk) ? 'cannot be thrown as a trap: Brands cannot take it' : meleeOnlyMiss(sd, sk) ? 'the minions of ' + sk.Name + ' cannot use it (melee minions only)' : 'does not support this skill (' + (ex.some(t => ctx.tags.has(lc(t))) ? 'not for ' + ex.filter(t => ctx.tags.has(lc(t))).join(' or ') + ' skills' : 'needs ' + req.join(' or ')) + ')', desc: sd.Description });
+      res.supports.push({ id, key, name: sd.Name + (granted ? ' (granted)' : '') + (ok && engShare ? ' (minions, ' + (engShare === 0.5 ? 'half strength' : Math.round(engShare * 100) + '% strength') + ')' : ''), granted, ok, why: ok ? '' : noHitMiss(sd, sk) ? 'no effect: ' + sk.Name + ' deals no hits' : brandTrapMiss(sd, sk) ? 'cannot be thrown as a trap: Brands cannot take it' : meleeOnlyMiss(sd, sk) ? 'the minions of ' + sk.Name + ' cannot use it (melee minions only)' : 'does not support this skill (' + (ex.some(t => ctx.tags.has(lc(t))) ? 'not for ' + ex.filter(t => ctx.tags.has(lc(t))).join(' or ') + ' skills' : 'needs ' + req.join(' or ')) + ')', desc: sd.Description });
       if (!ok || (o.off && o.off.has(key))) continue;
-      for (const m of sd.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: m.Value || 0, v2: m.Value2 || 0, local: false, src: 'Support · ' + sd.Name, key });
+      const k = engShare || 1;
+      for (const m of sd.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: (m.Value || 0) * k, v2: (m.Value2 || 0) * k, local: false, src: 'Support · ' + sd.Name + (engShare ? ' (minions, x' + engShare + ')' : ''), key });
+      if (engShare && !MINION_ENGINE_COUNTED.has(lc(id))) res.notes.push(sd.Name + ': works through ' + sk.Name + '\'s minions at ' + Math.round(engShare * 100) + '% strength (the developer\'s rule file), but what it does there is not counted yet (the sim has no minion ailments, Marks or charges).');
     }
     // Spellblade keystone: "Spell Damage modifiers also apply to Attacks": the Spell damage lines (Skyfall's 20%
     // more included), the hero's Int spell damage and Boundless Mind (both in the scaling below). Ballista swap
@@ -9385,8 +9435,16 @@ window.BOCharacter = function (ctx) {
     const spellDamageAttack = isAttack && (/spell damage modifiers (also )?apply/i.test(sk.Description || '') || (lc(skillId) === 'thunderfall' && is056(GD)));
     if (spellDamageAttack) res.notes.push(sk.Name + ': spell damage modifiers apply to it (patch 0.56), as with Spellblade.');
     const spellblade = isAttack && (spellDamageAttack || mods.some(m => m.stat === 'Keystone' && (m.tags || []).includes('Spellblade')));
+    // Since game build 64 the Spellblade keystone lends only the increases and reductions: developer's rule file (API build 73
+    // switches.json, r91.METAHOLES.bSpellbladeInc91 True): "Spellblade lends an attack the increases and reductions to Spell
+    // Damage only (PoE Crown of Eyes rule), not Spell more / added / extra lines". The 5 Nov Ballista test above (Skyfall's
+    // more and Boundless Mind counted) was before that build. Thunderfall's own "spell damage modifiers apply" stays whole
+    // (the switch names Spellblade only; not checked).
+    const spellbladeKey = spellblade && !spellDamageAttack;
+    const sbIncOnly = spellbladeKey && bSwitch(GD, 'r91.METAHOLES.bSpellbladeInc91', is073(GD));
+    if (sbIncOnly) res.notes.push('Spellblade: your attack takes the increased and reduced Spell Damage lines only, not Spell "more" lines or Boundless Mind (developer\'s rule file, from game build 64).');
     if (spellblade) {
-      for (const m of mods.slice()) if (m.stat === 'Damage' && (m.tags || []).includes('Spell'))
+      for (const m of mods.slice()) if (m.stat === 'Damage' && (m.tags || []).includes('Spell') && (!sbIncOnly || m.mode === 'Inc'))
         mods.push(Object.assign({}, m, { tags: m.tags.map(t => t === 'Spell' ? 'Attack' : t), src: m.src + ' (Spellblade)' }));
     }
     res.mods = mods;
@@ -9436,20 +9494,7 @@ window.BOCharacter = function (ctx) {
 
     // Attributes.
     const cls = GD.classes[lc(ch.classId)] || {};
-    const attr = {};
-    for (const a of ['Str', 'Dex', 'Int']) {
-      let flat = (cls[a] || 0) + (cls[a + 'PerLevel'] || 0) * Math.max(0, ch.level - 1);
-      let inc = 0;
-      for (const m of mods) {
-        if (m.stat === a || m.stat === 'Attributes') {
-          if (m.mode === 'Flat') { flat += m.v; use(m); } else if (m.mode === 'Inc') { inc += m.v; use(m); }
-        }
-      }
-      // Rounded to the nearest point, not down. Character panel, 12 Nov 2026 (Nectest, Necromancer level 100: 0.5 / 1.5 / 2.5
-      // a level): Str 76, Dex 179, Int 738 where the sums are 75.5, 178.5 and 737.5; Magetest's 904.2 shows 904, so it is
-      // rounding and not rounding up. With Int 738 the sheet's Energy Shield is 9,024, the panel's number.
-      attr[a] = Math.round(flat * (1 + inc / 100));
-    }
+    const attr = attrsFrom(GD, ch, mods, use);
     res.attr = attr;
     const per10 = (a, k) => attr[a] / 10 * (H[k] || 0); // not rounded down (Shrimpbow tooltips: 107 Dex = +10.7% attack speed, 52 Int = 4.21 s bleed)
     // Mountainborn: "{v}% more Melee Physical Damage for every 10 Strength" (one more multiplier, unrounded like
@@ -9814,7 +9859,7 @@ window.BOCharacter = function (ctx) {
     // Boundless Mind: "Every 10 Intelligence also gives you 1% more Spell damage" (Spellblade carries it to
     // attacks: see above; with 501 Int it is x1.50 and the Signet test needs it).
     let intMore = 1;
-    if (spellLike) for (const m of pickMods(mods, 'IntSpellMore', 'Flat')) {
+    if (spellLike && !(sbIncOnly && !ctx.isSpell)) for (const m of pickMods(mods, 'IntSpellMore', 'Flat')) {
       use(m, 'more spell damage per Int');
       if (engine0565) engine.push({ v: m.v * attr.Int / 10, types: [], src: m.src + ' (' + attr.Int + ' Int)' });
       else intMore *= 1 + m.v * attr.Int / 10 / 100;
@@ -10027,7 +10072,7 @@ window.BOCharacter = function (ctx) {
       // Totem count set by hand (owner request, 9 Nov 2026): no game data on how many spell totems stand, so the
       // default stays one. The cap of 10 Totems is from the 0.56.2 patch notes (7 Nov).
       let tcount = Math.max(1, Math.floor(o.totemCount || 1));
-      if (is0562(GD)) tcount = Math.min(tcount, ruleNum(GD, 'r80.CAPS.Totems', 10));
+      if (is0562(GD)) tcount = Math.min(tcount, ruleNum(GD, 'r80.CAPS.Totems', 10) + siegeLift(GD, mods));
       // Totem speed also speeds a Spell Totem's casts (owner's Judgement tooltip, 9 Nov 2026: "10 totems, each casting it
       // every 0.36 s" and "Casts per second 2.78" per totem, from the gem's 0.8 s; the build's +134.9% increased
       // totem speed gives 0.8 / 2.349 = 0.341 s, close to the shown 0.36 s, so the sum may include a line that does not apply).
@@ -10209,7 +10254,7 @@ window.BOCharacter = function (ctx) {
       for (const m of pickMods(mods, 'TotemCount', 'Flat')) if (applies(ctx, m)) { count += m.v; use(m); }
       if (o.totemCount > 0) count = Math.floor(o.totemCount); // set by hand (owner request, 9 Nov 2026)
       // 0.56.2 (patch notes 7 Nov): at most 6 Ballistas and 10 Totems stand at once.
-      if (is0562(GD)) count = Math.min(count, tt.Kind === 'Ballista' ? ruleNum(GD, 'r80.CAPS.Ballistas', 6) : ruleNum(GD, 'r80.CAPS.Totems', 10));
+      if (is0562(GD)) count = Math.min(count, (tt.Kind === 'Ballista' ? ruleNum(GD, 'r80.CAPS.Ballistas', 6) : ruleNum(GD, 'r80.CAPS.Totems', 10)) + siegeLift(GD, mods));
       let tsInc = 0; for (const m of pickMods(mods, 'TotemSpeed', 'Inc')) if (applies(ctx, m)) { tsInc += m.v; use(m); }
       const every = tt.Interval / Math.max(0.25, 1 + tsInc / 100); // formulas.md section 3 (public API archive, 12 Nov 2026): "interval = Totem.Interval / max(0.25, 1 + increased totem speed)", which also settles that totem speed fires a Ballista faster
       usesPerSec = count / every; useTime = 1 / usesPerSec;
@@ -10758,10 +10803,13 @@ window.BOCharacter = function (ctx) {
           const D = GD.deep || {}, max = D.MapMaxLevel || 80, mls = D.LadderMonsterLevels || [];
           const deepLvl = mls.length ? mls[mls.length - 1] : 84;
           const rl = +o.ruptureLevel > 0 ? +o.ruptureLevel : lvl > max ? max + Math.max(1, mls.indexOf(Math.min(lvl, deepLvl)) + 1) : lvl;
-          const pts = [[62, 15.24e6], [130, 257153696], [150, 1755677184 / 1.4]];
+          // RL 66 added 14 Nov 2026: log "Guardian: model at RL 66 - target 45 s x median boss DPS 499513 = life 22437324"
+          // (ashen_wyrm, life 24,681,056 = model x 1.32 / 1.2); the straight line from 62 to 130 gave 18.0M there.
+          const pts = [[62, 15.24e6], [66, 22437324], [130, 257153696], [150, 1755677184 / 1.4]];
           if (rl <= 62) return pts[0][1] * Math.pow(1.1315, rl - 62);
-          if (rl >= 150) return pts[2][1] * Math.pow(D.LadderLifePerLevel || 1.03, rl - 150);
-          const k = rl <= 130 ? 0 : 1, [r0, l0] = pts[k], [r1, l1] = pts[k + 1];
+          if (rl >= 150) return pts[pts.length - 1][1] * Math.pow(D.LadderLifePerLevel || 1.03, rl - 150);
+          const last = pts.length - 1; let k = 0; while (k < last - 1 && rl > pts[k + 1][0]) k++;
+          const [r0, l0] = pts[k], [r1, l1] = pts[k + 1];
           return l0 * Math.pow(l1 / l0, (rl - r0) / (r1 - r0));
         };
         const life = o.enemyLife || (isBoss ? guardianLife() : 30 * ML.Base * Math.exp(ML.K * Math.pow(lvl, ML.P)) * (rar.Life || 1));
@@ -11247,7 +11295,8 @@ window.BOCharacter = function (ctx) {
       const sid = (m.tags || []).find(t => GD.supports[lc(t)]);
       if (sid && (m.tags || []).some(t => lc(t) === 'minion') && (m.tags || []).every(t => lc(t) === lc(sid) || tags.has(lc(t)))) grantedToMinions.add(lc(sid));
     }
-    const fromSupport = m => { const k = String(m.key || ''); return k.startsWith('support:') && (forMinions(GD.supports[k.slice(8)]) || grantedToMinions.has(lc(k.slice(8)))); };
+    const fromSupport = m => { const k = String(m.key || ''); return k.startsWith('support:') && (forMinions(GD.supports[k.slice(8)]) || grantedToMinions.has(lc(k.slice(8))) || minionEngine(GD, GD.supports[k.slice(8)], sk)); };
+    const fromEngine = m => { const k = String(m.key || ''); return k.startsWith('support:') && minionEngine(GD, GD.supports[k.slice(8)], sk); };
     // Gear levels past +5 grow minion skills x1.08 each (patch notes 5 Nov: "Minion skills: 8% a level"; was x1.04);
     // the 0.56 curve with its data (minionFade).
     const growth = res.gem ? spellLevelGrowth(G.DamageGrowth || 1.19, res.gem.own, res.gem.bonus, minionFade(GD)) :Math.pow(G.DamageGrowth || 1.19, L - 1);
@@ -11260,6 +11309,16 @@ window.BOCharacter = function (ctx) {
     // 'spec avg 128' (gem 12); the sim's base parts give 110.4 / 126.3. Skill panel '672 DPS (all its minions)' =
     // 4 x hit 113 / 0.673 s.
     if (o.minionSpec) for (const d of DT) parts[d] = o.minionSpec[d] ? [o.minionSpec[d][0], o.minionSpec[d][1]] : [0, 0];
+    // Added damage of an engine support (Added Poison, already at half from calcSkill), "scaled up by the skill's gem level like its
+    // own damage": grown like the summon gem's own hit. Not yet seen in the log's PetSheet68.
+    const engAdded = [];
+    if (!o.minionSpec) for (const m of mods) if (fromEngine(m) && m.stat === 'AddedDamage' && m.mode === 'Flat') {
+      const st = splitTags(m.tags), g = st.gemScaled ? growth : 1;
+      for (const d of st.types) { parts[d][0] += m.v * g; parts[d][1] += m.v2 * g; }
+      engAdded.push(m.src.replace(/^Support · /, '') + ' ' + (m.v * g).toFixed(1) + '-' + (m.v2 * g).toFixed(1) + ' ' + st.types.join('/'));
+      use(m, 'minion');
+    }
+    if (engAdded.length) res.notes.push('Added to each minion hit: ' + engAdded.join(', ') + ' (half the support\'s numbers, grown with the gem like the minions\' own damage; the growth is a reading of the support\'s text, not checked in game). Penetration, poisons and the DoT multiplier are not counted for minions.');
     // More lines: the summon's own supports only (your own damage lines do not reach minions). Ruthless (made into
     // an averaged Physical more line in calcSkill) is kept out of the hit: the game's panel shows the hit without it
     // and counts it in the DPS only (Grave Golem 2 Nov: 248-454 with or without it, DPS 2,015 -> 2,325).
@@ -11348,13 +11407,16 @@ window.BOCharacter = function (ctx) {
     // multiplier"; API game data build 73: Soul Harvest (deathknell_n1) CritChance Inc 40 + CritMulti Flat 15 tagged Minion, and the
     // new minion_crit / minion_crit_multi suffixes). Read as increased crit chance on the minions' base chance and + to their
     // multiplier, the player's crit rule; not yet seen in the log's PetSheet68.
-    let mCritInc = 0, mCritMulti = 0;
-    for (const m of mods) if (!m.local && (m.stat === 'CritChance' && m.mode === 'Inc' || m.stat === 'CritMulti' && m.mode === 'Flat') && splitTags(m.tags).conds.some(c => lc(c) === 'minion') && fit(m)) {
+    // Honed Edge and Deathblow on the summon gem count here at half strength (r74.MINIONENG, see MINION_ENGINE): +0.5% base chance,
+    // 40% increased, +25% multiplier.
+    let mCritInc = 0, mCritMulti = 0, mCritBase = 0;
+    for (const m of mods) if (!m.local && (m.stat === 'CritChance' && m.mode === 'Inc' || m.stat === 'CritMulti' && m.mode === 'Flat') && (splitTags(m.tags).conds.some(c => lc(c) === 'minion') || fromEngine(m)) && fit(m)) {
       if (m.stat === 'CritChance') mCritInc += m.v; else mCritMulti += m.v;
       use(m, 'minion crit');
     }
-    const chance = Math.min(100, (H.SpellCritBase || 6) * (1 + mCritInc / 100)), multi = (H.CritMultiBase || 150) + mCritMulti, critFactor = 1 + chance / 100 * (multi / 100 - 1);
-    if (mCritInc || mCritMulti) res.notes.push('Minion crit: ' + chance.toFixed(1) + '% chance, x' + (multi / 100).toFixed(2) + ' (your minion crit lines on the base ' + (H.SpellCritBase || 6) + '% and x' + ((H.CritMultiBase || 150) / 100).toFixed(1) + '). Not checked against the game yet.');
+    for (const m of mods) if (fromEngine(m) && m.stat === 'CritChance' && m.mode === 'Flat') { mCritBase += m.v; use(m, 'minion crit'); }
+    const chance = Math.min(100, ((H.SpellCritBase || 6) + mCritBase) * (1 + mCritInc / 100)), multi = (H.CritMultiBase || 150) + mCritMulti, critFactor = 1 + chance / 100 * (multi / 100 - 1);
+    if (mCritInc || mCritMulti || mCritBase) res.notes.push('Minion crit: ' + chance.toFixed(1) + '% chance, x' + (multi / 100).toFixed(2) + ' (your minion crit lines on the base ' + (H.SpellCritBase || 6) + '% and x' + ((H.CritMultiBase || 150) / 100).toFixed(1) + '). Not checked against the game yet.');
     // How many stand at once: the gem's Cap, one more every CountEvery gem levels or at PerLevels, + MinionCap lines.
     let alive = (mi.Cap || mi.Count || 1) + (mi.CountEvery ? Math.floor((L - 1) / mi.CountEvery) : 0) + (mi.PerLevels || []).filter(l => L >= l).length;
     // The Grave Golem is one at a time ("Only one answers at a time"): +minion lines do not add golems (the log's
@@ -11785,6 +11847,23 @@ window.BOCharacter = function (ctx) {
   // Only supports made for minions (their socket rule names Minion) reach the minions' hits; a spell support on a
   // summon gem (Controlled Destruction, Spell Echo) changes the summoning spell, not what the minions deal.
   const forMinions = sp => !!sp && (sp.RequiresAnyTag || []).includes('Minion');
+  // The engine supports fit minion skills at half strength although their ExcludeTags still name Minion. Developer's rule file
+  // (API build 73 switches.json, r74.MINIONENG: Share 0.5, bOn True; r82.SKILLSWEEP bMinionEng True): "the 12 engine supports
+  // (incl. Added Poison) fit Minion skills at Share of their numbers; Mark/Bloodlust/Fury fire on Share of minion hits/kills".
+  // The twelve are the supports whose text says so ("On a minion skill ... half strength", "... half of its minions' kills").
+  // Owner's tooltip 14 Nov 2026: Added Poison "On a minion skill its minions' hits carry it at half strength", while the page
+  // said "not for Minion skills". Their numbers are halved when socketed (calcSkill). Counted in the minion sheet: added damage,
+  // crit, and Vicious Projectiles' more/speed lines; ailments, penetration, DoT multiplier, Marks and charges are not.
+  const MINION_ENGINE = new Set(['added_poison', 'honed_edge', 'deathblow', 'rend', 'deep_wounds', 'living_storm', 'contagion_flame',
+    'shatter', 'vicious_projectiles', 'hunters_mark_support', 'bloodlust_support', 'gather_fury']);
+  const MINION_ENGINE_COUNTED = new Set(['added_poison', 'honed_edge', 'deathblow', 'vicious_projectiles']);
+  const minionEngShare = GD => {
+    const on = (GD.rules || {})['r74.MINIONENG.bOn'], onV = on && typeof on === 'object' ? on.value : on;
+    if (onV != null && String(onV).toLowerCase() === 'false') return 0;
+    return on == null && !is073(GD) ? 0 : ruleNum(GD, 'r74.MINIONENG.Share', 0.5);
+  };
+  const minionSummon = sk => !!sk && isSummon(sk) && (sk.Tags || []).includes('Minion');
+  const minionEngine = (GD, sp, sk) => !!sp && MINION_ENGINE.has(lc(sp.Id)) && minionSummon(sk) && minionEngShare(GD) > 0;
   // Melee Physical Damage works on melee minions only. Game tooltip (owner's screenshot, 9 Nov 2026): "Fits Hammer Blow, Holy Slash,
   // Summon Skeletons, Grave Golem, Raise Zombie, Holy Elemental, Moonfall, Thunderfall. Won't fit: ... The minions of Summon Skeletal Mage
   // cannot use it" (the shooting mage is left out). Multistrike and Brutality do fit it (see the notes above).
@@ -11848,7 +11927,7 @@ window.BOCharacter = function (ctx) {
   const noFit = (sp, sk) => !!noFitWhy(sp, sk);
   // Faster Casting is a Spell support (no Minion tag) but speeds up shooting minions (patch notes 7 Nov, 0.56.3).
   const castsForMinions = (sp, sk) => !!sp && lc(sp.Id) === 'faster_casting' && !!sk && isSummon(sk) && (sk.Tags || []).includes('Projectile');
-  const minionCounts = (sp, sk) => castsForMinions(sp, sk) || forMinions(sp) && (sp.Mods || []).some(m => (m.Stat === 'Damage' && m.Mode === 'More') || m.Stat === 'DamageAsExtra' || m.Stat === 'MinionStrikes' || m.Stat === 'RuthlessBlow' || ((m.Stat === 'MinionSpeed' || m.Stat === 'AttackSpeed') && m.Mode === 'More'));
+  const minionCounts = (sp, sk) => castsForMinions(sp, sk) || (!!sp && MINION_ENGINE_COUNTED.has(lc(sp.Id)) && minionSummon(sk)) || forMinions(sp) &&(sp.Mods || []).some(m => (m.Stat === 'Damage' && m.Mode === 'More') || m.Stat === 'DamageAsExtra' || m.Stat === 'MinionStrikes' || m.Stat === 'RuthlessBlow' || ((m.Stat === 'MinionSpeed' || m.Stat === 'AttackSpeed') && m.Mode === 'More'));
   const SHAPES = ['orbit', 'skyfall', 'rain_support', 'trap_support', 'totem_support', 'arrow_totem'];
 
   // Support gems the character has: spares + every support socketed in any skill.
@@ -11895,7 +11974,7 @@ window.BOCharacter = function (ctx) {
   // A support's ExcludeTags for a skill: the Ballista takes Trap and Skyfall although both exclude Totem (tooltip and log 5 Nov, see
   // calcSkill; Trap's text: "It also fits a bow Ballista", Skyfall's: "the Ballista's volley can fall"). The picker and the search
   // left the two out for it until 12 Nov 2026, though the sim counted them when socketed.
-  const exTagsFor = (sp, sk) => (sp.ExcludeTags || []).filter(t => !(sk && sk.Totem && sk.Totem.Interval > 0 && (sk.Tags || []).includes('Attack') && lc(t) === 'totem' && ['trap_support', 'skyfall'].includes(lc(sp.Id))));
+  const exTagsFor = (sp, sk, GD) => (sp.ExcludeTags || []).filter(t => !(sk && sk.Totem && sk.Totem.Interval > 0 && (sk.Tags || []).includes('Attack') && lc(t) === 'totem' && ['trap_support', 'skyfall'].includes(lc(sp.Id))) && !(GD && lc(t) === 'minion' && minionEngine(GD, sp, sk)));
   // Every support that can go in this skill's sockets (or, for a Conduit spell, the channel's), for the page's picker.
   // packOnly: adds nothing against one enemy; shape: only one shape gem counts (Orbit, Skyfall, Rain, Trap, Totem).
   function supportChoices(GD, ch, skillId, o) {
@@ -11903,7 +11982,7 @@ window.BOCharacter = function (ctx) {
     const host = conduitHost(GD, ch, skillId, collectMods(GD, ch, o || {}).mods, (o || {}).conduit);
     const base = host ? GD.skills[lc(host.skill)] || sk : sk;
     const tags = socketTags(base);
-    const fits = sp => (!(sp.RequiresAnyTag || []).length || sp.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(sp, base).some(t => tags.has(lc(t))) && !noFit(sp, base);
+    const fits = sp => (!(sp.RequiresAnyTag || []).length || sp.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(sp, base, GD).some(t => tags.has(lc(t))) && !noFit(sp, base);
     return Object.values(GD.supports).filter(fits).map(sp => ({ id: lc(sp.Id), name: sp.Name, desc: sp.Description || '', packOnly: isSummon(sk) ? !minionCounts(sp, sk) : NO_SINGLE_TARGET.has(lc(sp.Id)) && !['cast_on_crit', 'channel_conduit', 'tithe', 'siphon'].includes(lc(sp.Id)), shape: SHAPES.includes(lc(sp.Id)) }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -11917,7 +11996,7 @@ window.BOCharacter = function (ctx) {
     const host = conduitHost(GD, ch, skillId, collectMods(GD, ch, o).mods, o.conduit);
     const tagSets = [socketTags(sk)];
     if (host) tagSets.push(socketTags(GD.skills[lc(host.skill)]));
-    const fitsTags = (s, tags) => (!(s.RequiresAnyTag || []).length || s.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(s, host ? GD.skills[lc(host.skill)] : sk).some(t => tags.has(lc(t))) && !noFit(s, host ? GD.skills[lc(host.skill)] : sk);
+    const fitsTags = (s, tags) => (!(s.RequiresAnyTag || []).length || s.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(s, host ? GD.skills[lc(host.skill)] : sk, GD).some(t => tags.has(lc(t))) && !noFit(s, host ? GD.skills[lc(host.skill)] : sk);
     const owned = ownedSupports(ch);
     // A Conduit spell's supports sit in the channel's sockets, so they must fit the channel.
     const fits = Object.values(GD.supports).filter(s => host ? fitsTags(s, tagSets[1]) : fitsTags(s, tagSets[0]));
@@ -12042,7 +12121,9 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { oneKindLost, noFitWhy, defenceTotal, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET };
+  const api = { oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
+    // The share at which a support works on minion skills despite "Minion" in its ExcludeTags (0 = it does not), for tooltips.
+    minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -12634,13 +12715,21 @@ window.BOStartApp = function () {
   }
   function defenceCore(ch, mods, attr) {
     const life = Math.floor(S.heroMaxLife(GD, ch, mods, attr)); // the game rounds down: 467.5 shows as 467
-    let f = 0, inc = 0; const rs = { Fire: 0, Cold: 0, Lightning: 0, Poison: 0 }; let all = 0;
+    let f = 0, inc = 0;
     const loc = {}; // per item: local ES flat and local "% increased defences"
+    // Resistances per source (item, Vow, tree...): each source's lines for an element are added, then rounded, as the
+    // character sheet lists them (sim.js keeps boosted rare lines unrounded; Doom Knot 19.5 fire + 5.2 all = +25%).
+    const rsBy = {};
     for (const m of mods) {
       if (m.local && (m.stat === 'EnergyShield' || m.stat === 'Defences')) { const o = loc[m.key] || (loc[m.key] = { es: 0, def: 0 }); if (m.stat === 'EnergyShield' && m.mode === 'Flat') o.es += m.v; else if (m.stat === 'Defences' && m.mode === 'Inc') o.def += m.v; }
       else if (m.stat === 'EnergyShield') { if (m.mode === 'Flat') f += m.v; else if (m.mode === 'Inc') inc += m.v; }
-      else if (m.stat === 'Resist' && m.mode === 'Flat') { const t = (m.tags || [])[0]; if (t === 'Elemental') all += m.v; else if (t in rs) rs[t] += m.v; }
+      else if (m.stat === 'Resist' && m.mode === 'Flat') {
+        const t = (m.tags || [])[0], o = rsBy[m.key || m.src] || (rsBy[m.key || m.src] = { Fire: 0, Cold: 0, Lightning: 0, Poison: 0 });
+        if (t === 'Elemental') { o.Fire += m.v; o.Cold += m.v; o.Lightning += m.v; } else if (t in o) o[t] += m.v;
+      }
     }
+    const rs = { Fire: 0, Cold: 0, Lightning: 0, Poison: 0 };
+    for (const o of Object.values(rsBy)) for (const k in rs) rs[k] += Math.round(o[k]);
     // Energy shield: each item's base ES plus its local ES lines, times its own "% increased defences"; then the global
     // flat lines, 0.5 per Int, and the tree's % ES with 4% per 10 Int. Checked 8 Nov against the in-game sheet: Shrimpslam
     // (Warrior 52, Int 64) game 111; (Warrior 53, Int 65) game 112, here the same both times; Shrimpage (Mage 20) game 339, here 323 (the save's attributes run 1-6 under the
@@ -12651,7 +12740,7 @@ window.BOStartApp = function () {
       f += ((bs.EnergyShield || 0) + o.es) * (1 + o.def / 100);
     }
     const es = (f + (H.EsPerInt79 || 0) * int) * (1 + (inc + (H.IntEsPctPer10 || 0) * int / 10) / 100); // Int is not rounded: Int 65 gives +26% (not +24%), the sheet's tooltip 8 Nov
-    const resParts = [['Fire', Math.round(rs.Fire + all)], ['Cold', Math.round(rs.Cold + all)], ['Lightning', Math.round(rs.Lightning + all)], ['Poison', Math.round(rs.Poison)]];
+    const resParts = [['Fire', rs.Fire], ['Cold', rs.Cold], ['Lightning', rs.Lightning], ['Poison', rs.Poison]];
     return { life, es, resParts };
   }
   function renderSummaryStrip() {

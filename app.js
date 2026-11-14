@@ -5824,6 +5824,8 @@ window.BOItemSearch = function (ctx) {
       mem.set(path, { at: Date.now(), data });
       return data;
     }
+    // A tree node id as the tree has it: the API sends the Spellblade keystone as "Spellblade" (tree id "spellblade").
+    const nodeId = id => { const n = GD().nodes || {}; return n[id] || !n[String(id).toLowerCase()] ? id : String(id).toLowerCase(); };
     const name = (kind, id) => {
       if (!id) return '';
       if (isHidden(id)) return 'Undiscovered';
@@ -6088,7 +6090,7 @@ window.BOItemSearch = function (ctx) {
       }).join('');
       const nodes = (b.passive_nodes || []);
       const hiddenNodes = nodes.filter(isHidden).length;
-      const big = nodes.filter(id => !isHidden(id)).map(id => (GD().nodes || {})[id]).filter(n => n && (n.Kind === 'Keystone' || n.Kind === 'Notable'));
+      const big = nodes.filter(id => !isHidden(id)).map(id => (GD().nodes || {})[nodeId(id)]).filter(n => n && (n.Kind === 'Keystone' || n.Kind === 'Notable'));
       const keys = big.filter(n => n.Kind === 'Keystone').map(n => n.Name), notables = big.filter(n => n.Kind === 'Notable').map(n => n.Name);
       const items = (b.items || []).slice().sort((x, y) => (SLOT_ORDER.indexOf(x.slot) + 99) % 99 - (SLOT_ORDER.indexOf(y.slot) + 99) % 99);
       const asc = b.ascendancy || {};
@@ -9006,7 +9008,9 @@ window.BOCharacter = function (ctx) {
     sources.push({ key: 'passives', label: 'Passive tree (' + ch.passives.length + ' nodes)', group: 'Character' });
     if (!off.has('passives')) {
       for (const id of ch.passives) {
-        const n = GD.nodes[id] || GD.nodes[GD.moved[id]];
+        // The public API's builds send the Spellblade keystone as "Spellblade"; the tree's id is "spellblade" (13 of 522
+        // ladder builds, 14 Nov 2026; every other node id matched). Fall back to the lower-case id.
+        const n = GD.nodes[id] || GD.nodes[GD.moved[id]] || GD.nodes[lc(id)];
         if (!n) { notes.push('Passive node not in current tree: ' + id); continue; }
         for (const m of n.Mods || []) add(m, m.Value, m.Value2, 'Passive · ' + n.Name + (n.Kind === 'Keystone' || n.Kind === 'Notable' ? ' (' + n.Kind + ')' : ''), 'passives');
       }
@@ -14076,8 +14080,9 @@ window.BOStartApp = function () {
   }
   const iconBox = key => { const I = window.TREE_ICONS, i = I.idx[key]; return (i % I.cols) * I.T + ' ' + Math.floor(i / I.cols) * I.T + ' ' + I.T + ' ' + I.T; };
   const dimKey = key => window.TREE_ICONS.idx[key + '_D'] != null ? key + '_D' : key;
-  const nodeOf = id => GD.nodes[id] || GD.nodes[GD.moved[id]];
-  const realId = id => GD.nodes[id] ? id : (GD.moved[id] || id);
+  // Lower-case fallback: the public API sends the Spellblade keystone as "Spellblade" (tree id "spellblade"), see sim.js.
+  const nodeOf = id => GD.nodes[id] || GD.nodes[GD.moved[id]] || GD.nodes[String(id).toLowerCase()];
+  const realId = id => GD.nodes[id] ? id : (GD.moved[id] || (GD.nodes[String(id).toLowerCase()] ? String(id).toLowerCase() : id));
   function treeAdj() {
     if (T.adj) return T.adj;
     const adj = {};

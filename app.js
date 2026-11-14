@@ -2034,7 +2034,12 @@ window.PAGE_LANGS = {
   function parse(GD, S, text, o) {
     o = o || {};
     const slot = o.slot || '';
-    const raw = String(text || '').replace(/\r/g, '').split('\n').map(l => fixDigits(l.trim())).filter(l => /[a-z]/i.test(l));
+    // The game's own copy (Ctrl+C on an item, 14 Nov 2026) puts the Alt note on the stat's line after three spaces:
+    // "+36 to Intelligence   S T3 [33-37] · T1 at item level 84", "+10% Chance to Block   [10]". Split it onto its own
+    // line under the stat, the way a screenshot with Alt shows it.
+    const raw = String(text || '').replace(/\r/g, '').split('\n')
+      .flatMap(l => { const p = l.trim().split(/\s{3,}(?=[PS]\s*T\s*\d|\[\s*-?\d)/); return p; })
+      .map(l => fixDigits(l.trim())).filter(l => /[a-z]/i.test(l));
     const all = keyOf(raw.join(' '));
     // The off hand also holds one-handed weapons (dual wielding).
     const fitsSlot = b => !slot || b.Slot === baseSlot(slot) || (slot === 'OffHand' && b.Slot === 'MainHand' && !b.bTwoHanded && !(b.Tags || []).includes('TwoHand'));
@@ -2064,7 +2069,10 @@ window.PAGE_LANGS = {
     const baseFound = !!base;
     if (!base) base = GD.bases[lc(o.base)] || bases.sort((a, b) => (a.Level || 0) - (b.Level || 0))[0] || null;
     // "Item level 84", or "ilvl 84" (OCR reads the l as i or 1 too).
-    const ilvlM = raw.join('\n').match(/(?:item\s*level|\bil[vy][l1iI|])\s*[:.]?\s*(\d+)/i);
+    // Not the Alt note's "T1 at item level 84" (when a better tier opens). The game's copy has no item level line.
+    const ilvlM = raw.join('\n').match(/(?<!\bat\s*)(?:item\s*level|\bil[vy][l1iI|])\s*[:.]?\s*(\d+)/i);
+    // "Base Grade: 80, 114% of the base" (tooltip and copy): the save's BaseGrade95, item.grade.
+    const gradeM = raw.join('\n').match(/\bbase\s*grade\s*[:.]?\s*(\d+)/i);
     const runeList = Object.values(GD.runes || {});
     const runes = [];
     const mw = /\bmasterwork\b/i.test(raw.join(' '));
@@ -2087,7 +2095,11 @@ window.PAGE_LANGS = {
       if (/^\W*vow\s*\d+\W+\d+\s*%?\W*$/i.test(l)) { pre[i] = 'vow'; return; }
       if (isShare(l)) pre[i] = 'share';
       // The base's defences: "959 Armour   26 Energy Shield", "24% block" (OCR may drop a word: "959 — 26 Energy Shield").
-      else if (/^\W*\d/.test(l) && !lc(l).replace(/[\d.,%]+|armour|evasion|rating|energy|shield|block|chance|ward|[^a-z]+/g, '')) pre[i] = 'base';
+      // The copy's form: "Armour: 124", "Evasion Rating: 42".
+      else if ((/^\W*\d/.test(l) || /^[a-z ]+:\s*[\d.,%]+\s*$/i.test(l)) && !lc(l).replace(/[\d.,%]+|armour|evasion|rating|energy|shield|block|chance|ward|[^a-z]+/g, '')) pre[i] = 'base';
+      // The header's notes: "Base Grade: 80, 114% of the base", "Armour from: base 37 · Grade 114% · 82 added",
+      // "FLAWLESS RARE · its rolled lines count 30% more" (the sim works the boost out itself, sim.js rareKind).
+      else if (/^\W*(base\s*grade\b|(armour|evasion(\s*rating)?|energy\s*shield|ward)\s*from\s*:|(flawless|great)\s*rare\b)/i.test(l)) pre[i] = 'header';
     });
     // One rune prints a line per stat, each with its note.
     const weapon = base && (base.Tags || []).includes('Weapon');
@@ -2100,19 +2112,35 @@ window.PAGE_LANGS = {
     // What a line can be: an implicit of the base, a unique's line, or an affix this base can roll.
     const cands = [];
     for (const m of (base && base.Implicits) || []) cands.push({ kind: 'implicit', tpl: modTpl(S, GD, m), label: 'implicit' });
+    // The base's family line (the blue line under the header: "+9 to Dexterity" on Lamellar Boots, "Regenerate 5 Life
+    // per second" on Knight's Plate; API bases.FamilyLine). It comes with the base, like an implicit.
+    if (base && base.FamilyLine) cands.push({ kind: 'implicit', tpl: modTpl(S, GD, base.FamilyLine), label: 'implicit' });
     if (u) u.Mods.forEach((um, i) => { if (um.Mod) cands.push({ kind: 'unique', i, um, tpl: uniqueTpl(S, GD, um), label: u.Name }); });
     // A unique's other lines are Vows: a rare's affix bound to it at the cube. Looked for only when the tooltip says
     // "Vow", so a unique line worded unlike our text isn't taken for one.
     if (!u || /\bvow/i.test(raw.join(' '))) for (const af of Object.values(GD.affixes)) if (affixOk(af, base)) cands.push({ kind: 'affix', af, tpl: modTpl(S, GD, af.Mod), label: af.Type });
 
+    // A Great / Flawless Rare's tooltip (and copy) shows its rolled lines boosted, x1.1 / x1.3 (sim.js rareBoost: the game
+    // rounds shown = stored x 1.3f; whole numbers stay whole, others to 0.1). Items keep the save's unboosted roll, so a read
+    // number is taken back before its tier is looked for. Sorrow Tread copy, 14 Nov 2026: "FLAWLESS RARE", +82 to Armour
+    // P T4 [58-77] = 63 x 1.3, +35% to Fire Resistance S T4 [26-30] = 27 x 1.3.
+    const kindM = !u && raw.join(' ').match(/\b(flawless|great)\s*rare\b/i), rareKind = kindM ? lc(kindM[1]) : '';
+    const rareBoost = rareKind === 'flawless' ? 1.3 : rareKind === 'great' ? 1.1 : 1;
+    const unboost = (x, stat) => {
+      if (rareBoost === 1 || !x || (S.RARE_COUNT_STATS && S.RARE_COUNT_STATS.has(stat))) return x;
+      const r = x / Math.fround(rareBoost);
+      return Number.isInteger(x) ? Math.round(r) : Math.round(r * 10) / 10;
+    };
     const used = new Set(), groups = new Set(), lines = [], unread = [];
     const affixes = [], uniqueVals = {};
     const best = (k, line) => {
       let top = null, score = 0, tp = null;
+      // The line without a note in brackets: "81% increased Armour (all your Armour, not only this item)".
+      const k2 = /\(/.test(line) ? keyOf(line.replace(/\s*\([^)]*\)?/g, '')) : '';
       for (const c of cands) {
         if (used.has(c)) continue;
         for (const tpl of c.tpl) {
-          let s = likeness(k, tpl.key);
+          let s = Math.max(likeness(k, tpl.key), k2 ? likeness(k2, tpl.key) : 0);
           if (c.kind === 'affix' && groups.has(c.af.Group)) s -= 0.3; // one affix per group
           if (c.kind === 'affix' && u) s -= 0.02; // on a unique, its own lines first
           if (s > score) { top = c; score = s; tp = tpl; }
@@ -2123,7 +2151,7 @@ window.PAGE_LANGS = {
     for (let i = 0; i < raw.length; i++) {
       // Some tooltips print the affix's type and tier at the end: "173% increased Physical Damage Prefix T1".
       let line = raw[i], hint = hints[i] || null;
-      if (pre[i]) { lines.push({ text: line, kind: 'info', label: pre[i] === 'tier' ? 'tier (Alt)' : pre[i] === 'share' ? 'skill\'s share of the item' : pre[i] === 'base' ? 'the base\'s defences' : '' }); continue; }
+      if (pre[i]) { lines.push({ text: line, kind: 'info', label: pre[i] === 'tier' ? 'tier (Alt)' : pre[i] === 'share' ? 'skill\'s share of the item' : pre[i] === 'base' ? 'the base\'s defences' : pre[i] === 'header' ? 'item header' : '' }); continue; }
       // "+49 to Strength (Vow 1 · 100%)": the tag (and any stray character after it) is not part of the stat.
       // Same for a range shown with Alt: "+43 to maximum Life [30-50]".
       line = line.replace(/\s*\(\s*vow\s*\d.*$/i, '').replace(/\s*\[\s*\d[^\]]*\]?\W*$/, '');
@@ -2159,6 +2187,9 @@ window.PAGE_LANGS = {
       const val = values(m.tpl, text);
       let misread = '';
       if (c.kind === 'affix') {
+        const was = val.v;
+        val.v = unboost(val.v, c.af.Mod && c.af.Mod.Stat); val.v2 = unboost(val.v2, c.af.Mod && c.af.Mod.Stat);
+        if (val.v !== was) misread = ' (shown ' + was + ' with the ' + rareKind + ' boost)';
         let same = cands.filter(x => x.kind === 'affix' && !used.has(x) && !groups.has(x.af.Group) && x.tpl.some(t => t.key === m.tpl.key));
         if (hint && same.some(x => x.af.Type === hint.type)) same = same.filter(x => x.af.Type === hint.type);
         // The "+" read as a 4: "437% to Critical Strike Multiplier" for "+37%". Taken when the number without the 4 is closer to a tier.
@@ -2193,6 +2224,7 @@ window.PAGE_LANGS = {
 
     let item;
     const level = ilvlM ? Math.max(1, Math.min(100, +ilvlM[1])) : null;
+    const grade = gradeM ? Math.max(1, Math.min(100, +gradeM[1])) : null;
     if (u) {
       const mid = (lo, hi) => lo == null ? 0 : Math.round((lo + hi) / 2 * 100) / 100;
       // A tooltip shows a scaled red line as the game counts it (sim.js UNIQUE_LINE_SCALE); items keep the unscaled roll,
@@ -2209,8 +2241,17 @@ window.PAGE_LANGS = {
       const rarity = /\brare\b/i.test(top) ? 'Rare' : /\bmagic\b/i.test(top) ? 'Magic' : !affixes.length ? 'Normal' : count('Prefix') > 1 || count('Suffix') > 1 ? 'Rare' : 'Magic';
       // No item level on the screenshot: the character's, raised to what the rolled tiers need.
       const need = Math.max(1, ...affixes.map(a => (GD.affixes[lc(a.id)].Tiers[a.tier] || {}).ILvl || 1));
-      item = { slot, base: base ? base.Id : '', rarity, unique: 'None', name: '', level: level || Math.max(o.level || 1, need), affixes, runes };
+      let lvl = level || Math.max(o.level || 1, need);
+      // The game's copy has no item level. A Flawless Rare needs every line at the best tier its level allows (sim.js
+      // rareKind): keep the level below the next better tier of every line, so the sim grades it the same.
+      if (!level && rareKind === 'flawless') {
+        const below = Math.min(100, ...affixes.map(a => { const T = GD.affixes[lc(a.id)].Tiers; return a.tier > 0 && T[a.tier - 1] ? T[a.tier - 1].ILvl - 1 : 100; }));
+        if (below >= need) lvl = Math.max(need, Math.min(lvl, below));
+      }
+      if (!level) notes.push('No item level in the text: ' + lvl + ' is used' + (rareKind === 'flawless' ? ' (it keeps every line at its top tier)' : '') + '. Set the real one below.');
+      item = { slot, base: base ? base.Id : '', rarity, unique: 'None', name: '', level: lvl, affixes, runes };
     }
+    if (item && grade) item.grade = grade;
     if (!baseFound && base) notes.push('No base name found: ' + base.Name + ' is used. Pick the right base below.');
     return { item: base ? item : null, lines, unread, baseFound, notes };
   }
@@ -3258,7 +3299,7 @@ window.BOPlanner = function (ctx) {
     const busy = RD.key === key && RD.busy;
     let h = '<div class="pl-read" tabindex="0" role="button" data-key="' + esc(key) + '" aria-label="Paste, drop or pick a screenshot of the item">' +
       '<b>' + (busy ? esc(busy) : 'Read a screenshot') + '</b>' +
-      (busy ? '' : ' <span>Click here and paste it (Ctrl+V), drop it here, or <label class="linkish">pick an image<input type="file" data-f="readimg" accept="image/*" hidden></label>. Item text works too. The image is read in this browser and never uploaded.</span>') + '</div>';
+      (busy ? '' : ' <span>Click here and paste it (Ctrl+V), drop it here, or <label class="linkish">pick an image<input type="file" data-f="readimg" accept="image/*" hidden></label>. Item text copied in the game (Ctrl+C on the item) works too. The image is read in this browser and never uploaded.</span>') + '</div>';
     const r = RD.key === key && RD.r;
     if (r && r.error) h += '<p class="hint bad">' + esc(r.error) + '</p>';
     else if (r) {
@@ -3952,7 +3993,7 @@ window.BOCreator = function (ctx) {
   // editor below so it can be checked and corrected before it goes in the bag.
   function readBoxHtml() {
     let h = '<div class="pl-read" id="crRead" tabindex="0" role="button" aria-label="Paste, drop or pick a screenshot of the item"><b>' + (C.readBusy ? esc(C.readBusy) : 'Read a screenshot') + '</b>' +
-      (C.readBusy ? '' : ' <span>Click here and paste it (Ctrl+V), drop it here, or <label class="linkish">pick an image<input type="file" id="crReadImg" accept="image/*" hidden></label>. Item text works too. The image is read in this browser and never uploaded.</span>') + '</div>';
+      (C.readBusy ? '' : ' <span>Click here and paste it (Ctrl+V), drop it here, or <label class="linkish">pick an image<input type="file" id="crReadImg" accept="image/*" hidden></label>. Item text copied in the game (Ctrl+C on the item) works too. The image is read in this browser and never uploaded.</span>') + '</div>';
     const r = C.read;
     if (r && r.error) h += '<p class="hint bad">' + esc(r.error) + '</p>';
     else if (r) {
@@ -8154,7 +8195,7 @@ window.BOCharacter = function (ctx) {
   // ----- Screenshot: read an item from a screenshot or its tooltip text (itemread.js) into this slot -----
   function readBar() {
     let h = '<div class="io-read" id="ioRead" tabindex="0" role="button" aria-label="Paste, drop or pick a screenshot of the item"><b>' + esc(RD.busy || 'Read a screenshot') + '</b>' +
-      (RD.busy ? '' : ' <span>Press Ctrl+V to paste one, drop it here, or <label class="linkish">pick an image<input type="file" id="ioFile" accept="image/*" hidden></label>. Item text works too. The image is read in this browser and never uploaded.</span>') + '</div>';
+      (RD.busy ? '' : ' <span>Press Ctrl+V to paste one, drop it here, or <label class="linkish">pick an image<input type="file" id="ioFile" accept="image/*" hidden></label>. Item text copied in the game (Ctrl+C on the item) works too. The image is read in this browser and never uploaded.</span>') + '</div>';
     const r = RD.r;
     if (r && r.error) h += '<p class="hint bad">' + esc(r.error) + '</p>';
     else if (r) {
@@ -12125,7 +12166,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
+  const api = { RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
     // The share at which a support works on minion skills despite "Minion" in its ExcludeTags (0 = it does not), for tooltips.
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -15057,7 +15098,7 @@ window.BOStartApp = function () {
   function cmpReadHtml() {
     let h = '<div class="cmp-drop" id="cmpDrop" tabindex="0" role="button" aria-label="Paste, drop or pick a screenshot of the item">' +
       '<b>' + (CMP.busy ? esc(CMP.busy) : 'Paste a screenshot of the item (Ctrl+V)') + '</b>' +
-      (CMP.busy ? '' : '<span>or drop one here, or <label class="linkish">pick an image<input type="file" id="cmpFile" accept="image/*" hidden></label>. Pasted item text works too.</span>') +
+      (CMP.busy ? '' : '<span>or drop one here, or <label class="linkish">pick an image<input type="file" id="cmpFile" accept="image/*" hidden></label>. Item text copied in the game (Ctrl+C on the item) works too.</span>') +
       '<small>Crop it to the item\'s tooltip for the best read. The image is read in this browser and never uploaded; the first time, the text reader (Tesseract, a few MB) downloads from jsDelivr.</small></div>';
     const r = CMP.read;
     if (r && r.error) h += '<p class="hint bad">' + esc(r.error) + '</p>';
@@ -15366,8 +15407,17 @@ window.BOStartApp = function () {
   }
   function cmpReadText(text, fromImage) {
     cmpSync();
-    const ia = CMP.a.items[0];
-    const r = window.BOItemRead.parse(GD, S, text, { slot: cmpSlot(), base: ia && ia.base, level: st.ch.level });
+    // Text that names a base of another slot (the game's copy always names it: "Lamellar Boots · Rare") moves the
+    // compare to that slot, the way a click on the slot does.
+    let r = window.BOItemRead.parse(GD, S, text, { slot: cmpSlot(), base: CMP.a.items[0] && CMP.a.items[0].base, level: st.ch.level });
+    if (!r.baseFound) {
+      const any = window.BOItemRead.parse(GD, S, text, { level: st.ch.level }), b = any.baseFound && any.item && GD.bases[String(any.item.base).toLowerCase()];
+      const key = !b ? '' : b.Slot === 'Ring' ? (/^Ring\d$/.test(CMP.key) ? CMP.key : 'Ring1') : b.Slot === 'Idol' ? (CMP.key.startsWith('idol:') ? CMP.key : 'idol:new') : b.Slot;
+      if (key && key !== CMP.key && cmpSlots(st.ch).some(s => s.key === key)) {
+        CMP.key = key; CMP.aEdited = false; CMP.a = null; cmpSync();
+        r = window.BOItemRead.parse(GD, S, text, { slot: cmpSlot(), base: CMP.a.items[0] && CMP.a.items[0].base, level: st.ch.level });
+      }
+    }
     if (!r.item) { CMP.read = { error: fromImage ? 'No item text found in that image. Crop it to the tooltip and try again.' : 'That text does not look like an item.' }; return renderCompare(); }
     CMP.b = { level: st.ch.level, items: [r.item] }; CMP.kb = planner.gear.newKit(true);
     CMP.read = r; CMP.msg = '';

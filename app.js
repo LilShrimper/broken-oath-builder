@@ -10530,7 +10530,13 @@ window.BOCharacter = function (ctx) {
       // On a Rare / Unique / Guardian a Woe holds and grows Dread by itself up to Tough.Cap.
       const tough = (rarity === 'rare' || isBoss) && c.Tough && c.Tough.Holds ? (c.Tough.Cap || 0) : 0;
       const dread = Math.max(+cfg.dread || 0, tough);
-      const dreadPct = c.Dread && dread ? Math.min(dread, isBoss ? (c.Dread.BossCap || c.Dread.Cap) : c.Dread.Cap) * c.Dread.EffectPct : 0;
+      // On a Guardian the Tough growth has its own cap (Tough.Cap), also for a curse with no Dread cap of its own: Death
+      // Sentence (Dread.Cap 0, EffectPct 3, Tough 1 a second up to 10) grows 25% -> 32.5%. Game log 13 Nov 2026 (Rangtest,
+      // three Guardians): "GuardianTaken59: ... Woe/Sentence best 25.0%, 25.8%, 26.5%, 27.2%, 28.0%, 28.8%" one second
+      // apart, poison ticks at (1 + 29.5 ... 31.75%) and the fight average "SheetX98: ... curse_x 1.32" (155 s fight).
+      // Counted at the cap (reached after 10 s). Rares are left as before: not seen in a log.
+      const dreadCap = isBoss ? Math.max(c.Dread ? c.Dread.BossCap || c.Dread.Cap || 0 : 0, tough) : c.Dread ? c.Dread.Cap : 0;
+      const dreadPct = c.Dread && dread ? Math.min(dread, dreadCap) * c.Dread.EffectPct : 0;
       // Deepened Woe (CurseMore) in the Woe gem's own sockets: "Every line of the linked Woe is 25% stronger: the damage it
       // makes enemies take, the resistance it lowers, the damage they deal less and its slow" (in-game support tooltip,
       // owner's screenshot 9 Nov 2026, on Woe of the Tempest). Counted as its own multiplier on top of Dread and the
@@ -10843,6 +10849,14 @@ window.BOCharacter = function (ctx) {
         if (m.stat !== 'Trigger' || !(m.key === 'passives' || String(m.key || '').startsWith('item:'))) continue;
         const t = trigParse(m);
         if (!['Hit', 'Crit', 'SkillUse'].includes(t.when) || !t.pct) continue;
+        // A line that names a skill fires for that skill only (Quiver of the Ninth Storm: "Every Lightning Arrow hit
+        // cracks into a storm ... 50% of the hit as Lightning", tags Hit, Nova, lightning_arrow, PerTarget=0.3). Until
+        // 14 Nov the skill's name failed the condition check and the line was never counted. Game log 13 Nov 2026
+        // (Rangtest, 3 Guardian kills): "Trigger: Hit -> Nova (lightning_arrow, fired N) el Lightning pct 50 nth 0", and
+        // "DmgSrc91: guardian_fight ... lightning_arrow:0.653,trig:nova:0.304" (also 0.654 / 0.334 and 0.575 / 0.295):
+        // novas = 0.47-0.51 of the arrow's damage; this sheet (quiver + One Breath) gives about the same share.
+        const named = t.conds.filter(x => GD.skills[lc(x)]);
+        if (named.length) { if (!named.some(x => lc(x) === lc(skillId))) continue; t.conds = t.conds.filter(x => !GD.skills[lc(x)]); }
         if (!condsOk(ctx, t.conds)) continue;
         // "Cold hit", "Poison Spell hit": the skill's own tag (converted or extra damage does not make a Poison Spell)
         if (!t.types.every(d => ctx.tags.has(lc(d)))) continue;
@@ -10887,7 +10901,7 @@ window.BOCharacter = function (ctx) {
         (res.triggers = res.triggers || []).push({ src: name, when: t.when, nth: t.nth, pct: t.pct, count: t.count, element: t.element, perSec: events, dps });
         const what = t.when === 'Hit' ? (t.nth > 1 ? 'every ' + t.nth + 'th hit' : 'every hit') + (t.state.length ? ' on a ' + (t.state.includes('VsBurningOrShocked') ? 'Burning or Shocked' : 'Burning') + ' enemy (' + Math.round(share * 100) + '% of the time)' : '')
           : t.when === 'Crit' ? 'every crit' : (t.nth > 1 ? 'every ' + t.nth + 'th use' : 'every use');
-        res.notes.push(name + ': ' + what + ' adds ' + (t.count > 1 ? t.count + ' x ' : '') + t.pct + '% of the hit' + (t.element ? ' as ' + t.element : '') + capped + ', ' + events.toFixed(2) + ' a second = +' + Math.round(hitDpsNow > 0 ? dps / hitDpsNow * 100 : 0) + '% hit damage on one enemy (splash to others not counted).' + (/Pyre|Overclock/.test(name) ? '' : ' From the node text; not checked against the game yet.'));
+        res.notes.push(name + ': ' + what + ' adds ' + (t.count > 1 ? t.count + ' x ' : '') + t.pct + '% of the hit' + (t.element ? ' as ' + t.element : '') + capped + ', ' + events.toFixed(2) + ' a second = +' + Math.round(hitDpsNow > 0 ? dps / hitDpsNow * 100 : 0) + '% hit damage on one enemy (splash to others not counted).' + (/Pyre|Overclock|Ninth Storm|One Breath/.test(name) ? '' : ' From the node text; not checked against the game yet.'));
       }
     }
     // Elemental Overload's buff: up for 8 s after any crit, so the share of time it is up is 1 - exp(-crits a second x 8).
@@ -11347,7 +11361,13 @@ window.BOCharacter = function (ctx) {
       const c = GD.curses[id]; if (!c || !cfg || !cfg.on) continue;
       const tough = (rarity === 'rare' || isBoss) && c.Tough && c.Tough.Holds ? (c.Tough.Cap || 0) : 0;
       const dread = Math.max(+cfg.dread || 0, tough);
-      const dreadPct = c.Dread && dread ? Math.min(dread, isBoss ? (c.Dread.BossCap || c.Dread.Cap) : c.Dread.Cap) * c.Dread.EffectPct : 0;
+      // On a Guardian the Tough growth has its own cap (Tough.Cap), also for a curse with no Dread cap of its own: Death
+      // Sentence (Dread.Cap 0, EffectPct 3, Tough 1 a second up to 10) grows 25% -> 32.5%. Game log 13 Nov 2026 (Rangtest,
+      // three Guardians): "GuardianTaken59: ... Woe/Sentence best 25.0%, 25.8%, 26.5%, 27.2%, 28.0%, 28.8%" one second
+      // apart, poison ticks at (1 + 29.5 ... 31.75%) and the fight average "SheetX98: ... curse_x 1.32" (155 s fight).
+      // Counted at the cap (reached after 10 s). Rares are left as before: not seen in a log.
+      const dreadCap = isBoss ? Math.max(c.Dread ? c.Dread.BossCap || c.Dread.Cap || 0 : 0, tough) : c.Dread ? c.Dread.Cap : 0;
+      const dreadPct = c.Dread && dread ? Math.min(dread, dreadCap) * c.Dread.EffectPct : 0;
       const woeSups = c.Skill && lc(c.Skill) === lc(sk.Id) && o.supportsOverride ? o.supportsOverride : ((ch.sockets || []).find(s => c.Skill && lc(s.skill) === lc(c.Skill)) || {}).supports || [];
       let curseMore = 0;
       for (const sid of woeSups) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'CurseMore' && m.Mode === 'Flat') curseMore += m.Value;

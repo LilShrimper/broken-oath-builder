@@ -10562,7 +10562,9 @@ window.BOCharacter = function (ctx) {
       activeCurses.push(...(LIMIT[kind] ? rows.slice(0, LIMIT[kind]) : rows));
     }
     // Hunter's Marks (MarkOnHit): +X% damage taken per Mark up to a cap, doubled on a Guardian or Unique.
-    // A separate group from Woes/Sentences, so a Guardian takes both its best curse and its Marks.
+    // A separate group from Woes/Sentences. On a Guardian (Patch 73) only the stronger group counts (takenOf below);
+    // log 13 Nov 2026 "GuardianTaken59: ... Woe/Sentence best 25.8%, Mark/Banner 4.6%" (1.5 / 3.1 / 4.6% = ~1.54% a
+    // Mark, "Hunter's Mark full (13)": 13 x 1.54 = 20%, the same total as this sheet's 10 x 2.0% for Rangtest).
     let marks = 0, markPct = 0;
     for (const m of pickMods(mods, 'MarkOnHit', 'Flat')) if (applies(ctx, m)) { marks += m.v; use(m); }
     if (marks > 0) {
@@ -10593,18 +10595,26 @@ window.BOCharacter = function (ctx) {
     for (const m of pickMods(mods, 'MaimOnHit', 'Flat')) if (applies(ctx, m)) { maimPct += m.v; use(m); }
     if (maimPct) res.notes.push('Maim: the enemy takes ' + maimPct + '% more Physical damage from your hits (the game\'s skill panel counts it too).');
     // Patch 73 (developer's patch notes, Discord 13 Nov 2026 2:37 PM local): "On a Guardian only your strongest damage taken
-    // effect counts." So on a Guardian from data build 73 the sources above (each curse, Marks, the venom golem, Maim, the
-    // Configure Enemy extra) no longer multiply: the biggest one alone counts. Lines inside one curse still add (one effect).
+    // effect counts." So on a Guardian from data build 73 the sources above (each curse, Marks, Maim, the
+    // Configure Enemy extra; not the venom golem, see takenOf) no longer multiply: the biggest one alone counts. Lines inside one curse still add (one effect).
     // Shock stays outside (the notes of Patch 72 make it a stronger hit, not a taken effect): not checked in the game yet.
     const strongestTaken = isBoss && guardianStrongestTaken(GD); // scaling.json Meta.bGuardianStrongestTaken (true from data build 73)
     const takenOf = (d, phys) => {
-      const parts = [...activeCurses.map(r => 1 + (r.taken + (d ? r.elem[d] || 0 : 0)) / 100), 1 + (o.extraTakenPct || 0) / 100, 1 + markPct / 100, golemTaken];
+      const parts = [...activeCurses.map(r => 1 + (r.taken + (d ? r.elem[d] || 0 : 0)) / 100), 1 + (o.extraTakenPct || 0) / 100, 1 + markPct / 100];
       if (phys) parts.push(1 + maimPct / 100);
-      return strongestTaken ? Math.max(1, ...parts) : parts.reduce((a, b) => a * b, 1);
+      // The venom golem is NOT in that choice: it multiplies on top. Game log 13 Nov 2026 23:20 (Rangtest, RL 130
+      // cyclops_tyrant, Armoured = LessTakenPct 23; Death Sentence growing 0.75 a second, Marks up, golem within 9 m):
+      // six PoisonTaken63 ticks x1.047115, 1.053324, 1.059551, 1.065726, 1.071977, 1.078100 = (1 + Sentence 26.5,
+      // 27.25, 28, 28.75, 29.5, 30.25%) x 1.075 x 0.77, each within 0.00003. With the golem inside the max they would be
+      // 0.974-1.003. The same fight's GuardianTaken59 lines name only Woe/Sentence and Mark/Banner as the groups.
+      // The hero's own damage too: 23:34 (RL 130 crystal_crasher, no mods, no Marks), Caustic Arrow's poison (DotSrc97
+      // 'caustic_arrow', 3-17 stacks): eight ticks x1.39212, 1.40019 (x3), 1.40825, 1.41631 (x2) = (1 + Sentence 29.5,
+      // 30.25, 31, 31.75%) x 1.075 exactly; the first, x1.74015, = 1.295 x 1.075 x 1.25 (DazeOpen89 daze, on top as well).
+      return strongestTaken ? Math.max(1, ...parts) * golemTaken : parts.reduce((a, b) => a * b, 1) * golemTaken;
     };
     if (strongestTaken) {
-      const n = activeCurses.filter(r => r.taken > 0 || Object.values(r.elem).some(v => v > 0)).length + (o.extraTakenPct > 0) + (markPct > 0) + (golemTaken > 1) + (maimPct > 0);
-      if (n > 1) res.notes.push('Guardian: only your strongest damage taken effect counts (patch 73), so of your ' + n + ' sources only the biggest is counted here.');
+      const n = activeCurses.filter(r => r.taken > 0 || Object.values(r.elem).some(v => v > 0)).length + (o.extraTakenPct > 0) + (markPct > 0) + (maimPct > 0);
+      if (n > 1) res.notes.push('Guardian: only your strongest damage taken effect counts (patch 73), so of your ' + n + ' sources only the biggest is counted here.' + (golemTaken > 1 ? ' The venom golem is not one of them: it multiplies on top (game log 13 Nov).' : ''));
     }
     const enemy = { level: lvl, rarity, resist, pen, armour, guardian, curses: curseRows, activeCurses: activeCurses.map(r => r.id), curseEffInc };
     res.enemy = enemy;
@@ -10659,13 +10669,36 @@ window.BOCharacter = function (ctx) {
       if (chance > 0) {
         const ML = M.Life || { Base: 20, K: 0.225, P: 0.7 };
         const rar = (M.Rarity || {})[{ normal: 0, magic: 1, rare: 2 }[rarity]] || {};
-        const life = o.enemyLife || (isBoss ? 820 : 30) * ML.Base * Math.exp(ML.K * Math.pow(lvl, ML.P)) * (isBoss ? 1 : rar.Life || 1);
+        // A Guardian's life is NOT that curve: scaling.json MonsterLife note (build 73) "Guardians use ModelDps life",
+        // the game log's "Guardian: model at RL n - target s x median boss DPS = life", so it follows the ladder's
+        // damage, not a formula. Estimate from the owner's logs (13 Nov 2026), straight lines between them on a log
+        // scale: 11 fights at Rupture 39-62 (0.74M at RL 39 ... 15.24M at RL 62, about x1.1315 a level), RL 130
+        // cyclops_tyrant 257,153,696, RL 150 ogre_warlord 1,755,677,184 with Empowered (40% more life) = 1.254B without.
+        // Past RL 150 no fight yet: x LadderLifePerLevel (1.03, scaling.json Rift) a level. The sim's old curve gave
+        // 3.08M at RL 150. o.ruptureLevel picks the Deep level; without it a Deep monster level counts as the lowest
+        // Rupture with that level. Only the shock size reads this, and it sits at the 5% floor on a Deep Guardian.
+        const guardianLife = () => {
+          const D = GD.deep || {}, max = D.MapMaxLevel || 80, mls = D.LadderMonsterLevels || [];
+          const deepLvl = mls.length ? mls[mls.length - 1] : 84;
+          const rl = +o.ruptureLevel > 0 ? +o.ruptureLevel : lvl > max ? max + Math.max(1, mls.indexOf(Math.min(lvl, deepLvl)) + 1) : lvl;
+          const pts = [[62, 15.24e6], [130, 257153696], [150, 1755677184 / 1.4]];
+          if (rl <= 62) return pts[0][1] * Math.pow(1.1315, rl - 62);
+          if (rl >= 150) return pts[2][1] * Math.pow(D.LadderLifePerLevel || 1.03, rl - 150);
+          const k = rl <= 130 ? 0 : 1, [r0, l0] = pts[k], [r1, l1] = pts[k + 1];
+          return l0 * Math.pow(l1 / l0, (rl - r0) / (r1 - r0));
+        };
+        const life = o.enemyLife || (isBoss ? guardianLife() : 30 * ML.Base * Math.exp(ML.K * Math.pow(lvl, ML.P)) * (rar.Life || 1));
         const lightHit = hit.Lightning.avg * critFactor * mitig.Lightning.k * mitig.Lightning.taken;
         const effK = Math.max(0, 1 + sumMod('ShockEffect', 'Inc') / 100) * sumMod('ShockEffect', 'More');
         const raw = A.ShockCoef * Math.pow(Math.max(0, lightHit) / life, A.ShockPow);
         const cap = effK > 1 ? Math.min(A.ShockMaxCap || A.ShockMax, A.ShockMax * effK) : A.ShockMax;
         const size = Math.min(cap, clamp(raw, A.ShockMin, A.ShockMax) * effK);
-        const stacks = Math.max(1, Math.round(1 + sumMod('ShockStacks', 'Flat')));
+        // On a Guardian only one shock counts: game log 13 Nov 2026 (Rangtest, RL 150 ogre_warlord, Oath of the Rolling
+        // Thunder = 3 shocks at once, 2,692+ shocks laid) "SheetX98: guardian_fight ... shock_x 1.07" over the whole
+        // 155 s fight. One shock from this sheet with the real life is 6.7% (the 5% floor x shock effect); three would
+        // be 22%. Patch 73: "On a Guardian only your strongest damage taken effect counts".
+        const stackLines = Math.max(1, Math.round(1 + sumMod('ShockStacks', 'Flat')));
+        const stacks = isBoss ? 1 : stackLines;
         const ls = /at most (d+)% more damage taken/i.exec((GD.supports.living_storm || {}).Description || '');
         // 0.56.4: "stacked Shocks reach 75% (was 60%)"; the data's ShockStackCap and Living Storm's text say 75.
         const allCap = stacks > 1 ? (ls ? +ls[1] : is0564(GD) ? (A.ShockStackCap || 75) : 60) : cap;
@@ -10680,7 +10713,7 @@ window.BOCharacter = function (ctx) {
         ail.shock = { chance, life, lightHit, raw, size, cap, stacks, allCap, duration: dur, rate, avg, pct, effInc: (effK - 1) * 100 };
         for (const d of Object.keys(byType)) byType[d] *= shockF;
         hitDpsVs *= shockF; res.hitDps = hitDpsVs;
-        res.notes.push('Shock: ' + Math.round(chance) + '% chance a hit, each shock ' + size.toFixed(1) + '% more damage taken (' + (raw < A.ShockMin ? "the game's " + A.ShockMin + '% floor: your lightning hit is small next to its ~' + Math.round(life).toLocaleString('en-US') + ' life' : 'from your lightning hit vs its ~' + Math.round(life).toLocaleString('en-US') + ' life') + (effK !== 1 ? ', shock effect x' + effK.toFixed(2) : '') + '), ' + avg.toFixed(2) + ' of ' + stacks + ' on it on average = +' + pct.toFixed(1) + '%. Not checked against the game yet.');
+        res.notes.push('Shock: ' + Math.round(chance) + '% chance a hit, each shock ' + size.toFixed(1) + '% more damage taken (' + (raw < A.ShockMin ? "the game's " + A.ShockMin + '% floor: your lightning hit is small next to its ~' + Math.round(life).toLocaleString('en-US') + ' life' : 'from your lightning hit vs its ~' + Math.round(life).toLocaleString('en-US') + ' life') + (effK !== 1 ? ', shock effect x' + effK.toFixed(2) : '') + '), ' + avg.toFixed(2) + ' of ' + stacks + ' on it on average = +' + pct.toFixed(1) + '%.' + (isBoss ? (stackLines > 1 ? ' On a Guardian only one shock counts (game log 13 Nov), so your extra shock stacks do nothing here.' : '') + (o.enemyLife ? '' : ' Guardian life is an estimate from the Rupture level; type the real one in the life box for an exact shock.') : ' Not checked against the game yet.'));
       }
     }
     let poisonDps = 0, igniteDps = 0, bleedDps = 0;
@@ -15638,7 +15671,7 @@ window.BOStartApp = function () {
       const D = GD.deep || {}, max = D.MapMaxLevel || 80, ml = D.LadderMonsterLevels || [];
       const lvl = rl > 0 ? (rl <= max || !ml.length ? rl : ml[Math.min(rl - max, ml.length) - 1]) : undefined;
       const curses = {}; for (const id of ch.hotbar || []) if (GD.curses[id]) curses[id] = { on: true, dread: 0 };
-      const r = S.calcSkill(GD, ch, ch.mainSkill, { enemyRarity: 'boss', enemyLevel: lvl, curses });
+      const r = S.calcSkill(GD, ch, ch.mainSkill, { enemyRarity: 'boss', enemyLevel: lvl, ruptureLevel: rl > 0 ? rl : undefined, curses });
       return r && !r.error && !r.unsupported && r.totalDps > 0 ? r.totalDps : null;
     },
     openBuild: ch => { addChars([ch], 'code', ch.id); showTab('character'); saveTip('Loaded a ladder build as a plan. Damage Analysis sims it; your own characters are unchanged.'); },

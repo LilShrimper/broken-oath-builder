@@ -12,7 +12,7 @@
 <meta property="og:url" content="https://lilshrimper.github.io/broken-oath-builder/zh/supportgemsim/"><meta property="og:image" content="https://lilshrimper.github.io/broken-oath-builder/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
-<link rel="stylesheet" href="../../style.css?v=286">
+<link rel="stylesheet" href="../../style.css?v=287">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -106,6 +106,9 @@
       </button>
       <button class="tab" type="button" role="tab" data-tab="skillscaling" aria-selected="false" aria-label="Skill Scaling">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.4 5.6L20 9.3l-4.2 3.9 1.2 5.8-5-3-5 3 1.2-5.8L4 9.3l5.6-.7z"/></svg><span>Skill Scaling</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="patch" aria-selected="false" aria-label="Recent Patch">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9M12 7v5l3 2M21 3v5h-5"/></svg><span>Recent Patch</span>
       </button>
       <button class="tab" type="button" role="tab" data-tab="faq" aria-selected="false" aria-label="FAQ and Game Mechanics">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1 1-1.1 1.8M12 17h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18"/></svg><span>FAQ / Game Mechanics</span>
@@ -370,6 +373,7 @@
     <section class="build-pane compare-pane itemsearch-pane" id="itemSearchPane" hidden></section>
     <section class="build-pane compare-pane grail-pane" id="grailPane" hidden></section>
     <section class="build-pane compare-pane ladder-pane" id="ladderPane" hidden></section>
+    <section class="build-pane compare-pane patch-pane" id="patchPane" hidden></section>
     <section class="build-pane compare-pane faq-pane" id="skillsTabPane" hidden>
       <nav class="faq-nav" id="skillsNav" role="group" aria-label="Skills sections"></nav>
       <div class="build-pane faq-sec" id="scalingPane"></div>
@@ -535,7 +539,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":286,"at":"2026-11-13T23:43:12.924Z"};
+window.SITE_VERSION = {"v":287,"at":"2026-11-14T00:32:20.494Z"};
 window.SITE_LANG = 'zh';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -544,6 +548,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp","T":64,"cols":10,"rows":9,"idx":{"ar
 window.CLASS_ICONS = {"src":"icons/classes.webp","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../app.js?v=286"></script>
+<script src="../../app.js?v=287"></script>
 </body>
 </html>

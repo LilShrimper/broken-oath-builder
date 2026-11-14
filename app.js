@@ -225,9 +225,9 @@ window.PAGE_LANGS = {
     'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json', 'Gameplay/monster_affixes.json', 'Gameplay/monsters.json', 'Gameplay/oath_masteries.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Read when the folder has them; an older game folder without them still loads.
-  const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json', 'Items/quality_stones.json', 'Gameplay/league_rules.json', 'Gameplay/new_gems85.json'];
+  const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json', 'Items/quality_stones.json', 'Gameplay/league_rules.json', 'Gameplay/new_gems85.json', 'Items/base_implicits95.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 30; // 30: per-gem base poison chance (new_gems85.json; Damage tab); 29: the game's rule numbers (rules.json, switches.json; Damage tab); 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 31; // 31: armour / shield / axe family lines (base_implicits95.json; Damage tab); 30: per-gem base poison chance (new_gems85.json; Damage tab); 29: the game's rule numbers (rules.json, switches.json; Damage tab); 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -330,6 +330,29 @@ window.PAGE_LANGS = {
 
     const bases = {};
     for (const b of J('Items/item_bases.json').bases) bases[b.Id.toLowerCase()] = pick(b, ['Id', 'Name', 'Slot', 'Class', 'TypeName', 'Tags', 'Implicits', 'DamageMin', 'DamageMax', 'AttacksPerSecond', 'Crit', 'bTwoHanded', 'Weapon', 'Level', 'Armour', 'Evasion', 'EnergyShield', 'Block', 'Width', 'Height', 'ReqStr', 'ReqDex', 'ReqInt', 'DropWeight']); // defences: shown on items and compared, not used for damage (item_bases.json)
+    // Family lines (game file Items/base_implicits95.json, switches r95.ITEMS bImplicit95 and bWeaponImp95, both True in build 73;
+    // the API does not serve the file, so it sits in the snapshot). Every Helm / Chest / Gloves / Boots / shield base with no implicit
+    // of its own gets its family's line (key Slot|defence letters: A armour, V evasion, S energy shield); axes get bleed chance
+    // unless they already carry it. Value = Lo at base level 1 rising straight to Hi at base level 82, rounded (the file's _doc).
+    // Game log 13 Nov: "Implicit95: on (272 armour bases got their family line)", "WeaponImp95: on (24 weapon bases ...)"; this
+    // gives 252 + 20 shields and 24. Owner's tooltips 13 Nov 2026 (Spin_win): Barbute (L10) +8 life, Templar Gauntlets (L40) 7%
+    // increased melee damage, Templar Plate (L40) 7 life regen, Knight's Greaves (L28) +9 Strength, all as computed here; with
+    // them the sim's Strength (480) and life (3,132.1 vs 3,132.08) match the character sheet.
+    try {
+      const bi = J('Items/base_implicits95.json') || {};
+      const lineAt = (f, lvl) => ({ Stat: f.Stat, Mode: f.Mode, Tags: f.Tags || [], Value: Math.round(f.Lo + (f.Hi - f.Lo) * (Math.max(1, lvl || 1) - 1) / 81) });
+      for (const b of Object.values(bases)) {
+        let f = null;
+        if (['Helm', 'Chest', 'Gloves', 'Boots', 'OffHand'].includes(b.Slot)) {
+          if (b.Implicits && b.Implicits.length) continue;
+          f = (bi.Families || {})[b.Slot + '|' + (b.Armour > 0 ? 'A' : '') + (b.Evasion > 0 ? 'V' : '') + (b.EnergyShield > 0 ? 'S' : '')];
+        } else if (b.TypeName && (bi.Weapons || {})[b.TypeName]) {
+          f = bi.Weapons[b.TypeName];
+          if ((b.Implicits || []).some(m => m.Stat === f.Stat)) f = null;
+        }
+        if (f) b.FamilyLine = lineAt(f, b.Level);
+      }
+    } catch (e) { /* game data without the file: no family lines */ }
 
     const runesFile = J('Items/runes.json');
     const runes = {};
@@ -2584,7 +2607,15 @@ window.BOPlanner = function (ctx) {
     const rs = rows(ch), bar = onBar(ch);
     let h = '<div class="card"><h2>Skills <small>' + bar.length + '/' + BAR + ' on the bar</small></h2><p class="hint">Vows, Heralds and curses only count while on the skill bar. A spell triggered by Cast on Crit or a Channel Conduit can stay off the bar.</p>' +
       (ctx.countable ? '<p class="opt-slow">Include in simulations: the tree optimizer, Plan, node values, Item Compare and Gear Set Sim weigh that skill too. Each skill is simmed for every option tried, so the tree optimizer, Plan, node values and Gear Set Sim get slower: about one more full run per skill.</p>' : '') + '<div class="pl-skills">';
-    for (const r of rs) {
+    for (const r of rs) h += skillRow(ch, r, edit, dis, rs, bar);
+    if (!rs.length) h += '<p class="hint">No skills yet.</p>';
+    h += '</div>' + (edit ? '<label class="field"><span>Add a skill</span><select data-f="addskill">' + skillOpts('') + '</select></label>' : '') +
+      (ctx.linksEdited && ctx.linksEdited() ? '<div class="pl-row"><button class="btn small ghost" type="button" data-act="resetlinks" title="Supports and linked spells go back to the save\'s; gear and tree edits stay">Reset to save file links</button></div>' : '') + '</div>';
+    return h;
+  }
+  // One skill's editor (skill, gem level, bar, main, supports, linked spell). Also the Character tab's skill window (character.js).
+  function skillRow(ch, r, edit, dis, rs, bar) {
+      let h = '';
       const sk = GD.skills[lc(r.skill)], lvl = ch.gemLevels[r.skill] || 1;
       const sups = r.sock ? r.sock.supports : [], slots = S.socketsFor(GD, ch, r.skill, lvl);
       const link = sups.some(x => ['cast_on_crit', 'channel_conduit'].includes(lc(x)));
@@ -2601,11 +2632,7 @@ window.BOPlanner = function (ctx) {
         (link ? '<label class="field inline"><span>Linked spell <span class="meta">Cast on Crit in an attack, or a Channel Conduit, casts this</span></span><select data-f="conduit"' + dis + '>' + opt('', 'None (Cast on Crit casts the spell it sits in)', !r.sock.conduit) +
           rs.filter(x => x.skill !== r.skill && GD.skills[lc(x.skill)] && (GD.skills[lc(x.skill)].Tags || []).includes('Spell')).map(x => opt(x.skill, GD.skills[lc(x.skill)].Name, lc(x.skill) === lc(r.sock.conduit))).join('') + '</select></label>' : '') +
         '</div>';
-    }
-    if (!rs.length) h += '<p class="hint">No skills yet.</p>';
-    h += '</div>' + (edit ? '<label class="field"><span>Add a skill</span><select data-f="addskill">' + skillOpts('') + '</select></label>' : '') +
-      (ctx.linksEdited && ctx.linksEdited() ? '<div class="pl-row"><button class="btn small ghost" type="button" data-act="resetlinks" title="Supports and linked spells go back to the save\'s; gear and tree edits stay">Reset to save file links</button></div>' : '') + '</div>';
-    return h;
+      return h;
   }
 
   function itemSummary(it) {
@@ -2620,7 +2647,7 @@ window.BOPlanner = function (ctx) {
   const vowTag = n => { const sh = S.vowShare(GD, n); return 'Vow ' + (n + 1) + (sh < 1 ? ' · counts ' + Math.round(sh * 100) + '%' : ''); };
   // One affix: its type (P / S, or "Vow" on a unique), tier, numbers and text.
   function affixRow(it, a, ai, edit, dis, tag) {
-    const af = GD.affixes[lc(a.id)], x = edit ? '<button class="x" type="button" title="Remove" data-act="rmaffix" data-ai="' + ai + '">×</button>' : '';
+    const af = GD.affixes[lc(a.id)], x = edit ? '<button class="x" type="button" aria-label="Remove" data-act="rmaffix" data-ai="' + ai + '">×</button>' : '';
     if (!af) return '<div class="pl-affix"><span class="meta bad">Unknown affix ' + esc(a.id) + '</span>' + x + '</div>';
     const t = af.Tiers[a.tier] || af.Tiers[0], two = t && t.Min2 != null;
     // Outside the tier's range: flagged, not refused (see character.js affixRow).
@@ -3366,7 +3393,12 @@ window.BOPlanner = function (ctx) {
     if (!ch.mainSkill) ch.mainSkill = v;
     return true;
   }
-  return { skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, supTip, oathwordForItem, slotName: SLOT_NAME, rows, render, fromCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
+  // The Character tab's skill window: one skill's editor, with the same change / click handling as the Build tab.
+  function skillEditor(ch, skill) {
+    const rs = rows(ch), r = rs.find(x => x.skill === skill); if (!r) return '';
+    return skillRow(ch, r, true, '', rs, onBar(ch));
+  }
+  return { skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, supTip, oathwordForItem, slotName: SLOT_NAME, rows, render, fromCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
 };
 
 ;
@@ -4095,7 +4127,7 @@ window.BOCreator = function (ctx) {
     const owned = arr(R(), 'Gems').filter(id => GD.skills[lc(id)] && !list.includes(id)).sort((a, b) => barName(a).localeCompare(barName(b)));
     const slot = i => '<div class="cr-bar-slot' + (hb[i] ? ' full' : '') + '" style="grid-area: s' + i + '"><button type="button" class="cr-bar-put" data-cr="barslot" data-i="' + i + '" title="' + esc(C.barPick ? 'Put ' + barName(C.barPick) + ' on ' + BAR_SLOTS[i] : 'Pick a skill above first') + '">' +
       '<small>' + BAR_SLOTS[i].replace('Ctrl bar ', 'Ctrl ') + '</small><span>' + (hb[i] ? dot(hb[i]) + esc(barName(hb[i])) : '<i>empty</i>') + '</span></button>' +
-      (hb[i] ? '<button type="button" class="x" data-cr="barclear" data-i="' + i + '" aria-label="Clear ' + BAR_SLOTS[i] + '" title="Clear this slot">×</button>' : '') + '</div>';
+      (hb[i] ? '<button type="button" class="x" data-cr="barclear" data-i="' + i + '" aria-label="Clear ' + BAR_SLOTS[i] + '">×</button>' : '') + '</div>';
     return '<h3>Skill bar</h3><p class="hint">Click a skill, then the slot to put it on. A skill can sit on more than one slot; × empties a slot.</p>' +
       '<div class="cr-bar-skills">' + (list.map(chip).join('') || '<span class="hint">No socketed skills yet: copy a build first, or pick a gem from the list.</span>') + chip('move') +
       (owned.length ? '<select id="crBarMore" aria-label="Another skill gem"><option value="">Another skill gem…</option>' + owned.map(id => opt(id, barName(id))).join('') + '</select>' : '') + '</div>' +
@@ -5167,6 +5199,17 @@ window.BOItemSearch = function (ctx) {
       '<span class="is-rune">' + glyphIcon(next) + '<b>' + esc(next.Name) + '</b></span></p>';
   }
   const implicits = (GD, b) => b && (b.Implicits || []).length ? '<ul class="is-lines implicit">' + b.Implicits.map(m => li(plain(GD, m))).join('') + '</ul>' : '';
+  // Patch history (owner, 13 Nov 2026): every card and mod row folds out its changes from the Recent Patch data
+  // (patches.js), closed by default and filled in when opened (the site fetches that file only then).
+  const HIST_SEC = { base: 'bases', unique: 'uniques', oathword: 'runewords', mod: 'affixes', rune: 'runes' };
+  const idOf = e => (e.b && e.cat === 'base' ? e.b : e.u || e.w || e.a || e.r || {}).Id;
+  const histBox = e => ctx.patches && HIST_SEC[e.cat] && idOf(e) ? '<details class="is-hist" data-hist="' + esc(HIST_SEC[e.cat] + ':' + idOf(e)) + '"><summary>Patch history</summary><div class="is-hist-body"></div></details>' : '';
+  function fillHist(d) {
+    const P = ctx.patches && ctx.patches(), body = d.querySelector('.is-hist-body'); if (!P || !body) return;
+    const k = d.dataset.hist, i = k.indexOf(':');
+    const fill = () => { body.innerHTML = P.historyHtml([[k.slice(0, i), k.slice(i + 1)]], 50); };
+    if (P.ready()) fill(); else { body.innerHTML = '<p class="hint">Loading the patch history…</p>'; P.load().then(fill); }
+  }
   function card(e) {
     const GD = ctx.gd();
     let ico, sub = '', body = '', badges = [];
@@ -5236,7 +5279,7 @@ window.BOItemSearch = function (ctx) {
     const nb = addedBadge(e); if (nb) badges.unshift(nb);
     return '<article class="is-card cat-' + e.cat + '"><header>' + ico + '<div class="is-head"><b class="is-name">' + esc(e.name) + '</b><small>' + esc((e.cat === 'rune' ? (e.jewel ? 'Jewel' : 'Rune') : CAT_NAME[e.cat]) + ' · ' + sub) + '</small></div>' +
       '<span class="is-lvl" title="' + (e.cat === 'mod' ? 'Item level the ' + (tierIdx(e) >= 0 ? F.tier : 'lowest') + ' tier needs' : 'Level') + '">' + (e.cat === 'mod' ? 'iLvl ' : 'Lvl ') + levelOf(e) + '</span></header>' +
-      body + (badges.length ? '<footer>' + badges.join('') + '</footer>' : '') + '</article>';
+      body + histBox(e) + (badges.length ? '<footer>' + badges.join('') + '</footer>' : '') + '</article>';
   }
 
   // Item mods as one row each (click to open the tier table): Prefix / Suffix, the line with its full roll range (or the
@@ -5254,7 +5297,7 @@ window.BOItemSearch = function (ctx) {
       '<span class="n ilvl" title="Item level ' + (t ? 'tier ' + (on + 1) + ' needs' : 'the lowest and highest tiers need') + '">' + (t ? t.ILvl || 1 : lo === hi ? lo : lo + '–' + hi) + '</span></span>' +
       '</summary><div class="is-mbody"><p class="is-into">Rolls on: ' + esc(e.slots.join(', ') || 'nothing') + (e.types.length ? ' (' + esc(e.types.join(', ')) + ')' : '') + '</p>' +
       '<table class="is-tiers"><thead><tr><th>Tier</th><th>Name</th><th>Item level</th><th>Roll</th></tr></thead><tbody>' +
-      a.Tiers.map((x, i) => '<tr' + (i === on ? ' class="on"' : '') + '><td>T' + (i + 1) + '</td><td>' + esc(x.Name || '') + '</td><td>' + (x.ILvl || 1) + '</td><td>' + rng(x.Min, x.Max) + (x.Min2 != null ? ' / ' + rng(x.Min2, x.Max2) : '') + '</td></tr>').join('') + '</tbody></table></div></details>';
+      a.Tiers.map((x, i) => '<tr' + (i === on ? ' class="on"' : '') + '><td>T' + (i + 1) + '</td><td>' + esc(x.Name || '') + '</td><td>' + (x.ILvl || 1) + '</td><td>' + rng(x.Min, x.Max) + (x.Min2 != null ? ' / ' + rng(x.Min2, x.Max2) : '') + '</td></tr>').join('') + '</tbody></table>' + histBox(e) + '</div></details>';
   }
 
   // ---------- page ----------
@@ -5322,6 +5365,7 @@ window.BOItemSearch = function (ctx) {
   let timer = 0;
   function bind() {
     const el = $('#itemSearchPane'); if (!el || el.dataset.bound) return; el.dataset.bound = '1';
+    el.addEventListener('toggle', e => { const d = e.target; if (d && d.classList && d.classList.contains('is-hist') && d.open) fillHist(d); }, true);
     el.addEventListener('click', e => {
       const c = e.target.closest('[data-cat]');
       if (c) { F.cat = c.dataset.cat; F.tier = ''; F.type = ''; F.affix = ''; F.sort = sortFor(F.cat); shown = PAGE; return refresh(); }
@@ -6091,6 +6135,183 @@ window.BOItemSearch = function (ctx) {
   root.BOLadderChar = charFromApi;
   if (typeof module !== 'undefined') module.exports = { charFromApi, ehpOf };
 })(typeof window !== 'undefined' ? window : globalThis);
+
+;
+// The Recent Patch tab (owner, 13 Nov 2026): what the newest game build changed against the one before (or any two
+// builds next to each other), and the change history of one skill, support or item across every build we have.
+// Data: tools/patch-history.js, from the site's own copies of the game data (patches.json on the site, window.PATCH_LOG
+// in the local page). Display only. app.js calls BOPatches(ctx) and gets { render, load, historyHtml, openHistory }.
+window.BOPatches = function (ctx) {
+  'use strict';
+  const { $, esc } = ctx;
+  const lc = s => String(s == null ? '' : s).toLowerCase();
+  let LOG = window.PATCH_LOG || null, loading = null, failed = false;
+  // view: 'patch' | 'history'; b: the build shown (its changes against the build before); sec: '' = every section
+  const V = { view: 'patch', b: 0, sec: '', q: '', hq: '', pick: null };
+
+  function load() {
+    if (LOG) return Promise.resolve(LOG);
+    if (loading) return loading;
+    loading = fetch((window.SITE_BASE || '') + 'patches.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).catch(() => null)
+      .then(j => { loading = null; if (j && Array.isArray(j.builds)) LOG = j; else failed = true; return LOG; });
+    return loading;
+  }
+  const secName = s => ((LOG.sections || []).find(x => x[0] === s) || [s, s])[1];
+  const buildOf = b => LOG.builds.find(x => x.b === b);
+  const prevOf = b => { const i = LOG.builds.findIndex(x => x.b === b); return i > 0 ? LOG.builds[i - 1] : null; };
+  // A bare date (2026-11-13) is that local day, not UTC midnight (which shows the day before west of Greenwich).
+  const day = d => { const t = Date.parse(/^\d{4}-\d\d-\d\d$/.test(d || '') ? d + 'T12:00:00' : d || ''); return t ? new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : d || ''; };
+  // Builds that changed something we show (a build with nothing is a label change or a re-export).
+  const withChanges = () => LOG.builds.filter(x => LOG.changes.some(c => c.b === x.b));
+  // Builds before game build 70 were read from the game's own files, not the public API (owner, 13 Nov 2026: keep them, marked).
+  const fromGame = b => { const x = buildOf(b); return !!x && x.src === 'game'; };
+  const SRC_TAG = '<span class="pt-src" title="This build&#39;s game data was read from the game&#39;s own files (before 12 Nov 2026), not from the Broken Oath public API">from game files</span>';
+  const icon = c => (c.sec === 'skills' || c.sec === 'supports') && ctx.skillDot ? (c.sec === 'skills' ? ctx.skillDot(c.id) : ctx.gemDot(c.id)) : '';
+
+  // Word-level marks for a changed text: the words that went (old) and came (new). Long texts only; short lines show whole.
+  function wordDiff(a, b) {
+    const A = a.split(/(\s+)/), B = b.split(/(\s+)/);
+    if (A.length * B.length > 250000) return [esc(a), esc(b)];
+    const n = A.length, m = B.length, L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    let i = 0, j = 0, oa = '', ob = '';
+    while (i < n && j < m) {
+      if (A[i] === B[j]) { oa += esc(A[i]); ob += esc(B[j]); i++; j++; }
+      else if (L[i + 1][j] >= L[i][j + 1]) { oa += /^\s+$/.test(A[i]) ? A[i] : '<del>' + esc(A[i]) + '</del>'; i++; }
+      else { ob += /^\s+$/.test(B[j]) ? B[j] : '<ins>' + esc(B[j]) + '</ins>'; j++; }
+    }
+    while (i < n) { oa += /^\s+$/.test(A[i]) ? A[i] : '<del>' + esc(A[i]) + '</del>'; i++; }
+    while (j < m) { ob += /^\s+$/.test(B[j]) ? B[j] : '<ins>' + esc(B[j]) + '</ins>'; j++; }
+    return [oa, ob];
+  }
+  function linesHtml(c) {
+    if (c.kind === 'added') return '<p class="pt-note">New in this build.</p>';
+    if (c.kind === 'removed') return '<p class="pt-note">Taken out of the game data in this build.</p>';
+    return '<ul class="pt-lines">' + c.lines.map(([o, n]) => {
+      if (o && n && (o.length > 60 || n.length > 60)) { const [a, b] = wordDiff(o, n); return '<li class="pt-text"><div class="pt-old">' + a + '</div><div class="pt-new">' + b + '</div></li>'; }
+      return '<li>' + (o ? '<span class="pt-old">' + esc(o) + '</span>' : '') + (o && n ? '<span class="pt-arrow" aria-label="becomes">→</span>' : '') + (n ? '<span class="pt-new">' + (o ? '' : '<b>New line:</b> ') + esc(n) + '</span>' : '<span class="pt-new pt-gone">line removed</span>') + '</li>';
+    }).join('') + '</ul>';
+  }
+  const KIND = { added: 'New', removed: 'Removed', changed: 'Changed' };
+  function entryHtml(c, withBuild) {
+    const b = withBuild && buildOf(c.b);
+    return '<div class="pt-entry pt-' + c.kind + '"><div class="pt-head">' + icon(c) + '<b' + tipAttr(c) + '>' + esc(c.name) + '</b><span class="pt-kind">' + KIND[c.kind] + '</span>' +
+      (withBuild && b ? '<span class="meta">' + esc(b.label) + ' · ' + esc(day(b.day)) + '</span>' + (b.src === 'game' ? SRC_TAG : '') : '<span class="meta">' + esc(secName(c.sec).replace(/s$/, '')) + '</span>') +
+      (!withBuild ? '<button type="button" class="btn small ghost pt-hist" data-pt="hist" data-sec="' + esc(c.sec) + '" data-id="' + esc(c.id) + '">History</button>' : '') + '</div>' + linesHtml(c) + '</div>';
+  }
+  const match = (c, q) => !q || lc(c.name).includes(q) || lc(c.id).includes(q) || c.lines.some(l => lc(l[0]).includes(q) || lc(l[1]).includes(q));
+
+  function patchView() {
+    const list = withChanges();
+    if (!V.b || !buildOf(V.b)) V.b = (list[list.length - 1] || {}).b;
+    const cur = buildOf(V.b), prev = prevOf(V.b);
+    if (!cur) return '<div class="card"><p class="hint">No patch history yet.</p></div>';
+    const all = LOG.changes.filter(c => c.b === V.b), q = lc(V.q.trim());
+    const counts = {}; for (const c of all) counts[c.sec] = (counts[c.sec] || 0) + 1;
+    let h = '<div class="card pt-controls"><div class="pt-row"><label class="field inline"><span>Patch</span><select id="ptBuild">' +
+      list.slice().reverse().map(x => { const p = prevOf(x.b); return '<option value="' + x.b + '"' + (x.b === V.b ? ' selected' : '') + '>' + esc(x.label + ' (' + day(x.day) + ')' + (p ? ' vs ' + p.label : '') + (x.src === 'game' ? ' · from game files' : '')) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="field inline grow pt-search"><input type="search" id="ptSearch" placeholder="Find a skill, item or word in this patch" autocomplete="off" value="' + esc(V.q) + '"></label></div>' +
+      '<div class="cmp-modes pt-secs" role="group" aria-label="Sections">' + [['', 'All', all.length]].concat((LOG.sections || []).filter(s => counts[s[0]]).map(s => [s[0], s[1], counts[s[0]]]))
+        .map(s => '<button type="button" class="cmp-mode' + (V.sec === s[0] ? ' on' : '') + '" data-pt="sec" data-v="' + esc(s[0]) + '" aria-pressed="' + (V.sec === s[0]) + '">' + esc(s[1]) + ' <small>' + s[2] + '</small></button>').join('') + '</div>' +
+      '<p class="hint">' + esc(cur.label) + ' against ' + esc(prev ? prev.label : 'the build before') + ': ' + all.filter(c => c.kind === 'changed').length + ' changed, ' + all.filter(c => c.kind === 'added').length + ' new, ' + all.filter(c => c.kind === 'removed').length + ' removed. Old text is struck through, new text is marked.' + (cur.src === 'game' ? ' ' + SRC_TAG + ' This build’s data was read from the game’s own files at the time, not from the public API.' : '') + '</p></div>';
+    for (const s of LOG.sections || []) {
+      if (V.sec && V.sec !== s[0]) continue;
+      const rows = all.filter(c => c.sec === s[0] && match(c, q)); if (!rows.length) continue;
+      const order = { added: 0, changed: 1, removed: 2 };
+      rows.sort((a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name));
+      h += '<div class="card pt-sec"><h2>' + esc(s[1]) + ' <small>' + rows.length + '</small></h2>' + rows.map(c => entryHtml(c, false)).join('') + '</div>';
+    }
+    if (q && !all.some(c => match(c, q))) h += '<div class="card"><p class="hint">Nothing in this patch matches "' + esc(V.q) + '".</p></div>';
+    return h;
+  }
+
+  // One entry's history, newest first. key = sec + ':' + id.
+  function historyOf(sec, id) { return LOG.changes.filter(c => c.sec === sec && c.id === id).sort((a, b) => b.b - a.b); }
+  function historyView() {
+    const q = lc(V.hq.trim());
+    let h = '<div class="card pt-controls"><div class="pt-row"><label class="field inline grow pt-search"><input type="search" id="ptHistSearch" placeholder="Find a skill, support, unique, base or rune" autocomplete="off" value="' + esc(V.hq) + '"></label></div>' +
+      '<p class="hint">Every change we have on record since ' + esc(day((LOG.builds[0] || {}).day)) + ', newest first. Pick an entry to see its history.</p></div>';
+    if (q) {
+      const seen = new Map();
+      for (const c of LOG.changes) if (lc(c.name).includes(q) || lc(c.id).includes(q)) { const k = c.sec + ':' + c.id; const e = seen.get(k) || { c, n: 0 }; e.n++; if (c.b > e.c.b) e.c = c; seen.set(k, e); }
+      const hits = [...seen.values()].sort((a, b) => a.c.name.localeCompare(b.c.name)).slice(0, 60);
+      h += '<div class="card pt-hits">' + (hits.length ? hits.map(({ c, n }) => '<button type="button" class="pt-hit' + (V.pick === c.sec + ':' + c.id ? ' on' : '') + '"' + tipAttr(c) + ' data-pt="pick" data-sec="' + esc(c.sec) + '" data-id="' + esc(c.id) + '">' + icon(c) + '<b>' + esc(c.name) + '</b><span class="meta">' + esc(secName(c.sec)) + ' · ' + n + ' patch' + (n === 1 ? '' : 'es') + '</span></button>').join('') : '<p class="hint">No changes on record for "' + esc(V.hq) + '".</p>') + '</div>';
+    }
+    if (V.pick) {
+      const i = V.pick.indexOf(':'), rows = historyOf(V.pick.slice(0, i), V.pick.slice(i + 1));
+      if (rows.length) h += '<div class="card pt-sec"><h2>' + icon(rows[0]) + esc(rows[0].name) + ' <small>' + esc(secName(rows[0].sec)) + ' · ' + rows.length + ' change' + (rows.length === 1 ? '' : 's') + '</small></h2>' + rows.map(c => entryHtml(c, true)).join('') + '</div>';
+    }
+    return h;
+  }
+
+  // ---------- Hover tooltips: what a skill, support or item does now (ctx.tip, the page's .pl-tip look) ----------
+  const tipAttr = c => ' data-ptip="' + esc(c.sec + ':' + c.id) + '"';
+  let tipEl = null;
+  const hideTip = () => { if (tipEl) { tipEl.hidden = true; tipEl.dataset.key = ''; } };
+  function showTip(e) {
+    const t = e.target.closest && e.target.closest('[data-ptip]');
+    if (!t || !ctx.tip) return hideTip();
+    const key = t.dataset.ptip, i = key.indexOf(':');
+    let html = ''; try { html = ctx.tip(key.slice(0, i), key.slice(i + 1)); } catch (err) { html = ''; }
+    if (!html) return hideTip();
+    if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'pl-tip'; tipEl.setAttribute('role', 'tooltip'); document.body.appendChild(tipEl); }
+    if (tipEl.dataset.key !== key) { tipEl.innerHTML = html + '<span class="pl-tip-desc pt-tip-now">As in the latest game data.</span>'; tipEl.dataset.key = key; }
+    tipEl.hidden = false;
+    const r = t.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+    let y = r.bottom + 6; if (y + h > innerHeight - 8) y = Math.max(8, r.top - h - 6);
+    tipEl.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px'; tipEl.style.top = y + 'px';
+  }
+  function render() {
+    hideTip();
+    const el = $('#patchPane'); if (!el || el.hidden) return;
+    bind(el);
+    let h = '<div class="cmp-intro results-heading"><div><div class="eyebrow">GAME DATA</div><h2>Recent Patch</h2><p>What each game patch changed in skills, supports, items and the passive tree, read from the game data of each build. From game build 70 (12 Nov 2026) on: Data: Broken Oath public API. Older builds (2 to 11 Nov) were read from the game’s own files at the time and are marked <i>from game files</i>. Hover a name for what it does now. Numbers, skills and the meta change with every patch.</p></div></div>';
+    if (!LOG) {
+      el.innerHTML = h + '<div class="card"><p class="hint">' + (failed ? 'Could not load the patch history. Try again later.' : 'Loading the patch history…') + '</p></div>';
+      if (!failed) load().then(() => render());
+      return;
+    }
+    h += '<div class="cmp-modes pt-views" role="tablist">' + [['patch', 'Patch changes'], ['history', 'Change history']].map(v => '<button type="button" role="tab" class="cmp-mode' + (V.view === v[0] ? ' on' : '') + '" data-pt="view" data-v="' + v[0] + '" aria-selected="' + (V.view === v[0]) + '">' + v[1] + '</button>').join('') + '</div>';
+    el.innerHTML = h + (V.view === 'patch' ? patchView() : historyView());
+  }
+  function keepFocus(id, fn) {
+    const a = document.activeElement, pos = a && a.id === id ? a.selectionStart : null;
+    fn();
+    if (pos != null) { const b = document.getElementById(id); if (b) { b.focus(); try { b.setSelectionRange(pos, pos); } catch (e) { /* search box */ } } }
+  }
+  function bind(el) {
+    if (el.dataset.bound) return; el.dataset.bound = '1';
+    el.addEventListener('mouseover', showTip); el.addEventListener('focusin', showTip);
+    el.addEventListener('mouseleave', hideTip); el.addEventListener('focusout', hideTip);
+    window.addEventListener('scroll', hideTip, { passive: true });
+    el.addEventListener('click', e => {
+      const b = e.target.closest && e.target.closest('[data-pt]'); if (!b) return;
+      const a = b.dataset.pt;
+      if (a === 'view') { V.view = b.dataset.v; return render(); }
+      if (a === 'sec') { V.sec = b.dataset.v; return render(); }
+      if (a === 'hist' || a === 'pick') { V.view = 'history'; V.pick = b.dataset.sec + ':' + b.dataset.id; if (a === 'hist') V.hq = (LOG.changes.find(c => c.sec === b.dataset.sec && c.id === b.dataset.id) || {}).name || ''; render(); if (a === 'hist') el.scrollIntoView({ block: 'start' }); }
+    });
+    el.addEventListener('change', e => { if (e.target.id === 'ptBuild') { V.b = +e.target.value; render(); } });
+    el.addEventListener('input', e => {
+      if (e.target.id === 'ptSearch') { V.q = e.target.value; keepFocus('ptSearch', render); }
+      if (e.target.id === 'ptHistSearch') { V.hq = e.target.value; V.pick = null; keepFocus('ptHistSearch', render); }
+    });
+  }
+  // For the Character tab's skill window: the change history of a skill and its supports, newest first (most `max` entries).
+  function historyHtml(items, max) {
+    if (!LOG) return '';
+    const rows = items.flatMap(([sec, id]) => historyOf(sec, id)).sort((a, b) => b.b - a.b);
+    if (!rows.length) return '<p class="hint">No changes on record since ' + esc(day((LOG.builds[0] || {}).day)) + '.</p>';
+    return rows.slice(0, max || 6).map(c => entryHtml(c, true)).join('') + (rows.length > (max || 6) ? '<p class="hint">' + (rows.length - (max || 6)) + ' older changes on the Recent Patch tab.</p>' : '');
+  }
+  // Opens the tab's Change history on one entry.
+  function openHistory(sec, id) {
+    V.view = 'history'; V.pick = sec + ':' + id;
+    const c = LOG && LOG.changes.find(x => x.sec === sec && x.id === id); V.hq = c ? c.name : '';
+  }
+  const countOf = (sec, id) => LOG ? LOG.changes.filter(c => c.sec === sec && c.id === id).length : 0;
+  return { render, load, historyHtml, openHistory, countOf, ready: () => !!LOG };
+};
 
 ;
 // Skill Scaling tab: one square per skill, coloured like its gem, with what the skill does at gem levels 1-20.
@@ -7122,6 +7343,22 @@ window.BOCharacter = function (ctx) {
   const copyOf = x => JSON.parse(JSON.stringify(x));
   const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
   let note = null; // { id, text }: what the last Copy / Paste did, shown on that character's page
+  // Undo the last removal (owner, 13 Nov 2026: gear, idol, spell; no confirm pop-ups). Only the fields that removal touched
+  // are put back, so other edits made since stay. One step: a new removal replaces it.
+  const UNDO_KEYS = { gear: ['items', 'idolShelf'], skill: ['sockets', 'hotbar', 'gems', 'gemLevels', 'mainSkill'], bar: ['hotbar'] };
+  let undo = null; // { id, kind, label, snap }
+  function remember(kind, label) {
+    const ch = ctx.current(); if (!ch) return;
+    undo = { id: ch.id, kind, label, snap: copyOf(Object.fromEntries(UNDO_KEYS[kind].map(k => [k, ch[k] === undefined ? null : ch[k]]))) };
+  }
+  function doUndo() {
+    const cur = ctx.current(); if (!undo || !cur || cur.id !== undo.id) return;
+    const ch = ctx.editable(); if (!ch) return;
+    for (const k of UNDO_KEYS[undo.kind]) { if (undo.snap[k] === null) delete ch[k]; else ch[k] = copyOf(undo.snap[k]); }
+    const u = undo; undo = null; note = { id: ch.id, text: 'Put back: ' + u.label + '.' };
+    ctx.commit(ch, u.kind === 'gear' ? {} : { skills: true }); render(); if (SW) renderSkill();
+  }
+  const undoBar = ch => undo && ch && undo.id === ch.id ? '<div class="ch-undo" role="status"><span>Removed <b>' + esc(undo.label) + '</b></span><button class="btn small" type="button" data-undo="1">Undo</button><span class="meta">Ctrl+Z</span></div>' : '';
 
   function itemName(it, slot) {
     const gd = ctx.gd(), base = gd.bases[lc(it.base)], u = it.rarity === 'Unique' && gd.uniques[lc(it.unique)];
@@ -7375,6 +7612,7 @@ window.BOCharacter = function (ctx) {
     let h = '<div class="card ch-gear"><div class="ch-skills-head"><h2>Gear</h2><span class="ch-acts">' +
       '<button class="btn small ghost" type="button" data-clip="copygear" title="Copies every item here (idols too), to paste on another character or plan"' + (ch.items.length ? '' : ' disabled') + '>Copy gear</button>' +
       '<button class="btn small ghost" type="button" data-clip="pastegear" title="' + esc(has ? 'Replaces the gear here with the ' + plural(clip.items.length, 'item') + ' copied from ' + clip.from : 'Use Copy gear on another character or plan first') + '"' + (has ? '' : ' disabled') + '>Paste gear</button></span></div><div class="ch-doll">' + SLOTS.map(s => slotCell(ch, s)).join('') + '</div>';
+    h += barCard(ch);
     h += '<h3>Idols <small>' + plural(L.idols.length, 'idol') + ' · ' + L.used.size + ' of ' + FCELLS.length + ' cells</small></h3>' + fossilHtml(ch, L);
     return h + '</div>';
   }
@@ -7394,13 +7632,174 @@ window.BOCharacter = function (ctx) {
     for (const r of ordered) {
       const sk = gd.skills[lc(r.skill)], sups = r.sock ? r.sock.supports : [];
       const canSim = sk && !(ctx.sim.dealsNoHits && ctx.sim.dealsNoHits(sk)) && ctx.supportSearch;
-      h += '<div class="ch-skill' + (lc(r.skill) === main ? ' main' : '') + '"><div class="ch-skill-name" data-tip="skill" data-id="' + esc(r.skill) + '" tabindex="0">' + ctx.skillDot(r.skill) + '<b>' + esc(sk ? sk.Name : r.skill) + '</b>' +
+      h += '<div class="ch-skill' + (lc(r.skill) === main ? ' main' : '') + '" data-skwin="' + esc(r.skill) + '" tabindex="0" role="button" aria-label="Edit ' + esc(sk ? sk.Name : r.skill) + '" title="Click to edit this skill: gem level, supports, skill bar"><div class="ch-skill-name" data-tip="skill" data-id="' + esc(r.skill) + '">' + ctx.skillDot(r.skill) + '<b>' + esc(sk ? sk.Name : r.skill) + '</b>' +
         '<span class="meta">level ' + (ch.gemLevels[r.skill] || 1) + (bar.has(r.skill) ? '' : ' · off the bar') + (lc(r.skill) === main ? ' · main skill' : '') + '</span>' +
         '<span class="ch-skill-acts">' + (canSim ? '<button class="btn small ghost ch-simsup" type="button" data-simsup="' + esc(r.skill) + '" title="Tries the support combinations for this skill at its gem level, against the enemy set on the Damage tab">Sim Supports</button>' : '') +
         '<button class="x ch-skill-x" type="button" data-rmskill="' + esc(r.skill) + '" aria-label="Remove ' + esc(sk ? sk.Name : r.skill) + '">×</button></span></div>' +
         sups.map(id => '<div class="ch-sup" data-tip="sup" data-id="' + esc(id) + '" tabindex="0">' + ctx.gemDot(id) + esc((gd.supports[lc(id)] || { Name: id }).Name) + '</div>').join('') + '</div>';
     }
     return h + '</div>';
+  }
+
+  // ---------- Action bar: the in-game skill bar, slot by slot ----------
+  // ch.hotbar holds 13 entries ("" = empty, "move" = move only): 0-2 left click, middle mouse (M5 in the save notes; owner,
+  // 13 Nov 2026: middle mouse by default, so it is named that), right click; 3-7 keys 1-5; 8-12 the Ctrl
+  // bar (same order as the Save Creator's mapper, creator.js BAR_SLOTS, from the owner's screenshot of 12 Nov 2026). Skills
+  // the Build tab added past entry 12 count as on the bar but have no slot yet: shown under the bar. For the sim only being
+  // on the bar matters (Vows, Heralds and curses count while on it); the slot is what a save or the Save Creator keeps.
+  const BAR_SLOTS = ['Left click', 'Middle mouse', 'Right click', 'Key 1', 'Key 2', 'Key 3', 'Key 4', 'Key 5', 'Ctrl 1', 'Ctrl 2', 'Ctrl 3', 'Ctrl 4', 'Ctrl 5'];
+  const BAR_MAIN = 8;
+  const barName = id => id === 'move' ? 'Move only' : (ctx.gd().skills[lc(id)] || {}).Name || id;
+  function barCard(ch) {
+    const hb = ch.hotbar || [], rs = planner.rows(ch), extra = hb.slice(BAR_SLOTS.length).filter(x => x && !hb.slice(0, BAR_SLOTS.length).includes(x));
+    const opts = '<option value="-">Empty</option>' + rs.map(r => '<option value="' + esc(r.skill) + '">' + esc(barName(r.skill)) + '</option>').join('') + '<option value="move">Move only</option>';
+    const slot = i => {
+      const id = hb[i] || '', sk = id && id !== 'move' ? ctx.gd().skills[lc(id)] : null;
+      return '<div class="cr-bar-slot ch-bar-slot' + (id ? ' full' : '') + '" style="grid-area: s' + i + '"><button type="button" class="cr-bar-put" data-barslot="' + i + '"' + (sk ? ' data-tip="skill" data-id="' + esc(id) + '"' : '') + ' title="' + esc(id ? 'Click to put another skill on ' + BAR_SLOTS[i] : 'Click to put a skill on ' + BAR_SLOTS[i]) + '">' +
+        '<small>' + BAR_SLOTS[i] + '</small><span>' + (id ? (sk ? ctx.skillDot(id) : '') + esc(barName(id)) : '<i>empty</i>') + '</span></button>' +
+        '<select class="ch-bar-sel" data-barsel="' + i + '" aria-hidden="true" tabindex="-1">' + opts + '</select>' +
+        (id ? '<button type="button" class="x" data-barclear="' + i + '" aria-label="Clear ' + BAR_SLOTS[i] + '">×</button>' : '') + '</div>';
+    };
+    const n = new Set(hb.filter(x => x && x !== 'move')).size;
+    return '<div class="ch-bar-card"><h3>Action bar <small>' + n + ' skill' + (n === 1 ? '' : 's') + ' on it</small></h3>' +
+      '<div class="cr-bar">' + hb.slice(0, BAR_MAIN).concat(Array(Math.max(0, BAR_MAIN - hb.length)).fill('')).slice(0, BAR_MAIN).map((x, i) => slot(i)).join('') + '<span class="cr-bar-label">Ctrl bar</span>' + BAR_SLOTS.slice(BAR_MAIN).map((x, i) => slot(BAR_MAIN + i)).join('') + '</div>' +
+      (extra.length ? '<p class="hint">Also on the bar, no slot yet: ' + extra.map(id => esc(barName(id))).join(', ') + '. Click a slot to place ' + (extra.length > 1 ? 'them' : 'it') + '.</p>' : '') +
+      '<p class="hint">Click a slot to pick its skill, or drag a skill to another slot. Vows, Heralds and curses only count in the sim while on the bar.</p></div>';
+  }
+  // Dragging a skill onto another slot moves it there; a skill already in that slot goes to the slot it came from
+  // (owner, 13 Nov 2026). A press without movement is a click (opens the picker).
+  let BD = null, barJust = false; // BD: { i, x, y, el, ghost, over }
+  function barDown(e) {
+    const b = e.target.closest && e.target.closest('.ch-bar-card .cr-bar-put[data-barslot]');
+    if (!b || e.button !== 0 || !ctx.current() || !(ctx.current().hotbar || [])[+b.dataset.barslot]) return;
+    BD = { i: +b.dataset.barslot, x: e.clientX, y: e.clientY, el: b, ghost: null, over: null };
+  }
+  function barMove(e) {
+    if (!BD) return;
+    if (!BD.ghost) {
+      if (Math.hypot(e.clientX - BD.x, e.clientY - BD.y) < 6) return;
+      hide(); closeBarPicker();
+      const r = BD.el.getBoundingClientRect(), g = BD.el.cloneNode(true);
+      g.className = 'cr-bar-put ch-bar-ghost'; g.removeAttribute('data-barslot'); g.removeAttribute('data-tip');
+      g.style.width = r.width + 'px'; g.style.height = r.height + 'px';
+      document.body.appendChild(g); BD.ghost = g; BD.dx = e.clientX - r.left; BD.dy = e.clientY - r.top;
+      BD.el.classList.add('ch-bar-from'); document.body.classList.add('ch-bar-dragging');
+    }
+    e.preventDefault();
+    BD.ghost.style.left = (e.clientX - BD.dx) + 'px'; BD.ghost.style.top = (e.clientY - BD.dy) + 'px';
+    const under = document.elementFromPoint(e.clientX, e.clientY), t = under && under.closest && under.closest('.ch-bar-card [data-barslot]');
+    if (BD.over && BD.over !== t) BD.over.classList.remove('ch-bar-over');
+    BD.over = t && +t.dataset.barslot !== BD.i ? t : null; if (BD.over) BD.over.classList.add('ch-bar-over');
+  }
+  function barUp(e, cancel) {
+    if (!BD) return;
+    const d = BD; BD = null;
+    if (!d.ghost) return;
+    d.ghost.remove(); d.el.classList.remove('ch-bar-from'); document.body.classList.remove('ch-bar-dragging');
+    if (d.over) d.over.classList.remove('ch-bar-over');
+    barJust = true; setTimeout(() => { barJust = false; }, 0);
+    if (cancel || !d.over) return;
+    const j = +d.over.dataset.barslot, ch = ctx.editable(); if (!ch) return;
+    const hb = (ch.hotbar || []).slice(); while (hb.length < BAR_SLOTS.length) hb.push('');
+    [hb[d.i], hb[j]] = [hb[j], hb[d.i]];
+    ch.hotbar = hb; ctx.commit(ch, { skills: true }); render(); if (SW) renderSkill();
+  }
+  const closeBarPicker = () => { const p = document.querySelector('.pl-pick'); if (p) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); };
+  function setBar(i, v) {
+    const ch = ctx.editable(); if (!ch) return;
+    const hb = (ch.hotbar || []).slice();
+    while (hb.length < BAR_SLOTS.length) hb.push('');
+    const id = v === '-' ? '' : v;
+    hb[i] = id;
+    // A skill placed here leaves the "no slot yet" list past entry 12.
+    ch.hotbar = hb.slice(0, BAR_SLOTS.length).concat(hb.slice(BAR_SLOTS.length).filter(x => x && x !== id));
+    if (id && id !== 'move' && !ch.gems.includes(id)) ch.gems.push(id);
+    ctx.commit(ch, { skills: true }); render(); if (SW) renderSkill();
+  }
+
+  // ---------- Skill window: edit one skill (the Build tab's skill editor), sim its supports, see its patch history ----------
+  let SW = null, swBack = null, swFocus = null; // SW: { skill }
+  function openSkill(skill, from) {
+    const ch = ctx.current(); if (!ch || !planner.rows(ch).some(r => r.skill === skill)) return;
+    swFocus = from || null; SW = { skill, open: new Set() }; planner.clearStatus();
+    if (!swBack) {
+      swBack = document.createElement('div'); swBack.className = 'io-back sw-back'; swBack.setAttribute('role', 'dialog'); swBack.setAttribute('aria-modal', 'true'); swBack.setAttribute('aria-label', 'Skill');
+      swBack.addEventListener('mousedown', e => { if (e.target === swBack) closeSkill(); });
+      swBack.addEventListener('click', onSwClick);
+      swBack.addEventListener('change', e => {
+        if (!SW || !e.target.dataset.f) return;
+        const before = planner.rows(ctx.current()).map(r => r.skill);
+        planner.skillChange(e); afterEdit(before);
+      });
+      document.addEventListener('keydown', e => { if (SW && swBack && !swBack.hidden && e.key === 'Escape' && !(SP && spBack && !spBack.hidden)) { e.preventDefault(); closeSkill(); } });
+      document.body.appendChild(swBack);
+    }
+    swBack.hidden = false; document.body.classList.add('io-open');
+    renderSkill();
+    const f = swBack.querySelector('.io-x'); if (f) f.focus({ preventScroll: true });
+    // The patch history comes in its own file on the site: fetched once, then the window fills it in.
+    const P = ctx.patches && ctx.patches(); if (P && !P.ready()) P.load().then(() => { if (SW) renderSkill(); });
+  }
+  function closeSkill() {
+    hide(); SW = null; if (swBack) swBack.hidden = true;
+    if (!(SP && spBack && !spBack.hidden)) document.body.classList.remove('io-open');
+    if (swFocus && swFocus.isConnected) swFocus.focus({ preventScroll: true });
+  }
+  // After an edit: the skill may have been swapped for another (the skill box) or taken out (×).
+  function afterEdit(before) {
+    const ch = ctx.current(); if (!SW || !ch) return;
+    const now = planner.rows(ch).map(r => r.skill);
+    if (!now.includes(SW.skill)) { const swapped = now.filter(s => !before.includes(s)); if (swapped.length === 1) SW.skill = swapped[0]; else { render(); return closeSkill(); } }
+    render(); renderSkill();
+  }
+  async function onSwClick(e) {
+    if (!SW) return;
+    if (e.target.closest('[data-sw="close"]')) return closeSkill();
+    const sim = e.target.closest('[data-sw="sim"], [data-act="simbest"]');
+    if (sim) { const s = SW.skill; hide(); swBack.hidden = true; return openSup(s, null, true); }
+    const hist = e.target.closest('[data-sw="history"]');
+    if (hist) { const P = ctx.patches && ctx.patches(); if (P) { P.openHistory('skills', SW.skill); closeSkill(); if (ctx.showTab) ctx.showTab('patch'); } return; }
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    if (b.dataset.act === 'rmskill') { const sk = ctx.gd().skills[lc(SW.skill)]; remember('skill', sk ? sk.Name : SW.skill); }
+    const before = planner.rows(ctx.current()).map(r => r.skill);
+    await planner.skillClick(e); afterEdit(before);
+  }
+  function renderSkill() {
+    if (!SW || !swBack) return;
+    const ch = ctx.current(); if (!ch) return closeSkill();
+    const gd = ctx.gd(), sk = gd.skills[lc(SW.skill)], name = sk ? sk.Name : SW.skill;
+    const ed = planner.skillEditor(ch, SW.skill); if (!ed) return closeSkill();
+    const slots = (ch.hotbar || []).map((x, i) => x === SW.skill && i < BAR_SLOTS.length ? BAR_SLOTS[i] : '').filter(Boolean);
+    let h = '<div class="io-win sw-win"><div class="io-head"><span class="sp-title">' + ctx.skillDot(SW.skill) + '<b>' + esc(name) + '</b></span>' +
+      '<span class="io-slotname">level ' + (ch.gemLevels[SW.skill] || 1) + (slots.length ? ' · ' + esc(slots.join(', ')) : '') + '</span><button class="io-x" type="button" data-sw="close" aria-label="Close">×</button></div><div class="io-body">';
+    // This skill's numbers against the Damage tab's enemy.
+    let r = null; try { r = ctx.skillSheet ? ctx.skillSheet(SW.skill) : null; } catch (err) { r = null; }
+    if (r && !r.error && !r.unsupported) {
+      const m = r.mana && !r.mana.skip ? r.mana : null;
+      h += '<div class="sw-stats"><div><span>DPS vs the set enemy</span><b>' + fmt(r.totalDps || 0) + '</b></div>' + (r.hitAvg ? '<div><span>Average hit</span><b>' + fmt(r.hitAvg) + '</b></div>' : '') +
+        (r.crit ? '<div><span>Crit</span><b>' + (Math.round(r.crit.chance * 10) / 10) + '% ×' + (r.crit.multi > 10 ? r.crit.multi / 100 : r.crit.multi).toFixed(2) + '</b></div>' : '') +
+        (m ? '<div><span>Mana</span><b class="' + (m.ok ? '' : 'bad') + '">' + (m.sustained ? 'sustained' : m.ok ? 'lasts ' + Math.round(m.lasts) + ' s' : 'runs dry in ' + Math.max(1, Math.round(m.lasts)) + ' s') + '</b></div>' : '') + '</div>';
+    }
+    const st = planner.status(); if (st) h += '<p class="hint pl-status" role="status">' + esc(st) + '</p>';
+    const canSim = sk && !(ctx.sim.dealsNoHits && ctx.sim.dealsNoHits(sk)) && ctx.supportSearch;
+    h += '<div class="sw-acts">' + (canSim ? '<button class="btn small" type="button" data-sw="sim" title="Tries the support combinations for this skill at its gem level, against the enemy set on the Damage tab">Sim Supports</button>' : '') + '</div>';
+    h += '<div class="pl-skills sw-editor">' + ed + '</div>';
+    // Patch history of this skill and the supports in it.
+    const P = ctx.patches && ctx.patches(), sock = sockOf(ch, SW.skill);
+    // Split (owner, 13 Nov 2026): the skill, then its support gems one by one, each folding out on its own; all closed at first.
+    // SW.open keeps which ones are open while the window redraws after an edit.
+    const isOpen = k => SW.open.has(k) ? ' open' : '';
+    const n = (sec, id) => P.countOf(sec, id), cnt = k => '<small>' + k + ' change' + (k === 1 ? '' : 's') + '</small>';
+    h += '<details class="sw-hist" data-swk="all"' + isOpen('all') + '><summary><b>Patch history</b></summary>';
+    if (P && P.ready()) {
+      const sups = ((sock && sock.supports) || []).map(lc), supN = sups.reduce((t, id) => t + n('supports', id), 0);
+      h += '<details class="sw-sub" data-swk="skill"' + isOpen('skill') + '><summary>' + ctx.skillDot(SW.skill) + '<b>Spell</b> · ' + esc(name) + ' ' + cnt(n('skills', SW.skill)) + '</summary>' + P.historyHtml([['skills', SW.skill]], 10) + '</details>';
+      h += '<details class="sw-sub" data-swk="sups"' + isOpen('sups') + '><summary><b>Support gems</b> ' + (sups.length ? cnt(supN) : '<small>none socketed</small>') + '</summary>' +
+        (sups.length ? sups.map(id => '<details class="sw-sub sw-sup" data-swk="sup:' + esc(id) + '"' + isOpen('sup:' + id) + '><summary>' + ctx.gemDot(id) + esc(supNm(id)) + ' ' + cnt(n('supports', id)) + '</summary>' + P.historyHtml([['supports', id]], 10) + '</details>').join('') : '<p class="hint">Socket a support to see its history.</p>') + '</details>';
+      h += '<p><button class="btn small ghost" type="button" data-sw="history">Full history on the Recent Patch tab</button></p>';
+    } else h += '<p class="hint">Loading the patch history…</p>';
+    swBack.innerHTML = h + '</details></div></div>';
+    swBack.querySelectorAll('details[data-swk]').forEach(d => d.addEventListener('toggle', () => { if (SW) { if (d.open) SW.open.add(d.dataset.swk); else SW.open.delete(d.dataset.swk); } }));
   }
 
   function passivesCard(ch) {
@@ -7434,13 +7833,15 @@ window.BOCharacter = function (ctx) {
     let h = '<div class="cmp-intro results-heading"><div><div class="eyebrow">BUILD OVERVIEW</div><h2>Character</h2><p>The loaded character at a glance: gear by slot, skills with their supports and the notable passives. Click a gear slot to pick or edit an item; hover an item or gem for its details.</p></div>' + (ch && ctx.enemyBtn ? ctx.enemyBtn() : '') + '</div>';
     if (!ch) { el.innerHTML = h + '<div class="card"><p class="hint">No character loaded. Load a save, a build code or start a plan first.</p></div>'; return; }
     if (note && note.id === ch.id) h += '<p class="hint pl-status" role="status">' + esc(note.text) + '</p>';
-    el.innerHTML = h + '<div class="ch-cols"><div class="ch-col">' + gearCard(ch) + (ctx.beltCard ? ctx.beltCard() : '') + notesCard() + '</div><div class="ch-col">' + skillsCard(ch) + passivesCard(ch) + '</div></div>';
+    el.innerHTML = h + undoBar(ch) + '<div class="ch-cols"><div class="ch-col">' + gearCard(ch) + (ctx.beltCard ? ctx.beltCard() : '') + notesCard() + '</div><div class="ch-col">' + skillsCard(ch) + passivesCard(ch) + '</div></div>';
   }
 
   // Tooltips: the same item, skill and support text the Build tab shows.
   let tip = null;
   const hide = () => { if (tip) tip.hidden = true; };
   function show(e) {
+    // A × (remove, clear) never shows a tooltip, not even the item's or skill's it sits in (owner, 13 Nov 2026).
+    if (e.target.closest && e.target.closest('.x, .ch-item-x, [data-rmitem], [data-rmshelf], [data-rmskill], [data-barclear]')) return hide();
     const t = e.target.closest && e.target.closest('#characterPane [data-tip]');
     const ch = ctx.current();
     if (!t || !ch) return hide();
@@ -7461,6 +7862,10 @@ window.BOCharacter = function (ctx) {
     if (el.dataset.bound) return; el.dataset.bound = '1';
     el.addEventListener('input', e => { if (e.target && e.target.id === 'chNotes') ctx.notes.set(e.target.value); });
     el.addEventListener('pointerdown', dragDown);
+    el.addEventListener('pointerdown', barDown);
+    document.addEventListener('pointermove', barMove, { passive: false });
+    document.addEventListener('pointerup', e => barUp(e, false));
+    document.addEventListener('pointercancel', e => barUp(e, true));
     document.addEventListener('pointermove', dragMove, { passive: false });
     document.addEventListener('pointerup', e => dragEnd(e, false));
     document.addEventListener('pointercancel', e => dragEnd(e, true));
@@ -7470,11 +7875,15 @@ window.BOCharacter = function (ctx) {
       if (dragJust) return;
       if (e.target.closest && e.target.closest('#chAddSkillBtn')) { hide(); const s = $('#chAddSkill'); if (s && ctx.current()) planner.openPicker(s); return; }
       const ss = e.target.closest && e.target.closest('[data-simsup]'); if (ss) { hide(); return openSup(ss.dataset.simsup, ss); }
+      const bc = e.target.closest && e.target.closest('[data-barclear]'); if (bc) { hide(); const i = +bc.dataset.barclear; remember('bar', barName((ctx.current().hotbar || [])[i]) + ' from ' + BAR_SLOTS[i]); return setBar(i, '-'); }
+      const bs = e.target.closest && e.target.closest('[data-barslot]');
+      if (bs && barJust) return;
+      if (bs) { hide(); const sel = el.querySelector('[data-barsel="' + bs.dataset.barslot + '"]'); if (sel && ctx.current()) { sel.value = (ctx.current().hotbar || [])[+bs.dataset.barslot] || '-'; planner.openPicker(sel); } return; }
       const ri = e.target.closest && e.target.closest('[data-rmitem]');
       if (ri) {
         e.stopPropagation();
         const ch0 = ctx.current(), i = +ri.dataset.rmitem, it0 = ch0 && ch0.items[i]; if (!it0) return;
-        hide(); const ch = ctx.editable(); if (!ch) return;
+        hide(); remember('gear', itemName(it0, it0.slot).name); const ch = ctx.editable(); if (!ch) return;
         pinIdols(ch, idolLayout(ch)); // the other idols keep their cells (idols without a saved place would otherwise be laid out again)
         ch.items.splice(i, 1); ctx.commit(ch); render(); return;
       }
@@ -7482,24 +7891,27 @@ window.BOCharacter = function (ctx) {
       if (rs) {
         e.stopPropagation();
         const i = +rs.dataset.rmshelf; if (!shelfOf(ctx.current())[i]) return;
-        hide(); const ch = ctx.editable(); if (!ch) return;
+        hide(); { const it1 = shelfOf(ctx.current())[i]; remember('gear', itemName(it1, it1.slot || 'Idol').name); } const ch = ctx.editable(); if (!ch) return;
         shelfW(ch).splice(i, 1); ctx.commit(ch); render(); return;
       }
       const rm = e.target.closest && e.target.closest('[data-rmskill]');
       if (rm) {
         const ch0 = ctx.current(), id = rm.dataset.rmskill, sk = ctx.gd().skills[lc(id)], nm = sk ? sk.Name : id; if (!ch0) return;
-        if (!window.confirm('Remove ' + nm + ' from the planner?\n\nThis also removes its supports and takes it off the skill bar. You will need to add it back in (and socket its supports again) to see its damage in the sim.')) return;
-        hide(); const ch = ctx.editable(); if (!ch) return;
+        hide(); remember('skill', nm); const ch = ctx.editable(); if (!ch) return;
         planner.removeSkill(ch, id); ctx.commit(ch); render(); return;
       }
+      if (e.target.closest && e.target.closest('[data-undo]')) return doUndo();
       const c = e.target.closest && e.target.closest('[data-clip]'); if (c) return clipAct(c.dataset.clip);
+      const sw = e.target.closest && e.target.closest('[data-skwin]'); if (sw) { hide(); return openSkill(sw.dataset.skwin, sw); }
       const s = e.target.closest && e.target.closest('[data-open]'); if (s) openItem(s);
     });
     el.addEventListener('change', e => {
+      if (e.target && e.target.dataset && e.target.dataset.barsel != null) return setBar(+e.target.dataset.barsel, e.target.value);
       if (!e.target || e.target.id !== 'chAddSkill') return;
       const ch = ctx.editable(); if (ch && planner.addSkill(ch, e.target.value)) { ctx.commit(ch); render(); } else render();
     });
     el.addEventListener('keydown', e => { const s = e.target.closest && e.target.closest('.ch-slot[data-open]'); if (s && s === e.target && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openItem(s); } });
+    el.addEventListener('keydown', e => { const s = e.target.closest && e.target.closest('.ch-skill[data-skwin]'); if (s && s === e.target && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); hide(); openSkill(s.dataset.skwin, s); } });
     // Arrow keys move the focused idol one cell.
     el.addEventListener('keydown', e => {
       const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key], t = e.target;
@@ -7507,6 +7919,12 @@ window.BOCharacter = function (ctx) {
       e.preventDefault();
       const idx = +t.dataset.idx, p = idolLayout(ctx.current()).at.get(idx);
       if (p && dropIdol(idx, p[0] + d[0], p[1] + d[1], false)) { hide(); const n = el.querySelector('.ch-idol[data-idx="' + idx + '"]'); if (n) n.focus({ preventScroll: true }); }
+    });
+    document.addEventListener('keydown', e => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || lc(e.key) !== 'z' || el.hidden || !undo) return;
+      const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (document.body.classList.contains('io-open')) return;
+      e.preventDefault(); doUndo();
     });
     el.addEventListener('mouseover', show); el.addEventListener('focusin', show);
     el.addEventListener('mouseleave', hide); el.addEventListener('focusout', hide);
@@ -7970,11 +8388,11 @@ window.BOCharacter = function (ctx) {
   const fmt = x => ctx.num ? ctx.num(x) : Math.round(x).toLocaleString('en-US');
   const fmtPct = x => ctx.pct ? ctx.pct(x) : (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + '%';
   const sockOf = (ch, skill) => (ch.sockets || []).find(s => lc(s.skill) === lc(skill));
-  function openSup(skill, from) {
+  function openSup(skill, from, fromSkillWin) {
     if (!ctx.current()) return;
     spFocus = from || null;
     if (SP && SP.job) SP.job.cancel();
-    SP = { skill, pool: 'all', manaOk: true, pct: 0, job: null, res: null, base: [], msg: '' };
+    SP = { skill, back: !!fromSkillWin, pool: 'all', manaOk: true, pct: 0, job: null, res: null, base: [], msg: '' };
     if (!spBack) {
       spBack = document.createElement('div'); spBack.className = 'io-back sp-back'; spBack.setAttribute('role', 'dialog'); spBack.setAttribute('aria-modal', 'true'); spBack.setAttribute('aria-label', 'Sim Supports');
       spBack.addEventListener('mousedown', e => { if (e.target === spBack) closeSup(); });
@@ -7994,7 +8412,11 @@ window.BOCharacter = function (ctx) {
   }
   function closeSup() {
     if (SP && SP.job) SP.job.cancel();
-    SP = null; if (spBack) spBack.hidden = true; document.body.classList.remove('io-open');
+    const back = SP && SP.back && SW;
+    SP = null; if (spBack) spBack.hidden = true;
+    // Opened from the skill window: back to it, with the supports now socketed.
+    if (back) { swBack.hidden = false; renderSkill(); const f = swBack.querySelector('.io-x'); if (f) f.focus({ preventScroll: true }); return; }
+    document.body.classList.remove('io-open');
     if (spFocus && spFocus.isConnected) spFocus.focus({ preventScroll: true });
   }
   function runSup() {
@@ -8033,7 +8455,7 @@ window.BOCharacter = function (ctx) {
           '<span class="nums">' + fmt(x.v) + ' DPS (' + fmtPct(x.v / (R.current || 1) - 1) + ') · ' + (x.manaPerSec != null ? 'mana ' + fmt(x.manaPerSec) + '/s of ' + fmt(x.manaGain) : 'mana ×' + x.mana.toFixed(1)) + (x.notOwned.length ? ' · not owned: ' + esc(x.notOwned.map(supNm).join(', ')) : '') + '</span></span>' +
           (same(x.sup) ? '<span class="hint">in use</span>' : '<button class="btn small" type="button" data-sp="use" data-i="' + i + '">Use</button>') + '</div>';
       });
-      h += '</div><p class="hint">' + R.sockets + ' sockets · ' + R.poolSize + ' supports · ' + R.tried.toLocaleString('en-US') + ' setups tried' + (R.exact ? '' : ' (building up the best setup instead of trying them all)') + '.' +
+      h += '</div>' + (R.manaNone ? '<p class="hint bad">None of these keeps your mana up (each runs you dry within a minute of nonstop use); shown anyway, best damage first.</p>' : '') + '<p class="hint">' + R.sockets + ' sockets · ' + R.poolSize + ' supports · ' + R.tried.toLocaleString('en-US') + ' setups tried' + (R.exact ? '' : ' (building up the best setup instead of trying them all)') + '.' +
         (SP.manaOk && R.manaDropped ? ' ' + R.manaDropped.toLocaleString('en-US') + ' setups were skipped: they would run you dry within a minute of nonstop use.' : '') + '</p>';
     }
     spBack.innerHTML = h + '</div></div>';
@@ -8055,7 +8477,7 @@ window.BOCharacter = function (ctx) {
     }
   }
 
-  return { render, hide, close: () => { if (M) closeItem(); if (SP) closeSup(); } };
+  return { render, hide, close: () => { if (M) closeItem(); if (SP) { SP.back = false; closeSup(); } if (SW) closeSkill(); } };
 };
 
 ;
@@ -8412,6 +8834,9 @@ window.BOCharacter = function (ctx) {
       sources.push({ key, label, group: 'Gear', detail: rw ? 'Runeword: ' + rw.Name : (it.rarity || '') });
       if (off.has(key)) continue;
       if (base) for (const m of base.Implicits || []) add(m, m.Value, m.Value2, label + ' · implicit', key);
+      // The base's family line (src/gamedata.js FamilyLine, base_implicits95.json): never boosted by Great / Flawless (the owner's
+      // tooltips, 13 Nov 2026: Doom Clutch, a Great rare, shows its 7% melee line unboosted). On uniques: not checked yet.
+      if (base && base.FamilyLine) add(base.FamilyLine, base.FamilyLine.Value, 0, label + ' · family line', key);
       else notes.push('Unknown item base ' + it.base + ' on ' + it.slot);
       let vowN = 0;
       // Idols never get the Great / Flawless boost: the owner's Dwarven Fossil panel (9 Nov 2026) shows +76% critical
@@ -10447,7 +10872,8 @@ window.BOCharacter = function (ctx) {
     }
     res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
     // What the in-game skill panel shows: hits + ailments to one enemy, before its resistances and curses.
-    res.panelDps = res.sheetHitDps * (1 + (hit.Physical ? hit.Physical.avg / (hitAvg || 1) : 0) * maimPct / 100) +(ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * ail.ignite.panelBurning : 0) + (ail.bleed ? ail.bleed.dps1 * ail.bleed.uptime : 0);
+    const panelHitDps = res.sheetHitDps * (1 + (hit.Physical ? hit.Physical.avg / (hitAvg || 1) : 0) * maimPct / 100);
+    res.panelDps = panelHitDps + (ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * ail.ignite.panelBurning : 0) + (ail.bleed ? ail.bleed.dps1 * ail.bleed.uptime : 0);
     // ----- Life Leech's "more damage while leeching" and Stormfrost's Lightning against the Chilled -----
     // Support texts (game data, Steam build 26595060, read 11 Nov 2026; from the data file / gem text, not yet checked against a tooltip or log): Life Leech "deals 15% more damage while you are leeching (below full
     // life)"; Stormfrost "its Lightning damage is 15% more against Chilled or Frozen enemies". Life Leech is counted as on (in a fight you are rarely at
@@ -10495,6 +10921,10 @@ window.BOCharacter = function (ctx) {
       hitDpsVs *= execF; res.hitDps = hitDpsVs; poisonDps *= execF; igniteDps *= execF; bleedDps *= execF;
       res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
       res.executioner = { more: lowMore, below: T * 100, cull: C * 100, factor: execF };
+      // The game's skill panel counts the same fight average on the hits, not on the bleed. Copy stats, 13 Nov 2026, build 73
+      // (Spin_win, Rending Slam gem 14): with Executioner hit DPS 25,794.3 = avg 20,006.3 x crit 1.0469 / cycle 1.01971 x 1.2558
+      // (= 1 / (0.5 + 0.4 / 1.35)); without it 20,727 = 20,172.3 x 1.0469 / 1.01889 exactly; the bleed part did not move.
+      res.panelDps += panelHitDps * (execF - 1); res.sheetHitDps *= execF;
       res.notes.push('Executioner: ' + lowMore + '% more damage below ' + Math.round(T * 100) + '% life and kills below ' + Math.round(C * 100) + '%: one enemy dies ' + Math.round((1 - 1 / execF) * 100) + '% sooner, counted as x' + execF.toFixed(2) + ' over the fight.');
     }
     // Bone Sovereign ("You deal no damage yourself.") and Ancestral Host ("You deal no damage with skills you use yourself
@@ -10550,7 +10980,16 @@ window.BOCharacter = function (ctx) {
       const econ = is073(GD) && (GD.rules || {})['r98.META.bEcon74'] !== false && String(((GD.rules || {})['r98.META.bEcon74'] || {}).value || '').toLowerCase() !== 'false';
       const offClassCost = econ && sk.HomeClasses && ch.classId && !sk.HomeClasses.some(c => lc(c) === lc(ch.classId)) ? ruleNum(GD, 'r98.META.fOffClassMana74', 1.5) : 1;
       const cost = sk.ManaCost * cut * mult * offClassCost * Math.max(0, 1 + costInc / 100) * (res.coc ? 0.5 : 1) * (1 - refund / 100);
-      const spend = cost * res.speed.usesPerSec;
+      // Sparks: usesPerSec above is the Sparks' strike rate (47 a second on Shrimpmage's Venom Spark), but mana is paid per cast.
+      // The game's own Spark text (skills.json, game data build 73, all four Sparks and Wayward Orb): "Each cast throws 2 sparks
+      // apart (3 from gem level 20); recasts add more up to your Spark limit ..., then replace the oldest". So keeping the cap up
+      // costs ceil(cap / per cast) casts per Spark life (Venom Spark, cap 10, 19 s: 5 casts, 0.26 a second, not 47), and never
+      // more than the cast rate. Found 13 Nov 2026: with the strike rate every Spark setup failed "Mana sustained" and the
+      // Character tab's Sim Supports came back empty (a streamer's Venom Spark). Mana only: the damage side still uses its own
+      // rule above. Not checked in game.
+      const perCast = ((res.gem && (res.gem.own || 0) + (res.gem.bonus || 0)) || L) >= 20 ? 3 : 2;
+      const castRate = res.brand && res.brand.castsPerSec ? (res.brand.duration > 0 ? Math.min(res.brand.castsPerSec, Math.ceil((res.brand.cap || 1) / perCast) / res.brand.duration) : res.brand.castsPerSec) : res.speed.usesPerSec;
+      const spend = cost * castRate;
       let onHit = 0; for (const m of pickMods(mods, 'ManaOnHit', 'Flat')) if (applies(ctx, m)) onHit += m.v;
       let leech = 0; for (const m of pickMods(mods, 'ManaLeech', 'Flat')) if (applies(ctx, m)) leech += m.v;
       const leechCap = econ ? ruleNum(GD, 'r98.META.fManaLeechRate98', 8) : (H.LeechRatePct || 20);
@@ -10615,6 +11054,18 @@ window.BOCharacter = function (ctx) {
       res.panelDps = r2.totalDps;
       res.notes = res.notes.filter(n => !/they are not counted here/.test(n));
       res.notes.push(sk.Name + ': the game\'s skill panel shows its risen minions only: ' + r2.minion.alive + ' standing, hit ' + Math.round(r2.hitAvg) + ', every ' + r2.minion.pace.toFixed(3) + ' s = ' + Math.round(r2.totalDps) + ' DPS (the panel number). The lance\'s own hits (' + Math.round(res.ownPanelDps) + ' DPS) and the minions are not added into the vs-enemy numbers.');
+    }
+    // Fortified stacks come from melee hits, so the character sheet (out of combat) has none: the sheet figures (hit, its
+    // breakdown, sheet hit DPS, panel DPS) are worked out without Fortified, the vs-enemy DPS keeps full stacks. Owner's Copy
+    // stats, 13 Nov 2026 (Spin_win, Warrior 46, Fortified x5 = 10% increased melee + 0.5% more): with Fortified the sim's hits
+    // were 1.9-3.3% over the sheet (Slash, Leap Slam, Cyclone, Rending Slam), without it -0.33 / -0.33 / -0.33 / -0.18%.
+    if (!o._noFort && !(o.off && o.off.has('fortify')) && (res.sources || []).some(s => s.key === 'fortify') && res.hit) {
+      const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { _noFort: true, off: new Set([...(o.off || []), 'fortify']) }));
+      if (p && p.hit && isFinite(p.panelDps)) {
+        res.fortified = { hitAvg: res.hitAvg, sheetHitDps: res.sheetHitDps, panelDps: res.panelDps };
+        for (const k of ['hit', 'hitAvg', 'hitAvgCrit', 'scaleInfo', 'convertedParts', 'baseParts', 'sheetHitDps', 'panelDps']) if (p[k] !== undefined) res[k] = p[k];
+        res.notes.push('Fortified is counted in the vs-enemy DPS only (full stacks in a fight); the hit, its breakdown and the panel DPS are the character sheet\'s, out of combat (no stacks).');
+      }
     }
     return res;
   }
@@ -11552,6 +12003,7 @@ window.BOStartApp = function () {
   let faq = null; // the FAQ / Game Mechanics tab (faq.js)
   let character = null; // the Character tab (character.js)
   let itemSearch = null; // the Item Search tab (itemsearch.js)
+  let patches = null; // the Recent Patch tab (patches.js): what each game build changed, and each skill's or item's history
   let ladder = null; // the Ladder tab (ladder.js): public ladders and top builds, Broken Oath public API
   let grail = null; // the Grail tab (grail.js): found uniques, held / craftable Oathwords, runes owned
   let brewery = null, breweryDirty = false; // the Brewery tab (brewery.js); dirty: potions changed since the last damage render
@@ -14797,10 +15249,10 @@ window.BOStartApp = function () {
   // Share codes (#b=, #s=) stay in the hash. window.SITE_BASE is the way up to the site root ('' on the root page);
   // the local DamageSim.html doesn't set it (opened from a file it can't use addresses).
   const ROUTES = { character: 'build/character', tree: 'build/tree', 'build:skills': 'build/skills', damage: 'build/damage',
-    compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', faq: 'faq',
+    compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', patch: 'patch', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', faq: 'faq',
     skillscaling: 'skills', minions: 'skills/minions', creator: 'creator', plan: 'plan', code: 'code' };
   const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', 'build:skills': 'Skills', damage: 'Damage Analysis',
-    compare: 'Item Simulator', items: 'Item Search', grail: 'Grail', ladder: 'Ladder', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery",
+    compare: 'Item Simulator', items: 'Item Search', grail: 'Grail', ladder: 'Ladder', patch: 'Recent Patch', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery",
     faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code' };
   // The Skills tab holds two views: Skill Scaling (scaling.js) and Minion Scaling (faq.js's minions section).
   let skillsView = 'scaling';
@@ -14858,7 +15310,7 @@ window.BOStartApp = function () {
     document.body.classList.toggle('plan-page', tab === 'plan'); // the plan setup page: no Damage-tab controls beside it
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'faq' || tab === 'skillscaling' || tab === 'character');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character');
     document.body.classList.toggle('character-page', tab === 'character');
     document.body.classList.toggle('ladder-page', tab === 'ladder'); // no character strip on the Ladder tab
     document.body.classList.toggle('creator-page', tab === 'creator'); // the Save Creator has no use for the build views
@@ -14872,7 +15324,7 @@ window.BOStartApp = function () {
     // Character, Passive tree and Damage Analysis are sub-tabs of Build Planner: keep that main tab lit.
     document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'damage'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
     if (tab === 'tree' || tab === 'damage' || tab === 'character') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character';
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     renderBuildStats();
@@ -14884,6 +15336,7 @@ window.BOStartApp = function () {
     if (tab === 'items') itemSearch.render();
     if (tab === 'grail') grail.render();
     if (tab === 'ladder') ladder.render();
+    if (tab === 'patch') patches.render();
     if (tab === 'faq') faq.render();
     if (tab === 'skillscaling') renderSkillsTab();
     if (tab === 'character') character.render();
@@ -15052,7 +15505,9 @@ window.BOStartApp = function () {
         while (!job.done && performance.now() - t < 40) job.step(150);
         if (!job.done) { progress(Math.round(job.tried / Math.max(1, job.total) * 100)); return setTimeout(tick, 0); }
         const id = x => (GD.supports[String(x).toLowerCase()] || { Id: x }).Id;
-        resolve({ results: job.results.map(r => Object.assign({}, r, { sup: r.sup.map(id) })), current: cur.totalDps, sockets: job.sockets, tried: job.tried, exact: job.exact, poolSize: job.pool.length, manaDropped: job.manaDropped || 0 });
+        // Nothing keeps the mana up: show the setups anyway, marked, instead of an empty window (as bestSupportsFor falls back).
+        if (!job.results.length && opt.manaOk && !job.again) { const o2 = comboOpts(); o2.gemLevel = st.ch.gemLevels[skill] || undefined; const dropped = job.manaDropped || 0; job = S.supportSearch(GD, st.ch, skill, o2, { pool: opt.pool || 'all', target: 'enemy', keep: 8, manaOk: false, pinned: [], blocked: [] }); job.again = true; job.manaAll = dropped; return setTimeout(tick, 0); }
+        resolve({ results: job.results.map(r => Object.assign({}, r, { sup: r.sup.map(id) })), current: cur.totalDps, sockets: job.sockets, tried: job.tried, exact: job.exact, poolSize: job.pool.length, manaDropped: job.manaDropped || 0, manaNone: !!job.again });
       };
       setTimeout(tick, 0);
     });
@@ -15113,9 +15568,51 @@ window.BOStartApp = function () {
   // The Item Search tab (itemsearch.js): uniques, Oathwords, bases, mods, runes and jewels from the game data.
   grail = window.BOGrail({ $, esc, gd: () => GD, current: () => st.ch, icons: () => itemSearch,
     onChange: () => { if (!$('#itemSearchPane').hidden) itemSearch.render(); } });
-  itemSearch = window.BOItemSearch({ $, esc, gd: () => GD, owned: () => grail });
+  itemSearch = window.BOItemSearch({ $, esc, gd: () => GD, owned: () => grail, patches: () => patches });
   // The Ladder tab (ladder.js): public ladders and top builds from the Broken Oath public API, read only through the
   // share worker's cache (/api/). ?ladderapi=local points it at `wrangler dev` on port 8787 for testing.
+  // Recent Patch tab hover tooltips: what an entry does in the current game data, in the page's .pl-tip look (the Build tab's
+  // skill and support tooltips, Item Search's unique tooltip, the planner's item tooltip for a plain base).
+  function patchTip(sec, id) {
+    const lid = String(id).toLowerCase(), li = t => '<li>' + esc(t) + '</li>', head = (n, sub) => '<b>' + esc(n) + '</b><span class="pl-tip-sub">' + esc(sub) + '</span>';
+    const list = (k, ls) => ls.length ? '<ul class="' + k + '">' + ls.map(li).join('') + '</ul>' : '';
+    const byId = (sect) => { const v = GD[sect]; return !v ? null : Array.isArray(v) ? v.find(x => x && x.Id === id) : v[id] || v[lid]; };
+    if (sec === 'skills') return planner.skillTip(null, id, false, true);
+    if (sec === 'supports') return planner.supTip(id);
+    if (sec === 'uniques') return itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '';
+    if (sec === 'blessings' || sec === 'curses') {
+      const b = byId(sec); if (!b) return '';
+      if (b.Skill && GD.skills[String(b.Skill).toLowerCase()]) return planner.skillTip(null, b.Skill, false, true);
+      return head(b.Name, b.Kind || '') + (b.Text ? '<span class="pl-tip-desc">' + esc(b.Text) + '</span>' : '');
+    }
+    if (sec === 'bases') {
+      const b = GD.bases[lid]; if (!b) return '';
+      const slot = b.Slot === 'Ring' ? 'Ring1' : b.Slot || 'MainHand';
+      try { return planner.itemTip({ slot, base: b.Id, rarity: 'Normal', unique: 'None', name: '', affixes: [], runes: [], level: b.Level || 1 }, slot); } catch (e) { return head(b.Name, b.TypeName || b.Class || ''); }
+    }
+    if (sec === 'nodes') {
+      const n = GD.nodes[id]; if (!n) return '';
+      const ls = (n.Mods || []).filter(m => !['Keystone', 'Trigger', 'Dragonling'].includes(m.Mode)).map(modLine).filter(Boolean);
+      return head(n.Name, (n.Kind || 'Passive') + ' passive') + list('pl-tip-base', ls.length ? ls : n.Text ? [n.Text] : []);
+    }
+    if (sec === 'runes') {
+      const r = byId('runes'); if (!r) return '';
+      return head(r.Name, 'Rune' + (r.Tier ? ' · tier ' + r.Tier : '') + (r.Level ? ' · level ' + r.Level : '')) +
+        (r.Weapon ? '<span class="pl-tip-desc">In a weapon</span>' + list('pl-tip-base', r.Weapon.map(modLine)) : '') + (r.Armour ? '<span class="pl-tip-desc">In armour</span>' + list('pl-tip-base', r.Armour.map(modLine)) : '');
+    }
+    if (sec === 'runewords') {
+      const w = byId('runewords'); if (!w) return '';
+      return head(w.Name, 'Oathword · ' + (w.Runes || []).join(' + ')) + list('pl-tip-base', (w.Mods || []).map(m => modLine(m.Mod || m))) + ((w.Bases || []).length ? '<span class="pl-tip-desc">Goes in: ' + esc(w.Bases.join(', ')) + '</span>' : '');
+    }
+    if (sec === 'affixes') {
+      const a = GD.affixes[lid] || GD.affixes[id]; if (!a || !a.Mod) return '';
+      return head(modLine(Object.assign({}, a.Mod, { Value: (a.Tiers[0] || {}).Max })), 'Item mod · ' + (a.Type || '') + ((a.BaseTags || []).length ? ' · ' + a.BaseTags.join(', ') : '')) +
+        list('pl-tip-base', (a.Tiers || []).map((t, i) => 'Tier ' + (i + 1) + (t.Name ? ' ' + t.Name : '') + ' (item level ' + t.ILvl + '): ' + t.Min + (t.Max !== t.Min ? '-' + t.Max : '')));
+    }
+    if (sec === 'potions') { const p = byId('potions'); return p ? head(p.Name, 'Potion') + (p.Text || p.Description ? '<span class="pl-tip-desc">' + esc(p.Text || p.Description) + '</span>' : '') : ''; }
+    return '';
+  }
+  patches = window.BOPatches({ $, esc, skillDot, gemDot, tip: patchTip });
   ladder = window.BOLadder({ $, esc, gd: () => GD, num, gemDot, skillDot, classIcon,
     api: (new URLSearchParams(location.search).get('ladderapi') === 'local' ? 'http://localhost:8787' : SHARE_API) + '/api/',
     // An item's lines as text: base numbers (weapon damage or defences) then its own lines, added up by stat (as Item Simulator).
@@ -15151,6 +15648,9 @@ window.BOStartApp = function () {
     beltCard: () => brewery ? brewery.beltCard() : '',
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, num, pct, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
     supportSearch: supportSearchFor, simSkill: () => st.skill, // the main skill: the plan's own, or the one the Damage tab sims
+    // The skill window: one skill's sheet against the Damage tab's enemy, the patch history, and a way to its tab.
+    skillSheet: id => { if (!st.ch) return null; const o = comboOpts(); o.gemLevel = st.ch.gemLevels[id] || undefined; return S.calcSkill(GD, st.ch, id, o); },
+    patches: () => patches, showTab: t => showTab(t),
     // Item overlay: edits go to a plan itself, or to a copy of a loaded character (as on the Build tab); the save file is never written.
     editable: buildEditable, commit: (ch, what) => { if (ch.plan) planChanged(ch, what || {}); else buildEdited(ch, what || {}); planner.render(); }, // the caller redraws the Character tab
     sheet: () => st.ch && st.skill ? S.calcSkill(GD, st.ch, st.skill, opts()) : null,
@@ -15197,7 +15697,7 @@ window.BOStartApp = function () {
   if (CHARS.length) selectChar($('#charSelect').value); else render();
   // Landing: Build Planner > Character for anyone with a character; a first visit with none gets the welcome page (Damage view).
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
-  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'items', 'grail', 'ladder', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'items', 'grail', 'ladder', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
   routingReady = true; // from here on, switching tabs changes the address
   // Opened from a share link: load it as a plan, then drop it from the address so a refresh doesn't add it again.
   const bdbHash = /^#b=/.test(location.hash) && brokedCode(location.hash);

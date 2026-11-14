@@ -2227,3 +2227,101 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 .ch-doll .ch-slot-Chest.has-art { padding-top: 6px; }
 .ch-doll .ch-slot-Chest.has-art > .ch-slot-label { position: static; text-align: left; padding-left: 6px; }
 .ch-doll .ch-slot-Chest.has-art > .is-ico.art { min-height: 92px; }
+
+/* ---------- Recent Patch tab (patches.js) ---------- */
+.patch-pane .pt-views { margin: 0 0 12px; }
+.pt-controls .pt-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.pt-controls select { max-width: 100%; }
+.pt-search input { font-size: 15px; padding: 10px 12px; border: 1px solid var(--dashboard-gold); border-radius: 8px; }
+.pt-secs { margin-top: 10px; flex-wrap: wrap; }
+.pt-secs small { color: var(--faint); margin-left: 4px; }
+.pt-sec h2 small { color: var(--faint); font-weight: 400; }
+.pt-entry { border-top: 1px solid var(--line); padding: 10px 0; }
+.pt-entry:first-of-type { border-top: 0; }
+.pt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pt-head .meta { color: var(--faint); font-size: 12px; }
+.pt-kind { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pt-added .pt-kind { color: var(--good); border-color: color-mix(in srgb, var(--good) 50%, transparent); }
+.pt-removed .pt-kind { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, transparent); }
+.pt-changed .pt-kind { color: var(--dashboard-gold); border-color: color-mix(in srgb, var(--dashboard-gold) 50%, transparent); }
+.pt-hist { margin-left: auto; }
+.pt-note { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+.pt-lines { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.pt-lines li { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }
+.pt-lines li.pt-text { display: grid; gap: 4px; }
+.pt-old { color: var(--muted); }
+.pt-lines li:not(.pt-text) > .pt-old { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--bad) 70%, transparent); }
+.pt-new { color: var(--text); }
+.pt-new.pt-gone { color: var(--bad); font-style: italic; }
+.pt-arrow { color: var(--dashboard-gold); }
+.pt-text .pt-old, .pt-text .pt-new { padding: 6px 8px; border-radius: 6px; background: var(--panel-2); line-height: 1.45; }
+.pt-text .pt-old { opacity: .85; }
+.pt-lines del { color: var(--bad); text-decoration: line-through; background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.pt-lines ins { color: var(--good); text-decoration: none; background: color-mix(in srgb, var(--good) 14%, transparent); }
+.pt-hits { display: flex; flex-wrap: wrap; gap: 6px; }
+.pt-hit { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.pt-hit .meta { color: var(--faint); font-size: 12px; }
+.pt-hit:hover, .pt-hit:focus-visible, .pt-hit.on { border-color: var(--dashboard-gold); outline: none; }
+
+/* ---------- Character tab: action bar and skill window (character.js) ---------- */
+.ch-bar-card { margin: 4px 0 6px; }
+.ch-bar-card .cr-bar { max-width: none; }
+.ch-bar-slot { position: relative; }
+.ch-bar-slot .cr-bar-put { padding-right: 24px; }
+.ch-bar-slot .cr-bar-put span { display: block; min-width: 0; line-height: 1.25; overflow-wrap: break-word; hyphens: auto; }
+.ch-bar-slot .cr-bar-put span > :first-child:not(:only-child) { vertical-align: middle; margin-right: 5px; }
+.ch-bar-slot.full .cr-bar-put { border-color: color-mix(in srgb, var(--dashboard-gold) 45%, var(--line)); }
+.ch-bar-sel { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
+.ch-bar-slot .x { position: absolute; top: 4px; right: 4px; width: 18px; height: 18px; padding: 0; font-size: 13px; line-height: 1; }
+.ch-skill[data-skwin] { cursor: pointer; border-radius: 8px; transition: background .12s, box-shadow .12s; }
+.ch-skill[data-skwin]:hover, .ch-skill[data-skwin]:focus-visible { background: color-mix(in srgb, var(--dashboard-gold) 7%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--dashboard-gold) 40%, transparent); outline: none; }
+.ch-skill[data-skwin]:hover .ch-skill-name b { color: var(--dashboard-gold); }
+.sw-win { width: min(900px, 100%); height: auto; max-height: min(820px, 100%); }
+.sw-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.sw-stats > div { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.sw-stats span { color: var(--faint); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.sw-stats b { font-size: 17px; color: var(--dashboard-gold); }
+.sw-stats b.bad { color: var(--bad); }
+.sw-acts { display: flex; gap: 8px; margin-bottom: 8px; }
+.sw-win .io-body { padding: 18px 24px 22px; }
+.sw-editor .pl-skill { padding: 12px 16px 14px; }
+.sw-editor .pl-simbest { display: none; }
+.sw-hist, .is-hist { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 0 14px; background: var(--panel); }
+.sw-hist > summary, .is-hist > summary { cursor: pointer; padding: 10px 0; list-style-position: inside; }
+.sw-hist > summary small { color: var(--faint); font-weight: 400; margin-left: 4px; }
+.sw-hist[open], .is-hist[open] { padding-bottom: 10px; }
+.is-hist { margin-top: 10px; padding: 0 10px; font-size: 13px; }
+.is-hist > summary { padding: 7px 0; color: var(--muted); }
+.is-hist .pt-entry:first-child { border-top: 0; }
+/* In the gear card: the three mouse buttons on the right above keys 1-5, as the game's bar (owner's screenshot, 13 Nov 2026), then the Ctrl bar. */
+.ch-bar-card .cr-bar { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-areas: '. . s0 s1 s2' 's3 s4 s5 s6 s7' 'lab lab lab lab lab' 's8 s9 s10 s11 s12'; }
+.ch-bar-slot .cr-bar-put { font-size: 12.5px; }
+@media (max-width: 760px) {
+  .ch-bar-slot .cr-bar-put { font-size: 12px; padding: 5px 22px 5px 6px; }
+  .ch-bar-slot .cr-bar-put span > :first-child:not(:only-child) { display: block; margin: 2px 0 3px; }
+}
+.pt-src { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px dashed var(--line); color: var(--faint); white-space: nowrap; }
+.pt-head b[data-ptip] { cursor: help; text-decoration: underline dotted color-mix(in srgb, var(--dashboard-gold) 50%, transparent); text-underline-offset: 3px; }
+.pl-tip .pt-tip-now { color: var(--faint); font-size: 11px; }
+
+/* Bar drag (character.js barDown/barMove/barUp) */
+.ch-bar-card .ch-bar-slot.full .cr-bar-put { touch-action: none; cursor: grab; }
+.ch-bar-ghost { position: fixed; z-index: 950; pointer-events: none; opacity: .9; box-shadow: 0 8px 24px #000a; border-color: var(--dashboard-gold) !important; cursor: grabbing; }
+.cr-bar-put.ch-bar-from { opacity: .35; }
+.cr-bar-put.ch-bar-over { border-color: var(--dashboard-gold); box-shadow: 0 0 0 2px color-mix(in srgb, var(--dashboard-gold) 55%, transparent); }
+body.ch-bar-dragging, body.ch-bar-dragging * { cursor: grabbing !important; user-select: none; }
+/* Undo the last removal: a bar at the bottom of the screen while on the Character tab */
+.ch-undo { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 800; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; border: 1px solid color-mix(in srgb, var(--dashboard-gold) 45%, var(--line)); border-radius: 10px; background: var(--bg-2); box-shadow: 0 8px 28px #0008; font-size: 14px; max-width: calc(100vw - 32px); }
+.ch-undo .meta { color: var(--faint); font-size: 12px; }
+@media (max-width: 760px) { .ch-undo .meta { display: none; } }
+/* The page's general details rule takes the top border off the first fold-out in a box: keep it on these. */
+details.is-hist, details.sw-hist { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 0; }
+details.sw-hist { margin-top: 14px; }
+/* Skill window history: one fold-out for the spell, one for its support gems (each support its own). */
+details.sw-sub { border: 1px solid var(--line); border-radius: 8px; padding: 0 12px; margin: 8px 0 0; background: var(--panel-2); }
+details.sw-sub > summary { cursor: pointer; padding: 8px 0; display: flex; align-items: center; gap: 6px; list-style: none; }
+details.sw-sub > summary::before { content: '▸'; color: var(--dashboard-gold); width: 12px; }
+details.sw-sub[open] > summary::before { content: '▾'; }
+details.sw-sub > summary small { color: var(--faint); margin-left: 4px; }
+details.sw-sub[open] { padding-bottom: 8px; }
+details.sw-sub.sw-sup { background: var(--panel); }

@@ -5282,7 +5282,10 @@ window.BOItemSearch = function (ctx) {
     if (b.Block) out.push(['Block', b.Block + '%']);
     const req = [['ReqStr', 'Str'], ['ReqDex', 'Dex'], ['ReqInt', 'Int']].filter(([k]) => b[k]).map(([k, n]) => b[k] + ' ' + n);
     if (req.length) out.push(['Requires', req.join(', ')]);
-    if (b.Width) out.push(['Size', b.Width + ' × ' + b.Height]);
+    // Most rune sockets the base can roll (runes.json Rules.MaxSockets by tag or slot; same lookup as planner.js runeSlots).
+    const R = GD.runeSockets || {}, rk = Object.keys(R).filter(k => (b.Tags || []).includes(k) || b.Slot === k);
+    if (rk.length) out.push(['Max sockets', String(Math.max(...rk.map(k => R[k])))]);
+    if (b.Width) out.push(['Inventory size', b.Width + ' × ' + b.Height]);
     return out.length ? '<dl class="is-stats">' + out.map(([k, v]) => '<dt>' + esc(k) + '</dt><dd>' + esc(v) + '</dd>').join('') + '</dl>' : '';
   }
   // "3 Fe + 600 gold upgrades into Ur" (runes.json: Next, Rules FuseCount and FuseGold by tier). Jewels have a Next
@@ -12056,7 +12059,13 @@ window.BOCharacter = function (ctx) {
   // Readable text for a mod, using the game's own stat_text templates where possible.
   function modText(GD, m) {
     const { types, conds, gemScaled } = splitTags(m.tags);
-    const keys = [m.stat + '.' + m.mode + (m.tags.length ? '+' + m.tags.join('+') : ''), m.stat + '.' + m.mode + (conds[0] ? '+' + conds[0] : ''), m.stat + '.' + m.mode + (gemScaled ? '+GemScaled' : ''), m.stat + '.' + m.mode + '+', m.stat + '.' + m.mode];
+    // The untagged wording comes last: a line tagged only with damage types (Nightshade's "+1.5 Poison" gem levels, typed
+    // leech, typed damage taken) must reach the "+" form, which has a {tags} slot, or its type drops out of the text.
+    // Display text only, no effect on numbers.
+    // Only when the "+" form names the types: its {tags} slot always does, its {skills} slot only when there are no other tags.
+    const sm = m.stat + '.' + m.mode, plus = GD.statText[sm + '+'];
+    const typed = types.length && plus && (plus.includes('{tags}') || !conds.length) ? sm + '+' : null;
+    const keys = [sm + (m.tags.length ? '+' + m.tags.join('+') : ''), typed, sm + (conds[0] ? '+' + conds[0] : ''), sm + (gemScaled ? '+GemScaled' : ''), sm + '+', sm].filter(Boolean);
     let t = null; for (const k of keys) if (GD.statText[k]) { t = GD.statText[k]; break; }
     const fmt = x => (Math.round(x * 100) / 100).toString();
     if (!t) return m.stat + ' ' + m.mode + ' ' + fmt(m.v) + (m.v2 ? '-' + fmt(m.v2) : '') + (m.tags.length ? ' [' + m.tags.join(', ') + ']' : '');
@@ -12067,7 +12076,7 @@ window.BOCharacter = function (ctx) {
     const isEle = ut.length === 3 && ['Fire', 'Cold', 'Lightning'].every(x => ut.includes(x));
     const typeWords = isEle ? 'Elemental' : ut.length > 1 ? ut.slice(0, -1).join(', ') + ' and ' + ut[ut.length - 1] : ut.join('');
     const tagWords = [typeWords, ...conds].filter(Boolean).join(' ');
-    return t.replace('{v}', fmt(m.v)).replace('{v2}', fmt(m.v2)).replace('{abs}', fmt(Math.abs(m.v))).replace('{tags}', tagWords || '').replace('{skills}', (conds.join(' ') || 'Skills'))
+    return t.replace('{v}', fmt(m.v)).replace('{v2}', fmt(m.v2)).replace('{abs}', fmt(Math.abs(m.v))).replace('{tags}', tagWords || '').replace('{skills}', (conds.join(' ') || (typeWords ? typeWords + ' Skills' : 'Skills')))
       .replace('{tag0}', m.tags[0] || '').replace('{tag1}', m.tags[1] || '').replace(/\{n\}\|plural\(one=([^,]+),other=([^)]+)\)/, (_, a, b) => Math.abs(m.v) === 1 ? a : b).replace(/\s+/g, ' ').trim()
       + (conds.length && !/\{tags\}|\{skills\}/.test(t) && !t.includes(conds[0]) ? ' (' + conds.join(', ') + ')' : '');
   }

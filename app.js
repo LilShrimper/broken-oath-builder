@@ -372,7 +372,7 @@ window.PAGE_LANGS = {
     const dragon = { aspects: {}, classes: {}, classAspect: dragonFile.ClassAspect || {}, ascend: { enabled: !!asc.bEnabled, classes: (asc.Classes || []).map(c => c.toLowerCase()) }, rules,
       // The tree's own rules (Build tab): points from milestone levels, +1 once hatched, + Gate kills / Pinnacle;
       // one Keystone or Capstone at a time.
-      tree: { milestones: DT_.MilestoneLevels || [], perGate: DT_.PointsPerGateKill || 1, pinnacle: DT_.PinnaclePoint || 0, hatch: asc.HatchBonusPoints || 0,
+      tree: { milestones: DT_.MilestoneLevels || [], perGate: DT_.PointsPerGateKill || 1, minGate: DT_.MinGateBand || 4, pinnacle: DT_.PinnaclePoint || 0, hatch: asc.HatchBonusPoints || 0,
         maxCrowns: DT_.MaxKeystones || 1, crownKinds: DT_.CrownKinds || ['Keystone'] } };
     // Color: the Aspect's tint (the game's Dragonling opener and the drake take it), as a CSS colour.
     const rgb = c => c && c.R != null ? 'rgb(' + [c.R, c.G, c.B].map(v => Math.round(Math.max(0, Math.min(1, v)) * 255)).join(', ') + ')' : '';
@@ -2538,7 +2538,11 @@ window.BOPlanner = function (ctx) {
   const ascOn = ch => !!(GD.dragon.ascend && GD.dragon.ascend.enabled && (GD.dragon.ascend.classes || []).includes(lc(ch.classId)));
   // Gate kills unknown (a save): assume just enough to hold the nodes it has.
   const dBase = ch => { const R = dRules(); return (R.milestones || []).filter(l => ch.level >= l).length + (R.hatch || 0); };
-  const dExtra = ch => ch.dragonExtra != null ? ch.dragonExtra : Math.max(0, (ch.dragonNodes || []).length - dBase(ch));
+  // Gate kills + Pinnacle cap: only Gates 4 to 7 give a point (dragonling.json MinGateBand 4; the game's tree panel,
+  // owner's screenshot 14 Nov 2026: "14 taken · Levels 8/8 · Gates 4 to 7: 4/4 · Pinnacle 1/1 · Ascendancy egg +1").
+  const DGATE_TOP = 7;
+  const dExtraMax = () => { const R = dRules(); return Math.max(0, DGATE_TOP - (R.minGate || 4) + 1) * (R.perGate || 1) + (R.pinnacle != null ? R.pinnacle : 1); };
+  const dExtra = ch => Math.min(dExtraMax(), ch.dragonExtra != null ? ch.dragonExtra : Math.max(0, (ch.dragonNodes || []).length - dBase(ch)));
   function dPoints(ch) { return dBase(ch) + dExtra(ch); }
   function dAdj(T) {
     const adj = {}; for (const id in T) adj[id] = adj[id] || new Set();
@@ -2603,14 +2607,14 @@ window.BOPlanner = function (ctx) {
     const over = used > pts;
     let h = '<div class="card"><h2>Dragonling <small>' + used + ' / ' + pts + ' points' + (paths.length ? ' · ' + esc(paths.join(' + ')) + (paths.length > 1 ? ' paths' : ' path') : '') + '</small></h2>';
     h += '<div class="pl-row">' + (aspects.length ? '<label class="field inline"><span>Aspect</span><select data-f="aspect"' + dis + '>' + opt('', 'None', !ch.dragonAspect) + aspects.map(a => opt(a, GD.dragon.aspects[a].Name || a, a === ch.dragonAspect)).join('') + '</select></label>' : '') +
-      '<label class="field inline" title="One point for each end-game Gate killed and one for the Pinnacle"><span>Gate kills + Pinnacle</span><input type="number" min="0" max="40" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
+      '<label class="field inline" title="One point for each of Gates 4 to 7 killed and one for the Pinnacle"><span>Gate kills + Pinnacle</span><input type="number" min="0" max="' + dExtraMax() + '" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
       (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') + '</div>';
     // What the chosen Aspect gives (dragonling.json Aspects: the sim counts these lines).
     const asp = GD.dragon.aspects && GD.dragon.aspects[ch.dragonAspect];
     h += asp ? '<p class="dl-aspect"><b>' + esc(asp.Name || ch.dragonAspect) + ' Aspect:</b> ' + esc(asp.Text || '') + '</p>'
       : '<p class="hint">No Aspect chosen: each one gives its own bonuses (pick one above to see them).</p>';
     h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.' :
-      'Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, + Gate kills and the Pinnacle. ' + (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + 'Paths can be mixed; one Keystone or Capstone at a time. Hover a node for its lines.') + '</p>';
+      'Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, +1 each for Gates 4 to 7 and the Pinnacle (' + (dBase({ level: 100 }) + dExtraMax()) + ' at most). ' + (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + 'Paths can be mixed; one Keystone or Capstone at a time. Hover a node for its lines.') + '</p>';
     h += '<svg class="dl-tree" viewBox="-560 -640 1120 1100" role="img" aria-label="Dragonling tree">' + '<g class="dl-links">' + lines + '</g>' + dots + '</svg>';
     if (list) h += '<ul class="dl-list">' + list + '</ul>';
     return h + '</div>';
@@ -3118,7 +3122,7 @@ window.BOPlanner = function (ctx) {
       case 'level': ch.level = Math.max(1, Math.min(100, +v || 1)); return done({ tree: true });
       case 'bonus': ch.bonusPoints = Math.max(0, +v || 0); return done({ tree: true });
       case 'aspect': ch.dragonAspect = v; return done();
-      case 'dextra': ch.dragonExtra = Math.max(0, Math.min(40, +v || 0)); return done();
+      case 'dextra': ch.dragonExtra = Math.max(0, Math.min(dExtraMax(), +v || 0)); return done();
       case 'addskill': {
         if (!v || rows(ch).some(r => r.skill === v)) return render();
         ensureSocket(ch, v); if (!ch.gemLevels[v]) ch.gemLevels[v] = Math.max(1, ...Object.values(ch.gemLevels).filter(x => x > 0), 1);
@@ -11290,6 +11294,8 @@ window.BOCharacter = function (ctx) {
       // (Kill, Roll, Block, WhenHit and MinionDeath triggers, and support triggers, are not counted above).
       if (m.stat === 'Trigger') {
         const t = trigParse(m);
+        // A pulse of one kind of minion (Minion=<summon skill>) is counted on that summon's sheet, not listed here.
+        if ((m.tags || []).some(x => /^Minion=/i.test(x))) continue;
         if (condsOk(ctx, t.conds) && t.types.every(d => ctx.tags.has(lc(d)))) res.notModelled.push(m);
         continue;
       }
@@ -11367,6 +11373,7 @@ window.BOCharacter = function (ctx) {
   // The fit's separate k per minion was the skill's SpellGrowth (Skeletons 0.05, Skeletal Mage 0.06, Zombie and Golem 0.13).
   // The fit had no gem level in it, so it read high for a gem above 17 and low below it (ladder Grave Golems 12 Nov: 0.89x to 1.19x).
   const MINION_PACE = 0.72, MINION_NEAR = 60;
+  const MINION_PULSE_STEP = 0.21; // minion pulses from red items: see res.pulses in minionSheet (log 14 Nov 2026)
   // Also shown on the page's Minion Scaling tab. sk = the summon skill (SpellGrowth, Minion.LevelDamage).
   function minionLevelFactor(GD, sk, zoneLevel, heroLevel, gemLevel) {
     const mi = sk && sk.Minion;
@@ -11446,9 +11453,24 @@ window.BOCharacter = function (ctx) {
       minionNoElem.forEach(m => use(m, 'minion, no elemental damage'));
       if (lost.length) res.notes.push('Brutality: these minions deal no elemental damage, so the ' + lost.join(', ') + ' from other supports is lost (the game shows those supports "idle").');
     }
+    // Spellbound Dead (ascended Legion Wyrm, flag Asc71_SpellboundDead, GD.dragon.rules.SpellboundDead.Share 0.25): "25% of your
+    // increased Spell damage also applies to your Minions". In-game node tooltip, Shrimpskelemage, 14 Nov 2026 (Patch 74).
+    // Taken here: your own increased Damage lines that name Spell (not the summon gem's supports); a line's element picks the
+    // part it scales (Carrion Hymn's Spell + Poison: the poison only); other tags it names must fit the minion skill.
+    // Effect on that character's Skeletal Mage: 146% Spell -> +36.5% on 599% minion increased, panel x1.052 (sim 0.86 -> 0.91 of
+    // the game's 1,855,815). Whether the share is taken before or after the summon skill's own increased is not checked.
+    const spellbound = mods.some(m => m.stat === 'Dragonling' && (m.tags || []).includes('Asc71_SpellboundDead'))
+      ? (((GD.dragon || {}).rules || {}).SpellboundDead || {}).Share ?? 0.25 : 0;
+    const spellboundLine = m => {
+      if (String(m.key || '').startsWith('support:') || m.key === 'engine') return null;
+      const { types, conds } = splitTags(m.tags);
+      if (!conds.some(c => lc(c) === 'spell') || !conds.every(c => lc(c) === 'spell' || tags.has(lc(c)))) return null;
+      return types;
+    };
     const incFor = d => {
       let v = attr.Int / 10 * (H.IntMinionDamagePer10 || 0);
       for (const m of pickMods(mods, 'MinionDamage', 'Inc')) { const t = fit(m); if (t && (!t.length || t.includes(d))) { v += m.v; use(m, 'minion'); } }
+      if (spellbound) for (const m of pickMods(mods, 'Damage', 'Inc')) { const t = spellboundLine(m); if (t && (!t.length || t.includes(d))) { v += m.v * spellbound; use(m, 'minion, Spellbound Dead x' + spellbound); } }
       return v;
     };
     let minionMore = 1;
@@ -11629,6 +11651,37 @@ window.BOCharacter = function (ctx) {
     res.minionCurseK = curseK;
     res.sheetHitDps = res.panelDps = dps;
     res.hitDps = res.totalDps = dps * curseK;
+    // Red items that make one kind of minion pulse (uniques.json: Trigger [Pulse, Whirl, Minion=<summon skill>, Pct, Radius,
+    // Element], Value2 = seconds between pulses). Shroud of the Restless Gale: "Your Zombies within 2.5 metres of an enemy spin
+    // as cyclones, hitting all around them for 60% of their own hit (at most once a second)"; Diadem of the Storm Choir: "Every
+    // 1.5 seconds, each of your Skeletal Mages fighting an enemy crackles: a storm of arcs hits every enemy within 3 metres of
+    // that enemy for 70% of the mage's own hit as Lightning Damage" (owner's in-game tooltips, 14 Nov 2026: the size and the
+    // seconds). Game log 14 Nov 2026 (Shrimpskelemage, both worn, 17:25-17:29):
+    //   "Trigger: Pulse -> Whirl (, fired N) el Physical pct 60 nth 0" 227 times, gaps 1.005-1.2 s, median 1.050;
+    //   "... el Lightning pct 70 nth 0" 146 times, gaps 1.5-1.8 s, median 1.653 (so a little slower than the text);
+    //   one storm per minion at each pulse: "DiademStorm: summon_skeletal_mage storm at 862 cm from the pet, 6 foes" x7 in one
+    //   frame (around the mage's target), "DiademStorm: summon_zombie storm at 0 cm from the pet, 3 foes" x7 (around the zombie).
+    // The gap is counted as the line's seconds rounded up to a 0.21 s step (1.05 and 1.68 s): a fit to those two medians.
+    // Not proven: the size in game (the log has no pulse damage; "DmgSrc91" has no pulse entry, one Guardian fight with the
+    // items), whether a pulse can crit (counted as the average hit, like the tree's bursts), whether the army's "each blow
+    // x0.837" applies (counted), and whether every zombie stays within 2.5 m (counted: all of them). One enemy only. Not in the
+    // game's panel ("PetSheet68 ... dps 1167625" = hit x cap / pace with the items on), so the panel DPS stays as it was.
+    res.pulses = [];
+    for (const m of mods) {
+      if (m.stat !== 'Trigger' || !String(m.key || '').startsWith('item:')) continue;
+      if (!(m.tags || []).includes('Pulse') || !(m.tags || []).some(t => lc(t) === 'minion=' + lc(sk.Id))) continue;
+      const t = trigParse(m); if (!t.pct) continue;
+      const every = Math.ceil((t.cooldown || 1) / MINION_PULSE_STEP - 1e-9) * MINION_PULSE_STEP;
+      const size = avg * critFactor * t.pct / 100 * armyK;
+      const el = t.element && DT.includes(t.element) ? t.element : null;
+      const one = isBoss && guardianStrongestTaken(GD);
+      const cK = el ? activeCurses.reduce((p, r) => one ? Math.max(p, 1 + (r.taken + (r.elem[el] || 0)) / 100) : p * (1 + (r.taken + (r.elem[el] || 0)) / 100), 1) : curseK;
+      const pDps = alive * size / every * cK;
+      res.pulses.push({ src: m.src, pct: t.pct, element: el, every, size, dps: pDps });
+      res.hitDps += pDps; res.totalDps += pDps;
+      use(m, 'minion pulse');
+      res.notes.push(m.src + ': each of the ' + alive + ' ' + sk.Name.replace(/^(Summon|Raise) /, '') + ' minions pulses about every ' + every.toFixed(2) + ' s for ' + t.pct + '% of its own hit' + (el ? ' as ' + el : '') + ' (' + Math.round(size).toLocaleString('en-US') + ' each), +' + Math.round(pDps).toLocaleString('en-US') + ' DPS on one enemy. Counted in the vs-enemy DPS only: the game\'s panel leaves it out. The timing is from the game log (14 Nov 2026), the size from the item\'s text; the damage itself is not measured yet.');
+    }
     // specAvg: the summon gem's own hit before the minion's multipliers, the game's "spec avg" (PetSheet68) and the avg_hit of a summon in Copy stats.
     res.minion = { specAvg: DT.reduce((a, d) => a + (scaled[d][0] + scaled[d][1]) / 2, 0) * (1 + specInc / 100), specInc, soloK, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.stat === 'MinionDamage' ? 1 + golem.v / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth, oneKind };
     res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
@@ -14506,7 +14559,7 @@ window.BOStartApp = function () {
   $('#dragonBody').addEventListener('change', e => {
     const t = e.target, f = t.dataset.f; if (!st.ch || !f) return;
     if (f === 'aspect') setDragon({ dragonAspect: t.value });
-    else if (f === 'dextra') setDragon({ dragonExtra: Math.max(0, Math.min(40, +t.value || 0)) });
+    else if (f === 'dextra') setDragon({ dragonExtra: Math.max(0, Math.min(+t.max || 5, +t.value || 0)) });
   });
 
   function modLine(m) { return S.modText(GD, { stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: m.Value || 0, v2: m.Value2 || 0 }); }

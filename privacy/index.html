@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Privacy Policy · Broken Oath Builder</title>
-<meta name="description" content="How Broken Oath Builder handles your files, shared builds and reports.">
+<meta name="description" content="How Broken Oath Builder handles your files, shared builds, reports and optional accounts.">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}</script>
 <style>:root { color-scheme: dark; --bg: #0b0f1e; --panel: #131a2e; --text: #e7e9f4; --muted: #a0a8c4; --line: #273152; --gold: #d7b66d; }
 :root[data-theme="light"] { color-scheme: light; --bg: #f7f5ef; --panel: #fff; --text: #24283a; --muted: #555e73; --line: #ded9cb; --gold: #795714; }
@@ -35,12 +35,26 @@ footer { padding: 24px 0 36px; border-top: 1px solid var(--line); font-size: 13p
 <a class="skip" href="#content">Skip to content</a>
 <header><a class="brand" href="../../">Broken Oath <span>Builder</span></a><button id="theme" type="button">Switch to light mode</button></header>
 <nav aria-label="Legal pages"><a href="../privacy/index.html" aria-current="page">Privacy Policy</a><a href="../terms/index.html">Terms of Use</a><a href="../disclaimer/index.html">Disclaimer</a><a href="../contact/index.html">Contact</a></nav>
-<main id="content"><p class="eyebrow">Site information</p><h1>Privacy Policy</h1><p class="intro">How Broken Oath Builder handles your files, shared builds and reports.</p><p class="updated">Last updated <time datetime="2026-11-11">11 November 2026</time></p>
+<main id="content"><p class="eyebrow">Site information</p><h1>Privacy Policy</h1><p class="intro">How Broken Oath Builder handles your files, shared builds, reports and optional accounts.</p><p class="updated">Last updated <time datetime="2026-11-15">15 November 2026</time></p>
 
 <h2>Your files stay on your device</h2>
 <p>Save files, game data, screenshots and the game log you open are processed in your browser. The site does not upload those files. The Save Creator edits eligible offline saves in your browser and gives you a download; you decide whether to copy it into the game folder.</p>
 <h2>Browser storage</h2>
-<p>The builder uses local storage and browser storage for loaded character summaries, plans, settings and remembered folder access where supported. This lets you return to your work on the same device. Use the builder's Reset control to remove loaded characters and plans, or clear this site's browser data to remove its saved settings and permissions too. Export anything you want to keep first.</p>
+<p>The builder uses local storage and browser storage for loaded character summaries, plans, settings and remembered folder access where supported. This lets you return to your work on the same device. Use the builder's Reset control to remove loaded characters and plans, or clear this site's browser data to remove its saved settings and permissions too. Export anything you want to keep first. When you sign in to an account, this browser also keeps a sign-in token and a note of which plans it has saved to the account; signing out removes the token.</p>
+<h2>Accounts (optional)</h2>
+<p>You can sign in with Discord to save your build plans to an account, so they open on your other devices. Everything else on the site works without an account.</p>
+<p><strong>What Discord shares.</strong> Sign-in asks Discord only for your basic profile (the <code>identify</code> permission): your Discord user ID, username, display name and avatar. It does not give us your email, your servers or your messages, and the builder cannot post anything on Discord. The access Discord grants is used once, to read that profile, and then handed back to Discord.</p>
+<p><strong>What we store.</strong></p>
+<ul>
+<li>Your account: a one-way, keyed scramble of your Discord user ID (not the ID itself), the date it was created, the date you last used it, and a counter that limits how often plans can be saved.</li>
+<li>Your plans: each plan you save to the account, as a build code. A plan can include its name, class, level, equipment, skills, passive tree and tree tabs, potions and the notes you wrote.</li>
+<li>Your sign-ins: for each browser you sign in on, a scrambled sign-in token, a short label such as "Windows · Chrome" and its dates.</li>
+</ul>
+<p>Your account keeps no Discord username, display name or avatar. At sign-in, your display name passes through our server once to reach your browser, which keeps it to show who is signed in; that sign-in record is deleted as soon as the sign-in finishes, or within the hour if it is never finished.</p>
+<p><strong>Who can see it.</strong> Plans in an account are private: only browsers signed in to that account can read them. They are not listed anywhere and are not shared with the game's developers or anyone else. The site owner can reach the database to keep the service running; it does not show which Discord user an account belongs to. Sharing a plan with a share link works as described below and is separate from your account.</p>
+<p><strong>How long.</strong> Plans stay until you delete them or your account. A deleted plan is kept as a deletion note for up to 30 days so your other browsers remove it too. A browser's sign-in ends after 90 days without use. An account that is not used for two years is deleted with its plans.</p>
+<p><strong>Your controls.</strong> In the account menu (your name at the top right of the Tools bar) you can download all your plans, see your signed-in browsers, sign out, sign out everywhere, and <strong>Delete my account</strong>, which removes the account, every plan in it and every sign-in at once. You can also remove the builder's access in Discord (User Settings, Authorized Apps). Plans already in a browser stay there until you remove them in that browser.</p>
+<p>Accounts are stored in Cloudflare D1. Discord's handling of your Discord account is covered by <a href="https://discord.com/privacy">Discord's privacy policy</a>.</p>
 <h2>Shared builds</h2>
 <p>Choosing Copy share link sends an encoded build to our Cloudflare share service so it can create a short link. The build can include the character name, class, level, equipment, skills and passive tree. Anyone with the link can open it; treat it as public. It does not include your original save file or Steam ID. Stored short links have no automatic expiry. A long build code or link can also contain the build itself, so anyone you give that code or link to can read it.</p>
 <h2>Problem reports and fight checks</h2>
@@ -54,9 +68,9 @@ footer { padding: 24px 0 36px; border-top: 1px solid var(--line); font-size: 13p
 <li>Reading text from a screenshot downloads Tesseract software and language data from external delivery services such as jsDelivr. Image processing stays in your browser.</li>
 <li>The Ladder displays the game's public API data through our Cloudflare cache. The builder does not upload your local saves to the ladder. Importing a Broked DB short link asks our service to retrieve that shared build from Broked DB.</li>
 </ul>
-<p>The builder does not require an account, sell your data or set advertising cookies. External services have their own data-handling practices.</p>
+<p>Accounts are optional. The builder does not sell your data or set advertising cookies. External services have their own data-handling practices.</p>
 <h2>Your choices and requests</h2>
-<p>You can use the tools without sharing a build or sending a report. To ask about access, correction or removal of a stored report or short link, use the <a href="../contact/index.html">contact page</a>. Include the report reference or share link so the owner can find it. Clearing browser data does not delete information already sent to the share or report service. Copies other people have made cannot be recalled.</p>
+<p>You can use the tools without signing in, sharing a build or sending a report. If you have an account, you can download or delete it yourself from the account menu. To ask about access, correction or removal of a stored report or short link, use the <a href="../contact/index.html">contact page</a>. Include the report reference or share link so the owner can find it. Clearing browser data does not delete information already sent to the share or report service. Copies other people have made cannot be recalled.</p>
 <p>If this policy changes, the update date on this page will change.</p></main>
 <footer><p>Unofficial fan tool. Game content belongs to its respective owners. Calculated results are estimates.</p><a href="../../">Back to the builder</a></footer>
 <script>(function () { const b = document.getElementById('theme'), r = document.documentElement; function label() { b.textContent = r.dataset.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'; } label(); b.addEventListener('click', function () { const t = r.dataset.theme === 'light' ? 'dark' : 'light'; r.dataset.theme = t; try { localStorage.setItem('bods:theme', t); } catch (e) {} label(); }); })();</script>

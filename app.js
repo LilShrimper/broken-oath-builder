@@ -15339,6 +15339,37 @@ window.BOStartApp = function () {
     }
     if (list.some(Boolean)) grail.setSources(list);
   }
+  // Which characters of a folder to load. The ticks are kept per character id (bods:savePick, { id: true/false }),
+  // so the same account folder opens with the same ones ticked; a character never seen before starts ticked.
+  function pickChars(list) {
+    const dialog = $('#pickCharsDialog'), box = $('#pickCharsList'), mem = store.get('savePick', {}) || {};
+    box.textContent = '';
+    const boxes = list.map(ch => {
+      const row = document.createElement('label'), cb = document.createElement('input'), name = document.createElement('span'), meta = document.createElement('span');
+      cb.type = 'checkbox'; cb.checked = mem[ch.id] !== false;
+      name.className = 'pc-name notranslate'; name.textContent = ch.name;
+      meta.className = 'pc-meta';
+      { const cls = document.createElement('span'); cls.textContent = ch.classId; meta.append(cls, ' ' + ch.level + (ch.league ? ' · ' + ch.league : '')); } // class on its own: the page languages translate it
+      row.append(cb, name, meta); box.appendChild(row);
+      return cb;
+    });
+    const sync = () => { $('#pickCharsLoad').disabled = !boxes.some(b => b.checked); };
+    boxes.forEach(b => b.addEventListener('change', sync));
+    $('#pickCharsAll').onclick = () => { boxes.forEach(b => { b.checked = true; }); sync(); };
+    $('#pickCharsNone').onclick = () => { boxes.forEach(b => { b.checked = false; }); sync(); };
+    sync();
+    return new Promise(resolve => {
+      dialog.addEventListener('close', () => {
+        if (dialog.returnValue !== 'confirm') { resolve(null); return; }
+        const next = Object.assign({}, mem);
+        list.forEach((ch, i) => { next[ch.id] = boxes[i].checked; });
+        store.set('savePick', next);
+        resolve(list.filter((ch, i) => boxes[i].checked));
+      }, { once: true });
+      dialog.returnValue = '';
+      dialog.showModal();
+    });
+  }
   async function loadFolder(files) {
     const saves = Array.from(files).filter(f => isCharSave(f.name));
     readGrail(Array.from(files));
@@ -15347,6 +15378,12 @@ window.BOStartApp = function () {
     for (const f of saves) { try { got.push(await readSave(f)); } catch (e) { bad.push(f.name); } }
     if (!got.length) { saveTip('Could not read any of the ' + saves.length + ' character saves in that folder.'); return; }
     got.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+    if (got.length > 1) {
+      const picked = await pickChars(got);
+      if (!picked) return; // cancelled: keep what is loaded now
+      if (!picked.length) { saveTip('No characters picked, nothing loaded.'); return; }
+      got.splice(0, got.length, ...picked);
+    }
     const sel = st.ch && got.some(c => c.id === st.ch.id) ? st.ch.id : got[0].id; // stay on the one you are looking at
     const kept = addChars(got, 'folder', sel);
     saveTip('Loaded ' + got.length + ' character' + (got.length > 1 ? 's' : '') + ' (' + got.map(c => c.name).join(', ') + ').' + (bad.length ? ' Skipped ' + bad.length + ' save' + (bad.length > 1 ? 's' : '') + ' it could not read.' : '') +

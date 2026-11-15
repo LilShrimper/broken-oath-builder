@@ -227,7 +227,7 @@ window.PAGE_LANGS = {
   // Read when the folder has them; an older game folder without them still loads.
   const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json', 'Items/quality_stones.json', 'Gameplay/league_rules.json', 'Gameplay/new_gems85.json', 'Items/base_implicits95.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
-  const SCHEMA = 31; // 31: armour / shield / axe family lines (base_implicits95.json; Damage tab); 30: per-gem base poison chance (new_gems85.json; Damage tab); 29: the game's rule numbers (rules.json, switches.json; Damage tab); 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 32; // 32: Guardian signature runes (Grail, Item Search tabs); 31: armour / shield / axe family lines (base_implicits95.json; Damage tab); 30: per-gem base poison chance (new_gems85.json; Damage tab); 29: the game's rule numbers (rules.json, switches.json; Damage tab); 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -414,7 +414,12 @@ window.PAGE_LANGS = {
     // Rupture Levels the Ward tier adds more resistance to that element (bosses.json Tiers 'ward').
     const B = J('Rifts/bosses.json');
     const guardians = {};
-    for (const gd of B.guardians || []) guardians[gd.Id] = { name: gd.Name, variants: (gd.Variants || []).map(v => ({ id: v.Id, name: v.Name, element: v.Element, resist: (v.Resist || {})[v.Element] || 0 })),
+    // Signature runes (Grail and Item Search tabs, display only): cube_recipes.json Signatures maps each Guardian to one rune
+    // (the rune the game's Guardian card shows under the portrait: The Demon Warlord = Ingwaz, owner's screenshot 14 Nov 2026).
+    // Its keys carry a g_ prefix that bosses.json ids lack, and one is short (g_hellguard = hellguard_captain).
+    const CR = J('Items/cube_recipes.json'), sigRunes = CR.Signatures || {}, CRR = CR.Rules || {};
+    const sigRuneRule = { fromML: CRR.SignatureFromML, chance: CRR.SignatureChance, chanceTierV: CRR.SignatureChanceTierV, tierVFromML: CRR.SignatureTierVFromML };
+    for (const gd of B.guardians || []) guardians[gd.Id] = { sigRune: sigRunes[gd.Id] || sigRunes['g_' + gd.Id] || sigRunes[Object.keys(sigRunes).find(k => ('g_' + gd.Id).startsWith(k + '_'))] || '', name: gd.Name, variants: (gd.Variants || []).map(v => ({ id: v.Id, name: v.Name, element: v.Element, resist: (v.Resist || {})[v.Element] || 0 })),
       // Drop lists (Grail tab, display only): SignatureUniques, and the ChaseUnique with its ChaseChance per kill.
       sig: gd.SignatureUniques || [], chase: gd.ChaseUnique || '', chaseChance: gd.ChaseChance || 0 };
     const ward = (B.Tiers || []).filter(t => t.Id === 'ward').map(t => ({ fromRL: t.FromRL, gateFromRL: t.GateFromRL, resist: t.Resist })).sort((a, b) => a.fromRL - b.fromRL);
@@ -531,7 +536,7 @@ window.PAGE_LANGS = {
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
       { skills, classes, supports, nodes, masteries, oaths, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice, gemPoison, rules: gameRules });
+        affixes, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, sigRuneRule, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice, gemPoison, rules: gameRules });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, OPTIONAL, SCHEMA };
@@ -5908,7 +5913,7 @@ window.BOItemSearch = function (ctx) {
       const jewel = r.Kind === 'jewel' || /^jw_/.test(r.Id);
       const lines = [...(r.Weapon || []).map(m => plain(GD, m)), ...(r.Armour || []).map(m => plain(GD, m))];
       ALL.push({ cat: 'rune', id: r.Id, name: r.Name, level: r.Level || 1, slots: ['Weapon', 'Off-hand', 'Helm', 'Chest'], types: [jewel ? 'Jewel' : 'Rune'],
-        tiers: ['Tier ' + (r.Tier || 1)], tierSort: r.Tier || 1, icon: jewel ? 'jewel' : 'rune', r, jewel, text: [r.Name, jewel ? 'Jewel' : 'Rune', ...lines].join(' ') });
+        tiers: ['Tier ' + (r.Tier || 1)], tierSort: r.Tier || 1, icon: jewel ? 'jewel' : 'rune', r, jewel, text: [r.Name, jewel ? 'Jewel' : 'Rune', ...lines, ...sigGuardians(GD, r).map(n => n + ' signature')].join(' ') });
     }
     // Skill gems (Gem kind) and weapon skills sold as gems (Weapon kind, as the planner's skillDot); not basic attacks or Move.
     for (const sk of Object.values(GD.skills || {})) {
@@ -6004,6 +6009,8 @@ window.BOItemSearch = function (ctx) {
   }
   // "3 Fe + 600 gold upgrades into Ur" (runes.json: Next, Rules FuseCount and FuseGold by tier). Jewels have a Next
   // but no fuse cost in the data, so only where they lead is shown.
+  // The Guardians whose signature rune this is (gamedata.js guardians[].sigRune, from cube_recipes.json Signatures).
+  const sigGuardians = (GD, r) => Object.values(GD.guardians || {}).filter(g => g.sigRune && lc(g.sigRune) === lc(r.Id)).map(g => g.name);
   function upgradeLine(GD, r) {
     const next = r.Next && GD.runes[lc(r.Next)], F_ = GD.runeFuse || {};
     if (!next) {
@@ -6114,7 +6121,8 @@ window.BOItemSearch = function (ctx) {
       ico = glyphIcon(r);
       sub = 'Tier ' + (r.Tier || 1) + (r.Lore ? ' · ' + r.Lore.charAt(0).toUpperCase() + r.Lore.slice(1) : '');
       body = '<div class="is-split"><div><b>In a weapon</b><ul class="is-lines rune">' + ((r.Weapon || []).map(m => li(plain(GD, m))).join('') || li('No effect', 'none')) + '</ul></div>' +
-        '<div><b>In armour</b><ul class="is-lines rune">' + ((r.Armour || []).map(m => li(plain(GD, m))).join('') || li('No effect', 'none')) + '</ul></div></div>' + upgradeLine(GD, r);
+        '<div><b>In armour</b><ul class="is-lines rune">' + ((r.Armour || []).map(m => li(plain(GD, m))).join('') || li('No effect', 'none')) + '</ul></div></div>' + upgradeLine(GD, r) +
+        sigGuardians(GD, r).map(n => '<p class="is-into">' + esc(n + "'s signature rune") + '</p>').join('');
       const inv = owned(), n = inv && inv.loaded ? inv.runes[lc(r.Id)] || 0 : null;
       if (n != null) badges.push(badge(n ? 'You have ' + n + ' (' + inv.runeWhere[lc(r.Id)].join(', ') + ')' : 'You have none', n ? 'held' : 'muted'));
     }
@@ -6231,7 +6239,7 @@ window.BOItemSearch = function (ctx) {
   }
 
   // For the Grail tab: the same icons.
-  const forGrail = { sprite, uniqueIcon: u => art('uniq', u.Id, 'unique') || icon(baseIcon(ctx.gd().bases[lc(u.BaseId)]), 'unique'), wordIcon: () => icon('oathword', 'oathword') };
+  const forGrail = { sprite, uniqueIcon: u => art('uniq', u.Id, 'unique') || icon(baseIcon(ctx.gd().bases[lc(u.BaseId)]), 'unique'), wordIcon: () => icon('oathword', 'oathword'), runeIcon: glyphIcon };
   // Hover tooltip for a unique anywhere on the page (FAQ tab): the Item Search card's lines in the .pl-tip look.
   function uniqueTip(id) {
     const GD = ctx.gd(), u = GD && GD.uniques[lc(id)]; if (!u) return '';
@@ -6456,10 +6464,33 @@ window.BOItemSearch = function (ctx) {
         (state === 'held' ? '<span class="gr-check" aria-label="Held">✓</span>' : state === 'craft' ? '<span class="gr-craft">Craftable</span>' : '') + '</div>';
     }
 
+    // Signature runes: one per Guardian (gamedata.js guardians[].sigRune, cube_recipes.json Signatures), with how many you hold.
+    function sigRunes() {
+      const g = GD();
+      return Object.values(g.guardians || {}).filter(x => x.sigRune && g.runes[lc(x.sigRune)]).map(x => ({ guardian: x.name, r: g.runes[lc(x.sigRune)] }))
+        .sort((a, b) => (a.r.Tier || 0) - (b.r.Tier || 0) || a.guardian.localeCompare(b.guardian));
+    }
+    function sigTile(x, inv) {
+      const I = icons(), id = lc(x.r.Id), n = inv.runes[id] || 0, have = n > 0;
+      const show = V.show === 'all' || (V.show === 'found') === have;
+      if (!show || (V.q && !lc(x.r.Name + ' ' + x.guardian + ' signature rune').includes(lc(V.q)))) return '';
+      const where = inv.loaded ? (have ? 'You have ' + n + ' (' + inv.runeWhere[id].join(', ') + ')' : 'You have none') : '';
+      return '<div class="gr-tile' + (have ? ' have' : '') + '">' + (I && I.runeIcon ? I.runeIcon(x.r) : '') + '<div class="gr-body"><b>' + esc(x.r.Name) + '</b><small>' +
+        esc(x.guardian + "'s signature rune · Tier " + (x.r.Tier || 1)) + '</small>' + (where ? '<small class="gr-where">' + esc(where) + '</small>' : '') + '</div>' +
+        (have ? '<span class="gr-check" aria-label="Held">✓</span>' : '') + '</div>';
+    }
+    // The drop rule as cube_recipes.json Rules gives it (SignatureFromML, SignatureChance, SignatureChanceTierV, SignatureTierVFromML).
+    function sigNote() {
+      const R = GD().sigRuneRule || {};
+      if (!R.chance) return '';
+      return 'Game data: ' + fmtChance(R.chance) + ' a Guardian kill from monster level ' + (R.fromML || 1) +
+        (R.chanceTierV ? '; Tier V and up ' + fmtChance(R.chanceTierV) + (R.tierVFromML ? ', from monster level ' + R.tierVFromML : '') : '');
+    }
+
     function render() {
       const el = $('#grailPane'); if (!el || el.hidden) return;
       const g = GD();
-      let h = (icons() ? icons().sprite() : '') + '<div class="cmp-intro"><div class="eyebrow">COLLECTION</div><h2>Grail</h2><p>The uniques you have found (the game\'s Collection), the Oathwords you hold or have runes for, and where each one drops. Read from your saves in this browser; nothing is uploaded.</p></div>';
+      let h = (icons() ? icons().sprite() : '') + '<div class="cmp-intro"><div class="eyebrow">COLLECTION</div><h2>Grail</h2><p>The uniques you have found (the game\'s Collection), the Oathwords you hold or have runes for, each Guardian\'s signature rune, and where each one drops. Read from your saves in this browser; nothing is uploaded.</p></div>';
       if (!g || !g.uniques) { el.innerHTML = h + '<div class="card"><p class="hint">Game data is still loading.</p></div>'; return; }
       const L = leagues(), lg = league(), inv = inventory(lg), G = groups();
       const count = list => list.filter(u => inv.found.has(lc(u.Id))).length;
@@ -6475,7 +6506,7 @@ window.BOItemSearch = function (ctx) {
         '<label class="field grow"><span>Search</span><input type="text" id="grQ" placeholder="Name, base or where it drops" value="' + esc(V.q) + '" autocomplete="off"></label></div>' +
         '<div class="gr-stats">' +
         stat('Reds', count(redsAll), redsAll.length) + stat('The Chase', count(chaseAll), chaseAll.length) + stat('Community reds', count(G.community), G.community.length) +
-        stat('All uniques', inv.found.size, allU) + stat('Oathwords held', held, words.length) + (inv.loaded ? stat('Craftable now', craft, words.length - held) : '') + '</div>' +
+        stat('All uniques', inv.found.size, allU) + stat('Signature runes', sigRunes().filter(x => inv.runes[lc(x.r.Id)]).length, sigRunes().length) + stat('Oathwords held', held, words.length) + (inv.loaded ? stat('Craftable now', craft, words.length - held) : '') + '</div>' +
         (inv.loaded ? '<p class="hint gr-src">From ' + inv.sources.map(s => s.kind === 'stash' ? 'the ' + esc(leagueName(lg)) + ' stash' : esc(s.name)).join(', ') + '.</p>' : '') + '</div>';
       h += '<div id="grBody">' + body(G, inv, words) + '</div>';
       el.innerHTML = h;
@@ -6485,6 +6516,9 @@ window.BOItemSearch = function (ctx) {
       let h = '<h3 class="gr-h">Reds</h3>' + G.reds.map(x => section(x.name, x.list, inv)).join('');
       h += '<h3 class="gr-h">The Chase</h3>' + G.chase.map(x => section(x.name, x.list, inv)).join('');
       h += '<h3 class="gr-h">Community reds</h3>' + section('Community reds', G.community, inv, 'Not on the game\'s Reds page');
+      const sr = sigRunes(), srTiles = sr.map(x => sigTile(x, inv)).join(''), srNote = sigNote();
+      h += '<h3 class="gr-h">Signature runes</h3><details class="gr-sec" open><summary><span>One rune per Guardian</span><b>' + sr.filter(x => inv.runes[lc(x.r.Id)]).length + ' of ' + sr.length + '</b>' + (srNote ? '<small>' + esc(srNote) + '</small>' : '') + '</summary>' +
+        (srTiles ? '<div class="gr-grid">' + srTiles + '</div>' : '<p class="hint">Nothing to show with this filter.</p>') + '</details>';
       const tiles = words.slice().sort((a, b) => (a.Level || 0) - (b.Level || 0) || a.Name.localeCompare(b.Name)).map(w => wordTile(w, inv)).join('');
       h += '<h3 class="gr-h">Oathwords</h3><details class="gr-sec" open><summary><span>Oathwords</span><b>' + words.filter(w => wordStatus(w, inv).held.length).length + ' held</b><small>The saves do not list Oathwords you made before, only the ones you hold now</small></summary>' +
         (tiles ? '<div class="gr-grid">' + tiles + '</div>' : '<p class="hint">Nothing to show with this filter.</p>') + '</details>';

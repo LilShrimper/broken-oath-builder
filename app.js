@@ -13234,20 +13234,20 @@ window.BOCharacter = function (ctx) {
 // share-worker/src/accounts.js). Local storage stays the working copy: the page works the same signed out, offline or
 // with the worker down. Signed in, each plan goes to the account a few seconds after its last edit, and the account's
 // plans come back to this browser when the page opens or the tab comes back into view.
-// Testers only for now: ?cloud=1 turns it on in this browser (?cloud=0 off). ?cloudapi=local talks to `wrangler dev`
+// Open to everyone since v311 (owner, 15 Nov 2026, after a two-PC test); ?cloud=1 was the testers' switch before.
+// Not on DamageSim.html opened as a file (sign-in can't return to a file). ?cloudapi=local talks to `wrangler dev`
 // on port 8787 and signs in with its test-only route instead of Discord.
 // app.js calls BOCloud(ctx) and gets back { start, check, removed, reset, badge, enabled }.
 window.BOCloud = function (ctx) {
   'use strict';
   const { $, esc } = ctx;
-  const KEY = 'bods:cloud', FLAG = 'bods:cloudOn';
+  const KEY = 'bods:cloud';
   const PUSH_DELAY = 3000;     // after the last edit
   const PULL_EVERY = 60000;    // at most, when the tab comes back into view
   const CHECK_EVERY = 10000;   // catches edits that don't pass through keepChars (tree tabs, notes, potions)
   const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* off */ } }, del(k) { try { localStorage.removeItem(k); } catch (e) { /* off */ } } };
   const qs = new URLSearchParams(location.search);
-  if (qs.get('cloud') === '1') ls.set(FLAG, '1');
-  if (qs.get('cloud') === '0') ls.del(FLAG);
+  ls.del('bods:cloudOn'); // the testers' old switch
   const local = qs.get('cloudapi') === 'local';
   const API = local ? 'http://localhost:8787' : ctx.api;
   // On lilshrimper.dev the page and the sign-in service are the same site, so the session lives in a cookie only the
@@ -13255,7 +13255,7 @@ window.BOCloud = function (ctx) {
   // github.io address, a pages.dev preview) the page keeps the token itself and sends it as a Bearer header.
   const COOKIE = 'cookie';
   const cookieSite = /(^|\.)lilshrimper\.dev$/.test(location.hostname) || (local && location.hostname === 'localhost');
-  const on = ls.get(FLAG) === '1' && location.protocol !== 'file:';
+  const on = location.protocol !== 'file:';
 
   // Kept per browser: the session and what this browser last knew of each plan in the account.
   //   revs: plan id -> the account's rev this browser holds; sigs: plan id -> what the plan looked like then;
@@ -13449,7 +13449,7 @@ window.BOCloud = function (ctx) {
   }
 
   // ---------- the button and its menu ----------
-  const ago = t => { if (!t) return ''; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
+  const ago = t => { if (!t) return ''; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }); };
   function statusText() {
     if (!S.token) return '';
     if (state === 'saving' || (S.dirty.length && state !== 'offline' && state !== 'error')) return 'Saving to your account…';
@@ -13467,7 +13467,7 @@ window.BOCloud = function (ctx) {
     b.innerHTML = S.token
       ? '<span class="cloud-initial notranslate" aria-hidden="true">' + esc((S.name || '?').trim().charAt(0).toUpperCase()) + '</span><span class="cloud-name notranslate">' + esc(S.name) + '</span><span class="cloud-dot" aria-hidden="true"></span>'
       : DISCORD + '<span class="cloud-word">Sign in</span>';
-    b.setAttribute('aria-label', S.token ? 'Account: ' + S.name + '. ' + statusText() : 'Sign in with Discord to save your plans to an account');
+    b.setAttribute('aria-label', S.token ? 'Account: ' + S.name : 'Sign in with Discord to save your plans to an account');
     b.title = S.token ? statusText() : 'Sign in with Discord to save your plans to an account, so they open on every device';
     if (menu) fillMenu();
   }

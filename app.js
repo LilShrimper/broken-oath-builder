@@ -16193,10 +16193,26 @@ window.BOStartApp = function () {
     return m;
   }
   const lineText = x => (x.text ? x.text.replace(/\{(0|v)\}/g, num(x.v)).replace(/\{1\}/g, num(x.v2)) : S.modText(GD, x)).replace(/\+-/g, '-');
-  function cmpLinesTable(ia, ib) {
+  // Written-out lines (unique effects) the sim used for a skill on one side: text -> { skills, dps } (dps: a minion pulse's own share).
+  function cmpModelled(skillRows, side) {
+    const out = new Map(), key = 'item:' + cmpSlot();
+    for (const r of skillRows || []) {
+      const res = r[side]; if (!res || !res.used) continue;
+      for (const [m, why] of res.used) {
+        if (!m.text || m.key !== key) continue;
+        const e = out.get(m.text) || { skills: [], dps: 0 }; out.set(m.text, e);
+        if (!e.skills.includes(r.name)) e.skills.push(r.name);
+        if (why === 'minion pulse') for (const p of res.pulses || []) if (p.src === m.src) e.dps += p.dps;
+      }
+    }
+    return out;
+  }
+  function cmpLinesTable(ia, ib, skillRows) {
     const A = itemLines(ia), B = itemLines(ib), keys = [...new Set([...B.keys(), ...A.keys()])];
     if (!keys.length) return '';
+    const MA = cmpModelled(skillRows, 'ra'), MB = cmpModelled(skillRows, 'rb');
     const two = x => x && x.v2 && (!x.text || /\{1\}/.test(x.text));
+    let anyModelled = false;
     const rows = keys.map(k => {
       const a = A.get(k), b = B.get(k), x = a || b;
       const d = (b ? b.v : 0) - (a ? a.v : 0), d2 = (b ? b.v2 : 0) - (a ? a.v2 : 0);
@@ -16204,10 +16220,18 @@ window.BOStartApp = function () {
       if (a && b && !d && !d2) ch = '<span class="meta">same</span>';
       else if (x.text && !(a && b)) ch = b ? '<span class="up">new</span>' : '<span class="down">lost</span>';
       else ch = '<span class="' + (d + d2 >= 0 ? 'up' : 'down') + '">' + (d >= 0 ? '+' : '') + num(d) + (two(a) || two(b) ? ' / ' + (d2 >= 0 ? '+' : '') + num(d2) : '') + '</span>';
+      // A unique effect the sim counts: say so, with the skills it counts for (and a pulse's DPS), since its number is in the DPS above.
+      const mo = x.text && ((b && MB.get(x.text)) || (a && MA.get(x.text)));
+      if (mo) {
+        anyModelled = true;
+        const sign = b && !a ? '+' : !b && a ? '−' : '';
+        ch += '<div class="cmp-modelled">in the sim: ' + esc(mo.skills.join(', ')) + (mo.dps > 0 ? ' <b>' + sign + num(mo.dps) + ' DPS</b>' : '') + '</div>';
+      }
       return '<tr><td>' + (a ? esc(lineText(a)) : '<span class="meta">–</span>') + '</td><td>' + (b ? esc(lineText(b)) : '<span class="meta">–</span>') + '</td><td>' + ch + '</td></tr>';
     });
     return '<h3>Item lines</h3><div class="table-wrap"><table class="tbl cmp-lines"><thead><tr><th>Your item</th><th>New item</th><th>Change</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div>' +
-      '<p class="hint">Each item\'s base numbers (weapon damage or defences, with its local lines), then its own lines (implicits, affixes, runes) added up by stat, before your tree and other gear scale them. Life, resistances and other defences are compared here only; the DPS above counts every line the sim models.</p>';
+      '<p class="hint">Each item\'s base numbers (weapon damage or defences, with its local lines), then its own lines (implicits, affixes, runes) added up by stat, before your tree and other gear scale them. Life, resistances and other defences are compared here only; the DPS above counts every line the sim models.' +
+      (anyModelled ? ' <b>In the sim</b> marks a unique effect the sim counts, with the skills it counts for; its worth is in the DPS above.' : '') + '</p>';
   }
   function cmpRows(ia, ib) {
     const chA = cmpWith(st.ch, ia), chB = cmpWith(st.ch, ib);
@@ -16264,7 +16288,7 @@ window.BOStartApp = function () {
     if (rows.length > 1) h += '<div class="table-wrap"><table class="tbl"><thead><tr><th>Skill</th><th>Your item</th><th>' + (ib ? 'New item' : 'Slot empty') + '</th><th>Change</th></tr></thead><tbody>' +
       rows.map(x => '<tr' + (cb && cb.W[x.id] ? ' class="cmp-counted"' : '') + '><td>' + skillDot(x.id) + esc(x.name) + (x.id === st.skill ? ' <span class="hint">(selected)</span>' : cb && cb.W[x.id] ? ' <span class="hint">(counted, weight ' + cb.W[x.id] + ')</span>' : '') + '</td><td>' + (x.a == null ? '–' : num(x.a)) + '</td><td' + (x.why ? ' title="' + esc(x.why) + '"' : '') + '>' + (x.b == null ? '–' : num(x.b)) + '</td><td>' + change(x.a, x.b) + '</td></tr>').join('') + '</tbody></table></div>' +
       '<p class="hint">The selected skill uses the supports set on the Damage tab; the others use their own from the build.</p>';
-    h += cmpLinesTable(ia, ib);
+    h += cmpLinesTable(ia, ib, rows);
     return h + '</div>';
   }
   function cmpEquipHtml(ib) {

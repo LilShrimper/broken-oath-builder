@@ -14958,7 +14958,7 @@ window.BOStartApp = function () {
         if (!build) { say('Could not attach the build (share-link service unreachable). Untick it, or try again.', 'bad'); btn.disabled = false; return; }
       }
       const tab = (document.querySelector('.tab[aria-selected="true"]') || {}).dataset;
-      const page = (tab && tab.tab || 'damage') + ' tab, game data ' + (GD_BUILD || String(GD.filesAt || GD.builtAt).slice(0, 10)) + (/^https?:$/.test(location.protocol) && location.hostname === 'lilshrimper.github.io' ? '' : ', local copy');
+      const page = (tab && tab.tab || 'damage') + ' tab, game data ' + (GD_BUILD || String(GD.filesAt || GD.builtAt).slice(0, 10)) + (/^https?:$/.test(location.protocol) && /^(builder\.lilshrimper\.dev|lilshrimper\.github\.io)$/.test(location.hostname) ? '' : ', local copy');
       const text = check ? (note ? 'Note: ' + note + '\n\n' : '') + lastCheckReport : note;
       const ex = $('#reportLog').checked ? logExcerpt() : null; // the same lines the player saw in the preview
       const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 10000);
@@ -15378,7 +15378,7 @@ window.BOStartApp = function () {
   // Share links: the character on screen, edits included (gear, supports and gem level picked on the Damage tab,
   // tree), opens on the other end as a plan. Short form <site>#s=<id>: the code is kept by the share-worker
   // (Cloudflare, share-worker/). If that can't be reached, the long form <site>#build=<code> carries it all.
-  const SITE_URL = 'https://lilshrimper.github.io/broken-oath-builder/';
+  const SITE_URL = 'https://builder.lilshrimper.dev/'; // the site's address since 15 Nov 2026 (was lilshrimper.github.io/broken-oath-builder/)
   // Own domain (13 Nov 2026): China's DNS answers *.workers.dev with a fake address (173.244.209.150, viewdns firewall test),
   // so the Ladder, share links and reports failed there; api.lilshrimper.dev resolved correctly. Same worker, same KV.
   const SHARE_API = 'https://api.lilshrimper.dev';

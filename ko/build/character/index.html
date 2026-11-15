@@ -2,17 +2,51 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
+<script>(function () { try {
+  var local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname), API = local ? "http://localhost:8787" : "https://api.lilshrimper.dev";
+  var q = location.search, h = document.documentElement;
+  if (location.hostname === "lilshrimper.github.io" || (local && /[?&]movetest\b/.test(q))) {
+    var NEW = local ? "http://127.0.0.1:" + location.port : "https://builder.lilshrimper.dev";
+    var rest = local ? location.pathname : (location.pathname.replace(/^\/broken-oath-builder/, "") || "/");
+    q = q.replace(/([?&])movetest\b[^&]*&?/, "$1").replace(/[?&]$/, "");
+    h.style.display = "none"; window.BO_MOVING = true;
+    var done = false, go = function (code) { if (done) return; done = true; location.replace(NEW + rest + (code ? (q ? q + "&" : "?") + "migrate=" + code : q) + location.hash); };
+    var data = {}, n = 0;
+    try { if (!localStorage.getItem("bods:moved")) for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf("bods:") === 0) { data[k] = localStorage.getItem(k); n++; } } } catch (e) { /* storage off */ }
+    if (!n) return go("");
+    setTimeout(function () { go(""); }, 8000);
+    fetch(API + "/m", { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(data) })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j && j.code && !done) { try { localStorage.setItem("bods:moved", new Date().toISOString()); } catch (e) { /* off */ } } go(j && j.code); }, function () { go(""); });
+    return;
+  }
+  var m = q.match(/[?&]migrate=([A-Za-z0-9_-]{32,64})/); if (!m) return;
+  history.replaceState(null, "", location.pathname + q.replace(/([?&])migrate=[^&]*&?/, "$1").replace(/[?&]$/, "") + location.hash);
+  var x = new XMLHttpRequest(); x.open("GET", API + "/m/" + m[1], false);
+  try { x.send(); } catch (e) { return; }
+  if (x.status !== 200) return;
+  var d = JSON.parse(x.responseText), byId = function (a) { var o = {}; (a || []).forEach(function (c) { if (c && c.id) o[c.id] = c; }); return o; };
+  for (var k in d) {
+    if (k.indexOf("bods:") !== 0 || k === "bods:moved") continue;
+    var have = localStorage.getItem(k);
+    if (have == null) { localStorage.setItem(k, d[k]); continue; }
+    if (k === "bods:chars") { var a = byId(JSON.parse(have)), b = JSON.parse(d[k]) || [];
+      b.forEach(function (c) { if (c && c.id && (!a[c.id] || (c.savedAt || "") > (a[c.id].savedAt || ""))) a[c.id] = c; });
+      localStorage.setItem(k, JSON.stringify(Object.keys(a).map(function (id) { return a[id]; }))); }
+  }
+  localStorage.setItem("bods:movedIn", new Date().toISOString());
+} catch (e) { /* storage off or bad data: the page starts as it is */ } })();</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>캐릭터 · Broken Oath Builder</title>
 <meta name="description" content="빌드 플래너를 위해 『Broken Oath』 캐릭터를 설정하세요: 직업, 레벨, 능력치.">
-<link rel="canonical" href="https://lilshrimper.github.io/broken-oath-builder/ko/build/character/">
-<link rel="alternate" hreflang="en" href="https://lilshrimper.github.io/broken-oath-builder/build/character/"><link rel="alternate" hreflang="zh-Hans" href="https://lilshrimper.github.io/broken-oath-builder/zh/build/character/"><link rel="alternate" hreflang="es" href="https://lilshrimper.github.io/broken-oath-builder/es/build/character/"><link rel="alternate" hreflang="ru" href="https://lilshrimper.github.io/broken-oath-builder/ru/build/character/"><link rel="alternate" hreflang="de" href="https://lilshrimper.github.io/broken-oath-builder/de/build/character/"><link rel="alternate" hreflang="fr" href="https://lilshrimper.github.io/broken-oath-builder/fr/build/character/"><link rel="alternate" hreflang="ja" href="https://lilshrimper.github.io/broken-oath-builder/ja/build/character/"><link rel="alternate" hreflang="ko" href="https://lilshrimper.github.io/broken-oath-builder/ko/build/character/"><link rel="alternate" hreflang="pl" href="https://lilshrimper.github.io/broken-oath-builder/pl/build/character/"><link rel="alternate" hreflang="pt-BR" href="https://lilshrimper.github.io/broken-oath-builder/pt/build/character/"><link rel="alternate" hreflang="uk" href="https://lilshrimper.github.io/broken-oath-builder/uk/build/character/">
+<link rel="canonical" href="https://builder.lilshrimper.dev/ko/build/character/">
+<link rel="alternate" hreflang="en" href="https://builder.lilshrimper.dev/build/character/"><link rel="alternate" hreflang="zh-Hans" href="https://builder.lilshrimper.dev/zh/build/character/"><link rel="alternate" hreflang="es" href="https://builder.lilshrimper.dev/es/build/character/"><link rel="alternate" hreflang="ru" href="https://builder.lilshrimper.dev/ru/build/character/"><link rel="alternate" hreflang="de" href="https://builder.lilshrimper.dev/de/build/character/"><link rel="alternate" hreflang="fr" href="https://builder.lilshrimper.dev/fr/build/character/"><link rel="alternate" hreflang="ja" href="https://builder.lilshrimper.dev/ja/build/character/"><link rel="alternate" hreflang="ko" href="https://builder.lilshrimper.dev/ko/build/character/"><link rel="alternate" hreflang="pl" href="https://builder.lilshrimper.dev/pl/build/character/"><link rel="alternate" hreflang="pt-BR" href="https://builder.lilshrimper.dev/pt/build/character/"><link rel="alternate" hreflang="uk" href="https://builder.lilshrimper.dev/uk/build/character/">
 <meta property="og:type" content="website"><meta property="og:site_name" content="Broken Oath Builder">
 <meta property="og:title" content="캐릭터 · Broken Oath Builder"><meta property="og:description" content="빌드 플래너를 위해 『Broken Oath』 캐릭터를 설정하세요: 직업, 레벨, 능력치.">
-<meta property="og:url" content="https://lilshrimper.github.io/broken-oath-builder/ko/build/character/"><meta property="og:image" content="https://lilshrimper.github.io/broken-oath-builder/assets/lilshrimper-sigil.png">
+<meta property="og:url" content="https://builder.lilshrimper.dev/ko/build/character/"><meta property="og:image" content="https://builder.lilshrimper.dev/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=308">
+<link rel="stylesheet" href="../../../style.css?v=309">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -559,7 +593,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":308,"at":"2026-11-15T17:34:29.091Z"};
+window.SITE_VERSION = {"v":309,"at":"2026-11-15T17:59:25.879Z"};
 window.SITE_LANG = 'ko';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -568,6 +602,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=14188d03","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../../app.js?v=308"></script>
+<script src="../../../app.js?v=309"></script>
 </body>
 </html>

@@ -13594,6 +13594,15 @@ window.BOStartApp = function () {
     get(k, def) { try { const v = localStorage.getItem('bods:' + k); return v == null ? def : JSON.parse(v); } catch (e) { return def; } },
     set(k, v) { try { localStorage.setItem('bods:' + k, JSON.stringify(v)); } catch (e) { /* storage off */ } },
   };
+  // soon(fn): run fn as the next task, for long jobs cut into slices. Not setTimeout(fn, 0): browsers slow timers in a
+  // hidden or covered window (about 1 per second, then 1 per minute after 5 minutes), which turned a 30 s Plan tree into
+  // 3-5 minutes while the game was in front (owner, Edge, 15 Nov 2026). MessageChannel messages are not slowed.
+  // Visible: setTimeout as before, so the page keeps painting between slices.
+  const soon = (() => {
+    const q = [], mc = new MessageChannel();
+    mc.port1.onmessage = () => { const fn = q.shift(); if (fn) fn(); };
+    return fn => { if (!document.hidden) { setTimeout(fn, 0); return; } q.push(fn); mc.port2.postMessage(0); };
+  })();
   function confirmInPage(title, message, action, danger) {
     const dialog = $('#confirmDialog'), button = $('#confirmAction');
     $('#confirmTitle').textContent = title;
@@ -14648,14 +14657,14 @@ window.BOStartApp = function () {
             x.kind === 'gear' ? '<button class="btn small" data-optimizer-action="' + i + '" disabled>Add</button>' : '<span class="optimizer-kind">Estimate</span>';
         return '<li class="optimizer-row"><span class="optimizer-rank">' + (i + 1) + '</span><span class="optimizer-copy">' + optimizerTitleHtml(x, i, true) + '<small>' + esc(x.detail) + '</small></span><strong class="optimizer-gain">' + pct(x.gain) + '</strong>' + action + '</li>';
       }).join('') + '</ol>' : '';
-      setTimeout(tick, 0);
+      soon(tick);
       } catch (error) {
         O.status = 'error';
         O.error = 'Optimization failed: ' + String(error && error.message || error);
         render();
       }
     };
-    setTimeout(tick, 0);
+    soon(tick);
   }
   function applyOptimizerResult(index) {
     const O = upgradeOptimizer, result = O.results[index];
@@ -15018,9 +15027,9 @@ window.BOStartApp = function () {
       while (!job.done && performance.now() - t < 40) job.step(150);
       st.opt.tried = job.tried; st.opt.total = job.total;
       if (job.done) { st.opt.manaDropped = job.manaDropped || 0; st.opt.running = false; st.optJob = null; btn.disabled = false; btn.textContent = 'Find best supports'; render(); }
-      else { btn.textContent = 'Searching… ' + Math.round(job.tried / job.total * 100) + '%'; setTimeout(tick, 0); }
+      else { btn.textContent = 'Searching… ' + Math.round(job.tried / job.total * 100) + '%'; soon(tick); }
     };
-    render(); setTimeout(tick, 0);
+    render(); soon(tick);
   }
   function stopSearch() { st.optJob = null; const b = $('#optBtn'); if (b) { b.disabled = false; b.textContent = 'Find best supports'; } }
   function useSetup(i) {
@@ -16312,7 +16321,7 @@ window.BOStartApp = function () {
         else { const pl = planTake(have, id); if (!pl) continue; list = pl.list; cost = pl.cost; swapped = pl.swapped; }
         T.scores.set(id, { d: rel(list), cost, swapped });
       }
-      if (i < ids.length) { $('#treeStatus').textContent = 'Scoring nodes for ' + skillName + '… ' + Math.round(i / ids.length * 100) + '%'; if (i % 200 < 30) paintTree(); setTimeout(step, 0); }
+      if (i < ids.length) { $('#treeStatus').textContent = 'Scoring nodes for ' + skillName + '… ' + Math.round(i / ids.length * 100) + '%'; if (i % 200 < 30) paintTree(); soon(step); }
       else { $('#treeStatus').textContent = 'Node values: ' + skillName + ' vs a ' + (st.rarity || 'rare') + ' (level ' + (st.enemyLevel || st.ch.level) + '), with the supports and settings on the left. Base ' + num(b) + ' DPS' + (more.length ? ' (' + sName(st.skill) + '); values are the weighted mean % of ' + (more.length + 1) + ' skills' : '') + '.'; paintTree(); bestList(); }
     };
     step();
@@ -16380,12 +16389,12 @@ window.BOStartApp = function () {
     busy(true); showProgress();
     const step = () => {
       if (job !== T.optJob) { busy(false); return; }
-      const t0 = performance.now(); let r;
+      const t0 = performance.now(), slice = document.hidden ? 250 : 30; let r; // hidden: nothing on screen to keep smooth
       try {
         do { r = gen.next(); if (r.value && r.value.phase) { phase = r.value.phase; if (r.value.q > q) q = Math.min(1, r.value.q); } }
-        while (!r.done && performance.now() - t0 < 30);
+        while (!r.done && performance.now() - t0 < slice);
       } catch (err) { busy(false); clearOpt(); card.hidden = false; card.innerHTML = '<p class="hint">The optimizer failed: ' + esc(err.message) + '</p>'; return; }
-      if (!r.done) { showProgress(); setTimeout(step, 0); return; }
+      if (!r.done) { showProgress(); soon(step); return; }
       busy(false); btn.title = '';
       $('#treePlan').disabled = false; $('#treePlanAll').disabled = false; $('#treeOptimize').disabled = false; btn.textContent = label;
       const res = r.value;
@@ -16848,12 +16857,12 @@ window.BOStartApp = function () {
       const t = performance.now(); let r;
       try { do { r = gen.next(); if (r.value && r.value.phase) { GS.phase = r.value.phase; GS.p = r.value.p || 0; } } while (!r.done && performance.now() - t < 30); }
       catch (err) { GS.running = false; GS.msg = 'The search failed: ' + err.message; return renderCompare(); }
-      if (!r.done) { gsProgress(); setTimeout(step, 0); return; }
+      if (!r.done) { gsProgress(); soon(step); return; }
       GS.running = false;
       if (r.value.error) GS.msg = r.value.error; else GS.res = Object.assign(r.value, { key, skill: st.skill });
       renderCompare();
     };
-    setTimeout(step, 0);
+    soon(step);
   }
   function gsCancel() { GS.job++; GS.running = false; GS.msg = 'Search stopped.'; renderCompare(); }
   function gsEquip() {
@@ -16959,12 +16968,12 @@ window.BOStartApp = function () {
       const t = performance.now(); let r;
       try { do { r = gen.next(); if (r.value && r.value.phase) { SBS.phase = r.value.phase; SBS.p = Math.min(0.95, (performance.now() - SBS.t0) / 15000); } } while (!r.done && performance.now() - t < 30); }
       catch (err) { SBS.running = false; SBS.msg = 'The search failed: ' + err.message; return renderCompare(); }
-      if (!r.done) { gsProgress(SBS); setTimeout(step, 0); return; }
+      if (!r.done) { gsProgress(SBS); soon(step); return; }
       SBS.running = false;
       if (r.value.error) SBS.msg = r.value.error; else SBS.res = Object.assign(r.value, { key, skill: st.skill });
       renderCompare();
     };
-    setTimeout(step, 0);
+    soon(step);
   }
   function sbsCancel() { SBS.job++; SBS.running = false; SBS.msg = 'Search stopped.'; renderCompare(); }
   function sbsEquip(i) {
@@ -17414,7 +17423,7 @@ window.BOStartApp = function () {
         const tick = () => {
           const t = performance.now();
           while (!job.done && performance.now() - t < 40) job.step(150);
-          if (!job.done) { progress(Math.round(job.tried / Math.max(1, job.total) * 100)); return setTimeout(tick, 0); }
+          if (!job.done) { progress(Math.round(job.tried / Math.max(1, job.total) * 100)); return soon(tick); }
           const best = job.results[0];
           if (!best && manaOk) return run(false);
           resolve(best ? best.sup.map(id => (GD.supports[String(id).toLowerCase()] || { Id: id }).Id) : null);
@@ -17439,13 +17448,13 @@ window.BOStartApp = function () {
         if (stop) return resolve(null);
         const t = performance.now();
         while (!job.done && performance.now() - t < 40) job.step(150);
-        if (!job.done) { progress(Math.round(job.tried / Math.max(1, job.total) * 100)); return setTimeout(tick, 0); }
+        if (!job.done) { progress(Math.round(job.tried / Math.max(1, job.total) * 100)); return soon(tick); }
         const id = x => (GD.supports[String(x).toLowerCase()] || { Id: x }).Id;
         // Nothing keeps the mana up: show the setups anyway, marked, instead of an empty window (as bestSupportsFor falls back).
-        if (!job.results.length && opt.manaOk && !job.again) { const o2 = comboOpts(); o2.gemLevel = st.ch.gemLevels[skill] || undefined; const dropped = job.manaDropped || 0; job = S.supportSearch(GD, st.ch, skill, o2, { pool: opt.pool || 'all', target: 'enemy', keep: 8, manaOk: false, pinned: pinsIn(skill, ((st.ch.sockets || []).find(x => String(x.skill).toLowerCase() === String(skill).toLowerCase()) || {}).supports), blocked: [...marksFor(skill).block] }); job.again = true; job.manaAll = dropped; return setTimeout(tick, 0); }
+        if (!job.results.length && opt.manaOk && !job.again) { const o2 = comboOpts(); o2.gemLevel = st.ch.gemLevels[skill] || undefined; const dropped = job.manaDropped || 0; job = S.supportSearch(GD, st.ch, skill, o2, { pool: opt.pool || 'all', target: 'enemy', keep: 8, manaOk: false, pinned: pinsIn(skill, ((st.ch.sockets || []).find(x => String(x.skill).toLowerCase() === String(skill).toLowerCase()) || {}).supports), blocked: [...marksFor(skill).block] }); job.again = true; job.manaAll = dropped; return soon(tick); }
         resolve({ results: job.results.map(r => Object.assign({}, r, { sup: r.sup.map(id) })), current: cur.totalDps, sockets: job.sockets, tried: job.tried, exact: job.exact, poolSize: job.pool.length, manaDropped: job.manaDropped || 0, manaNone: !!job.again });
       };
-      setTimeout(tick, 0);
+      soon(tick);
     });
     return { cancel: () => { stop = true; }, done };
   }

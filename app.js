@@ -13250,6 +13250,11 @@ window.BOCloud = function (ctx) {
   if (qs.get('cloud') === '0') ls.del(FLAG);
   const local = qs.get('cloudapi') === 'local';
   const API = local ? 'http://localhost:8787' : ctx.api;
+  // On lilshrimper.dev the page and the sign-in service are the same site, so the session lives in a cookie only the
+  // service can read (HttpOnly; worker: accounts.js SESSION_COOKIE) and S.token just says "cookie". Elsewhere (the old
+  // github.io address, a pages.dev preview) the page keeps the token itself and sends it as a Bearer header.
+  const COOKIE = 'cookie';
+  const cookieSite = /(^|\.)lilshrimper\.dev$/.test(location.hostname) || (local && location.hostname === 'localhost');
   const on = ls.get(FLAG) === '1' && location.protocol !== 'file:';
 
   // Kept per browser: the session and what this browser last knew of each plan in the account.
@@ -13270,8 +13275,9 @@ window.BOCloud = function (ctx) {
   async function call(method, path, body) {
     let r;
     try {
-      r = await fetch(API + path, { method, headers: Object.assign({ Authorization: 'Bearer ' + S.token }, body === undefined ? {} : { 'Content-Type': 'application/json' }),
-        body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store' });
+      r = await fetch(API + path, { method, credentials: 'include', cache: 'no-store',
+        headers: Object.assign(S.token && S.token !== COOKIE ? { Authorization: 'Bearer ' + S.token } : {}, body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        body: body === undefined ? undefined : JSON.stringify(body) });
     } catch (e) { return { s: 0, j: null }; }
     let j = null; try { j = await r.json(); } catch (e) { /* not json */ }
     if (r.status === 401 && S.token) signedOut('Your sign-in ended. Sign in again to keep saving plans to your account.');
@@ -13291,11 +13297,11 @@ window.BOCloud = function (ctx) {
   }
   async function finishSignIn(code) {
     let r;
-    try { r = await fetch(API + '/auth/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, device: device() }) }); }
+    try { r = await fetch(API + '/auth/redeem', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, device: device(), cookie: cookieSite }) }); }
     catch (e) { return ctx.tip('Could not reach the sign-in service. Check your connection and try again.'); }
     const j = await r.json().catch(() => null);
-    if (!r.ok || !j || !j.token) return ctx.tip((j && j.error) || 'Sign-in failed. Try again.');
-    S = Object.assign(blank(), { token: j.token, name: j.name || 'Signed in', localOnly: S.localOnly });
+    if (!r.ok || !j || !(j.token || j.cookie)) return ctx.tip((j && j.error) || 'Sign-in failed. Try again.');
+    S = Object.assign(blank(), { token: j.cookie ? COOKIE : j.token, name: j.name || 'Signed in', localOnly: S.localOnly });
     save(); render();
     await sync(true);
   }

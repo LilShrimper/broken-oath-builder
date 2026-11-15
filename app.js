@@ -4703,18 +4703,53 @@ window.BOBrewery = function (ctx) {
   function legacy() {
     try { const s = cleanBelt(JSON.parse(localStorage.getItem('bods:brewery') || 'null')); localStorage.removeItem('bods:brewery'); return s; } catch (e) { return null; }
   }
-  let B = blankBelt(), Bid = null, Bstored = false;
-  // Point B at the belt of the character on screen.
+  // A belt from the potions a character carries (ch.potItems: a loaded save's belt, read in sim.js extractCharacter, or
+  // an ItemDatabase planner link's). Save tiers count from the best down, potions.json's from the worst up (creator.js
+  // saveTier: lingering 25 = save tier 2 = Tier 1). The Rupture Level is the character's, raised where needed so every
+  // slot, vessel and tier the potions use is open (early brewing gates, as the game has it on).
+  function fromItems(ch) {
+    const p = P(), list = ch && Array.isArray(ch.potItems) ? ch.potItems : [];
+    if (!p || !p.Types || !list.length) return null;
+    const b = blankBelt(), keys = (p.Slots || []).map(s => s.Key), E = p.Early80 || null;
+    const g = rl => E && E.RLMap && E.RLMap[rl] != null ? E.RLMap[rl] : rl;
+    let need = 0, any = false;
+    for (const it of list) {
+      const i = keys.indexOf(it.s); if (i < 0) continue;
+      const role = (p.Slots[i] || {}).Role, u = it.u && p.Uniques.find(x => x.Id === it.u);
+      const type = u ? u.Type : String(it.b || '').toLowerCase(), t = p.Types.find(x => x.Id === type);
+      if (!t || t.Role !== role) continue;
+      const s = emptySlot(), ves = p.Vessels.find(v => v.Id === String(it.v || '').toLowerCase()) || p.Vessels[0];
+      s.type = type; s.unique = u ? u.Id : ''; s.vessel = ves.Id;
+      need = Math.max(need, g(ves.MinRL || 0), p.Slots[i].OpenAt ? (i === 3 ? (E || p.Unlock).Slot4 : (E || p.Unlock).Open) : 0);
+      for (const [id, tier] of u ? [] : it.a || []) {
+        if ((p.Pour || []).some(x => x.Id === id)) { s.pour = id; continue; }
+        const m = p.Mods.find(x => x.Id === id), ts = (m && m.Tiers) || []; if (!ts.length) continue;
+        const at = Math.max(0, Math.min(ts.length - 1, ts.length - 1 - (+tier || 0))), pick = { id, tier: ts[at].Tier };
+        need = Math.max(need, g(ts[at].MinRL || 0));
+        if (m.Kind === 'Prefix') s.pre.push(pick); else if (m.Kind === 'Suffix') s.suf.push(pick);
+        else if (m.Kind === 'Oath') s.oath = pick; else if (m.Kind === 'Core') s.core = pick;
+      }
+      b.slots[i] = s; any = true;
+    }
+    if (!any) return null;
+    b.rl = Math.max(+ch.rupture || 0, need); b.early = !!E;
+    return b;
+  }
+  const charById = id => ctx.byId ? ctx.byId(id) : null;
+  let B = blankBelt(), Bid = null, Bstored = false, Bsave = false;
+  // Point B at the belt of the character on screen: the one kept in this browser, else the one its save carries.
   function use() {
     const ch = ctx.current && ctx.current(), id = ch ? ch.id : '';
     if (id === Bid) return;
-    Bid = id; const got = id ? read(id) : null;
+    Bid = id; Bsave = false; const got = id ? read(id) : null;
     if (got) { B = got; Bstored = true; return; }
     const old = id ? legacy() : null;
-    B = old || blankBelt(); Bstored = !!old;
-    if (old) write(id, B);
+    if (old) { B = old; Bstored = true; write(id, B); return; }
+    const fromSave = fromItems(ch);
+    B = fromSave || blankBelt(); Bstored = false; Bsave = !!fromSave;
+    if (fromSave && P()) B.slots.forEach((_, i) => tidy(i));
   }
-  const keep = () => { if (Bid) { write(Bid, B); Bstored = true; } };
+  const keep = () => { if (Bid) { write(Bid, B); Bstored = true; Bsave = false; } };
 
   // ---------- rules from potions.json ----------
   const gate = rl => { const p = P(); if (!B.early || !p || !p.Early80) return rl; const m = p.Early80.RLMap || {}; return m[rl] != null ? m[rl] : rl; };
@@ -4808,9 +4843,12 @@ window.BOBrewery = function (ctx) {
 
   // What changes damage: the sim's stats, in plain words.
   const DMG = { Damage: 'Damage', CurseEffect: 'effect of your Curses', ManaCost: 'Mana Cost of Skills', LifeLeech: 'Damage Leeched as Life' };
+  // The "of the ... Answer" suffixes: the sim adds them to the defence engine (sim.js DEF_ENGINE), like the tree's lines.
+  const PER = { ArmourMore: '1,000 Armour', EvasionMore: '1,000 Evasion', EnergyShieldMore: '1,000 maximum Energy Shield', LifeMore: '1,000 maximum Life', BlockMore: '1% Chance to Block' };
   function damageWords(mods) {
-    return mods.filter(m => DMG[m.Stat]).map(m => {
+    return mods.filter(m => DMG[m.Stat] || (PER[m.Stat] && m.Mode === 'Flat')).map(m => {
       const v = Math.round(m.Value * 100) / 100;
+      if (PER[m.Stat]) return v + '% more Damage per ' + PER[m.Stat];
       if (m.Mode === 'More') return Math.abs(v) + '% ' + (v < 0 ? 'less ' : 'more ') + DMG[m.Stat];
       if (m.Mode === 'Inc') return Math.abs(v) + '% ' + (v < 0 ? 'reduced ' : 'increased ') + DMG[m.Stat];
       return v + '% ' + DMG[m.Stat];
@@ -4879,6 +4917,8 @@ window.BOBrewery = function (ctx) {
     let h = '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Brewmaw\'s Brewery</h2><p>Plan the potions Brewmaw the Alchemist makes on your wagon. Pick a vessel, a potion and its lines for each slot. Damage lines count in Damage Analysis; turn a slot off there under Vows, Heralds &amp; charges.</p></div>';
     h += ch ? '<p class="hint bw-for">Potions for <b>' + esc(ch.name) + '</b>. Each character keeps its own; plan codes and share links carry them.</p>'
       : '<p class="hint bw-for">Load a character or start a plan to keep potions with it. Until then nothing here is saved or counted.</p>';
+    if (Bsave) h += '<p class="hint bw-for">These are the potions on this character\'s belt in the save. Line values are the tier values from the game data (the game scales some by Rupture Level). Change anything to keep your own belt instead.</p>';
+    else if (Bstored && ch && fromItems(ch)) h += '<p class="hint bw-for">This belt is your own. <button class="btn small ghost" type="button" data-bw-fromsave="1">Use the potions from the save</button></p>';
     const p = P();
     if (!p || !p.Types) { el.innerHTML = h + '<div class="card"><p class="hint">This game data has no potions. Use game files from the 6 Nov 2026 patch or later.</p></div>'; return; }
     const joins = B.early && p.Early80 ? p.Early80.Open : p.Unlock.Open;
@@ -4896,6 +4936,12 @@ window.BOBrewery = function (ctx) {
   function bind() {
     const el = $('#breweryPane'); if (!el || el.dataset.bound) return; el.dataset.bound = '1';
     el.addEventListener('change', onChange);
+    el.addEventListener('click', e => {
+      if (!e.target.closest('[data-bw-fromsave]')) return;
+      use(); if (!Bid) return;
+      try { localStorage.removeItem(KEY(Bid)); } catch (err) { /* storage off */ }
+      Bid = null; use(); render(); renderOv(); if (ctx.onChange) ctx.onChange(); if (ctx.redraw) ctx.redraw();
+    });
   }
   function onChange(e) {
     {
@@ -5001,7 +5047,7 @@ window.BOBrewery = function (ctx) {
   }
 
   // For app.js: a character's belt for a code (null when it has none), and storing one from a code or a copied plan.
-  const belt = id => { use(); return id && id === Bid ? (Bstored ? JSON.parse(JSON.stringify(B)) : null) : read(id); };
+  const belt = id => { use(); return id && id === Bid ? (Bstored || Bsave ? JSON.parse(JSON.stringify(B)) : null) : read(id) || fromItems(charById(id)); };
   function setBelt(id, b) { const c = cleanBelt(b); if (!id || !c) return; write(id, c); if (id === Bid) { B = c; Bstored = true; } }
   const copyBelt = (from, to) => { const b = belt(from); if (b) setBelt(to, b); };
 
@@ -9666,7 +9712,25 @@ window.BOCharacter = function (ctx) {
       // oath_brute at om_warrior_fury" and "swore oath_war_unbowed at om_class_warrior (was None, paid 0 gold, 2 Oaths sworn)").
       oaths: Object.assign({}, R.OathMasteries95 || {}),
       supportGems: R.SupportGems || [], // spare support gems in the inventory
+      // The potion belt: PotionSlots79 holds four item IDs in potions.json Slots order (LifeFlask, ManaFlask,
+      // UtilityPotion1, UtilityPotion2; all zeros = empty), the items themselves sit in PotionSatchel79 (every save
+      // here, 15 Nov 2026; older saves set EquippedSlot instead). Same shape as an ItemDatabase planner link's `pot`,
+      // so the Brewery (brewery.js) and the Save Creator read both alike.
+      potItems: savePotions(R),
+      rupture: Math.max(+((R.RiftMap || {}).BestML) || 0, +((R.RiftMap || {}).RivenOpen) || 0), // Rupture Level as creator.js ruptureNow()
     };
+  }
+  const POT_SLOTS = ['LifeFlask', 'ManaFlask', 'UtilityPotion1', 'UtilityPotion2'];
+  function savePotions(R) {
+    const ids = (R.PotionSlots79 || []).map(x => String(x || '').toLowerCase());
+    return (R.PotionSatchel79 || []).map(x => {
+      const id = String(x.ID || '').toLowerCase(), at = id && !/^0+$/.test(id) ? ids.indexOf(id) : -1;
+      const s = at >= 0 ? POT_SLOTS[at] : x.EquippedSlot;
+      if (!s || s === 'None' || !POT_SLOTS.includes(s)) return null;
+      return { s, b: String(x.BaseID || '').toLowerCase(), u: x.UniqueID && x.UniqueID !== 'None' ? x.UniqueID : '', r: x.Rarity || 'Normal',
+        v: String(x.Look || 'clay').toLowerCase(), il: x.ItemLevel || 0, q: x.Quality || 0,
+        a: (x.Affixes || []).map(a => [a.AffixId, a.Tier, Math.round(+a.Value * 1000) / 1000, Math.round(+a.Value2 * 1000) / 1000]) };
+    }).filter(Boolean);
   }
 
   // ---------- character from an in-game build code ----------
@@ -13629,7 +13693,7 @@ window.BOStartApp = function () {
   const st = {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0 },
     enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: false, enemyLife: null, graveCall: false, flashfire: false, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
-    penFloor: false, opt: null, optJob: null, last: null,
+    penFloor: false, potionsOn: store.get('potionsOn', true) !== false, opt: null, optJob: null, last: null,
     keepSup: new Set(), blockSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
   };
   let upgradeOptimizer = { status: 'idle', results: [], key: '', run: 0 };
@@ -13839,7 +13903,7 @@ window.BOStartApp = function () {
       projOnTarget: +st.projOnTarget || undefined, totemCount: st.totemCount > 0 ? +st.totemCount : undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, castsPerSecOverride: st.cps > 0 ? +st.cps : undefined, penFloor: st.penFloor,
       conduit: st.conduit == null ? undefined : st.conduit,
       coc: st.coc === false ? false : undefined, cocSource: typeof st.coc === 'string' ? st.coc : undefined,
-      potions: brewery ? brewery.simPotions() : [],
+      potions: brewery && st.potionsOn ? brewery.simPotions() : [],
     }, extra || {});
   }
 
@@ -13999,7 +14063,7 @@ window.BOStartApp = function () {
     const vows = src.filter(s => s.group === 'Vows & Heralds' || s.group === 'Potions');
     $('#vowList').innerHTML = vows.length ? vows.map(s => '<li><label><input type="checkbox" data-src="' + esc(s.key) + '"' + (st.off.has(s.key) ? '' : ' checked') + '><span class="name">' + esc(s.label) + '</span></label>' +
       (s.vowbreak ? '<label title="Vowbreak: the Herald\'s extra damage x2.5 for 4 s"><input type="checkbox" data-vowbreak="' + esc(s.vowId) + '"' + (st.vowbreak.has(s.vowId) ? ' checked' : '') + '><span class="meta">Vowbreak</span></label>' : '') + '</li>').join('')
-      : '<li class="hint">No Vows or Heralds on your hotbar, and no potions set in the Brewery.</li>';
+      : '<li class="hint">No Vows or Heralds on your hotbar, and ' + (st.potionsOn ? 'no potions set in the Brewery.' : 'potions are off (Configure Enemy).') + '</li>';
     // Heralds not on the bar: tick one to see the skill with it, at the gem level you set.
     $('#heraldTryList').innerHTML = Object.values(GD.blessings).filter(b => /herald/i.test(b.Id) && b.Kind === 'Vow' && b.Skill && !ch.hotbar.includes(b.Skill)).map(b => {
       const lv = st.tryHeralds[b.Id] || 0;
@@ -15226,7 +15290,10 @@ window.BOStartApp = function () {
     if (moved) { const box = $('#supportSearchResults'); if (box) box.scrollIntoView({ block: 'start' }); }
   });
   $('#optReopen').addEventListener('click', () => { st.optHide = false; renderSupportSearchResults(); });
-  $('#penNeg').addEventListener('change', e => { st.penFloor = !e.target.checked; render(); });
+  // Penetration below 0% stays allowed (st.penFloor false) until a game test says otherwise; its switch was taken off the
+  // page (owner, 15 Nov 2026). In its place: Brewmaw's potions on or off, kept in this browser.
+  $('#potionsOn').checked = st.potionsOn;
+  $('#potionsOn').addEventListener('change', e => { st.potionsOn = e.target.checked; store.set('potionsOn', st.potionsOn); render(); });
   resGrid.addEventListener('input', e => { const d = e.target.dataset.res; if (d) { st.res[d] = e.target.value; render(); } });
   document.querySelectorAll('[data-charge]').forEach(el => el.addEventListener('input', e => { st.charges[e.target.dataset.charge] = Math.max(0, +e.target.value || 0); render(); }));
   const controlsChange = e => {
@@ -17524,7 +17591,7 @@ window.BOStartApp = function () {
       return { id: ch.id, name: ch.name, level: ch.level, main, bar: (ch.hotbar || []).map(sk).filter(Boolean), crit, res, cap: (GD.scaling.Hero || {}).ResistCap || 75 };
     } });
   // The Brewery tab (brewery.js): Brewmaw's potions; the active ones count in the damage sim.
-  brewery = window.BOBrewery({ $, esc, gd: () => GD, current: () => st.ch, onChange: () => { breweryDirty = true; },
+  brewery = window.BOBrewery({ $, esc, gd: () => GD, current: () => st.ch, byId: id => CHARS.find(c => c.id === id) || null, onChange: () => { breweryDirty = true; },
     redraw: () => { if (character) character.render(); if (planner) planner.render(); } }); // the belt cards behind the slot overlay
   const skillIcon = id => (window.GEM_ICONS && window.GEM_ICONS.idx[String(id).toLowerCase()] != null ? skillDot(id) : ''); // the icon only, no colour dot fallback
   scaling = window.BOScaling({ $, esc, gd: () => GD, skillIcon, tip: id => planner.skillTip(null, id, false, true) }); // hover tooltip on a card's title (the Build tab's skill tooltip, game data only)

@@ -46,7 +46,7 @@
 <meta property="og:url" content="https://builder.lilshrimper.dev/ru/build/tree/"><meta property="og:image" content="https://builder.lilshrimper.dev/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=316">
+<link rel="stylesheet" href="../../../style.css?v=317">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -378,7 +378,7 @@
       </div>
       <div class="res-grid" id="resGrid"></div>
       <p class="hint">Blank = the game's own curve (level × 0.36, at most 25%).</p>
-      <label class="check"><input type="checkbox" id="penNeg" checked><span>Penetration can push resistance below 0% <span class="meta">Not confirmed in game. Untick for the cautious rule.</span></span></label>
+      <label class="check"><input type="checkbox" id="potionsOn" checked><span>Enable your Brewmaw potions <span class="meta">Counts the potions from your Brewery belt, or your save's, in every damage number and optimizer.</span></span></label>
       <h3>Curses on the enemy</h3>
       <ul class="checklist" id="curseList"></ul>
       <div class="enemy-fields">
@@ -606,7 +606,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":316,"at":"2026-11-15T22:23:27.256Z"};
+window.SITE_VERSION = {"v":317,"at":"2026-11-15T23:45:04.285Z"};
 window.SITE_LANG = 'ru';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -615,6 +615,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=14188d03","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../../app.js?v=316"></script>
+<script src="../../../app.js?v=317"></script>
 </body>
 </html>

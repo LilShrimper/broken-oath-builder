@@ -4144,7 +4144,10 @@ window.BOCreator = function (ctx) {
   // dropped 6 Guardian Quartz (RL 42,45,48,52,55,58; 0 claimed so far)" on a save whose map was edited with an empty list,
   // and the three online saves played to the top hold [1..7, 142,145,148,152,155,158] with 13 bonus points.
   // Every save has BonusPassivePoints >= the number claimed (19 vs 7, 13 vs 13, 1 vs 1).
-  const QUARTZ_RL = [42, 45, 48, 52, 55, 58];
+  // Six more since (log, 14 Nov 2026): "Guardian The Cyclops Tyrant at ML 84 dropped 6 Guardian Quartz (RL 64,67,74,77,82,84;
+  // 13 claimed so far)"; that online save then held 164,167,174,177,182,184 too, with 19 bonus points. Its map stood at
+  // RivenOpen 129, so no other milestone pays quartz up to 129; whether any pays above it is not known yet.
+  const QUARTZ_RL = [42, 45, 48, 52, 55, 58, 64, 67, 74, 77, 82, 84];
   const QUARTZ_T = ['ArrayProperty', ['IntProperty']];
   function quartzWant() {
     const best = Math.max(mval('BestML', 0) || 0, mval('DeepBest', 0) || 0, mval('RivenOpen', 0) || 0);
@@ -5506,7 +5509,7 @@ window.BOLootFilter = function (ctx) {
     const b = ctx.build ? ctx.build() : null, fb = fromBuild(P.auto ? b : null);
     const plan = makeRules({ stage: P.stage, ssf: P.ssf, primary: P.wants.includes(fb.primary) ? fb.primary : P.wants[0] || null, wants: P.wants, short: fb.short });
     const stage = STAGES.find(s => s[0] === P.stage)[1];
-    load({ filter: { title: (P.auto && b ? b.name + ' ' : '') + stage + (P.ssf ? ' SSF' : ''), preset: CUSTOM, rules: plan.rules }, notes: [] }, 'Made a ' + stage.toLowerCase() + ' filter' + (P.auto && b ? ' for ' + b.name : '') + '.');
+    load({ filter: { title: (P.auto && b ? b.name + ' ' : '') + stage + (P.ssf ? ' SSF' : ''), preset: CUSTOM, rules: plan.rules }, notes: [] }, 'Made ' + (/^[aeiou]/i.test(stage) ? 'an ' : 'a ') + stage.toLowerCase() + ' filter' + (P.auto && b ? ' for ' + b.name : '') + '.');
   }
 
   // The game's MORE panel for one rule. A rule whose extra field is not a "3:" block (a future format) stays read only.
@@ -16077,12 +16080,13 @@ window.BOStartApp = function () {
     else if (banned(id)) $('#treeStatus').textContent = n.Name + ' is marked never take. Right-click it to allow it again.';
     else {
       const pl = planTake(have, id); if (!pl) return;
-      // Cap: one point per level up to max level 100 (not the character's own level, so you can plan ahead) plus the 13 Inscribed Quartz.
+      // Cap: one point per level up to max level 100 (not the character's own level, so you can plan ahead) plus the 19 Inscribed Quartz.
       // Proof (owner's screenshot, 11 Nov 2026): a level 100 character shows 111 allocated and "1 point left" = 112 points.
       const per = (GD.scaling.Hero || {}).PassivePointsPerLevel || 1;
       {
-        // Quartz quests: 7 Gates + 6 Guardian milestones = 13 bonus points (log and saves, 6 Nov 2026; see creator.js).
-        const QUARTZ = 13, cap = Math.round((100 - 1) * per + QUARTZ);
+        // Inscribed Quartz: 7 Gates + 12 Guardian milestones = 19 bonus points (log and saves, 6 Nov 2026: 13; six more at
+        // RL 64-84 seen 14 Nov 2026, an online save at 19 bonus points; see QUARTZ_RL in creator.js). None more up to RL 129.
+        const QUARTZ = 19, cap = Math.round((100 - 1) * per + QUARTZ);
         const used = pl.list.filter(x => GD.nodes[x] && GD.nodes[x].Kind !== 'Start').length;
         if (used > cap && pl.list.length > have.size) {
           $('#treeStatus').textContent = 'No points left: level 100 plus ' + QUARTZ + ' quartz points is ' + cap + ' passive points' + (pl.cost > 1 ? ' and this path needs ' + pl.cost : '') + '. Take a point back first.';

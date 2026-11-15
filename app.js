@@ -3503,7 +3503,7 @@ window.BOPlanner = function (ctx) {
     const rs = rows(ch), r = rs.find(x => x.skill === skill); if (!r) return '';
     return skillRow(ch, r, true, '', rs, onBar(ch));
   }
-  return { skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, supTip, oathwordForItem, slotName: SLOT_NAME, rows, render, fromCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
+  return { skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, supTip, oathwordForItem, slotName: SLOT_NAME, rows, render, fromCode, toCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
 };
 
 ;
@@ -13230,6 +13230,310 @@ window.BOCharacter = function (ctx) {
 })(typeof window !== 'undefined' ? window : globalThis);
 
 ;
+// Discord sign-in and plans saved to an account (owner, 15 Nov 2026; plan: DISCORD_LOGIN_PLAN.md, worker:
+// share-worker/src/accounts.js). Local storage stays the working copy: the page works the same signed out, offline or
+// with the worker down. Signed in, each plan goes to the account a few seconds after its last edit, and the account's
+// plans come back to this browser when the page opens or the tab comes back into view.
+// Testers only for now: ?cloud=1 turns it on in this browser (?cloud=0 off). ?cloudapi=local talks to `wrangler dev`
+// on port 8787 and signs in with its test-only route instead of Discord.
+// app.js calls BOCloud(ctx) and gets back { start, check, removed, reset, badge, enabled }.
+window.BOCloud = function (ctx) {
+  'use strict';
+  const { $, esc } = ctx;
+  const KEY = 'bods:cloud', FLAG = 'bods:cloudOn';
+  const PUSH_DELAY = 3000;     // after the last edit
+  const PULL_EVERY = 60000;    // at most, when the tab comes back into view
+  const CHECK_EVERY = 10000;   // catches edits that don't pass through keepChars (tree tabs, notes, potions)
+  const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* off */ } }, del(k) { try { localStorage.removeItem(k); } catch (e) { /* off */ } } };
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('cloud') === '1') ls.set(FLAG, '1');
+  if (qs.get('cloud') === '0') ls.del(FLAG);
+  const local = qs.get('cloudapi') === 'local';
+  const API = local ? 'http://localhost:8787' : ctx.api;
+  const on = ls.get(FLAG) === '1' && location.protocol !== 'file:';
+
+  // Kept per browser: the session and what this browser last knew of each plan in the account.
+  //   revs: plan id -> the account's rev this browser holds; sigs: plan id -> what the plan looked like then;
+  //   dirty: ids to send; gone: id -> rev, deleted here and still to delete there; localOnly: plans kept off the account.
+  const blank = () => ({ token: '', name: '', since: '', revs: {}, sigs: {}, dirty: [], gone: {}, localOnly: [], asked: false, last: '' });
+  let S = blank();
+  try { S = Object.assign(blank(), JSON.parse(ls.get(KEY) || '{}')); } catch (e) { /* damaged: start clean */ }
+  const save = () => ls.set(KEY, JSON.stringify(S));
+  let state = 'idle', err = '', timer = 0, busy = false, again = false, applying = false, lastPull = 0, menu = null;
+
+  const device = () => {
+    const ua = navigator.userAgent;
+    const os = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Mac OS/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : 'Device';
+    const br = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+    return os + ' · ' + br;
+  };
+  async function call(method, path, body) {
+    let r;
+    try {
+      r = await fetch(API + path, { method, headers: Object.assign({ Authorization: 'Bearer ' + S.token }, body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        body: body === undefined ? undefined : JSON.stringify(body), cache: 'no-store' });
+    } catch (e) { return { s: 0, j: null }; }
+    let j = null; try { j = await r.json(); } catch (e) { /* not json */ }
+    if (r.status === 401 && S.token) signedOut('Your sign-in ended. Sign in again to keep saving plans to your account.');
+    return { s: r.status, j };
+  }
+  const plans = () => ctx.plans();
+  const find = id => plans().find(p => p.id === id);
+  const isDirty = id => S.dirty.includes(id);
+  const markDirty = id => { if (!isDirty(id)) S.dirty.push(id); };
+  const clearDirty = id => { S.dirty = S.dirty.filter(x => x !== id); };
+
+  // ---------- sign-in ----------
+  function signIn() {
+    const back = location.origin + location.pathname + location.search;
+    const q = 'return=' + encodeURIComponent(back) + '&device=' + encodeURIComponent(device());
+    location.href = API + (local ? '/auth/dev?user=tester&' : '/auth/discord?') + q;
+  }
+  async function finishSignIn(code) {
+    let r;
+    try { r = await fetch(API + '/auth/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, device: device() }) }); }
+    catch (e) { return ctx.tip('Could not reach the sign-in service. Check your connection and try again.'); }
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j || !j.token) return ctx.tip((j && j.error) || 'Sign-in failed. Try again.');
+    S = Object.assign(blank(), { token: j.token, name: j.name || 'Signed in', localOnly: S.localOnly });
+    save(); render();
+    await sync(true);
+  }
+  const ERRORS = { cancelled: 'Sign-in cancelled.', expired: 'That sign-in took too long. Try again.', full: 'Too many new accounts today. Try again tomorrow.',
+    unavailable: 'Sign-in is not available right now.', failed: 'Discord sign-in failed. Try again.' };
+  function signedOut(msg) {
+    S = Object.assign(blank(), { localOnly: [] }); save(); state = 'idle'; render();
+    if (msg) ctx.tip(msg);
+  }
+  async function signOut(everywhere) {
+    if (everywhere && !await ctx.confirm('Sign out everywhere?', 'Every browser signed in to this account is signed out. Plans already saved stay in the account and in each browser.', 'Sign out everywhere')) return;
+    if (S.dirty.length || Object.keys(S.gone).length) await sync();
+    await call(everywhere ? 'DELETE' : 'POST', everywhere ? '/me/sessions' : '/auth/logout');
+    signedOut('Signed out. Your plans stay in this browser and in your account.');
+  }
+  async function deleteAccount() {
+    if (!await ctx.confirm('Delete your account?', 'Every plan saved to your account is deleted from it, and every browser is signed out. Plans in this browser stay here. This cannot be undone.', 'Delete account', true)) return;
+    const r = await call('DELETE', '/me');
+    if (r.s === 200) signedOut('Your account and the plans saved to it are deleted. Plans in this browser are still here.');
+    else ctx.tip('Could not delete the account right now. Try again later.');
+  }
+  async function exportAll() {
+    const r = await call('GET', '/me/export');
+    if (r.s !== 200 || !r.j) return ctx.tip('Could not download your plans right now.');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(r.j, null, 1)], { type: 'application/json' }));
+    a.download = 'broken-oath-builds.json'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+  async function devices() {
+    const r = await call('GET', '/me/sessions');
+    if (r.s !== 200 || !r.j) return ctx.tip('Could not list your signed-in browsers right now.');
+    const day = s => new Date(s).toLocaleDateString();
+    ctx.tip('Signed in: ' + r.j.sessions.map(x => (x.device || 'Browser') + (x.current ? ' (this one)' : '') + ', since ' + day(x.created_at)).join('; ') + '.');
+  }
+
+  // ---------- sync ----------
+  // What changed here since this browser last heard from the account.
+  function check() {
+    if (!S.token || applying) return;
+    let any = false;
+    for (const p of plans()) {
+      if (S.localOnly.includes(p.id)) continue;
+      const sig = ctx.sig(p);
+      if (S.sigs[p.id] !== sig) { S.sigs[p.id] = sig; markDirty(p.id); any = true; }
+    }
+    if (any) { save(); schedule(PUSH_DELAY); render(); }
+  }
+  function removed(id) {
+    if (!S.token) return;
+    clearDirty(id); delete S.sigs[id];
+    if (S.revs[id]) { S.gone[id] = S.revs[id]; delete S.revs[id]; schedule(500); }
+    S.localOnly = S.localOnly.filter(x => x !== id);
+    save(); render();
+  }
+  // "Reset loaded" cleared this browser: the account's plans come back at the next sync.
+  function reset() { if (!S.token) return; S.revs = {}; S.sigs = {}; S.dirty = []; S.since = ''; save(); schedule(500); }
+  function schedule(ms) { clearTimeout(timer); timer = setTimeout(() => sync(), ms); }
+
+  async function apply(fn) { applying = true; try { return await fn(); } finally { applying = false; } }
+  // The account's copy as a new plan beside this one, so neither version is lost.
+  async function keepCopy(b, why) {
+    const p = await apply(() => ctx.add(b.code, null, b.name + ' (' + why + ')'));
+    if (p) markDirty(p.id);
+  }
+  async function pull(first) {
+    const r = await call('GET', '/me/builds' + (S.since ? '?since=' + encodeURIComponent(S.since) : ''));
+    if (r.s !== 200 || !r.j) return false;
+    let missed = false; // a plan this browser could not open: the next pull asks from the same point again
+    for (const b of r.j.builds) {
+      const mine = find(b.id), had = S.revs[b.id];
+      if (had === b.rev) continue;
+      if (b.deleted) {
+        if (mine && isDirty(b.id)) { S.revs[b.id] = b.rev; continue; } // edited here: it goes back up (a deleted plan may be saved again)
+        if (mine) await apply(() => ctx.remove(b.id));
+        delete S.revs[b.id]; delete S.sigs[b.id]; clearDirty(b.id);
+        continue;
+      }
+      if (!mine) {
+        if (S.gone[b.id] != null) { S.gone[b.id] = b.rev; continue; } // deleted here, still to delete there
+        if (!(await apply(() => ctx.add(b.code, b.id, b.name)))) { missed = true; continue; }
+      } else if (had == null || isDirty(b.id)) {
+        // This browser already holds a plan of that id (from before signing in), or it changed here and there.
+        // Same content: nothing to do. Otherwise the account's version is kept as a copy and this one goes up over it.
+        S.revs[b.id] = b.rev; S.sigs[b.id] = ctx.sig(mine);
+        if ((await ctx.code(mine)) === b.code) clearDirty(b.id);
+        else { await keepCopy(b, 'other device'); markDirty(b.id); }
+        continue;
+      } else if (!(await apply(() => ctx.replace(b.id, b.code, b.name)))) { missed = true; continue; }
+      S.revs[b.id] = b.rev;
+      const now = find(b.id); if (now) S.sigs[b.id] = ctx.sig(now);
+      clearDirty(b.id);
+    }
+    if (!missed) S.since = r.j.now;
+    lastPull = Date.now();
+    // First sign-in in this browser: ask before sending the plans that were only here.
+    if (first && !S.asked) {
+      const only = plans().filter(p => S.revs[p.id] == null && !S.localOnly.includes(p.id));
+      S.asked = true;
+      if (only.length) {
+        const yes = await ctx.confirm('Save your plans to your account?', 'This browser has ' + only.length + ' plan' + (only.length === 1 ? '' : 's') + ' that ' + (only.length === 1 ? 'is' : 'are') + ' not in your account yet. Save ' + (only.length === 1 ? 'it' : 'them') + ' there too, so ' + (only.length === 1 ? 'it opens' : 'they open') + ' on your other devices? (Plans you make from now on are saved there anyway.)', 'Save to account');
+        if (!yes) S.localOnly = S.localOnly.concat(only.map(p => p.id));
+      }
+    }
+    return true;
+  }
+  async function push() {
+    for (const [id, rev] of Object.entries(S.gone)) {
+      const r = await call('DELETE', '/me/builds/' + encodeURIComponent(id) + '?rev=' + rev);
+      if (r.s === 200) delete S.gone[id];
+      else if (r.s === 409 && r.j && r.j.build) { delete S.gone[id]; if (!r.j.build.deleted) { await apply(() => ctx.add(r.j.build.code, id, r.j.build.name)); S.revs[id] = r.j.build.rev; S.sigs[id] = ctx.sig(find(id)); } }
+      else return false;
+    }
+    for (const id of S.dirty.slice()) {
+      const p = find(id);
+      if (!p || S.localOnly.includes(id)) { clearDirty(id); continue; }
+      let r = await call('PUT', '/me/builds/' + encodeURIComponent(id), { name: p.name || 'Plan', code: await ctx.code(p), baseRev: S.revs[id] || 0 });
+      if (r.s === 409 && r.j && r.j.build) {
+        // Saved on another device since this one last heard: keep that version as a copy, then save this one over it.
+        if (!r.j.build.deleted) await keepCopy(r.j.build, 'other device');
+        S.revs[id] = r.j.build.rev;
+        r = await call('PUT', '/me/builds/' + encodeURIComponent(id), { name: p.name || 'Plan', code: await ctx.code(p), baseRev: S.revs[id] });
+      }
+      if (r.s === 200 && r.j) { S.revs[id] = r.j.rev; clearDirty(id); continue; }
+      if (r.s === 400) { clearDirty(id); S.localOnly.push(id); err = '"' + p.name + '" could not be saved to your account (' + ((r.j && r.j.error) || 'refused') + '). It stays in this browser.'; continue; }
+      if (r.s === 403 || r.s === 429) { err = (r.j && r.j.error) || 'Your account is full.'; return false; }
+      return false;
+    }
+    return true;
+  }
+  async function sync(first) {
+    if (!S.token) return;
+    if (busy) { again = true; return; }
+    busy = true; again = false; state = 'saving'; err = ''; render();
+    let ok = false;
+    try { check(); ok = (await pull(first)) && (await push()); check(); }
+    catch (e) { ok = false; }
+    busy = false;
+    if (!S.token) return render();
+    state = ok ? (err ? 'error' : 'saved') : (navigator.onLine === false ? 'offline' : 'error');
+    if (ok) S.last = new Date().toISOString();
+    save(); render(); ctx.changed();
+    if (again || (ok && S.dirty.length)) schedule(PUSH_DELAY);
+    else if (!ok) schedule(60000); // try again in a minute
+  }
+
+  // ---------- the button and its menu ----------
+  const ago = t => { if (!t) return ''; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
+  function statusText() {
+    if (!S.token) return '';
+    if (state === 'saving' || (S.dirty.length && state !== 'offline' && state !== 'error')) return 'Saving to your account…';
+    if (state === 'offline') return 'Offline: your plans are kept in this browser and saved to your account when you are back online.';
+    if (state === 'error') return err || 'Could not reach your account. Your plans are kept in this browser; trying again in a minute.';
+    return 'All plans saved to your account' + (S.last ? ' (' + ago(S.last) + ')' : '') + '.';
+  }
+  const DISCORD = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 7.5a12 12 0 0 1 7 0M7 16.5c3 1.5 7 1.5 10 0M7.4 6.6C5.6 9.2 4.8 12 5 15.3c1 .9 2.2 1.5 3.4 1.8l.9-1.6M16.6 6.6c1.8 2.6 2.6 5.4 2.4 8.7-1 .9-2.2 1.5-3.4 1.8l-.9-1.6"/><circle cx="9.5" cy="12.3" r="1.1"/><circle cx="14.5" cy="12.3" r="1.1"/></svg>';
+  function render() {
+    const b = $('#cloudBtn'); if (!b) return;
+    b.hidden = !on;
+    if (!on) return;
+    const busyNow = S.token && (state === 'saving' || S.dirty.length > 0) && state !== 'offline' && state !== 'error';
+    b.dataset.state = !S.token ? 'out' : busyNow ? 'saving' : state === 'offline' || state === 'error' ? 'warn' : 'saved';
+    b.innerHTML = S.token
+      ? '<span class="cloud-initial notranslate" aria-hidden="true">' + esc((S.name || '?').trim().charAt(0).toUpperCase()) + '</span><span class="cloud-name notranslate">' + esc(S.name) + '</span><span class="cloud-dot" aria-hidden="true"></span>'
+      : DISCORD + '<span class="cloud-word">Sign in</span>';
+    b.setAttribute('aria-label', S.token ? 'Account: ' + S.name + '. ' + statusText() : 'Sign in with Discord to save your plans to an account');
+    b.title = S.token ? statusText() : 'Sign in with Discord to save your plans to an account, so they open on every device';
+    if (menu) fillMenu();
+  }
+  function fillMenu() {
+    const only = plans().filter(p => S.localOnly.includes(p.id)).length;
+    menu.innerHTML = '<p class="cloud-status">' + esc(statusText()) + '</p>' +
+      '<button type="button" data-c="sync">Save and refresh now</button>' +
+      (only ? '<button type="button" data-c="upload">Save the ' + only + ' plan' + (only === 1 ? '' : 's') + ' kept only here</button>' : '') +
+      '<button type="button" data-c="export">Download all my plans</button>' +
+      '<button type="button" data-c="devices">Signed-in browsers</button>' +
+      '<button type="button" data-c="out">Sign out</button>' +
+      '<button type="button" data-c="outall">Sign out everywhere</button>' +
+      '<button type="button" data-c="delete" class="danger">Delete my account…</button>';
+  }
+  function closeMenu() { if (menu) { menu.remove(); menu = null; const b = $('#cloudBtn'); if (b) b.setAttribute('aria-expanded', 'false'); } }
+  function openMenu(b) {
+    menu = document.createElement('div');
+    menu.className = 'lang-menu cloud-menu'; menu.setAttribute('role', 'menu');
+    fillMenu();
+    document.body.appendChild(menu);
+    const r = b.getBoundingClientRect(), w = menu.offsetWidth, h = menu.offsetHeight;
+    menu.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + 'px';
+    menu.style.top = (r.bottom + 6 + h < innerHeight - 8 ? r.bottom + 6 : Math.max(8, r.top - h - 6)) + 'px';
+    b.setAttribute('aria-expanded', 'true');
+    menu.querySelector('button').focus();
+    menu.addEventListener('click', async e => {
+      const c = e.target.closest('button[data-c]'); if (!c) return;
+      const what = c.dataset.c; closeMenu();
+      if (what === 'sync') sync();
+      else if (what === 'upload') { S.localOnly = S.localOnly.filter(id => !find(id)); S.sigs = Object.fromEntries(Object.entries(S.sigs).filter(([id]) => S.revs[id] != null)); save(); check(); sync(); }
+      else if (what === 'export') exportAll();
+      else if (what === 'devices') devices();
+      else if (what === 'out') signOut(false);
+      else if (what === 'outall') signOut(true);
+      else if (what === 'delete') deleteAccount();
+    });
+  }
+
+  function start() {
+    const b = $('#cloudBtn'); if (!b) return;
+    b.setAttribute('aria-haspopup', 'true'); b.setAttribute('aria-expanded', 'false');
+    b.addEventListener('click', e => { e.stopPropagation(); if (menu) return closeMenu(); if (!S.token) return signIn(); openMenu(b); });
+    document.addEventListener('click', e => { if (menu && !menu.contains(e.target)) closeMenu(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && menu) { closeMenu(); b.focus(); } });
+    addEventListener('resize', closeMenu);
+    render();
+    // Back from Discord: #login=<one-time code> (or #login-error=<why>). Taken out of the address at once.
+    const m = location.hash.match(/^#login=([A-Za-z0-9_-]{20,100})$/), bad = location.hash.match(/^#login-error=([a-z]+)$/);
+    if (m || bad) history.replaceState(null, '', location.pathname + location.search);
+    if (!on) return;
+    if (m) finishSignIn(m[1]);
+    else if (bad) ctx.tip(ERRORS[bad[1]] || ERRORS.failed);
+    else if (S.token) sync();
+    document.addEventListener('visibilitychange', () => {
+      if (!S.token) return;
+      if (document.visibilityState === 'hidden') { check(); if (S.dirty.length) sync(); }
+      else if (Date.now() - lastPull > PULL_EVERY) sync();
+    });
+    addEventListener('online', () => { if (S.token) sync(); });
+    setInterval(check, CHECK_EVERY);
+  }
+  // A plan's mark in the character list: saved to the account, waiting to be saved, or kept only in this browser.
+  function badge(id) {
+    if (!on || !S.token) return '';
+    if (S.localOnly.includes(id)) return 'local';
+    if (isDirty(id) || S.revs[id] == null) return 'saving';
+    return 'saved';
+  }
+  return { start, check, removed, reset, badge, enabled: () => on, signedIn: () => !!S.token };
+};
+
+;
 // Page logic for DamageSim.html. Data comes in as window.GD (game data) and window.CHARS (characters).
 // The app starts once GD exists: built into the page (local copy) or read from the player's own game
 // folder (public page, see boot() at the end).
@@ -13303,6 +13607,7 @@ window.BOStartApp = function () {
   let upgradeOptimizer = { status: 'idle', results: [], key: '', run: 0 };
 
   let planner = null; // the Build tab (planner.js), made at the start
+  let cloud = null; // plans saved to a Discord account (cloud.js), made at the start
   let creator = null; // the Save Creator tab (creator.js)
   let fossil = null; // the Fossil Planner tab (fossil.js)
   let lootFilter = null; // the Loot Filter tab (lootfilter.js)
@@ -14778,9 +15083,15 @@ window.BOStartApp = function () {
     document.removeEventListener('mousedown', charPick.out, true); document.removeEventListener('keydown', charPick.key, true); window.removeEventListener('scroll', charPick.out, true); window.removeEventListener('resize', charPick.out);
     charPick = null; if (refocus) $('#charSelect').focus({ preventScroll: true });
   }
+  // A plan's account state in the list (cloud.js): saved, waiting to be saved, or kept only in this browser.
+  const CLOUD_MARK = { saved: ['✓', 'Saved to your account'], saving: ['…', 'Waiting to be saved to your account'], local: ['', 'Kept only in this browser'] };
+  function cloudMark(c) {
+    const k = c.plan && cloud ? cloud.badge(c.id) : ''; if (!k) return '';
+    return '<span class="cloud-mark cloud-' + k + '" title="' + CLOUD_MARK[k][1] + '" aria-label="' + CLOUD_MARK[k][1] + '">' + CLOUD_MARK[k][0] + '</span>';
+  }
   function charPickHtml() {
     const cur = $('#charSelect').value;
-    const item = c => '<div class="pl-pick-item char-pick-item' + (c.id === cur ? ' on' : '') + '" role="option" tabindex="-1" aria-selected="' + (c.id === cur) + '" data-v="' + esc(c.id) + '"><span>' + esc(charLabel(c)) + '</span>' +
+    const item = c => '<div class="pl-pick-item char-pick-item' + (c.id === cur ? ' on' : '') + '" role="option" tabindex="-1" aria-selected="' + (c.id === cur) + '" data-v="' + esc(c.id) + '"><span>' + esc(charLabel(c)) + '</span>' + cloudMark(c) +
       '<button type="button" class="x" tabindex="-1" data-rmchar="' + esc(c.id) + '" aria-label="' + esc((c.plan ? 'Delete the plan ' : 'Remove ') + c.name + (c.plan ? '' : ' from the list')) + '">×</button></div>';
     const chars = CHARS.filter(c => !c.plan), plans = CHARS.filter(c => c.plan);
     return (chars.length ? '<div class="pl-pick-group">Characters</div>' + chars.map(item).join('') : '') + (plans.length ? '<div class="pl-pick-group">Plans</div>' + plans.map(item).join('') : '');
@@ -14830,6 +15141,7 @@ window.BOStartApp = function () {
       if (!await confirmInPage('Delete this plan?', 'The plan "' + ch.name + '" is deleted from this browser. This cannot be undone (a share link you made of it still opens).', 'Delete plan', true)) return;
     }
     if (ch.file) { const h = store.get('hiddenChars', []) || []; if (!h.includes(id)) store.set('hiddenChars', h.concat(id)); }
+    if (ch.plan && cloud) cloud.removed(ch.id); // and from the account
     const wasOn = st.chOrig === ch || (st.chOrig && st.chOrig.id === id);
     CHARS = CHARS.filter(c => c !== ch); keepChars();
     if (wasOn) {
@@ -14961,6 +15273,7 @@ window.BOStartApp = function () {
     if (grail) grail.clear();
     CHARS = CHARS.filter(c => c.file || (c.plan && !withPlans));
     if (withPlans) planner.render();
+    if (withPlans && cloud) cloud.reset(); // plans saved to the account come back (signed in)
     keepChars();
     $('#saveDirLabel').textContent = 'Load saves folder';
     saveTip('');
@@ -14975,8 +15288,12 @@ window.BOStartApp = function () {
     return ch;
   }
   // Characters loaded here (not the ones built into the page) stay in this browser, so a refresh keeps them.
+  // Up to 60 loaded characters plus up to 200 plans (plans are what people keep; an account holds up to 300).
   function keepChars() {
-    try { localStorage.setItem('bods:chars', JSON.stringify(CHARS.filter(c => !c.file).slice(0, 60))); return true; } catch (e) { return false; }
+    const mine = CHARS.filter(c => !c.file), list = mine.filter(c => c.plan).slice(0, 200).concat(mine.filter(c => !c.plan).slice(0, 60));
+    const kept = (() => { try { localStorage.setItem('bods:chars', JSON.stringify(list)); return true; } catch (e) { return false; } })();
+    if (cloud) cloud.check();
+    return kept;
   }
   function addChars(list, from, selectId) {
     // A fresh folder read replaces the last one, and drops builds loaded from codes (plans stay).
@@ -17084,18 +17401,21 @@ window.BOStartApp = function () {
     if (t.dataset.bwSlot != null) brewery.openSlot(+t.dataset.bwSlot); else showTab('brewery');
   });
   document.addEventListener('keydown', e => { const t = e.target; if ((e.key === 'Enter' || e.key === ' ') && t && t.dataset && t.dataset.bwSlot != null) { e.preventDefault(); brewery.openSlot(+t.dataset.bwSlot); } });
+  // A plan with what is kept beside it: its tree tabs (the open plan's live ones, another plan's stored ones) and potions.
+  function planWithTabs(ch) {
+    const open = ch === st.chOrig;
+    const t = open ? treeTabs() : store.get('trees:' + ch.id, null);
+    const belt = brewery && brewery.belt(ch.id);
+    if (belt) ch = Object.assign({}, ch, { potions: belt }); // and the plan's potions (Brewery tab)
+    if (!t || !Array.isArray(t.sets) || t.sets.length < 2) return ch;
+    if (open) syncTreeTab();
+    return Object.assign({}, ch, { trees: { active: t.active, sets: t.sets.map(s => ({ name: s.name, passives: s.passives.slice() })) } });
+  }
   planner = window.BOPlanner({
     beltCard: () => brewery ? brewery.beltCard() : '',
     GD, S, $, esc, gemDot, skillDot, confirm: confirmInPage, importCode: text => importAnyCode(text), bestSupports: bestSupportsFor, supMarks: marksFor,
     // A plan code carries the plan's tree tabs too (when it has more than one).
-    withTabs: ch => {
-      const t = ch === st.chOrig ? treeTabs() : null;
-      const belt = brewery && brewery.belt(ch.id);
-      if (belt) ch = Object.assign({}, ch, { potions: belt }); // and the plan's potions (Brewery tab)
-      if (!t || t.sets.length < 2) return ch;
-      syncTreeTab();
-      return Object.assign({}, ch, { trees: { active: t.active, sets: t.sets.map(s => ({ name: s.name, passives: s.passives.slice() })) } });
-    },
+    withTabs: ch => planWithTabs(ch),
     current: () => st.ch, workingCopy: () => st.ch,
     // "Include in simulations" on the Skills view = the Also count weights (st.optW).
     countable: id => (st.pickable || []).some(s => s.id === id), simSkill: () => st.skill,
@@ -17111,6 +17431,7 @@ window.BOStartApp = function () {
     edited: buildEdited,
     add: (p, from) => { if (from && brewery) brewery.copyBelt(from.id, p.id); addChars([p], 'plan', p.id); }, // from: the plan it duplicates
     remove: ch => {
+      if (ch.plan && cloud) cloud.removed(ch.id);
       CHARS = CHARS.filter(c => c !== ch); keepChars(); fillChars((CHARS[0] || {}).id);
       if (CHARS.length) selectChar(CHARS[0].id); else { st.ch = st.chOrig = null; render(); planner.render(); }
     },
@@ -17261,6 +17582,38 @@ window.BOStartApp = function () {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 
+  // Plans saved to a Discord account (cloud.js; testers only for now: ?cloud=1). It adds, replaces and removes plans here
+  // as the account changes, without changing which character is open unless that one changed.
+  async function cloudPlan(code, id, name) {
+    let p; try { p = await planner.fromCode(code); } catch (e) { console.warn('Account plan not opened:', e && e.message); return null; }
+    if (id) p.id = id;
+    if (name) p.name = name;
+    p = keepSharedTabs(p); p.from = 'plan';
+    return p;
+  }
+  function cloudShow(openId) {
+    const cur = st.chOrig ? st.chOrig.id : $('#charSelect').value;
+    fillChars(CHARS.some(c => c.id === cur) ? cur : (CHARS[0] || {}).id);
+    if (openId && CHARS.some(c => c.id === openId)) selectChar(openId);
+    else if (!CHARS.some(c => c.id === cur)) { if (CHARS.length) selectChar(CHARS[0].id); else { st.ch = st.chOrig = null; render(); planner.render(); } }
+    if (charPick) charPick.box.innerHTML = charPickHtml();
+  }
+  cloud = window.BOCloud({
+    $, esc, api: SHARE_API, confirm: confirmInPage, tip: saveTip,
+    plans: () => CHARS.filter(c => c.plan && !c.file),
+    // What a plan looks like now, with what is kept beside it (tree tabs, notes, potions): a change here means "save it".
+    sig: ch => JSON.stringify(ch) + '|' + JSON.stringify(store.get('trees:' + ch.id, null)) + '|' + (store.get('notes:' + ch.id, '') || '') + '|' + JSON.stringify(brewery ? brewery.belt(ch.id) || null : null),
+    code: ch => { const c = planWithTabs(ch), notes = store.get('notes:' + ch.id, ''); return planner.toCode(notes && String(notes).trim() ? Object.assign({}, c, { notes: String(notes).slice(0, NOTES_MAX) }) : c); },
+    add: async (code, id, name) => { const p = await cloudPlan(code, id, name); if (!p) return null; CHARS = CHARS.filter(c => c.id !== p.id); CHARS.push(p); keepChars(); cloudShow(); return p; },
+    replace: async (id, code, name) => {
+      const p = await cloudPlan(code, id, name); if (!p) return null;
+      const at = CHARS.findIndex(c => c.id === id); if (at < 0) CHARS.push(p); else CHARS[at] = p;
+      keepChars(); cloudShow(st.chOrig && st.chOrig.id === id ? id : null); return p;
+    },
+    remove: id => { CHARS = CHARS.filter(c => c.id !== id); keepChars(); cloudShow(); },
+    changed: () => { if (charPick) charPick.box.innerHTML = charPickHtml(); },
+  });
+
   // Start: characters loaded on an earlier visit come back (a newer copy built into the page wins).
   try {
     for (const ch of JSON.parse(localStorage.getItem('bods:chars') || '[]')) {
@@ -17275,6 +17628,7 @@ window.BOStartApp = function () {
   const startId = store.get('char', null);
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();
+  cloud.start(); // back from Discord sign-in (#login=), or a sync of the account's plans
   // Landing: Build Planner > Character for anyone with a character; a first visit with none gets the welcome page (Damage view).
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
   const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);

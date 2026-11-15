@@ -72,7 +72,10 @@ h3 { font-size: 11.5px; margin: 14px 0 6px; color: var(--muted); text-transform:
 /* The language button sits at the top right of the Tools bar; the tab row keeps that corner free (padding-right). */
 .main-tabs-wrap { position: relative; }
 .view-bar .main-tabs-wrap > .main-tabs { padding-right: 128px; }
-.lang-pick { position: absolute; top: 5px; right: 5px; display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 11px 0 7px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); color: var(--muted); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+/* The account button (src/cloud.js) sits left of it; both in .top-actions. */
+.top-actions { position: absolute; top: 5px; right: 5px; display: flex; gap: 6px; }
+.view-bar .main-tabs-wrap:has(#cloudBtn:not([hidden])) > .main-tabs { padding-right: 290px; }
+.lang-pick { position: static; display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 11px 0 7px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); color: var(--muted); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
 .lang-pick:hover, .lang-pick[aria-expanded="true"] { border-color: var(--accent); color: var(--text); }
 .lang-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .lang-pick svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
@@ -81,8 +84,29 @@ h3 { font-size: 11.5px; margin: 14px 0 6px; color: var(--muted); text-transform:
   .view-bar { position: relative; }
   .main-tabs-wrap { position: static; }
   .view-bar .main-tabs-wrap > .main-tabs { padding-right: 3px; }
-  .lang-pick { top: -9px; right: 0; height: 32px; font-size: 12.5px; }
+  .top-actions { top: -9px; right: 0; }
+  .lang-pick { height: 32px; font-size: 12.5px; }
+  .view-bar .main-tabs-wrap:has(#cloudBtn:not([hidden])) > .main-tabs { padding-right: 3px; }
+  .cloud-pick .cloud-name, .cloud-pick .cloud-word { display: none; }
+  .cloud-pick { padding: 0 9px 0 7px; }
 }
+/* Account button and menu (src/cloud.js): a Discord sign-in, then the name with a dot for the save state. */
+.cloud-pick .cloud-initial { display: grid; place-items: center; width: 22px; height: 22px; flex: none; border-radius: 50%; background: color-mix(in srgb, var(--dashboard-gold, var(--accent)) 20%, transparent); color: var(--dashboard-gold, var(--accent)); font-size: 11.5px; font-weight: 700; }
+.cloud-pick .cloud-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.cloud-pick .cloud-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--muted); }
+.cloud-pick[data-state="saved"] .cloud-dot { background: var(--good); }
+.cloud-pick[data-state="saving"] .cloud-dot { background: var(--accent); animation: cloud-pulse 1.2s ease-in-out infinite; }
+.cloud-pick[data-state="warn"] .cloud-dot { background: var(--bad); }
+@keyframes cloud-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .cloud-pick[data-state="saving"] .cloud-dot { animation: none; } }
+.cloud-menu { min-width: 230px; max-width: min(300px, calc(100vw - 16px)); }
+.cloud-menu .cloud-status { margin: 4px 10px 6px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+.cloud-menu button.danger { color: var(--bad); }
+.cloud-menu button.danger:hover, .cloud-menu button.danger:focus-visible { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); }
+.char-pick-item > span:first-child { flex: 1; }
+.cloud-mark { flex: none; min-width: 14px; font-size: 12px; text-align: center; color: var(--muted); }
+.cloud-mark.cloud-saved { color: var(--good); }
+.cloud-mark.cloud-local::before { content: ""; display: inline-block; width: 6px; height: 6px; border: 1px solid var(--muted); border-radius: 50%; }
 .lang-menu { position: fixed; z-index: 1000; display: grid; min-width: 132px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: 0 8px 24px rgb(0 0 0 / .35); }
 .lang-menu button { padding: 7px 10px; border: 0; border-radius: 7px; background: none; color: var(--muted); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
 .lang-menu button:hover, .lang-menu button:focus-visible { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--text); outline: none; }

@@ -1425,6 +1425,16 @@ body.lootfilter-page #buildSummary { display: none !important; } /* the characte
 .lf-want.on.primary { box-shadow: inset 0 0 0 1px var(--dashboard-gold); font-weight: 600; }
 .lf-want:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .lf-reading summary { cursor: pointer; color: var(--text); font-weight: 600; font-size: 13px; }
+.lf-more { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.lf-more summary { cursor: pointer; color: var(--dashboard-gold); font-weight: 700; font-size: 13px; letter-spacing: .04em; }
+:root[data-theme="light"] .lf-more summary, :root[data-theme="light"] .lf-wrap h3 { color: #8a6a1c; }
+.lf-mgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 8px; }
+.lf-more .field > span { display: flex; align-items: baseline; gap: 6px; }
+.lf-more input[type=text] { margin-top: 4px; }
+.lf-pickchip { display: inline-flex; align-items: center; gap: 4px; color: var(--text); }
+.lf-unpick { border: 0; background: none; color: var(--muted); cursor: pointer; font: inherit; font-size: 11px; padding: 0 2px; }
+.lf-unpick:hover { color: var(--bad); }
+.lf-unpick:focus-visible { outline: 2px solid var(--accent); border-radius: 4px; }
 .lf-reading ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); display: grid; gap: 5px; font-size: 13px; }
 .lf-act { flex: none; min-width: 74px; padding: 3px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 700; text-align: center; text-transform: uppercase; letter-spacing: .04em; border: 1px solid var(--line); color: var(--muted); }
 .lf-act.a0 { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--line)); }

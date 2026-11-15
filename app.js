@@ -5024,9 +5024,15 @@ window.BOBrewery = function (ctx) {
 // The game's rules: up to 12 rules, the TOP matching rule wins, no match = shown; some items are never hidden.
 // Share code: BOFILTER:1,<preset> then one |on,type,rarity,level,line,action,colour,quality,count,sound per rule; readers skip
 // fields they do not know, so fields past the known ones are kept as they are.
-// Not known yet (owner to test in game): what <preset> means, whether colour 0 means "no colour", which affixes count toward
-// each "Has a line" group, what "Good roll" / "Top roll" mean, sound values other than 0 and 255. The page keeps an imported
-// preset as it is and writes 0 for a new filter.
+// The game has moved past this file (switches.json build 76, r95.ITEMS bFilterV3: the "v3 rule engine" behind each rule's
+// MORE button: tier, N+ lines, sockets, item level and required level ranges, Base Grade, reds, unsworn, gear / rune row,
+// named base, named line, named red; "share codes keep the v2 head"). Their code layout was read from the owner's game copies
+// (15 Nov 2026; see "the game's MORE fields" below): all editable but named lines, which are kept as they are.
+// Not known yet (owner to test in game): which affixes count toward each "Has a line" group, what "Good roll" / "Top roll"
+// mean, the values of the sounds (the panel lists Chime, Soft, Jewel, Wind, Silent; 0 = Silent). The page keeps an imported
+// preset as it is and writes -1 for its own filters: the game's panel copies a custom filter out as BOFILTER:1,-1|...
+// (owner, 15 Nov 2026: our test code pasted with preset 0 came back from the game's Copy filter as -1, rules unchanged,
+// rule 5's on = 0 kept). What 0 and up mean (the game's own presets?) is not known.
 // The filter is kept in this browser (bods:lootfilter). Rule names are ours only: the game code has none, so they travel in
 // our links (#f=<code>&n=<names>&t=<title>), not in the code.
 // app.js calls BOLootFilter(ctx) and gets back { render, openFromHash }.
@@ -5038,7 +5044,12 @@ window.BOLootFilter = function (ctx) {
     neverHidden: ['uniques', 'runes', 'Dwarven Runes', 'idols', 'the Cube', 'gems', 'currency', 'gold', 'flasks'],
     prefix: 'BOFILTER:1',
     fields: ['on', 'type', 'rarity', 'level', 'line', 'action', 'colour', 'quality', 'count', 'sound'],
-    colours: [[1, 'jade', [0.30, 0.92, 0.52]], [2, 'frost', [0.36, 0.78, 1.0]], [3, 'bone', [1.0, 0.95, 0.84]]],
+    // 8 colours (switches.json r95.ITEMS bFilterCol95 = True, build 76: "colours 4 -> 8 (ember, jade, frost, bone + gold,
+    // blood, ash, white), 0..3 unchanged"), so 0 is ember, not "no colour". loot_filter.md gives the linear RGB of 1-3 only;
+    // the others (marked true) are our approximations for the swatch, not the game's numbers.
+    // Ember: the game's panel shows colour 0 as an amber blot (owner's screenshots, 15 Nov); swatch taken from that picture.
+    colours: [[0, 'ember', [0.91, 0.56, 0.11], true], [1, 'jade', [0.30, 0.92, 0.52]], [2, 'frost', [0.36, 0.78, 1.0]], [3, 'bone', [1.0, 0.95, 0.84]],
+      [4, 'gold', [1.0, 0.6, 0.05], true], [5, 'blood', [0.5, 0.01, 0.01], true], [6, 'ash', [0.3, 0.3, 0.3], true], [7, 'white', [1.0, 1.0, 1.0], true]],
     type: [[0, 'Any gear'], [1, 'Weapons'], [2, 'Armour'], [3, 'Jewellery'], [4, 'Rune bases'], [5, 'Helms'], [6, 'Body armour'], [7, 'Gloves'], [8, 'Boots'],
       [9, 'Shields & foci'], [10, 'Rings'], [11, 'Amulets'], [12, 'Belts'], [13, 'Core-touched'], [14, 'Idols'], [15, '4+ sockets'], [16, 'Truesworn']],
     rarity: [[0, 'Any rarity'], [1, 'Normal'], [2, 'Magic'], [3, 'Normal & magic'], [4, 'Rare'], [5, 'Rare & unique']],
@@ -5049,15 +5060,22 @@ window.BOLootFilter = function (ctx) {
     quality: [[0, 'Any roll'], [1, 'Good roll'], [2, 'Top roll']],
     count: [[0, '1 line'], [1, '2+ lines'], [2, '3+ lines']],
     action: [[0, 'Hide'], [1, 'Show'], [2, 'Highlight'], [3, 'Highlight + beam']],
-    sound: [[0, 'Silent'], [255, 'Auto']],
+    // Sounds from the owner's game copies, 15 Nov 2026 (Highlight rules set to each sound, then Copy filter).
+    sound: [[0, 'Silent'], [1, 'Chime'], [2, 'Soft'], [3, 'Jewel'], [4, 'Wind'], [255, 'Auto']],
     later: { title: 'Socket count and base type as conditions', text: 'Not rule conditions today (the type chip is the item class, e.g. Boots, not a single base). Both are being considered for a later filter update; no promise or date yet.' },
   };
   // The game data's copy wins field by field; anything it lacks comes from DEFAULTS.
-  const L = () => Object.assign({}, DEFAULTS, (ctx.gd && ctx.gd() && ctx.gd().lootFilter) || {});
+  // Colours merge by index: the file's exact RGB wins, DEFAULTS add the colours it does not list.
+  const L = () => {
+    const g = (ctx.gd && ctx.gd() && ctx.gd().lootFilter) || {}, out = Object.assign({}, DEFAULTS, g);
+    for (const k of ['colours', 'sound']) if (g[k]) { const m = new Map(DEFAULTS[k].map(c => [c[0], c])); for (const c of g[k]) m.set(c[0], c); out[k] = [...m.values()].sort((a, b) => a[0] - b[0]); }
+    return out;
+  };
   const name = (key, v) => { const x = (L()[key] || []).find(o => o[0] === v); return x ? x[1] : null; };
   const NEW_RULE = { on: 1, type: 0, rarity: 0, level: 0, line: 0, action: 1, colour: 0, quality: 0, count: 0, sound: 255 };
   const newRule = () => Object.assign({ name: '', extra: [] }, NEW_RULE);
-  const blank = () => ({ title: '', preset: '0', rules: [] });
+  const CUSTOM = '-1';
+  const blank = () => ({ title: '', preset: CUSTOM, rules: [] });
 
   // ---------- the share code ----------
   function encode(f) {
@@ -5072,7 +5090,7 @@ window.BOLootFilter = function (ctx) {
     if (!m) throw new Error('That is not a loot filter code. It should start with BOFILTER:1,');
     const notes = [];
     if ('BOFILTER:' + m[1] !== lf.prefix) notes.push('This code is format ' + m[1] + '; the page knows format ' + lf.prefix.split(':')[1] + '. Check it in game before use.');
-    const f = { title: '', preset: m[2] || '0', rules: [] };
+    const f = { title: '', preset: m[2] || CUSTOM, rules: [] };
     const parts = m[3].split('|').slice(1);
     for (const p of parts) {
       const v = p.split(','), r = newRule();
@@ -5091,13 +5109,14 @@ window.BOLootFilter = function (ctx) {
     if (!x || typeof x !== 'object' || !Array.isArray(x.rules)) return null;
     const f = blank();
     f.title = typeof x.title === 'string' ? x.title.slice(0, 80) : '';
-    f.preset = /^[\w.-]{0,12}$/.test(String(x.preset)) ? String(x.preset) || '0' : '0';
+    f.preset = /^[\w.-]{0,12}$/.test(String(x.preset)) ? String(x.preset) || CUSTOM : CUSTOM;
     f.rules = x.rules.slice(0, 40).map(r => {
       const o = newRule();
       if (r && typeof r === 'object') {
         for (const k of Object.keys(NEW_RULE).concat(L().fields)) if (r[k] != null && isFinite(+r[k])) o[k] = +r[k];
         o.name = typeof r.name === 'string' ? r.name.slice(0, 60) : '';
-        o.extra = Array.isArray(r.extra) ? r.extra.slice(0, 20).map(v => String(v).slice(0, 12)) : [];
+        // The game's MORE fields ride here ("3:t=1;n=3;i=70-80", named bases/lines/reds can be long): keep them whole.
+        o.extra = Array.isArray(r.extra) ? r.extra.slice(0, 40).map(v => String(v).slice(0, 400)) : [];
       }
       return o;
     });
@@ -5198,20 +5217,79 @@ window.BOLootFilter = function (ctx) {
     }
     return null;
   }
-  // The rule that decides the item: { i, rule, trace: [[i, why]] } (i = -1: no rule, the item is shown).
+  // ---------- the game's MORE fields (filter v3) ----------
+  // Learned from the owner's game copy, 15 Nov 2026 (rules set in the MORE panel, then Copy filter):
+  //   1,0,1,0,0,0,0,0,0,255,3:t=1;n=3;s=4;i=70-80   = T1 lines, 3+ lines, 4+ sockets, item level 70 to 80
+  //   1,0,1,0,0,0,0,0,0,255,3:q=40-60;r=1;u=2       = requires level 40 to 60, Reds only, Unsworn only
+  //   1,0,1,0,0,0,0,0,0,255,3:rt=3                  = Runes up to T3 (a rune row, not a gear row)
+  //   1,0,1,0,0,0,0,0,0,255,3:i=60-0;g=70           = item level 60+ (0 = no limit on that side), Grade 70+
+  //   1,0,1,0,0,0,0,0,0,255,3:i=0-75;g=90           = item level 75 or lower, Truesworn (grade 90+)
+  //   ...,3:b=silk_gloves_6+silk_helm_7;a=attack_speed_local+attack_speed+idol_attack_speed_s+idol_attack_speed_m
+  //                                                 = two named bases (base ids), one named line "#% increased Attack Speed"
+  //   ...,3:rn=community_binas_spotters_helm        = one named red (unique id)
+  // An 11th field "3:" + key=value pairs split by ";", only when something in MORE is set; lists joined by "+", up to 4 picks.
+  // Named lines stay read only: the game wrote 4 affix ids for "Attack Speed" where our data has 9 with that text, so we
+  // cannot rebuild its grouping yet. Also unknown: the key of the named line's "any of them" switch. Unknown keys are kept.
+  function more(r) {
+    const s = (r.extra || []).join(','), m = s.match(/^3:(.*)$/);
+    if (!m) return null;
+    const o = {};
+    for (const p of m[1].split(';')) if (p) { const i = p.indexOf('='); o[i < 0 ? p : p.slice(0, i)] = i < 0 ? '' : p.slice(i + 1); }
+    return o;
+  }
+  // Write a MORE object back the way the game does (its key order; defaults left out; nothing set = no 11th field).
+  const MORE_ORDER = ['t', 'n', 's', 'i', 'q', 'g', 'r', 'u', 'rt', 'b', 'a', 'rn'];
+  function setMore(r, o) {
+    const keys = MORE_ORDER.filter(k => k in o).concat(Object.keys(o).filter(k => !MORE_ORDER.includes(k)));
+    const parts = keys.filter(k => { const v = String(o[k]); return v !== '' && v !== '0' && v !== '0-0'; }).map(k => k + '=' + o[k]);
+    r.extra = parts.length ? ['3:' + parts.join(';')] : [];
+  }
+  const TIER = ['Any tier', 'T1 lines', 'T2 or better', 'T3 or better', 'T4 or better', 'T5 or better'];
+  const GRADE = [[0, 'Any grade'], [50, 'Grade 50+'], [70, 'Grade 70+'], [90, 'Truesworn']]; // 70 and 90 seen; 50 by the same pattern
+  const LEVELS = [10, 20, 30, 40, 50, 60, 68, 70, 75, 80, 84, 90]; // the panel's full list (owner's screenshots, 15 Nov 2026; same for item and required level, both sides)
+  const rangeOf = v => { const [a, b] = String(v || '0-0').split('-'); return [+a || 0, +b || 0]; };
+  const range = (v, what) => { const [a, b] = rangeOf(v); return a && b ? what + ' ' + a + ' to ' + b : a ? what + ' ' + a + '+' : b ? what + ' ' + b + ' or lower' : what + ' any'; };
+  const ids = v => String(v || '').split('+').filter(Boolean);
+  const gdName = (key, id) => { const gd = ctx.gd && ctx.gd(), x = gd && gd[key] && (gd[key][id] || (Array.isArray(gd[key]) ? gd[key].find(y => y.Id === id) : Object.values(gd[key]).find(y => y.Id === id))); return x ? x.Name : id; };
+  // A named line's text, from the first of its affixes (the stat text with # for the number).
+  function lineText(v) {
+    const gd = ctx.gd && ctx.gd(), first = ids(v)[0], a = gd && gd.affixes && (gd.affixes[first] || Object.values(gd.affixes).find(y => y.Id === first));
+    const t = a && a.Mod && gd.statText && gd.statText[a.Mod.Stat + '.' + a.Mod.Mode];
+    return t ? t.replace(/\{v\d?\}/g, '#').replace(/\s*\{tags\}/g, '') : first || v;
+  }
+  const MORE_LABEL = {
+    t: v => TIER[+v] || 'Tier ' + v, n: v => v + '+ lines', s: v => v + '+ sockets',
+    i: v => range(v, 'Item level'), q: v => range(v, 'Requires level'),
+    g: v => (GRADE.find(x => x[0] === +v) || [0, 'Grade ' + v + '+'])[1],
+    r: v => ({ 1: 'Reds only', 2: 'Chase reds' })[v] || 'Reds ' + v, u: v => ({ 1: 'Not unsworn', 2: 'Unsworn only' })[v] || 'Unsworn ' + v,
+    rt: v => 'Runes up to T' + v,
+    b: v => 'Base: ' + ids(v).map(id => gdName('bases', id)).join(' or '),
+    a: v => 'Named line: ' + lineText(v),
+    rn: v => 'Red: ' + ids(v).map(id => gdName('uniques', id)).join(' or ') };
+  const moreChips = r => { const o = more(r); return o ? Object.entries(o).map(([k, v]) => MORE_LABEL[k] ? MORE_LABEL[k](v) : 'MORE ' + k + '=' + v) : []; };
+  const runeRow = r => { const o = more(r); return !!(o && +o.rt); };
+
+  // The rule that decides the item: { i, rule, trace: [[i, why]], unsure } (i = -1: no rule, the item is shown).
+  // A rule with MORE fields: the page checks its main conditions only, so a match there is "unsure".
   function decide(it) {
     const lf = L(), trace = [];
     for (let i = 0; i < Math.min(F.rules.length, lf.maxRules); i++) {
       const r = F.rules[i];
       if (!r.on) { trace.push([i, 'the rule is off']); continue; }
-      const why = miss(r, it);
-      if (!why) return { i, rule: r, trace };
+      if (runeRow(r)) { trace.push([i, 'it is a rune rule (MORE: ' + moreChips(r).join(', ') + '), not for gear']); continue; }
+      let why = miss(r, it);
+      const mo = more(r);
+      if (!why && mo && mo.i) { const [a, b] = rangeOf(mo.i); if ((a && it.ilvl < a) || (b && it.ilvl > b)) why = 'item level ' + it.ilvl + ', its MORE wants ' + range(mo.i, 'item level').replace(/^item level /, ''); }
+      // Unsure only when MORE holds something the tester cannot check (anything but the item level).
+      if (!why) return { i, rule: r, trace, unsure: !!(mo && Object.keys(mo).some(k => k !== 'i')) };
       trace.push([i, why]);
     }
     return { i: -1, rule: null, trace };
   }
   // Does rule a catch every item rule b catches? (Then b, below a, is never reached.) Unknown values: no.
+  // A rule with MORE fields catches less than its main conditions say, and a rune row catches runes, not gear: never "covers".
   function covers(a, b) {
+    if (more(a) || runeRow(b)) return false;
     if (a.type && a.type !== b.type && !(TYPE_HOLDS[a.type] || []).includes(b.type)) return false;
     if (!has(RARITY, a.rarity) || !has(RARITY, b.rarity) || ![...RARITY[b.rarity]].every(x => RARITY[a.rarity].includes(x))) return false;
     if (!has(LEVEL, a.level) || !has(LEVEL, b.level)) return false;
@@ -5268,7 +5346,7 @@ window.BOLootFilter = function (ctx) {
     if (r.line) c.push(label('line', r.line) + ' line');
     if (r.quality) c.push(label('quality', r.quality));
     if (r.count) c.push(label('count', r.count));
-    return c;
+    return runeRow(r) ? moreChips(r) : c.concat(moreChips(r));
   }
   function actionChip(r) {
     const col = isLit(r) && colour(r.colour);
@@ -5330,7 +5408,8 @@ window.BOLootFilter = function (ctx) {
     else if (isHide(r) && (T.rarity === 'U' || T.kind === 'idol')) verdict = '<b>Rule ' + (d.i + 1) + '</b> would hide it, but the game never hides ' + (T.kind === 'idol' ? 'idols' : 'uniques') + ': it is shown.';
     else {
       const col = isLit(r) && colour(r.colour);
-      verdict = '<b>Rule ' + (d.i + 1) + (r.name ? ' (' + esc(r.name) + ')' : '') + '</b> catches it: ' + actionChip(r) + (col ? ' in ' + esc(col[1]) : '');
+      verdict = '<b>Rule ' + (d.i + 1) + (r.name ? ' (' + esc(r.name) + ')' : '') + '</b> catches it: ' + actionChip(r) + (col ? ' in ' + esc(col[1]) : '') +
+        (d.unsure ? ' <span class="hint">if its MORE conditions (' + esc(moreChips(r).join(', ')) + ') also fit; the page cannot test those</span>' : '');
     }
     h += '<div class="lf-verdict' + (r ? ' a' + r.action : '') + '">' + verdict + '</div>';
     if (d.trace.length) h += '<ul class="lf-trace">' + d.trace.map(([i, why]) => '<li><span>Rule ' + (i + 1) + '</span> skips it: ' + esc(why) + '.</li>').join('') + '</ul>';
@@ -5343,6 +5422,14 @@ window.BOLootFilter = function (ctx) {
   // SSF keeps more bases for crafting. "Wanted lines" come from the character on screen (ctx.build(), app.js): its
   // main skill's tags and damage type, curses on the bar, crit on the main skill, and resistances below the cap.
   const STAGES = [['level', 'Levelling'], ['mid', 'Mid-game'], ['end', 'Endgame']];
+  // The game's own presets, as its Copy filter writes them (owner's copies, 15 Nov 2026, game build 76). Loading one keeps
+  // its preset number, so the game sees the same preset.
+  const GAME_PRESETS = [
+    [0, 'All loot', 'BOFILTER:1,0|1,13,0,0,0,3,0,0,0,255'],
+    [1, 'Tidy', 'BOFILTER:1,1|1,13,0,0,0,3,0,0,0,255|1,4,1,0,0,1,0,0,0,255|1,16,3,0,0,2,0,0,0,255|1,0,1,0,0,0,0,0,0,255'],
+    [2, 'Strict', 'BOFILTER:1,2|1,13,0,0,0,3,0,0,0,255|1,4,1,0,0,1,0,0,0,255|1,16,3,6,0,2,0,0,0,255|1,0,3,0,0,0,0,0,0,255|1,0,4,6,0,3,0,0,0,255'],
+    [3, 'Very strict', 'BOFILTER:1,3|1,13,0,0,0,3,0,0,0,255|1,4,1,0,0,1,0,0,0,255|1,16,3,6,0,2,0,0,0,255|1,0,3,0,0,0,0,0,0,255|1,0,4,3,0,0,0,0,0,255|1,3,4,6,0,3,2,0,0,255|1,0,4,0,5,3,0,0,0,255'],
+    [4, 'End Game', 'BOFILTER:1,4|1,13,0,0,0,3,0,0,0,255|1,4,1,0,0,1,0,0,0,255|1,16,3,6,0,2,0,0,0,255|1,0,4,7,0,3,0,2,1,255|1,0,4,0,5,3,0,0,0,255|1,0,4,6,0,2,1,1,2,255|1,0,4,4,0,0,0,0,0,255|1,0,3,0,0,0,0,0,0,255']];
   const DMG_GROUP = { Fire: 11, Cold: 12, Lightning: 13, Physical: 14, Poison: 15 };
   const RES_GROUP = { Fire: 16, Cold: 17, Lightning: 18, Poison: 19 };
   const BASIC_WANTS = [1, 2]; // Life, Resistance: every build
@@ -5399,7 +5486,9 @@ window.BOLootFilter = function (ctx) {
     const key = P.auto && b ? b.id + '|' + (b.main ? b.main.id : '') : '';
     if (P.wants == null || P.key !== key) { P.wants = fb.wants.slice(); P.key = key; }
     const lf = L(), groups = (lf.line || []).filter(o => o[0]);
-    let h = '<div class="card lf-preset-card"><h2>Start from a preset</h2><p class="hint">Makes a filter from a few choices; edit it like any other afterwards. This is our own advice, not the game\'s.</p>';
+    let h = '<div class="card lf-preset-card"><h2>Start from a preset</h2>';
+    h += '<div class="field"><span>The game\'s own presets</span><div class="lf-row">' + GAME_PRESETS.map(g => '<button class="btn small ghost" type="button" data-lf-game="' + g[0] + '">' + esc(g[1]) + '</button>').join('') + '</div></div>';
+    h += '<h3>Or fit one to a build</h3><p class="hint">Makes a filter from a few choices; edit it like any other afterwards. This part is our own advice, not the game\'s.</p>';
     h += '<div class="field"><span>Stage</span><div class="lf-seg" role="radiogroup" aria-label="Stage">' + STAGES.map(s => '<button type="button" role="radio" aria-checked="' + (P.stage === s[0]) + '" class="' + (P.stage === s[0] ? 'on' : '') + '" data-lfp-stage="' + s[0] + '">' + s[1] + '</button>').join('') + '</div></div>';
     h += '<label class="lf-flag"><input type="checkbox" data-lfp-ssf' + (P.ssf ? ' checked' : '') + '> Solo self-found (keep more bases and rares for crafting)</label>';
     h += '<label class="lf-flag"><input type="checkbox" data-lfp-auto' + (P.auto ? ' checked' : '') + (b ? '' : ' disabled') + '> ' + (b ? 'Fit it to <b>' + esc(b.name) + '</b> (' + esc(b.main ? b.main.name : 'no skill') + ')' : 'Fit it to a character (load one, or open a Ladder build in the planner)') + '</label>';
@@ -5417,7 +5506,51 @@ window.BOLootFilter = function (ctx) {
     const b = ctx.build ? ctx.build() : null, fb = fromBuild(P.auto ? b : null);
     const plan = makeRules({ stage: P.stage, ssf: P.ssf, primary: P.wants.includes(fb.primary) ? fb.primary : P.wants[0] || null, wants: P.wants, short: fb.short });
     const stage = STAGES.find(s => s[0] === P.stage)[1];
-    load({ filter: { title: (P.auto && b ? b.name + ' ' : '') + stage + (P.ssf ? ' SSF' : ''), preset: '0', rules: plan.rules }, notes: [] }, 'Made a ' + stage.toLowerCase() + ' filter' + (P.auto && b ? ' for ' + b.name : '') + '.');
+    load({ filter: { title: (P.auto && b ? b.name + ' ' : '') + stage + (P.ssf ? ' SSF' : ''), preset: CUSTOM, rules: plan.rules }, notes: [] }, 'Made a ' + stage.toLowerCase() + ' filter' + (P.auto && b ? ' for ' + b.name : '') + '.');
+  }
+
+  // The game's MORE panel for one rule. A rule whose extra field is not a "3:" block (a future format) stays read only.
+  let moreOpen = false;
+  function moreEditor(r) {
+    const o = more(r);
+    if (!o && r.extra && r.extra.length) return '<p class="hint">This rule carries more from its code that this page does not know (' + esc(r.extra.join(',')) + '); it is kept as it is.</p>';
+    const m = o || {}, gd = ctx.gd && ctx.gd();
+    const opt = (v, t, on) => '<option value="' + esc(String(v)) + '"' + (on ? ' selected' : '') + '>' + esc(t) + '</option>';
+    const sel = (key, title, list) => { const v = +(m[key] || 0); return '<label class="field"><span>' + title + '</span><select data-lf-more="' + key + '">' + (list.some(x => x[0] === v) ? '' : opt(v, 'Value ' + v, true)) + list.map(x => opt(x[0], x[1], x[0] === v)).join('') + '</select></label>'; };
+    const lvl = (key, side, title, none, fmt) => {
+      const v = rangeOf(m[key])[side], list = [[0, none]].concat(LEVELS.map(n => [n, fmt(n)]));
+      return '<label class="field"><span>' + title + '</span><select data-lf-more="' + key + ':' + side + '">' + (list.some(x => x[0] === v) ? '' : opt(v, fmt(v), true)) + list.map(x => opt(x[0], x[1], x[0] === v)).join('') + '</select></label>';
+    };
+    const upto = (k, n) => [[0, k === 'n' ? 'Any lines' : 'Any sockets']].concat([1, 2, 3, 4, 5, 6].map(i => [i, i + '+ ' + (k === 'n' ? 'lines' : 'sockets')]));
+    const picks = (key, title, src, hint) => {
+      const have = ids(m[key]);
+      return '<div class="field"><span>' + title + ' <small class="hint">' + have.length + ' of 4</small></span>' +
+        (have.length ? '<div class="lf-chips">' + have.map(id => '<span class="lf-chip lf-pickchip">' + esc(gdName(src, id)) + '<button type="button" class="lf-unpick" data-lf-unpick="' + key + ':' + esc(id) + '" aria-label="Remove ' + esc(gdName(src, id)) + '">✕</button></span>').join('') + '</div>' : '') +
+        (have.length < 4 ? '<input type="text" list="lf-list-' + src + '" data-lf-pick="' + key + '" placeholder="' + hint + '">' : '') + '</div>';
+    };
+    const n = o ? Object.keys(o).length : 0;
+    let h = '<details class="lf-more"' + (moreOpen || n ? ' open' : '') + '><summary>More conditions' + (n ? ' (' + n + ' set)' : '') + '</summary><p class="hint">The game\'s MORE panel. ' +
+      (runeRow(r) ? '<b>Rune rule:</b> it acts on runes up to that tier; the item conditions above do not apply. ' : '') + '</p>';
+    h += '<div class="lf-mgrid">' +
+      sel('rt', 'Row', [[0, 'Gear row']].concat([1, 2, 3, 4, 5, 6].map(i => [i, 'Runes up to T' + i]))) +
+      sel('t', 'Line tier', TIER.map((t, i) => [i, t])) + sel('n', 'Lines', upto('n')) + sel('s', 'Sockets', upto('s')) +
+      lvl('i', 0, 'Item level from', 'Any item level', x => 'Item level ' + x + '+') + lvl('i', 1, 'Item level up to', 'No max item level', x => 'Item level ' + x + ' or lower') +
+      lvl('q', 0, 'Required level from', 'Any required level', x => 'Requires level ' + x + '+') + lvl('q', 1, 'Required level up to', 'No max required level', x => 'Requires level ' + x + ' or lower') +
+      sel('g', 'Grade', GRADE) + sel('r', 'Reds', [[0, 'Red or not'], [1, 'Reds only'], [2, 'Chase reds']]) + sel('u', 'Unsworn', [[0, 'Unsworn or not'], [1, 'Not unsworn'], [2, 'Unsworn only']]) +
+      '</div>';
+    h += picks('b', 'Named bases', 'bases', 'Type a base name') + picks('rn', 'Named reds', 'uniques', 'Type a red name');
+    h += '<div class="field"><span>Named lines</span>' + (m.a ? '<div class="lf-chips"><span class="lf-chip">' + esc(lineText(m.a)) + '</span></div>' : '') +
+      '<small class="hint">Set named lines in the game for now: it groups several affixes under one line and the page cannot match its grouping yet. A code that has them keeps them.</small></div>';
+    // Name lists for the pickers (one per kind; the browser filters them as you type).
+    const list = (src, key) => { const all = gd && gd[key] ? (Array.isArray(gd[key]) ? gd[key] : Object.values(gd[key])) : []; return '<datalist id="lf-list-' + src + '">' + all.map(x => '<option value="' + esc(x.Name) + '">').join('') + '</datalist>'; };
+    h += list('bases', 'bases') + list('uniques', 'uniques');
+    return h + '</details>';
+  }
+  // A name typed in a picker -> its id (exact name, any case).
+  function idByName(src, name) {
+    const gd = ctx.gd && ctx.gd(), all = gd && gd[src] ? (Array.isArray(gd[src]) ? gd[src] : Object.values(gd[src])) : [];
+    const x = all.find(y => String(y.Name).toLowerCase() === String(name).trim().toLowerCase());
+    return x ? x.Id : null;
   }
 
   function details() {
@@ -5433,13 +5566,15 @@ window.BOLootFilter = function (ctx) {
         '<button type="button" class="lf-sw' + (c[0] === r.colour ? ' on' : '') + '" data-lf-colour="' + c[0] + '" aria-pressed="' + (c[0] === r.colour) + '"><i style="background:' + css(c[2]) + '"></i>' + esc(c[1].charAt(0).toUpperCase() + c[1].slice(1)) + '</button>').join('') + '</div>' +
         (colour(r.colour) ? '' : '<small class="hint">No colour picked (code value ' + esc(String(r.colour)) + ').</small>') + '</div>';
     }
-    if (!isHide(r)) h += field('sound', 'Sound', r, 'Auto lets the game choose.');
+    // In-game panel (owner's screenshot, 15 Nov 2026, our test code pasted): only Highlight rules have a sound (and colour);
+    // Show and Hide have none. Sound 255 showed as "Chime" on a Highlight + beam rule and "Silent" on a plain Highlight.
+    if (isLit(r)) h += field('sound', 'Sound', r, 'Auto lets the game choose: in game it came out as Chime with a beam and Silent on a plain highlight.');
     h += '<h3>Item</h3>';
     h += field('type', 'Item type', r) + field('rarity', 'Rarity', r) + field('level', 'Item level', r);
     h += '<h3>Lines</h3>';
     h += field('line', 'Has a line', r) + field('quality', 'Line roll', r) + field('count', 'How many lines', r);
     h += '<p class="hint">The game\'s list does not say which affixes count toward each line group.</p>';
-    if (r.extra && r.extra.length) h += '<p class="hint">This rule carries ' + r.extra.length + ' more field' + (r.extra.length === 1 ? '' : 's') + ' from its code that this page does not know (' + esc(r.extra.join(', ')) + '); they are kept as they are.</p>';
+    h += moreEditor(r);
     return h + '</div>';
   }
 
@@ -5469,7 +5604,8 @@ window.BOLootFilter = function (ctx) {
       '<span class="hint lf-copied" aria-live="polite"></span></div></div>';
     // Notes
     h += '<div class="card lf-notes"><h2>Good to know</h2><ul>' +
-      '<li>Never hidden, whatever the rules say: ' + esc((lf.neverHidden || []).join(', ')) + '.</li>' +
+      '<li>Never hidden, whatever the rules say: ' + esc((lf.neverHidden || []).join(', ')) + '. One exception: a rule set to "Runes up to T1" to "T6" in the game\'s MORE panel can hide low runes.</li>' +
+      '<li>Each rule\'s "More conditions" match the game\'s MORE panel. Named lines can only be set in the game for now; a code that has them keeps them.</li>' +
       '<li>Each rule tests one line group. For two groups (say Life and Resistance), use two rules: the higher one wins.</li>' +
       (lf.later ? '<li>' + esc(lf.later.title) + ': ' + esc(lf.later.text.replace(/\s*The share code will keep.*$/, '')) + '</li>' : '') +
       '<li>The options come from the developer\'s loot filter list in the Broken Oath public API' + (ctx.gd && ctx.gd() && ctx.gd().lootFilter ? '' : ' (build 73 copy)') + '.</li>' +
@@ -5482,7 +5618,9 @@ window.BOLootFilter = function (ctx) {
   // ---------- events ----------
   let readingOpen = false;
   function testChange() { keepT(); render(); }
-  function change(fn, keepMsg) { fn(); keep(); if (!keepMsg) { msg = ''; msgUndo = null; } render(); }
+  // Any rule edit makes the filter custom (preset -1), as the game marks a filter whose rules are not a preset's.
+  function change(fn, keepMsg) { fn(); F.preset = CUSTOM; keep(); if (!keepMsg) { msg = ''; msgUndo = null; } render(); }
+  function editMore(fn) { const r = F.rules[sel]; if (!r) return; change(() => { const o = more(r) || {}; fn(o); setMore(r, o); }); }
   async function copy(text, done) {
     const out = $('#lootFilterPane .lf-copied');
     try { await navigator.clipboard.writeText(text); if (out) out.textContent = done; } catch (e) { window.prompt('Copy this:', text); }
@@ -5496,8 +5634,10 @@ window.BOLootFilter = function (ctx) {
       if (d.lfMove) { const [i, s] = d.lfMove.split(':').map(Number), j = i + s; if (j < 0 || j >= F.rules.length) return; change(() => { const x = F.rules.splice(i, 1)[0]; F.rules.splice(j, 0, x); if (sel === i) sel = j; else if (sel === j) sel = i; }); return; }
       if (d.lfDup != null) { const i = +d.lfDup; if (F.rules.length >= lf.maxRules) return; change(() => { F.rules.splice(i + 1, 0, JSON.parse(JSON.stringify(F.rules[i]))); sel = i + 1; }); return; }
       if (d.lfDel != null) { const i = +d.lfDel; change(() => { F.rules.splice(i, 1); if (sel >= F.rules.length) sel = F.rules.length - 1; else if (sel > i) sel--; }); return; }
-      if (d.lfAction != null) { const r = F.rules[sel]; if (!r) return; change(() => { r.action = +d.lfAction; if (isLit(r) && !colour(r.colour)) r.colour = (lf.colours[0] || [1])[0]; if (!isLit(r)) r.colour = 0; }); return; }
+      if (d.lfAction != null) { const r = F.rules[sel]; if (!r) return; change(() => { const was = isLit(r); r.action = +d.lfAction; if (isLit(r) && (!was || !colour(r.colour))) r.colour = 1; if (!isLit(r)) r.colour = 0; }); return; }
       if (d.lfColour != null) { const r = F.rules[sel]; if (r) change(() => { r.colour = +d.lfColour; }); return; }
+      if (d.lfUnpick) { const i = d.lfUnpick.indexOf(':'), k = d.lfUnpick.slice(0, i), id = d.lfUnpick.slice(i + 1); editMore(o => { o[k] = ids(o[k]).filter(x => x !== id).join('+'); }); return; }
+      if (d.lfGame != null) { const g = GAME_PRESETS.find(x => x[0] === +d.lfGame); if (g) { const got = decode(g[2]); load(got, 'Loaded the game\'s ' + g[1] + ' preset.'); render(); } return; }
       if (d.lfpStage) { P.stage = d.lfpStage; render(); return; }
       if (d.lfpWant) { const g = +d.lfpWant, i = P.wants.indexOf(g); if (i >= 0) P.wants.splice(i, 1); else P.wants.push(g); render(); return; }
       if (d.lftAdd != null) { if (T.lines.length < 8) { const used = new Set(T.lines.map(l => l.g)), g = ((L().line || []).find(o => o[0] && !used.has(o[0])) || [1])[0]; T.lines.push({ g, roll: 0 }); testChange(); } return; }
@@ -5523,6 +5663,17 @@ window.BOLootFilter = function (ctx) {
       const t = e.target;
       if (t.dataset.lfOn != null) { const r = F.rules[+t.dataset.lfOn]; if (r) change(() => { r.on = t.checked ? 1 : 0; }); return; }
       if (t.dataset.lfField) { const r = F.rules[sel]; if (r) change(() => { r[t.dataset.lfField] = +t.value; }); return; }
+      if (t.dataset.lfMore) {
+        const [k, side] = t.dataset.lfMore.split(':'), v = +t.value || 0;
+        editMore(o => { if (side == null) o[k] = String(v); else { const rg = rangeOf(o[k]); rg[+side] = v; o[k] = rg.join('-'); } });
+        return;
+      }
+      if (t.dataset.lfPick) {
+        const k = t.dataset.lfPick, id = idByName(k === 'b' ? 'bases' : 'uniques', t.value);
+        if (id) editMore(o => { const l = ids(o[k]); if (!l.includes(id) && l.length < 4) l.push(id); o[k] = l.join('+'); });
+        else if (t.value.trim()) { msg = 'No ' + (k === 'b' ? 'base' : 'red') + ' is called "' + t.value.trim() + '". Pick a name from the list.'; msgUndo = null; render(); }
+        return;
+      }
       // The tester.
       const v = t.dataset.lft;
       if (v === 'kind') { T.kind = t.value; T.base = ''; if (T.kind === 'idol') T.flags.sockets = false; return testChange(); }
@@ -5534,7 +5685,7 @@ window.BOLootFilter = function (ctx) {
       if (t.dataset.lftFlag) { T.flags[t.dataset.lftFlag] = t.checked; return testChange(); }
       if (t.dataset.lftLine) { const [i, f] = t.dataset.lftLine.split(':'), l = T.lines[+i]; if (l) { l[f] = +t.value; testChange(); } return; }
     });
-    el.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('lf-reading')) readingOpen = e.target.open; }, true);
+    el.addEventListener('toggle', e => { if (!e.target.classList) return; if (e.target.classList.contains('lf-reading')) readingOpen = e.target.open; if (e.target.classList.contains('lf-more')) moreOpen = e.target.open; }, true);
     // Names: kept as typed, without redrawing (that would take the focus away); the list catches up on blur.
     el.addEventListener('input', e => {
       const t = e.target;

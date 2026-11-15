@@ -1534,6 +1534,7 @@ window.PAGE_LANGS = {
     const rivenMax = lim(cfg.maxRiven, 999);
     const isRiven = id => (GD.affixes[lc(id)] || {}).Kind === 'Riven';
     const rivenOn = list => (list || []).filter(a => !a.id.startsWith('unique:') && isRiven(a.id)).length;
+    let collect = null; // Sim by Slot: every candidate tried (see cfg.onlySlot below)
     let calcs = 0, lastYield = 0, curPhase = 'Starting', curP = 0, rush = false;
     const late = () => Date.now() > deadline;
     const prog = () => ({ phase: curPhase, p: curP });
@@ -1707,7 +1708,7 @@ window.PAGE_LANGS = {
       // The off hand's weapon must be a kind the skill can use too (a one-hander, so it is never a bow / staff here).
       const okBase = b => (!filter || filter(b)) && ((slot !== 'MainHand' && !(slot === 'OffHand' && oneHandWeapon(b))) || mainOk(b));
       let best = { item: keepIt, v: keepIt && okBase(baseOf(keepIt)) && !coreBan(keepIt) ? V(items) : 0 };
-      const offer = (it, v) => { if (v > best.v * (1 + MIN_GAIN)) best = { item: it, v }; };
+      const offer = (it, v, kind) => { if (collect && it && v > 0) collect.push({ item: it, v, kind }); if (v > best.v * (1 + MIN_GAIN)) best = { item: it, v }; };
       // A candidate in this slot; the other hand is cleared when it can't be held with it.
       const trial = it => {
         let its = put(items, slot, it);
@@ -1729,7 +1730,7 @@ window.PAGE_LANGS = {
         const it = mk(GD.bases[lc(u.BaseId)], { rarity: 'Unique', unique: u.Id, name: u.Name });
         rollUnique(it, 1);
         const v = V(trial(it)); scored.push({ it, v });
-        offer(it, v);
+        offer(it, v, 'unique');
         if (due()) yield prog();
       }
       if (useVows) {
@@ -1737,7 +1738,7 @@ window.PAGE_LANGS = {
         for (const s of scored.slice(0, Math.max(1, K - 1))) {
           if (late()) break;
           const f = yield* fillAffixes(items, slot, s.it, true);
-          offer(f.item, V(trial(f.item)));
+          offer(f.item, V(trial(f.item)), 'unique');
         }
       }
       // Oathwords (a plain item with the runes in order)
@@ -1746,7 +1747,7 @@ window.PAGE_LANGS = {
         if (late()) break;
         for (const b of distinct(oathBases(slot, w).filter(okBase))) {
           const it = mk(b, { rarity: 'Normal', runes: w.Runes.slice() });
-          offer(it, V(trial(it)));
+          offer(it, V(trial(it)), 'oathword');
           if (due()) yield prog();
         }
       }
@@ -1761,7 +1762,7 @@ window.PAGE_LANGS = {
           const f = yield* fillAffixes(items, slot, s.it, false);
           let item = f.item, v = f.v;
           if (useRunes && rareSockets(baseOf(item)) && !late()) { const r = yield* fillRunes(trial(item).filter(i => i.slot !== slot), slot, item, v); item = r.item; }
-          offer(item, V(trial(item)));
+          offer(item, V(trial(item)), 'rare');
         }
       }
       return { item: best.item, v: best.v, kept: best.item === keepIt };
@@ -1844,6 +1845,33 @@ window.PAGE_LANGS = {
     let idolLayout = null, idolCells = 0;
     const base0 = V(items);
     if (!goals.length || !(goals[0].base > 0) || !(base0 > 0)) return { error: 'This skill has no DPS to optimize.' };
+    // Sim by Slot (owner's request, 14 Nov 2026): cfg.onlySlot = one slot only, the rest of the gear as worn. Every candidate the
+    // search tries there is kept (uniques, with Vows on the best few; Oathwords; rares filled on the best cfg.slotK bases) and
+    // the list comes back ranked, one row per unique, per Oathword (its best base) and per rare base. Same item rules and score as the full search.
+    if (cfg.onlySlot) {
+      const slot = cfg.onlySlot, K = Math.max(1, Math.round(+cfg.slotK || 8));
+      collect = [];
+      curPhase = phaseName(slot); curP = 0; yield prog();
+      const mainB = baseOf(at(items, 'MainHand'));
+      const r = yield* bestFor(slot, items, slot === 'OffHand' ? b => offOk(mainB, b) : null, K);
+      const best = new Map();
+      for (const c of collect) {
+        // One row per unique and per Oathword (on its best base); rares one per base.
+        const k = c.kind === 'unique' ? 'u:' + lc(c.item.unique) : c.kind === 'oathword' ? 'o:' + c.item.runes.join('+') : 'r:' + lc(c.item.base);
+        const o = best.get(k); if (!o || c.v > o.v) best.set(k, c);
+      }
+      const worn = at(items, slot);
+      // Rares on bases that play the same (they differ only in a name or defences the score does not count) show once.
+      const seen = new Set();
+      const rows = [...best.values()].sort((a, b) => b.v - a.v).filter(c => {
+        if (c.kind !== 'rare') return true;
+        const k = c.v.toPrecision(9) + JSON.stringify(c.item.affixes.map(x => x.id).sort()) + c.item.runes.join();
+        return !seen.has(k) && seen.add(k);
+      }).slice(0, Math.max(1, +cfg.slotRows || 40));
+      const trialOf = it => { let its = put(items, slot, it); if (slot === 'MainHand' && !offOk(baseOf(it), baseOf(at(its, 'OffHand')))) its = put(its, 'OffHand', null); return its; };
+      for (const row of rows) { row.gain = row.v / base0 - 1; row.dps = dpsOf(goals[0], trialOf(row.item)); row.dropsOff = slot === 'MainHand' && !!at(items, 'OffHand') && !at(trialOf(row.item), 'OffHand'); }
+      return { onlySlot: slot, rows, worn, base: base0, dps0: goals[0].base, empty: V(put(items, slot, null)), calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, scored, defWeight: defW, multi: multi && goals.length > 1, skills: goals.map(g => g.id), dropped, topKept: r.kept };
+    }
     const SLOTS = SINGLE.concat(items.filter(i => i.slot === 'DwarvenRune').length > 1 ? ['DwarvenRune2'] : []);
     const total = 1 + SLOTS.length + (idolN ? 1 : 0);
     let done = 0;
@@ -2679,7 +2707,7 @@ window.BOPlanner = function (ctx) {
         ctx.skillDot(r.skill) + '<select data-f="skill"' + dis + '>' + skillOpts(r.skill) + '</select>' +
         '<label class="field inline"><span>Gem level</span><input type="number" min="1" max="40" data-f="glevel" value="' + lvl + '"' + dis + '></label>' +
         '<label class="check-row"><input type="checkbox" data-f="bar"' + (bar.includes(r.skill) ? ' checked' : '') + dis + '><span>On bar</span></label>' +
-        '<label class="check-row" title="The skill the Damage tab opens on"><input type="radio" name="plMain" data-f="main"' + (ch.mainSkill === r.skill ? ' checked' : '') + dis + '><span>Main</span></label>' +
+        '<label class="check-row" title="The skill the Damage tab opens on"><input type="radio" name="plMain" data-f="main"' + (((ctx.simSkill && ctx.simSkill()) || ch.mainSkill) === r.skill ? ' checked' : '') + dis + '><span>Main</span></label>' +
         countBox(r.skill) +
         (edit ? '<button class="x" type="button" aria-label="Remove this skill" data-act="rmskill">×</button>' : '') + '</div>' +
         (sk ? '' : '<p class="hint bad">Unknown skill ' + esc(r.skill) + '</p>') +
@@ -7767,11 +7795,22 @@ window.BOCharacter = function (ctx) {
       const canSim = sk && !(ctx.sim.dealsNoHits && ctx.sim.dealsNoHits(sk)) && ctx.supportSearch;
       h += '<div class="ch-skill' + (lc(r.skill) === main ? ' main' : '') + '" data-skwin="' + esc(r.skill) + '" tabindex="0" role="button" aria-label="Edit ' + esc(sk ? sk.Name : r.skill) + '" title="Click to edit this skill: gem level, supports, skill bar"><div class="ch-skill-name" data-tip="skill" data-id="' + esc(r.skill) + '">' + ctx.skillDot(r.skill) + '<b>' + esc(sk ? sk.Name : r.skill) + '</b>' +
         '<span class="meta">level ' + (ch.gemLevels[r.skill] || 1) + (bar.has(r.skill) ? '' : ' · off the bar') + (lc(r.skill) === main ? ' · main skill' : '') + '</span>' +
-        '<span class="ch-skill-acts">' + (canSim ? '<button class="btn small ghost ch-simsup" type="button" data-simsup="' + esc(r.skill) + '" title="Tries the support combinations for this skill at its gem level, against the enemy set on the Damage tab">Sim Supports</button>' : '') +
+        '<span class="ch-skill-acts">' + (canSim ? '<button class="btn small ghost ch-simsup" type="button" data-simsup="' + esc(r.skill) + '" title="Opens this skill: pin or block supports, then run Sim Supports there">Sim Supports</button>' : '') +
         '<button class="x ch-skill-x" type="button" data-rmskill="' + esc(r.skill) + '" aria-label="Remove ' + esc(sk ? sk.Name : r.skill) + '">×</button></span></div>' +
-        sups.map(id => '<div class="ch-sup" data-tip="sup" data-id="' + esc(id) + '" tabindex="0">' + ctx.gemDot(id) + esc((gd.supports[lc(id)] || { Name: id }).Name) + '</div>').join('') + '</div>';
+        sups.map(id => '<div class="ch-sup" data-tip="sup" data-id="' + esc(id) + '" tabindex="0">' + ctx.gemDot(id) + esc((gd.supports[lc(id)] || { Name: id }).Name) + '</div>').join('') + skillChecks(r.skill, main) + '</div>';
     }
     return h + '</div>';
+  }
+
+  // "Include in Sim" and "Mark as Main" on each skill card (owner, 14 Nov 2026), the same settings as the skill window's
+  // Include in simulations and Main. The main skill always counts, so its Include box is ticked and locked.
+  function skillChecks(skill, main) {
+    const isMain = lc(skill) === main, can = ctx.countable && ctx.countable(skill);
+    if (!can && !isMain) return '';
+    const w = (ctx.optWeights ? ctx.optWeights() : {})[skill], inc = isMain || w > 0;
+    return '<div class="ch-skill-checks">' +
+      (can ? '<label class="check-row" title="' + (isMain ? 'The main skill always counts' : 'The tree optimizer, Plan, node values, Item Compare and Gear Set Sim weigh this skill too') + '"><input type="checkbox" data-chf="count"' + (inc ? ' checked' : '') + (isMain ? ' disabled' : '') + '><span>Include in Sim</span></label>' : '') +
+      '<label class="check-row" title="The skill the Damage tab sims"><input type="checkbox" data-chf="main"' + (isMain ? ' checked disabled' : '') + '><span>Mark as Main</span></label></div>';
   }
 
   // ---------- Action bar: the in-game skill bar, slot by slot ----------
@@ -7865,6 +7904,7 @@ window.BOCharacter = function (ctx) {
         planner.skillChange(e); afterEdit(before);
       });
       document.addEventListener('keydown', e => { if (SW && swBack && !swBack.hidden && e.key === 'Escape' && !(SP && spBack && !spBack.hidden)) { e.preventDefault(); closeSkill(); } });
+      tipOn(swBack);
       document.body.appendChild(swBack);
     }
     swBack.hidden = false; document.body.classList.add('io-open');
@@ -7889,7 +7929,7 @@ window.BOCharacter = function (ctx) {
     if (!SW) return;
     if (e.target.closest('[data-sw="close"]')) return closeSkill();
     const sim = e.target.closest('[data-sw="sim"], [data-act="simbest"]');
-    if (sim) { const s = SW.skill; hide(); swBack.hidden = true; return openSup(s, null, true); }
+    if (sim) { const s = SW.skill; hide(); return openSup(s, null, true); } // on top of the skill window, which stays open behind it
     const hist = e.target.closest('[data-sw="history"]');
     if (hist) { const P = ctx.patches && ctx.patches(); if (P) { P.openHistory('skills', SW.skill); closeSkill(); if (ctx.showTab) ctx.showTab('patch'); } return; }
     const b = e.target.closest('[data-act]'); if (!b) return;
@@ -7975,12 +8015,14 @@ window.BOCharacter = function (ctx) {
   function show(e) {
     // A × (remove, clear) never shows a tooltip, not even the item's or skill's it sits in (owner, 13 Nov 2026).
     if (e.target.closest && e.target.closest('.x, .ch-item-x, [data-rmitem], [data-rmshelf], [data-rmskill], [data-barclear]')) return hide();
-    const t = e.target.closest && e.target.closest('#characterPane [data-tip]');
+    // Also the skill window's support chips and the Sim Supports window's support names (owner, 14 Nov 2026).
+    const t = e.target.closest && (e.target.closest('#characterPane [data-tip], .sp-back [data-tip]') || e.target.closest('.sw-back .sup-name[data-sup]'));
     const ch = ctx.current();
     if (!t || !ch) return hide();
     let html = '';
     try {
-      if (t.dataset.tip === 'item') { const it = (t.dataset.shelf ? shelfOf(ch) : ch.items)[+t.dataset.idx]; html = it ? planner.itemTip(it, t.dataset.slot) : ''; }
+      if (!t.dataset.tip) html = planner.supTip(t.dataset.sup);
+      else if (t.dataset.tip === 'item') { const it = (t.dataset.shelf ? shelfOf(ch) : ch.items)[+t.dataset.idx]; html = it ? planner.itemTip(it, t.dataset.slot) : ''; }
       else if (t.dataset.tip === 'skill') html = planner.skillTip(ch, t.dataset.id);
       else if (t.dataset.tip === 'sup') html = planner.supTip(t.dataset.id);
     } catch (err) { html = ''; }
@@ -7990,6 +8032,12 @@ window.BOCharacter = function (ctx) {
     const r = t.getBoundingClientRect(), w = tip.offsetWidth, hg = tip.offsetHeight;
     let y = r.bottom + 6; if (y + hg > innerHeight - 8) y = Math.max(8, r.top - hg - 6);
     tip.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px'; tip.style.top = y + 'px';
+  }
+  // The skill and Sim Supports windows sit outside the pane: they get the same tooltips.
+  function tipOn(win) {
+    win.addEventListener('mouseover', show); win.addEventListener('focusin', show);
+    win.addEventListener('mouseleave', hide); win.addEventListener('focusout', hide);
+    win.addEventListener('click', hide);
   }
   function bind(el) {
     if (el.dataset.bound) return; el.dataset.bound = '1';
@@ -8007,7 +8055,10 @@ window.BOCharacter = function (ctx) {
     el.addEventListener('click', e => {
       if (dragJust) return;
       if (e.target.closest && e.target.closest('#chAddSkillBtn')) { hide(); const s = $('#chAddSkill'); if (s && ctx.current()) planner.openPicker(s); return; }
-      const ss = e.target.closest && e.target.closest('[data-simsup]'); if (ss) { hide(); return openSup(ss.dataset.simsup, ss); }
+      // Sim Supports opens the skill window only (owner, 14 Nov 2026): pin or block supports there first, then its own
+      // Sim Supports button runs the search. Focus goes to that button.
+      const ss = e.target.closest && e.target.closest('[data-simsup]'); if (ss) { hide(); openSkill(ss.dataset.simsup, ss); const b = SW && swBack.querySelector('[data-sw="sim"]'); if (b) b.focus({ preventScroll: true }); return; }
+      if (e.target.closest && e.target.closest('.ch-skill-checks')) return; // the boxes, not the skill window
       const bc = e.target.closest && e.target.closest('[data-barclear]'); if (bc) { hide(); const i = +bc.dataset.barclear; remember('bar', barName((ctx.current().hotbar || [])[i]) + ' from ' + BAR_SLOTS[i]); return setBar(i, '-'); }
       const bs = e.target.closest && e.target.closest('[data-barslot]');
       if (bs && barJust) return;
@@ -8040,6 +8091,13 @@ window.BOCharacter = function (ctx) {
     });
     el.addEventListener('change', e => {
       if (e.target && e.target.dataset && e.target.dataset.barsel != null) return setBar(+e.target.dataset.barsel, e.target.value);
+      const cf = e.target && e.target.dataset && e.target.dataset.chf;
+      if (cf) {
+        const card = e.target.closest('[data-skwin]'), sk = card && card.dataset.skwin; if (!sk) return;
+        if (cf === 'count') { if (ctx.setOptWeight) ctx.setOptWeight(sk, e.target.checked ? 1 : 0); return render(); }
+        if (cf === 'main' && e.target.checked) { const ch = ctx.editable(); if (!ch) return render(); ch.mainSkill = sk; ctx.commit(ch, { select: sk }); return render(); }
+        return;
+      }
       if (!e.target || e.target.id !== 'chAddSkill') return;
       const ch = ctx.editable(); if (ch && planner.addSkill(ch, e.target.value)) { ctx.commit(ch); render(); } else render();
     });
@@ -8518,6 +8576,8 @@ window.BOCharacter = function (ctx) {
   // Use sockets a setup on this character (a plan, or the page's copy of a loaded save).
   let SP = null, spBack = null, spFocus = null; // SP: { skill, pool, manaOk, pct, job, res, base, msg }
   const supNm = id => (ctx.gd().supports[lc(id)] || { Name: id }).Name;
+  // A support's name with its tooltip (show() reads data-tip="sup").
+  const supSpan = (id, cls) => '<span class="sp-sup' + (cls ? ' ' + cls : '') + '" data-tip="sup" data-id="' + esc(lc(id)) + '">' + esc(supNm(id)) + '</span>';
   const fmt = x => ctx.num ? ctx.num(x) : Math.round(x).toLocaleString('en-US');
   const fmtPct = x => ctx.pct ? ctx.pct(x) : (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + '%';
   const sockOf = (ch, skill) => (ch.sockets || []).find(s => lc(s.skill) === lc(skill));
@@ -8536,7 +8596,9 @@ window.BOCharacter = function (ctx) {
         else return;
         runSup();
       });
-      document.addEventListener('keydown', e => { if (SP && spBack && !spBack.hidden && e.key === 'Escape') { e.preventDefault(); closeSup(); } });
+      // stopImmediatePropagation: the skill window's own Escape must not close it too.
+      document.addEventListener('keydown', e => { if (SP && spBack && !spBack.hidden && e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeSup(); } }, true);
+      tipOn(spBack);
       document.body.appendChild(spBack);
     }
     spBack.hidden = false; document.body.classList.add('io-open');
@@ -8576,19 +8638,19 @@ window.BOCharacter = function (ctx) {
     h += '<p class="hint">Against the enemy set on the Damage tab. New supports are highlighted; struck-through ones come out. <b>Use</b> sockets that setup on this skill.</p>';
     const mk = ctx.supMarks ? ctx.supMarks(SP.skill) : null, pins = mk ? [...mk.pin].filter(id => inUse.includes(id)) : [], blks = mk ? [...mk.block] : [];
     // Each label and name in its own span, so each translates on its own (i18n.js works per text node).
-    const names = ids => ids.map(id => '<span>' + esc(supNm(id)) + '</span>').join(', ');
+    const names = ids => ids.map(id => supSpan(id)).join(', ');
     if (pins.length || blks.length) h += '<p class="hint">' + (pins.length ? '<span>Pinned, in every setup:</span> ' + names(pins) + '<br>' : '') + (blks.length ? '<span>Blocked, never picked:</span> ' + names(blks) + '<br>' : '') + '<span>Change these on the skill\'s support chips.</span></p>';
     if (SP.msg) h += '<p class="hint pl-status" role="status">' + esc(SP.msg) + '</p>';
     if (SP.job) h += '<p class="hint" id="spProg" role="status">Searching… ' + SP.pct + '%</p>';
     else if (R && R.none) h += '<p class="hint bad">No support setup found for ' + esc(name) + (SP.manaOk ? ' that keeps your mana up. Untick Mana sustained to see the rest.' : '.') + '</p>';
     else if (R) {
       const cur = SP.base;
-      h += '<div class="support-results sp-results"><div class="optrow current"><span class="rank">now</span><span class="names">' + esc(cur.map(supNm).join(', ') || 'no supports') + '<span class="nums">' + fmt(R.current) + ' DPS · your setup when you searched</span></span>' +
+      h += '<div class="support-results sp-results"><div class="optrow current"><span class="rank">now</span><span class="names">' + (cur.length ? names(cur) : 'no supports') + '<span class="nums">' + fmt(R.current) + ' DPS · your setup when you searched</span></span>' +
         (same(cur) ? '<span class="hint">in use</span>' : '<button class="btn small ghost" type="button" data-sp="use" data-i="-1">Back</button>') + '</div>';
       R.results.forEach((x, i) => {
         const sup = x.sup.map(lc), added = sup.filter(id => !cur.includes(id)), removed = cur.filter(id => !sup.includes(id));
-        h += '<div class="optrow"><span class="rank">' + (i + 1) + '</span><span class="names">' + sup.map(id => added.includes(id) ? '<span class="new">' + esc(supNm(id)) + '</span>' : esc(supNm(id))).join(', ') +
-          (removed.length ? ' <span class="gone">' + esc(removed.map(supNm).join(', ')) + '</span>' : '') +
+        h += '<div class="optrow"><span class="rank">' + (i + 1) + '</span><span class="names">' + sup.map(id => supSpan(id, added.includes(id) ? 'new' : '')).join(', ') +
+          (removed.length ? ' <span class="gone">' + names(removed) + '</span>' : '') +
           '<span class="nums">' + fmt(x.v) + ' DPS (' + fmtPct(x.v / (R.current || 1) - 1) + ') · ' + (x.manaPerSec != null ? 'mana ' + fmt(x.manaPerSec) + '/s of ' + fmt(x.manaGain) : 'mana ×' + x.mana.toFixed(1)) + (x.notOwned.length ? ' · not owned: ' + esc(x.notOwned.map(supNm).join(', ')) : '') + '</span></span>' +
           (same(x.sup) ? '<span class="hint">in use</span>' : '<button class="btn small" type="button" data-sp="use" data-i="' + i + '">Use</button>') + '</div>';
       });
@@ -12572,8 +12634,9 @@ window.BOStartApp = function () {
     showConfigTab(tabs[next].dataset.configTab, true);
   });
 
+  const charLabel = c => c.name + ' · ' + c.classId + ' ' + c.level + (c.file || c.plan ? '' : ' (loaded)');
   function fillChars(selectId) {
-    const o = c => '<option value="' + esc(c.id) + '">' + esc(c.name) + ' · ' + esc(c.classId) + ' ' + c.level + (c.file || c.plan ? '' : ' (loaded)') + '</option>';
+    const o = c => '<option value="' + esc(c.id) + '">' + esc(charLabel(c)) + '</option>';
     const chars = CHARS.filter(c => !c.plan), plans = CHARS.filter(c => c.plan);
     $('#charSelect').innerHTML = (plans.length ? (chars.length ? '<optgroup label="Characters">' + chars.map(o).join('') + '</optgroup>' : '') + '<optgroup label="Plans">' + plans.map(o).join('') + '</optgroup>' : chars.map(o).join('')) || '<option value="">No characters found</option>';
     if (selectId) $('#charSelect').value = selectId;
@@ -13000,6 +13063,7 @@ window.BOStartApp = function () {
     const el = $('#buildSummary'); if (!el) return;
     const share = $('#shareLinkBtn'), slot = $('#bsShare');
     if (share && slot && share.parentNode !== slot) slot.appendChild(share);
+    const saveB = $('#saveBuildBtn'); if (saveB && slot && saveB.parentNode !== slot) slot.appendChild(saveB); // split with Save as new build (owner, 14 Nov 2026)
     let r = null;
     if (st.ch && st.skill) { try { r = S.calcSkill(GD, st.ch, st.skill, opts()); } catch (e) { r = null; } }
     const ok = r && !r.error && !r.unsupported;
@@ -13911,6 +13975,92 @@ window.BOStartApp = function () {
 
   // ---------- events ----------
   $('#charSelect').addEventListener('change', e => selectChar(e.target.value));
+  // The character list opens as our own list, so each entry can carry a × (owner, 14 Nov 2026: remove characters from it).
+  // Loaded saves and codes leave the list (Reload saves brings saves back); a plan is deleted after a confirm; characters
+  // built into the local page stay hidden in this browser until a save of theirs is loaded again.
+  let charPick = null;
+  function closeCharPick(refocus) {
+    if (!charPick) return;
+    charPick.box.remove();
+    document.removeEventListener('mousedown', charPick.out, true); document.removeEventListener('keydown', charPick.key, true); window.removeEventListener('scroll', charPick.out, true); window.removeEventListener('resize', charPick.out);
+    charPick = null; if (refocus) $('#charSelect').focus({ preventScroll: true });
+  }
+  function charPickHtml() {
+    const cur = $('#charSelect').value;
+    const item = c => '<div class="pl-pick-item char-pick-item' + (c.id === cur ? ' on' : '') + '" role="option" tabindex="-1" aria-selected="' + (c.id === cur) + '" data-v="' + esc(c.id) + '"><span>' + esc(charLabel(c)) + '</span>' +
+      '<button type="button" class="x" tabindex="-1" data-rmchar="' + esc(c.id) + '" aria-label="' + esc((c.plan ? 'Delete the plan ' : 'Remove ') + c.name + (c.plan ? '' : ' from the list')) + '">×</button></div>';
+    const chars = CHARS.filter(c => !c.plan), plans = CHARS.filter(c => c.plan);
+    return (chars.length ? '<div class="pl-pick-group">Characters</div>' + chars.map(item).join('') : '') + (plans.length ? '<div class="pl-pick-group">Plans</div>' + plans.map(item).join('') : '');
+  }
+  function placeCharPick() {
+    const box = charPick.box, s = $('#charSelect').getBoundingClientRect();
+    box.style.width = Math.min(Math.max(s.width, 260), innerWidth - 16) + 'px';
+    box.style.left = Math.max(8, Math.min(s.left, innerWidth - box.offsetWidth - 8)) + 'px';
+    box.style.top = s.bottom + 4 + 'px'; box.style.maxHeight = Math.max(160, innerHeight - s.bottom - 12) + 'px';
+  }
+  function openCharPick() {
+    closeCharPick();
+    if (!CHARS.length) return;
+    const box = document.createElement('div');
+    box.className = 'pl-pick char-pick'; box.setAttribute('role', 'listbox'); box.setAttribute('aria-label', 'Characters and plans');
+    box.innerHTML = charPickHtml(); document.body.appendChild(box);
+    const sel = $('#charSelect');
+    charPick = {
+      box,
+      out: e => { if (!box.contains(e.target) && !(e.type === 'mousedown' && e.target === sel)) closeCharPick(); },
+      key: e => {
+        if (e.key === 'Escape' || e.key === 'Tab') { if (e.key === 'Escape') e.preventDefault(); return closeCharPick(e.key === 'Escape'); }
+        const items = [...box.querySelectorAll('.char-pick-item')], at = items.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const n = items[Math.max(0, Math.min(items.length - 1, at < 0 ? 0 : at + (e.key === 'ArrowDown' ? 1 : -1)))]; if (n) n.focus(); }
+        else if ((e.key === 'Enter' || e.key === ' ') && at >= 0) { e.preventDefault(); pickChar(items[at].dataset.v); }
+        else if (e.key === 'Delete' && at >= 0) { e.preventDefault(); removeChar(items[at].dataset.v, at); }
+      },
+    };
+    placeCharPick();
+    document.addEventListener('mousedown', charPick.out, true); document.addEventListener('keydown', charPick.key, true); window.addEventListener('scroll', charPick.out, true); window.addEventListener('resize', charPick.out);
+    box.addEventListener('click', e => {
+      const rm = e.target.closest('[data-rmchar]'); if (rm) { e.stopPropagation(); const items = [...box.querySelectorAll('.char-pick-item')]; return removeChar(rm.dataset.rmchar, items.indexOf(rm.closest('.char-pick-item'))); }
+      const i = e.target.closest('.char-pick-item'); if (i) pickChar(i.dataset.v);
+    });
+    const on = box.querySelector('.on') || box.querySelector('.char-pick-item');
+    if (on) { box.scrollTop = on.offsetTop - 60; on.focus({ preventScroll: true }); }
+  }
+  function pickChar(id) {
+    closeCharPick(true);
+    const sel = $('#charSelect');
+    if (id !== sel.value) { sel.value = id; selectChar(id); }
+  }
+  async function removeChar(id, at) {
+    const ch = CHARS.find(c => c.id === id); if (!ch) return;
+    if (ch.plan) {
+      closeCharPick();
+      if (!await confirmInPage('Delete this plan?', 'The plan "' + ch.name + '" is deleted from this browser. This cannot be undone (a share link you made of it still opens).', 'Delete plan', true)) return;
+    }
+    if (ch.file) { const h = store.get('hiddenChars', []) || []; if (!h.includes(id)) store.set('hiddenChars', h.concat(id)); }
+    const wasOn = st.chOrig === ch || (st.chOrig && st.chOrig.id === id);
+    CHARS = CHARS.filter(c => c !== ch); keepChars();
+    if (wasOn) {
+      fillChars((CHARS[0] || {}).id);
+      if (CHARS.length) selectChar(CHARS[0].id);
+      else { st.ch = st.chOrig = null; render(); planner.render(); if (character) character.render(); }
+    } else fillChars(st.chOrig && st.chOrig.id);
+    $('#saveDirLabel').textContent = CHARS.some(c => c.from === 'folder') ? 'Reload saves' : 'Load saves folder';
+    saveTip(ch.plan ? 'Deleted the plan "' + ch.name + '".' : 'Removed ' + ch.name + ' from the list.' + (ch.from === 'folder' || ch.from === 'file' || ch.file ? ' Loading the save again brings it back.' : ''));
+    if (charPick) {
+      charPick.box.innerHTML = charPickHtml();
+      if (!CHARS.length) return closeCharPick(true);
+      const items = charPick.box.querySelectorAll('.char-pick-item'), n = items[Math.min(at == null ? 0 : at, items.length - 1)];
+      if (n) n.focus({ preventScroll: true });
+    }
+  }
+  $('#charSelect').addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    if (charPick) closeCharPick(); else { e.currentTarget.focus({ preventScroll: true }); openCharPick(); }
+  });
+  $('#charSelect').addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'F4' || (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp'))) { e.preventDefault(); openCharPick(); }
+  });
   $('#skillSelect').addEventListener('change', e => selectSkill(e.target.value));
   $('#gemLevel').addEventListener('input', e => { st.gemLevel = +e.target.value || null; if (st.gemLevel) planSync(); render(); });
   $('#enemyLevel').addEventListener('input', e => { st.enemyLevel = +e.target.value || null; render(); });
@@ -14039,6 +14189,7 @@ window.BOStartApp = function () {
     // A fresh folder read replaces the last one, and drops builds loaded from codes (plans stay).
     if (from === 'folder') CHARS = CHARS.filter(c => c.plan || (c.from !== 'folder' && c.from !== 'code' && !c.fromCode));
     for (const ch of list) { ch.from = from; CHARS = CHARS.filter(c => c.id !== ch.id); }
+    { const hid = store.get('hiddenChars', []) || [], left = hid.filter(id => !list.some(c => c.id === id)); if (left.length !== hid.length) store.set('hiddenChars', left); } // loaded again: no longer hidden
     CHARS = [...list, ...CHARS];
     fillChars(selectId); selectChar(selectId);
     $('#saveDirLabel').textContent = CHARS.some(c => c.from === 'folder') ? 'Reload saves' : 'Load saves folder';
@@ -14230,6 +14381,27 @@ window.BOStartApp = function () {
     addChars([p], 'plan', p.id); showTab('build');
     planner.setStatus('Saved as the plan "' + p.name + '" (under Plans in the character list). Edits to it now save in this browser as you go.');
   }
+  // "Save as new build" (owner, 14 Nov 2026): the character or plan on screen, as a new plan under a name the user picks.
+  // Works on plans too (a renamed copy); the one it came from is unchanged.
+  function askName(def) {
+    const dialog = $('#nameDialog'), input = $('#nameInput');
+    input.value = def;
+    return new Promise(resolve => {
+      dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm' ? input.value.trim() : null), { once: true });
+      // Enter in the box saves (a form's implicit submit would use its first button, Cancel).
+      input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); dialog.close('confirm'); } };
+      dialog.returnValue = ''; dialog.showModal(); input.focus(); input.select();
+    });
+  }
+  $('#saveBuildBtn').addEventListener('click', async () => {
+    if (!st.ch) { alert('Load a character or start a plan first.'); return; }
+    const src = st.ch, def = src.name.replace(/ \((code|edited|copy)\)$/, '') + (src.plan ? ' (copy)' : '');
+    const name = await askName(def); if (name == null) return;
+    const p = keepSharedTabs(planner.planFrom(liveCopy()));
+    p.name = (name || def).slice(0, 60);
+    addChars([p], 'plan', p.id);
+    saveTip('Saved as the plan "' + p.name + '" (under Plans in the character list). Edits to it save in this browser as you go.');
+  });
   $('#shareLinkBtn').addEventListener('click', async () => {
     if (!st.ch) { alert('Load a character or start a plan first.'); return; }
     try {
@@ -15178,7 +15350,7 @@ window.BOStartApp = function () {
   // or pasted text): every counted skill's DPS with each, and the two items' lines side by side. The character
   // only changes with "Equip the new item".
   const lc = s => String(s == null ? '' : s).toLowerCase();
-  const CMP = { key: '', src: null, a: null, b: null, ka: null, kb: null, aEdited: false, read: null, busy: '', msg: '', mode: store.get('cmpMode', 'item') === 'gear' ? 'gear' : 'item' }; // mode: Item Sim or Gear Set Sim
+  const CMP = { key: '', src: null, a: null, b: null, ka: null, kb: null, aEdited: false, read: null, busy: '', msg: '', mode: ['gear', 'slot'].includes(store.get('cmpMode', 'item')) ? store.get('cmpMode', 'item') : 'item' }; // mode: Item Compare, Gear Set Sim or Sim by Slot
   const cmpVisible = () => !$('#comparePane').hidden;
   const itemName = it => { const u = it.rarity === 'Unique' && GD.uniques[lc(it.unique)], b = GD.bases[lc(it.base)]; return u ? u.Name : it.name || (b ? b.Name : it.base); };
   // Keys: a slot name, "idol:<index in ch.items>", or "idol:new" (an extra idol).
@@ -15331,10 +15503,11 @@ window.BOStartApp = function () {
     const open = !!(($('#comparePane') || document).querySelector('.opt-multi') || {}).open;
     return '<details class="opt-multi' + (optExtra().length ? ' on' : '') + '"' + (open ? ' open' : '') + '><summary>' + optMultiSum() + '</summary><div class="opt-multi-body right"><p class="hint">Tick other skills to judge gear on them too: the damage adds them up, and which item or set is better uses each skill\'s % change by its weight. Same setting as on the Skill tree tab.</p><div class="opt-multi-list">' + optMultiRows('Skill') + '</div><p class="opt-slow">Each skill added here is simmed for every option tried, so the tree optimizer, Plan, node values and Gear Set Sim get slower: about one more full run per skill.</p></div></details>';
   }
-  function cmpSlotButtons() {
+  function cmpSlotButtons(gearOnly) {
     const btn = s => '<button type="button" class="cmp-slot' + (s.key === CMP.key ? ' on' : '') + (s.it ? '' : ' empty') + (s.it && s.it.rarity === 'Unique' ? ' unique' : '') + '" data-slot="' + esc(s.key) + '" aria-pressed="' + (s.key === CMP.key) + '">' +
       '<span class="cmp-slot-name">' + esc(s.name) + '</span><span class="cmp-slot-item">' + esc(s.it ? itemName(s.it) : s.key === 'idol:new' ? 'add one' : 'empty') + '</span></button>';
     const all = cmpSlots(st.ch), gear = all.filter(s => s.slot !== 'Idol'), idols = all.filter(s => s.slot === 'Idol');
+    if (gearOnly) return '<div class="cmp-slots" role="group" aria-label="Gear">' + gear.map(btn).join('') + '</div>';
     return '<div class="cmp-slots" role="group" aria-label="Gear">' + gear.map(btn).join('') + '</div>' +
       '<h3>Idols</h3><div class="cmp-slots" role="group" aria-label="Idols">' + idols.map(btn).join('') + '</div>';
   }
@@ -15441,7 +15614,7 @@ window.BOStartApp = function () {
   }
   const gsPrioText = p => p <= 0 ? 'DPS only' : p >= 100 ? 'Defence only' : (100 - p) + '% DPS · ' + p + '% defence';
   const cmpModesHtml = () => '<div class="cmp-modes" role="tablist" aria-label="Item Simulator tools">' +
-    [['item', 'Item Compare', 'M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4'], ['gear', 'Gear Set Sim', 'M12 3 4 6v6c0 4.5 3.4 7.8 8 9 4.6-1.2 8-4.5 8-9V6z']].map(([k, n, d]) => '<button type="button" class="cmp-mode' + (CMP.mode === k ? ' on' : '') + '" role="tab" aria-selected="' + (CMP.mode === k) + '" data-cmpmode="' + k + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '"/></svg><span>' + n + '</span></button>').join('') + '</div>';
+    [['item', 'Item Compare', 'M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4'], ['gear', 'Gear Set Sim', 'M12 3 4 6v6c0 4.5 3.4 7.8 8 9 4.6-1.2 8-4.5 8-9V6z'], ['slot', 'Sim by Slot', 'M4 6h10M4 12h16M4 18h7M17 4v4M14 18h6']].map(([k, n, d]) => '<button type="button" class="cmp-mode' + (CMP.mode === k ? ' on' : '') + '" role="tab" aria-selected="' + (CMP.mode === k) + '" data-cmpmode="' + k + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '"/></svg><span>' + n + '</span></button>').join('') + '</div>';
   // Anything that changes the answer: the character's gear, tree and supports, the enemy settings, this tab's settings.
   function gsKey() {
     if (!st.ch) return '';
@@ -15461,10 +15634,11 @@ window.BOStartApp = function () {
     const n = it.affixes.length;
     return '<b>' + esc(it.rarity + ' ' + bn) + '</b> <span class="meta">' + (n ? n + ' line' + (n > 1 ? 's' : '') : 'no lines') + (it.runes.length ? ' · ' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') : '') + '</span>';
   }
-  function gsProgress() {
+  function gsProgress(o) {
+    o = o || GS;
     const bar = $('#gsBar'), ph = $('#gsPhase'); if (!bar || !ph) return;
-    bar.style.width = Math.max(2, Math.round(GS.p * 100)) + '%';
-    ph.textContent = GS.phase + ' · ' + Math.round((performance.now() - GS.t0) / 1000) + ' s';
+    bar.style.width = Math.max(2, Math.round(o.p * 100)) + '%';
+    ph.textContent = o.phase + ' · ' + Math.round((performance.now() - o.t0) / 1000) + ' s';
   }
   function gsRun() {
     if (!st.ch || !st.skill || GS.running || !window.BOGearOpt) return;
@@ -15573,12 +15747,99 @@ window.BOStartApp = function () {
     if (GS.res) h += gsResultHtml(GS.res);
     return h;
   }
-  const cmpItemMode = () => cmpVisible() && CMP.mode !== 'gear';
+  // ---------- Sim by Slot (the third sub-tab, owner's request 14 Nov 2026) ----------
+  // One slot, the rest of the gear as worn: every unique, Oathword and rare the Gear Set Sim would try there, ranked by the
+  // same score (gearopt.js cfg.onlySlot). Uses the Gear Set Sim's settings (item level, Vows, runes, the slider ...).
+  const SBS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '' };
+  const sbsSlot = () => planner.gear.SLOTS.includes(CMP.key) ? CMP.key : 'MainHand';
+  const sbsKey = () => gsKey() + '|' + sbsSlot();
+  function sbsRun() {
+    if (!st.ch || !st.skill || SBS.running || !window.BOGearOpt) return;
+    const job = ++SBS.job, key = sbsKey(), slot = sbsSlot();
+    Object.assign(SBS, { running: true, res: null, msg: '', phase: 'Starting', p: 0, t0: performance.now(), key });
+    const o = opts({ off: new Set([...st.off].filter(k => !/^item:/.test(k))) });
+    const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
+    const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
+    const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: 60 + (more.length ? 30 : 0) }, GS.set, { idolAffixes: '', maxRes: false, defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget(), onlySlot: slot, slotK: 8, slotRows: 40 }));
+    renderCompare();
+    const step = () => {
+      if (job !== SBS.job) return;
+      const t = performance.now(); let r;
+      try { do { r = gen.next(); if (r.value && r.value.phase) { SBS.phase = r.value.phase; SBS.p = Math.min(0.95, (performance.now() - SBS.t0) / 15000); } } while (!r.done && performance.now() - t < 30); }
+      catch (err) { SBS.running = false; SBS.msg = 'The search failed: ' + err.message; return renderCompare(); }
+      if (!r.done) { gsProgress(SBS); setTimeout(step, 0); return; }
+      SBS.running = false;
+      if (r.value.error) SBS.msg = r.value.error; else SBS.res = Object.assign(r.value, { key, skill: st.skill });
+      renderCompare();
+    };
+    setTimeout(step, 0);
+  }
+  function sbsCancel() { SBS.job++; SBS.running = false; SBS.msg = 'Search stopped.'; renderCompare(); }
+  function sbsEquip(i) {
+    const r = SBS.res, row = r && r.rows[i]; if (!row || !st.ch || r.key !== sbsKey()) return;
+    const ch = buildEditable(), slot = r.onlySlot, item = Object.assign(JSON.parse(JSON.stringify(row.item)), { slot });
+    ch.items = ch.items.filter(x => x.slot !== slot); ch.items.push(item);
+    if (row.dropsOff) ch.items = ch.items.filter(x => x.slot !== 'OffHand');
+    SBS.res = null; CMP.aEdited = false; CMP.a = null; CMP.b = null; CMP.read = null;
+    SBS.msg = 'Equipped ' + itemName(item) + ' on ' + ch.name + ' in this page' + (row.dropsOff ? ' (the off hand came off: it cannot be held with that weapon)' : '') + '; the Build and Damage tabs use it too.' + (ch.plan ? '' : ' Your save is never changed: Reset to save on the Build tab undoes it.');
+    if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {});
+  }
+  // Opens a listed item in Item Compare as the new item, against the one worn, so its lines can be set to what dropped.
+  function sbsCompare(i) {
+    const r = SBS.res, row = r && r.rows[i]; if (!row || !st.ch) return;
+    CMP.key = r.onlySlot; CMP.aEdited = false; CMP.a = null; cmpSync();
+    CMP.b = holder(Object.assign({}, row.item, { slot: r.onlySlot }), st.ch.level); CMP.kb = planner.gear.newKit(true); CMP.read = null; CMP.msg = '';
+    CMP.mode = 'item'; store.set('cmpMode', 'item'); renderCompare();
+  }
+  function sbsResultHtml(r) {
+    const skillName = (GD.skills[lc(r.skill)] || {}).Name || r.skill, slotName = gsSlotName(r.onlySlot), score = r.scored || r.multi;
+    const kind = { unique: 'Unique', oathword: 'Oathword', rare: 'Rare' };
+    let h = '<div class="card cmp-result"><h2>' + esc(slotName) + ' items <span class="hint">' + esc(skillName) + ', vs the configured enemy</span></h2>';
+    if (!r.rows.length) return h + '<p class="hint">Nothing fits this slot' + (r.onlySlot === 'OffHand' ? ' with your weapon (a two-hander leaves no off hand; a bow takes only a quiver)' : '') + '.</p></div>';
+    const top = r.rows[0];
+    h += '<div class="headline small">' + stat('Your ' + slotName.toLowerCase(), num(r.dps0), '', '', esc(skillName) + ', total DPS' + (r.worn ? ' with the item you wear' : ' with the slot empty')) +
+      stat('Best found', num(top.dps), '<div class="delta ' + (top.gain >= 0 ? 'up' : 'down') + '">' + pct(top.gain) + (score ? ' score' : '') + '</div>', 'main', 'found in ' + (r.ms / 1000).toFixed(1) + ' s' + (r.timedOut ? ' (stopped at the time limit)' : '')) +
+      stat('Slot worth now', r.worn && r.base > 0 ? num((1 - r.empty / r.base) * 100, 1) + '%' : '–', '', '', (score ? 'score' : 'DPS') + ' lost if the slot were left empty') + '</div>';
+    h += '<div class="table-wrap"><table class="tbl gs-table sbs-table"><thead><tr><th>#</th><th>Item</th><th>Kind</th><th>DPS</th><th title="' + (score ? 'Score (DPS and defence as the slider weighs them' + (r.multi ? ', over the skills under Also count' : '') + ')' : 'DPS') + ' against the item you wear now">Change</th><th></th></tr></thead><tbody>' +
+      r.rows.map((x, i) => '<tr class="' + (x.gain > 0.0005 ? 'gs-changed' : '') + '"><td>' + (i + 1) + '</td><td class="gs-hov" data-sbs-tip="' + i + '">' + gsItemLabel(x.item) +
+        '<details class="gs-lines"><summary>Lines</summary><div class="cmp-tip pl-tip">' + planner.gear.tip(x.item, x.item.slot) + '</div></details>' + (x.dropsOff ? '<div class="hint">Two-handed: your off hand comes off.</div>' : '') + '</td><td>' + kind[x.kind] + '</td><td>' + num(x.dps) + '</td><td><span class="' + (x.gain >= 0 ? 'up' : 'down') + '">' + pct(x.gain) + '</span></td>' +
+        '<td class="sbs-acts"><button class="btn small" type="button" data-sbs-equip="' + i + '">Equip</button> <button class="btn small ghost" type="button" data-sbs-cmp="' + i + '">Compare</button></td></tr>').join('') + '</tbody></table></div>';
+    h += '<p class="hint">Every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best. Rares carry the lines that add the most and the best runes; the best few uniques get Vows' + (r.vowMax < 6 ? ' (at most ' + r.vowMax + ')' : '') + '. The rest of your gear, the tree and the supports stay as they are. Compare opens the item in Item Compare, where you can set its lines to what dropped.' + (r.scored ? ' ' + gsDefNote() : '') + '</p>';
+    return h + '</div>';
+  }
+  function sbsHtml() {
+    const S_ = GS.set;
+    if (!planner.gear.SLOTS.includes(CMP.key)) { CMP.key = 'MainHand'; CMP.aEdited = false; CMP.a = null; }
+    const key = sbsKey();
+    if (SBS.running && SBS.key !== key) { SBS.job++; SBS.running = false; SBS.msg = 'The character, the slot or a setting changed, so the search was stopped.'; }
+    if (SBS.res && SBS.res.key !== key) SBS.res = null;
+    const off = SBS.running;
+    const chk = (f, label, tip) => '<label class="check-row" title="' + esc(tip) + '"><input type="checkbox" data-gs-set="' + f + '"' + (S_[f] ? ' checked' : '') + (off ? ' disabled' : '') + '><span>' + label + '</span></label>';
+    let h = '<div class="card gs-card"><div class="cmp-pick-head"><h2>Sim by Slot</h2><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + (off ? ' disabled' : '') + '>' + cmpSkillOptions() + '</select></label>' + (off ? '' : cmpMultiHtml() + enemyBtn()) + '</span></div>' +
+      '<p class="hint">Pick a slot: every unique, Oathword and rare that fits it is simmed with the rest of your gear as it is, best first. The settings are the same as the Gear Set Sim\'s.</p>' +
+      cmpSlotButtons(true) +
+      '<div class="gs-controls"><label class="field inline" title="Item level of the rares: 84 and up gives the top tier of every line"><span>Item level</span><input type="number" min="1" max="100" id="gsIlvl" value="' + S_.ilvl + '"' + (off ? ' disabled' : '') + '></label>' +
+      chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
+      chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
+      chk('vows', 'Vows on uniques', 'A red item takes up to 6 lines from rares at the cube; the best ones are added') +
+      chk('noCore', 'No Core Touched items', 'Skip Core Touched bases') +
+      chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') + '</div>' +
+      '<div class="gs-controls gs-goal">' + gsPrioHtml(off) + gsLayersHtml(off) + '</div>' +
+      '<div class="cmp-actions">' + (off ? '<button class="btn ghost" type="button" data-sbs="cancel">Stop</button>' :
+        '<button class="btn" type="button" data-sbs="run"' + (st.skill ? '' : ' disabled') + '>Sim ' + esc(gsSlotName(sbsSlot()).toLowerCase()) + ' items</button>') +
+      '<span class="hint">' + (st.skill ? 'Takes a few seconds; the page stays usable.' : 'This plan has no damage skill yet: add one on the Build tab.') + '</span></div>' +
+      (off ? '<div class="gs-prog" role="progressbar" aria-label="Search progress"><div class="gs-bar"><div id="gsBar" style="width:' + Math.max(2, Math.round(SBS.p * 100)) + '%"></div></div><div class="hint" id="gsPhase">' + esc(SBS.phase) + '</div></div>' : '') +
+      (SBS.msg ? '<p class="hint pl-status">' + esc(SBS.msg) + '</p>' : '') + '</div>';
+    if (SBS.res) h += sbsResultHtml(SBS.res);
+    return h;
+  }
+  const cmpItemMode = () => cmpVisible() && CMP.mode === 'item';
   function renderCompare() {
     const el = $('#comparePane'); if (!el || el.hidden) return;
-    let h = cmpModesHtml() + '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Item Simulator</h2><p>' + (CMP.mode === 'gear' ? 'Find the best gear for a skill from every unique, Oathword and rare, for damage, defence or both, and see what it would do.' : 'Pick one of your items, then fill in the item you found or paste a screenshot of it, to see what swapping does to your damage and defence, and which one to wear.') + '</p></div>';
+    let h = cmpModesHtml() + '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Item Simulator</h2><p>' + (CMP.mode === 'gear' ? 'Find the best gear for a skill from every unique, Oathword and rare, for damage, defence or both, and see what it would do.' : CMP.mode === 'slot' ? 'Pick one slot and see every unique, Oathword and rare that fits it, ranked by what it does for your skill with the rest of your gear as it is.' : 'Pick one of your items, then fill in the item you found or paste a screenshot of it, to see what swapping does to your damage and defence, and which one to wear.') + '</p></div>';
     if (!st.ch) { el.innerHTML = h + '<div class="empty">Load a character or start a plan first.</div>'; return; }
     if (CMP.mode === 'gear') { el.innerHTML = h + gsHtml(); return; }
+    if (CMP.mode === 'slot') { el.innerHTML = h + sbsHtml(); return; }
     cmpSync();
     const g = planner.gear, slot = cmpSlot(), ia = CMP.a.items[0] || null, ib = CMP.b.items[0] || null;
     h += '<div class="card cmp-pick"><div class="cmp-pick-head"><h2>Item slot</h2>' +
@@ -15667,6 +15928,8 @@ window.BOStartApp = function () {
       if (mb) { if (mb.dataset.cmpmode !== CMP.mode) { CMP.mode = mb.dataset.cmpmode; store.set('cmpMode', CMP.mode); renderCompare(); } return; }
       const gb = e.target.closest('[data-gs]');
       if (gb) { const a = gb.dataset.gs; if (a === 'run') gsRun(); else if (a === 'cancel') gsCancel(); else if (a === 'equip') gsEquip(); return; }
+      const sbb = e.target.closest('[data-sbs],[data-sbs-equip],[data-sbs-cmp]');
+      if (sbb) { const d = sbb.dataset; if (d.sbs === 'run') sbsRun(); else if (d.sbs === 'cancel') sbsCancel(); else if (d.sbsEquip != null) sbsEquip(+d.sbsEquip); else if (d.sbsCmp != null) sbsCompare(+d.sbsCmp); return; }
       if (e.target.closest('.pl-item > summary')) { e.preventDefault(); return; } // the editors stay open here
       const sb = e.target.closest('[data-slot]');
       if (sb) {
@@ -15696,6 +15959,9 @@ window.BOStartApp = function () {
       else if ((sb = e.target.closest && e.target.closest('[data-gs-tip]')) && GS.res) { // Gear Set Sim: your item / the best item in a row
         key = 'gs:' + sb.dataset.gsTip; const [w, i] = sb.dataset.gsTip.split(':'), row = GS.res.slots[+i];
         it = row && (w === 'was' ? row.was : row.item);
+      }
+      else if ((sb = e.target.closest && e.target.closest('[data-sbs-tip]')) && SBS.res) { // Sim by Slot: a listed item
+        key = 'sbs:' + sb.dataset.sbsTip; const row = SBS.res.rows[+sb.dataset.sbsTip]; it = row && row.item;
       }
       if (!it) return hideSlotTip();
       if (!tip) { tip = document.createElement('div'); tip.className = 'pl-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
@@ -16124,6 +16390,8 @@ window.BOStartApp = function () {
     beltCard: () => brewery ? brewery.beltCard() : '',
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, num, pct, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
     supportSearch: supportSearchFor, supMarks: marksFor, simSkill: () => st.skill, // the main skill: the plan's own, or the one the Damage tab sims
+    // The skill cards' "Include in Sim" = the Also count weights (st.optW), as on the Build tab's Skills view.
+    countable: id => (st.pickable || []).some(s => s.id === id), optWeights: () => st.optW || {}, setOptWeight: (id, w) => { setOptWeight(id, w); if (planner && !$('#buildPane').hidden) planner.render(); },
     // The skill window: one skill's sheet against the Damage tab's enemy, the patch history, and a way to its tab.
     skillSheet: id => { if (!st.ch) return null; const o = comboOpts(); o.gemLevel = st.ch.gemLevels[id] || undefined; return S.calcSkill(GD, st.ch, id, o); },
     patches: () => patches, showTab: t => showTab(t),
@@ -16167,6 +16435,7 @@ window.BOStartApp = function () {
     }
     CHARS.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
   } catch (e) { /* storage off or damaged */ }
+  { const hid = store.get('hiddenChars', []) || []; if (hid.length) CHARS = CHARS.filter(c => !(c.file && hid.includes(c.id))); } // removed from the character list (built into the local page)
   if (CHARS.some(c => c.from === 'folder')) $('#saveDirLabel').textContent = 'Reload saves';
   const startId = store.get('char', null);
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);

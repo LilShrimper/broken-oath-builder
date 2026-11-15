@@ -7438,6 +7438,8 @@ window.BOFaq = function (ctx) {
 
   const pct = x => String(Math.round(x * 1000) / 10).replace(/\.0$/, '');
   const r1 = x => String(Math.round(x * 10) / 10).replace(/\.0$/, '');
+  // Multistrike's "less" per strike from supports.json (Patch 70, 12 Nov 2026: 44% a strike, was 48%), so the text follows patches.
+  const msLess = GD => { const d = ((((GD || {}).supports || {}).multistrike || {}).Mods || []).find(x => x.Stat === 'Damage' && x.Mode === 'More'); return d ? -d.Value : 56; };
   const intro = (title, text) => '<div class="cmp-intro"><div class="eyebrow">REFERENCE</div><h2>' + title + '</h2><p>' + text + '</p></div>';
   const card = (title, body, sub) => '<div class="card faq-card"><h2>' + title + (sub ? ' <small>' + sub + '</small>' : '') + '</h2>' + body + '</div>';
   const list = items => '<ul class="faq-list">' + items.filter(Boolean).map(x => '<li>' + x + '</li>').join('') + '</ul>';
@@ -7453,7 +7455,7 @@ window.BOFaq = function (ctx) {
   // logs" and the comments in sim.js minionSheet): nothing new is claimed here.
   const MINION_RULES = {
     summon_skeletons: ['The army is shared with your other summons: 40 in all, the oldest go first (game log 6 Nov 2026, build 26474163).'],
-    summon_skeletal_mage: ['Multistrike on the mage: each strike does 52% less damage and all 3 strikes land (the mage throws all 3 bolts since the 5 Nov patch; the developer, 5 Nov: real damage is 94% of the panel).', 'Follows Faster Casting (patch notes, 7 Nov 2026).', 'Choir of Bones grants Chain to the bolts at the gem\'s own price: 5% less damage (game log, 11 Nov 2026).'],
+    summon_skeletal_mage: ['Multistrike on the mage: each strike does {MS}% less damage and all 3 strikes land (the mage throws all 3 bolts since the 5 Nov patch; the developer, 5 Nov: real damage is 94% of the panel).', 'Follows Faster Casting (patch notes, 7 Nov 2026).', 'Choir of Bones grants Chain to the bolts at the gem\'s own price: 5% less damage (game log, 11 Nov 2026).'],
     grave_reap: ['Kills rise as Risen Thralls (Bone Warrior). The skill panel shows the risen minions only, not the sweep (tooltip: "DPS (all its minions)"); they stand in the same 40-minion army as your summons.', 'Minion damage multiplier 0.12 (skills.json; the sim works the minion hit out from the skill\'s base damage).'],
     marrow_lance: ['Kills rise as Risen Casters (Skeleton Wizard). The skill panel shows the risen minions only, not the lance.', 'Log, 9 Nov 2026 (Marrow Lance gem 11, 11 summons on the bar): 4 risen at gem 11 (3 + 1), shared with the other summons in one army; PetSheet68 "marrow_lance avg 107-108" at gem 11.'],
     summon_bone_golem: ['Always exactly one golem, whatever "+minions" lines say (log: PetSheet68 cap 1).', 'Each +1 to maximum minions the golem cannot use gives it 30% more damage instead, added together (4 of them: ×2.2). Not in the game\'s text: worked out from the game log, 11 Nov 2026.', 'The fire golem blessing (12.5% more minion damage) applies to the golem itself too.', 'Brutality removes all fire, cold and lightning: linked Added Fire is idle and the golem deals no element.'],
@@ -7496,7 +7498,7 @@ window.BOFaq = function (ctx) {
       if (mon) {
         body += monBlock(mon).replace('<details><summary>Monster attack list', (s.Delivery === 'Summon' ? '' : '<details><summary>How they rise</summary><p class="faq-note">' + esc(s.Description || '') + '</p></details>') + '<details><summary>Monster attack list') + '';
       }
-      const rules = MINION_RULES[s.Id.toLowerCase()] || [];
+      const rules = (MINION_RULES[s.Id.toLowerCase()] || []).map(r => r.replace(/\{MS\}/g, msLess(GD)));
       if (rules.length) body += '<h3>Rules the sim applies</h3>' + list(rules);
       cards += card((ctx.skillIcon ? ctx.skillIcon(s.Id) : '') + esc(s.Name), body, esc(m.MonsterId));
     }
@@ -7518,7 +7520,7 @@ window.BOFaq = function (ctx) {
         '<b>Zone level:</b> minions grow with the level of the zone they fight in; in the hub that is your own level. It makes up for the gap between the monsters and the gem, so a low gem in a high zone gets the most and a high gem gets less. In Damage Analysis, set the Monster level box to the Rupture you run.',
         '<b>Increased Minion Damage:</b> every "minions deal X% increased damage" line, plus 1% per 10 Intelligence. They add together.',
         '<b>The summon skill\'s own increased damage:</b> "increased damage" on the summon\'s supports (Ravening Host 25%) and lines that name Minion skills (Bone Sovereign 30%). They add to each other and multiply the group above.',
-        '<b>More lines:</b> the summon\'s supports (Multistrike 52% less a strike, Ravening Host 12% more, a granted Chain 5% less), Added Fire\'s 30% extra, minion "more" lines (Bone Sovereign 15%), Harmony, and the defence lines that pay "more damage per 1,000 Armour" and the like (Bone Armour).',
+        '<b>More lines:</b> the summon\'s supports (Multistrike ' + msLess(GD) + '% less a strike, Ravening Host 12% more, a granted Chain 5% less), Added Fire\'s 30% extra, minion "more" lines (Bone Sovereign 15%), Harmony, and the defence lines that pay "more damage per 1,000 Armour" and the like (Bone Armour).',
         '<b>Strikes:</b> with Multistrike each blow strikes 3 times; the game\'s skill panel is 3 × its one-strike number.',
         'Checked against the game log on 11 Nov 2026 (Necromancer level 48–49; hub and Ruptures 31, 48, 64, 67 and 69): Skeletal Mage within 0.6%, Skeletons 0.5%, Raise Zombie 1.3%, Grave Golem 2.1%. The zone level rule is the game\'s own (the developer\'s formulas file in the public API) and fits those log numbers within 0.4%.',
       ]));
@@ -7548,12 +7550,12 @@ window.BOFaq = function (ctx) {
     h += card('The five ailments', table(['Ailment', 'Base chance', 'What it does', 'On Guardians'], [
       ['<b>Ignite</b>', A.IgniteChance + '% per hit with Fire', 'Deals ' + pct(A.IgniteFrac) + '% of the Fire hit over ' + A.IgniteSeconds + ' s. Only the strongest ignite counts: more ignites do not stack.', 'Same rules.'],
       ['<b>Shock</b>', A.ShockChance + '% per hit with Lightning', 'The enemy takes more damage for ' + A.ShockSeconds + ' s. The size depends on the hit compared with the enemy\'s life: ' + A.ShockCoef + ' × (hit ÷ life)<sup>' + A.ShockPow + '</sup> %, from ' + A.ShockMin + '% to ' + A.ShockMax + '%. Shock Effect lines raise the ' + A.ShockMax + '% cap up to ' + A.ShockMaxCap + '%.' + (A.ShockStackCap ? ' Several shocks add up to at most ' + A.ShockStackCap + '%.' : ''),
-        'Guardians have a lot of life, so a hit is a small share of it: a hit of 1% of its life shocks for ' + r1(shockAt(0.01)) + '%, 5% for ' + r1(shockAt(0.05)) + '%.'],
+        'Only one shock counts on a Guardian; shocks do not stack there (game log, 13 Nov 2026). Guardians have a lot of life, so a hit is a small share of it: a hit of 1% of its life shocks for ' + r1(shockAt(0.01)) + '%, 5% for ' + r1(shockAt(0.05)) + '%.'],
       ['<b>Poison</b>', A.PoisonChance + '% per hit with Poison', 'Each poison deals ' + pct(A.PoisonFracPerSec) + '% of the hit per second for ' + A.PoisonSeconds + ' s and they stack, up to ' + A.PoisonMaxStacks + '.' + (A.bPoisonTakesDamageTaken ? ' Each tick counts the enemy\'s damage taken (curses, Hunter\'s Marks, War Banner), like a hit.' : '') + ' Poison chance lines also poison Physical hits.',
         'The Dragonling\'s Virulence lets Rares and Guardians hold more stacks (60).'],
       ['<b>Freeze</b>', 'No chance roll', 'A Cold hit freezes for ' + A.FreezeSecPerPct + ' s per 1% of the enemy\'s life it took, at least ' + A.FreezeMinSeconds + ' s, at most ' + A.FreezeMaxSeconds + ' s. Rares freeze for ' + pct(A.FreezeRareMult) + '% as long.',
         pct(A.FreezeBossMult) + '% as long, at most ' + A.FreezeBossMaxSeconds + ' s, then immune for ' + A.FreezeBossImmuneSeconds + ' s.'],
-      ['<b>Chill</b>', 'No chance roll', 'A hit that is at least 25% Cold chills the enemy and slows it. A little Cold on a Physical hit (an Adds Cold prefix, a weapon that gains some Physical as extra Cold) still adds its damage but no longer chills or freezes. It counts again with 30% or more increased freeze duration or chill effect, or any Shatter (the developer\'s patch notes, 11 Nov 2026).', 'Same rules.'],
+      ['<b>Chill</b>', 'No chance roll', 'Any hit with Cold damage chills the enemy and slows it; more Cold makes a stronger chill. A little Cold on a Physical hit (an Adds Cold prefix, a weapon that gains some Physical as extra Cold) chills too (the developer\'s patch notes, Patch 72, 12 Nov 2026; before that a hit needed at least 25% Cold).', 'Same rules.'],
       ['<b>Bleed</b>', 'From skills and lines that cause it', 'Deals ' + pct(A.BleedFracPerSec) + '% of the Physical hit per second.', 'Same rules.'],
     ], 'faq-wrap'));
     // Poison's three groups. Game log 11 Nov 2026 (Mech70Check, Death Coil on the training dummy): "poison hit 72737.4, inc 154%, dot x1.06
@@ -7568,7 +7570,7 @@ window.BOFaq = function (ctx) {
         'Example from the game: a 72,737 hit with 154% increased and a 6% multiplier poisons for 72,737 × 20% × 2.54 × 1.06 = 39,168 a second per stack. Checked against the game log on 11 Nov 2026, with an amulet on and off (154% and 107% increased) and with and without a multiplier node: exact each time.',
       ]));
     h += card('Good to know', list([
-      'Chill and freeze need a hit that is at least 25% Cold (see Chill above); a hit with less Cold still deals its Cold damage. The sim\'s Stormfrost line follows this.',
+      'Any Cold in a hit chills again since Patch 72 (see Chill above); the 25% Cold floor from 0.56.9 is gone. The sim\'s Stormfrost line follows this.',
       'Chances are per hit that carries the element. Ignite, shock and poison chance lines add to the base chance.',
       H.IntAilmentDurPer10 ? 'Every 10 Intelligence makes ailments last ' + H.IntAilmentDurPer10 + '% longer; ailment duration lines add more.' : '',
       'Damage over time ticks every ' + A.TickSeconds + ' s.',
@@ -7585,7 +7587,7 @@ window.BOFaq = function (ctx) {
   //   separate: Glass Cannon on the character panel, 11 Nov 2026 (Runic Ward on 316,165 -> 368,374, off 302,271 -> 352,185: x1.1651
   //     both) and 12 Nov 2026 (Boundless Mind on 34,229 -> 40,412, off 25,966 -> 30,656: x1.1806 both); poison groups: log 11 Nov.
   //   Bloodlust: in the engine from 0.56.5 to 0.56.7; from 0.56.8 it is increased melee damage (blessings.json), so in neither list.
-  function multipliers() {
+  function multipliers(GD) {
     let h = intro('Damage Multipliers', 'Which "more" lines add together into one multiplier and which multiply on their own.');
     h += card('Added together into one multiplier', hint('Every line of the form "X% more damage for every amount of a stat". These add to each other first and then multiply your damage once. The game calls this group the damage engine.') +
       list([
@@ -7600,9 +7602,9 @@ window.BOFaq = function (ctx) {
       ]), 'the damage engine');
     h += card('Multiply separately', hint('Everything written as a plain "X% more damage". Each one multiplies by itself, so it is worth what it reads.') +
       list([
-        '<b>Plain "more" lines</b> on the tree, keystones and supports: Holy "more" lines, Glass Cannon, Bone Sovereign\'s 15%, Multistrike\'s 52% less.',
+        '<b>Plain "more" lines</b> on the tree, keystones and supports: Holy "more" lines, Glass Cannon, Bone Sovereign\'s 15%, Multistrike\'s ' + msLess(GD) + '% less.',
         '<b>Damage over Time Multiplier</b> and <b>increased Poison damage over time</b>: each is a group of its own (see <b>Ailments</b>).',
-        '<b>Crit multiplier</b>, and anything that makes the enemy take more damage: curses, Marks, shock.',
+        '<b>Crit multiplier</b>, and anything that makes the enemy take more damage: curses, Marks, shock. On a Guardian only the strongest curse, Mark or Banner counts (see <b>Curses &amp; Marks</b>).',
         '<b>For minions:</b> the summon skill\'s own increased damage, affinity, near you and zone level (see the Skills tab, Minion Scaling).',
         'The Rampart Strike support pays "more damage for each 1% chance to Block" but its text does not put it in the engine; the sim counts it separately. Not checked in the game.',
         'Checked on the character panel: Glass Cannon gave the same ×1.165 with Runic Ward on and off (11 Nov 2026), and the same ×1.181 with Boundless Mind on and off (12 Nov 2026). In the engine it would have given less with the other node on. Both poison groups: game log, 11 Nov 2026.',
@@ -7796,9 +7798,11 @@ window.BOFaq = function (ctx) {
     h += card('What stacks', list([
       '<b>Woes</b>: up to <b>2</b> per enemy (lines like "You can lay +1 more Woe" add more). A new Woe replaces the oldest.',
       '<b>Sentences</b>: one enemy at a time. It pays out when the enemy dies.',
-      'Woes and Sentences are separate, so an enemy can have both. A Guardian takes them all, but Woes at half effect.',
+      'Woes and Sentences are separate, so an enemy can have both. Woes work at half effect on a Guardian.',
       '<b>Hunter\'s Marks</b> and the <b>War Banner</b> are separate again and add on top of curses. Marks fall off 3 s after your last hit, so any skill that hits more often keeps them at the cap.',
-      'All of these multiply: two Woes, a Sentence and Marks are each their own "more damage taken".',
+      'On normal, magic and rare monsters all of these multiply: two Woes, a Sentence and Marks are each their own "more damage taken" (game log, 13 Nov 2026).',
+      // Patch 73 / data Meta.bGuardianStrongestTaken; log GuardianTaken59 13-14 Nov 2026; golem and daze on top: PoisonTaken63 ticks, 13 Nov 2026.
+      '<b>On a Guardian only the strongest one counts</b>: Woes, Sentences, Marks and the War Banner together (since Patch 73; seen in the game log 13 and 14 Nov 2026). The venom golem\'s blessing and daze still multiply on top.',
     ]));
     if (D.EffectPct) h += card('Dread', list([
       'While you channel a Woe it builds <b>Dread</b>: each point is +' + D.EffectPct + '% curse effect, up to ' + D.Cap + ' (' + D.BossCap + ' on Guardians).',
@@ -8051,8 +8055,15 @@ window.BOFaq = function (ctx) {
     h += card('Leaves your computer only when you choose', list([
       '<b>Share links</b>: the short link stores the build code (name, class, level, gear, tree, skills) so the link can open it. The long link carries the code itself and stores nothing.',
       '<b>Reports</b> (Report a problem, Send a check report): your text, the check report\'s numbers if there is one, a share link only if you tick it, and fight log lines only if you load your game log and tick "Attach log lines" (you see the exact lines first: fight lines only, no date or time of day, no name, no Steam ID, no file paths). No account. Check reports leave out your character name, Steam ID and file paths. Reports are kept 180 days.',
-      'No IP addresses or cookies are stored with links or reports. To stop spam, the report limit keeps a scrambled IP and date for one hour.',
+      'No IP addresses or cookies are stored with share links or reports. To stop spam, the report limit keeps a scrambled IP and date for one hour.',
       'The <b>Buy me a coffee</b> button is loaded from buymeacoffee.com.',
+    ]));
+    // Accounts opened to everyone in v311 (15 Nov 2026); wording follows src/legal-pages.js.
+    h += card('Accounts (optional)', list([
+      'You can sign in with Discord to save your build plans to an account, so they open on your other devices. Everything else works without one.',
+      'The account keeps a scrambled form of your Discord user ID (not the ID itself), your saved plans as build codes, and the dates it was made and last used. No Discord name or avatar is kept.',
+      'Signing in sets one cookie: a random sign-in code that the page cannot read, sent only to our own sign-in service and removed when you sign out.',
+      'The full details are on the site\'s Privacy page.',
     ]));
     return h;
   }
@@ -12028,7 +12039,7 @@ window.BOCharacter = function (ctx) {
       if (chillOk) {
         const add = byType.Lightning * chillMore / 100; byType.Lightning += add; hitDpsVs += add; res.hitDps = hitDpsVs;
         res.notes.push('Stormfrost: Lightning deals ' + chillMore + '% more against a Chilled or Frozen enemy; counted because this skill\'s own Cold chills it.');
-      } else res.notes.push('Stormfrost: its ' + chillMore + '% more Lightning against a Chilled enemy is not counted, because the hit of this skill is under 25% Cold (patch 0.56.9) or has none, so it does not chill.');
+      } else res.notes.push('Stormfrost: its ' + chillMore + '% more Lightning against a Chilled enemy is not counted, because the hit of this skill ' + (coldFloor ? 'is under 25% Cold (patch 0.56.9) or has none' : 'has no Cold') + ', so it does not chill.');
     }
     // ----- Executioner (LowLifeMore, CullingStrike) -----
     // X% more damage below T% of life, and hits kill below C%. Against one enemy fought from full life this is a

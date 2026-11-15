@@ -248,7 +248,7 @@ window.PAGE_LANGS = {
       if (s.Ground) o.Ground = pick(s.Ground, ['Duration', 'Tick', 'TickScale', 'Radius', 'HallowedTakenPct', 'HallowedCrit']); // Hallowed*: the ground's damage taken and crit (Consecrated Ground, Hallowed Slam)
       if (s.Totem) o.Totem = typeof s.Totem === 'object' ? Object.assign({ on: true }, pick(s.Totem, ['Kind', 'Interval', 'Duration', 'Max', 'PerLevels', 'Effectiveness'])) : true;
       if (s.Rain) o.Rain = pick(s.Rain, ['Delay', 'Waves', 'Interval', 'Arrows']);
-      if (s.Brand) { o.Brand = true; if (typeof s.Brand === 'object') { o.BrandDuration = s.Brand.Duration; o.BrandMax = s.Brand.Max; } } // duration and max: the tooltip of Venom/Rime/Ember shows {BrandLife}, not a number
+      if (s.Brand) { o.Brand = true; if (typeof s.Brand === 'object') { o.BrandDuration = s.Brand.Duration; o.BrandMax = s.Brand.Max; o.BrandChains = s.Brand.Chains; } } // duration and max: the tooltip of Venom/Rime/Ember shows {BrandLife}, not a number; BrandChains fills {BrandChains} in the gem text (display only, the sim does not read it)
       // Thousand Cuts: a chain of hops on a fixed timer, the last one heavier.
       if (s.Mirage) o.Mirage = pick(s.Mirage, ['Hops', 'Interval', 'HopTime', 'FinalScale']);
       if (s.Orbit) o.Orbit = typeof s.Orbit === 'object' ? pick(s.Orbit, ['Count', 'CountPerLevels', 'Max', 'AngularSpeed', 'SweepPeriod', 'HitInterval', 'RingSplitAt', 'EmpowerSpeed']) : true;
@@ -2938,9 +2938,11 @@ window.BOPlanner = function (ctx) {
   // Fill them from the skill's own data at the gem level (display only; the sim reads the same fields on its own).
   function skillDesc(sk, lvl) {
     const L = +lvl || 1, n = (base, at) => (+base || 0) + (at || []).filter(x => L >= x).length, o = sk.Orbit || {}, b = sk.Brand || {};
-    const fl = /\{Flights\} flights: (\d+), 1 more at gem level (\d+) and at (\d+)/.exec(sk.Description || '');
+    // Thousand Sparks: "{Flights} flights: 4, 1 more at gem level 10 and at 20" (older text) or
+    // "{Flights} flights (4, plus 1 at gem level 10, 1 at 20 and 1 for each Chain)" (b76); Chains from supports stay in the words.
+    const fl = /\{Flights\} flights(?::| \() ?(\d+), (?:1 more at gem level|plus 1 at gem level) (\d+),? (?:and at|1 at) (\d+)/.exec(sk.Description || '');
     const V = {
-      Chains: sk.Chains, BrandChains: b.Chains, BrandLife: b.Duration, Pierce: sk.Pierce,
+      Chains: sk.Chains, BrandChains: sk.BrandChains != null ? sk.BrandChains : b.Chains, BrandLife: sk.BrandDuration != null ? sk.BrandDuration : b.Duration, Pierce: sk.Pierce,
       Projectiles: sk.Projectiles != null ? n(sk.Projectiles, sk.ProjectilesAtLevels) : null,
       OrbitCount: o.Count != null ? n(o.Count, o.CountPerLevels) : null, OrbitMax: o.Max,
       Flights: fl ? n(fl[1], [+fl[2], +fl[3]]) : null,
@@ -17498,7 +17500,14 @@ window.BOStartApp = function () {
     if (sec === 'blessings' || sec === 'curses') {
       const b = byId(sec); if (!b) return '';
       if (b.Skill && GD.skills[String(b.Skill).toLowerCase()]) return planner.skillTip(null, b.Skill, false, true);
-      return head(b.Name, b.Kind || '') + (b.Text ? '<span class="pl-tip-desc">' + esc(b.Text) + '</span>' : '');
+      // The game fills {0}, {1}, ... itself: blessings from their Mods in order (per Charge/stack), curses from their fields.
+      // A value the data does not carry (Rift Toll, War Banner's stack) reads "a share" rather than a raw {0}.
+      const cv = sec === 'curses' ? [b.TakenPct, Object.values(b.ElementTakenPct || {})[0], null, Object.values(b.ResistDown || {})[0]]
+        : (b.Mods || []).map(m => Math.abs(+m.Value || 0));
+      if (b.Id === 'war_banner' && GD.curses.war_banner_near) cv[0] = GD.curses.war_banner_near.TakenPct;
+      const txt = String(b.Text || '').replace(/\{(\d)\}%/g, (m, i) => cv[+i] != null && cv[+i] !== '' ? num(cv[+i], 2) + '%' : 'a share')
+        .replace(/\{(\d)\}/g, (m, i) => cv[+i] != null ? num(cv[+i], 2) : 'some') + (b.Kind === 'Charge' ? ' (each Charge)' : b.Kind === 'Stack' && (b.Mods || []).length ? ' (each stack)' : '');
+      return head(b.Name, b.Kind || '') + (b.Text ? '<span class="pl-tip-desc">' + esc(txt) + '</span>' : '');
     }
     if (sec === 'bases') {
       const b = GD.bases[lid]; if (!b) return '';

@@ -5017,6 +5017,538 @@ window.BOBrewery = function (ctx) {
 };
 
 ;
+// Loot Filter tab: make a Broken Oath loot filter and copy its share code into the game's filter panel.
+// What a rule can test comes from the developer's loot_filter.md (public API archive, v1/static/b<build>/, "Generated from
+// Source/BrokenOath/UI/BOLootFilter.cpp"; build.js puts it in the game data as GD.lootFilter, tools/loot-filter.js reads it).
+// DEFAULTS below are that file as of build 73 (13 Nov 2026), used when the game data has none.
+// The game's rules: up to 12 rules, the TOP matching rule wins, no match = shown; some items are never hidden.
+// Share code: BOFILTER:1,<preset> then one |on,type,rarity,level,line,action,colour,quality,count,sound per rule; readers skip
+// fields they do not know, so fields past the known ones are kept as they are.
+// Not known yet (owner to test in game): what <preset> means, whether colour 0 means "no colour", which affixes count toward
+// each "Has a line" group, what "Good roll" / "Top roll" mean, sound values other than 0 and 255. The page keeps an imported
+// preset as it is and writes 0 for a new filter.
+// The filter is kept in this browser (bods:lootfilter). Rule names are ours only: the game code has none, so they travel in
+// our links (#f=<code>&n=<names>&t=<title>), not in the code.
+// app.js calls BOLootFilter(ctx) and gets back { render, openFromHash }.
+window.BOLootFilter = function (ctx) {
+  'use strict';
+  const { $, esc } = ctx;
+  const DEFAULTS = {
+    maxRules: 12,
+    neverHidden: ['uniques', 'runes', 'Dwarven Runes', 'idols', 'the Cube', 'gems', 'currency', 'gold', 'flasks'],
+    prefix: 'BOFILTER:1',
+    fields: ['on', 'type', 'rarity', 'level', 'line', 'action', 'colour', 'quality', 'count', 'sound'],
+    colours: [[1, 'jade', [0.30, 0.92, 0.52]], [2, 'frost', [0.36, 0.78, 1.0]], [3, 'bone', [1.0, 0.95, 0.84]]],
+    type: [[0, 'Any gear'], [1, 'Weapons'], [2, 'Armour'], [3, 'Jewellery'], [4, 'Rune bases'], [5, 'Helms'], [6, 'Body armour'], [7, 'Gloves'], [8, 'Boots'],
+      [9, 'Shields & foci'], [10, 'Rings'], [11, 'Amulets'], [12, 'Belts'], [13, 'Core-touched'], [14, 'Idols'], [15, '4+ sockets'], [16, 'Truesworn']],
+    rarity: [[0, 'Any rarity'], [1, 'Normal'], [2, 'Magic'], [3, 'Normal & magic'], [4, 'Rare'], [5, 'Rare & unique']],
+    level: [[0, 'Any level'], [1, 'Below 20'], [2, 'Below 40'], [3, 'Below 60'], [4, 'Below 75'], [5, '60+'], [6, '75+'], [7, '82+']],
+    line: [[0, 'Any lines'], [1, 'Life'], [2, 'Resistance'], [3, 'Minion'], [4, 'Move speed'], [5, '+Skill levels'], [6, 'Spell'], [7, 'Critical'], [8, 'Attack speed'],
+      [9, 'Cast speed'], [10, 'Mana'], [11, 'Fire damage'], [12, 'Cold damage'], [13, 'Lightning damage'], [14, 'Physical damage'], [15, 'Poison & ignite'], [16, 'Fire res'],
+      [17, 'Cold res'], [18, 'Lightning res'], [19, 'Poison res'], [20, 'Attributes'], [21, 'Defence'], [22, 'Leech & recovery'], [23, 'Area'], [24, 'Bleed & DoT'], [25, 'Curses'], [26, 'Cooldown recovery']],
+    quality: [[0, 'Any roll'], [1, 'Good roll'], [2, 'Top roll']],
+    count: [[0, '1 line'], [1, '2+ lines'], [2, '3+ lines']],
+    action: [[0, 'Hide'], [1, 'Show'], [2, 'Highlight'], [3, 'Highlight + beam']],
+    sound: [[0, 'Silent'], [255, 'Auto']],
+    later: { title: 'Socket count and base type as conditions', text: 'Not rule conditions today (the type chip is the item class, e.g. Boots, not a single base). Both are being considered for a later filter update; no promise or date yet.' },
+  };
+  // The game data's copy wins field by field; anything it lacks comes from DEFAULTS.
+  const L = () => Object.assign({}, DEFAULTS, (ctx.gd && ctx.gd() && ctx.gd().lootFilter) || {});
+  const name = (key, v) => { const x = (L()[key] || []).find(o => o[0] === v); return x ? x[1] : null; };
+  const NEW_RULE = { on: 1, type: 0, rarity: 0, level: 0, line: 0, action: 1, colour: 0, quality: 0, count: 0, sound: 255 };
+  const newRule = () => Object.assign({ name: '', extra: [] }, NEW_RULE);
+  const blank = () => ({ title: '', preset: '0', rules: [] });
+
+  // ---------- the share code ----------
+  function encode(f) {
+    const lf = L();
+    return lf.prefix + ',' + f.preset + f.rules.map(r => '|' + lf.fields.map(k => r[k] != null ? r[k] : (NEW_RULE[k] != null ? NEW_RULE[k] : 0)).concat(r.extra || []).join(',')).join('');
+  }
+  // A pasted code -> { filter, notes } or throws with a plain message.
+  function decode(text) {
+    const lf = L();
+    const s = String(text || '').trim().replace(/\s+/g, '');
+    const m = s.match(/BOFILTER:(\d+),([^|]*)((?:\|[^|]*)*)$/i);
+    if (!m) throw new Error('That is not a loot filter code. It should start with BOFILTER:1,');
+    const notes = [];
+    if ('BOFILTER:' + m[1] !== lf.prefix) notes.push('This code is format ' + m[1] + '; the page knows format ' + lf.prefix.split(':')[1] + '. Check it in game before use.');
+    const f = { title: '', preset: m[2] || '0', rules: [] };
+    const parts = m[3].split('|').slice(1);
+    for (const p of parts) {
+      const v = p.split(','), r = newRule();
+      lf.fields.forEach((k, i) => { if (v[i] != null && v[i] !== '') { const n = Number(v[i]); r[k] = isFinite(n) ? n : v[i]; } });
+      r.extra = v.slice(lf.fields.length);
+      f.rules.push(r);
+    }
+    if (f.rules.length > lf.maxRules) notes.push('The code has ' + f.rules.length + ' rules; the game takes ' + lf.maxRules + '.');
+    if (f.rules.some(r => r.extra.length)) notes.push('Some rules have fields this page does not know yet; they are kept as they are.');
+    return { filter: f, notes };
+  }
+
+  // ---------- state (this browser only) ----------
+  const KEY = 'bods:lootfilter';
+  function clean(x) {
+    if (!x || typeof x !== 'object' || !Array.isArray(x.rules)) return null;
+    const f = blank();
+    f.title = typeof x.title === 'string' ? x.title.slice(0, 80) : '';
+    f.preset = /^[\w.-]{0,12}$/.test(String(x.preset)) ? String(x.preset) || '0' : '0';
+    f.rules = x.rules.slice(0, 40).map(r => {
+      const o = newRule();
+      if (r && typeof r === 'object') {
+        for (const k of Object.keys(NEW_RULE).concat(L().fields)) if (r[k] != null && isFinite(+r[k])) o[k] = +r[k];
+        o.name = typeof r.name === 'string' ? r.name.slice(0, 60) : '';
+        o.extra = Array.isArray(r.extra) ? r.extra.slice(0, 20).map(v => String(v).slice(0, 12)) : [];
+      }
+      return o;
+    });
+    return f;
+  }
+  let F = (() => { try { return clean(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) { return null; } })() || blank();
+  let sel = F.rules.length ? 0 : -1, msg = '', msgUndo = null, pasting = false, pasteText = '';
+  const keep = () => { try { localStorage.setItem(KEY, JSON.stringify(F)); } catch (e) { /* storage off */ } };
+
+  // ---------- links ----------
+  function link() {
+    const p = ['f=' + encodeURIComponent(encode(F))];
+    if (F.rules.some(r => r.name)) p.push('n=' + F.rules.map(r => encodeURIComponent(r.name.replace(/\|/g, '/'))).join('|'));
+    if (F.title) p.push('t=' + encodeURIComponent(F.title));
+    const base = /^https?:$/.test(location.protocol) ? location.origin + location.pathname : ctx.siteUrl + 'lootfilter/';
+    return base + '#' + p.join('&');
+  }
+  // #f=<code>[&n=<names>][&t=<title>]: load it (the filter on screen can be brought back with Undo).
+  function openFromHash(hash) {
+    const h = String(hash || '').replace(/^#/, ''); if (!/^f=/.test(h)) return false;
+    const q = {}; for (const kv of h.split('&')) { const i = kv.indexOf('='); if (i > 0) q[kv.slice(0, i)] = kv.slice(i + 1); }
+    let got;
+    try { got = decode(decodeURIComponent(q.f || '')); } catch (e) { msg = 'Could not open that filter link: ' + e.message; return true; }
+    const names = q.n ? q.n.split('|').map(s => { try { return decodeURIComponent(s); } catch (e) { return ''; } }) : [];
+    got.filter.rules.forEach((r, i) => { r.name = (names[i] || '').slice(0, 60); });
+    try { got.filter.title = q.t ? decodeURIComponent(q.t).slice(0, 80) : ''; } catch (e) { /* keep empty */ }
+    load(got, 'Filter loaded from the link.');
+    return true;
+  }
+  function load(got, what) {
+    const before = JSON.stringify(F);
+    F = got.filter; sel = F.rules.length ? 0 : -1; keep();
+    msgUndo = JSON.parse(before).rules.length ? before : null;
+    msg = what + (got.notes.length ? ' ' + got.notes.join(' ') : '');
+  }
+
+  // ---------- how a rule matches (our reading; NOT checked in game) ----------
+  // loot_filter.md lists the values but not how each one tests an item. Everything below is the page's reading, shown
+  // to players under "How the page reads the rules" (READING). Change it here when an in-game test says otherwise.
+  // Item kinds for the tester, from the bases' Slot / Class (game data), and the "Item type" values each one counts as.
+  // Guesses: Armour = helm, body, gloves, boots; Jewellery = ring, amulet, belt; a tome is a focus; a quiver is in no
+  // group (only "Any gear").
+  const KINDS = [
+    ['weapon', 'Weapon', [1], b => b.Slot === 'MainHand'],
+    ['shield', 'Shield', [9], b => b.Class === 'Shield'],
+    ['tome', 'Tome (focus)', [9], b => b.Class === 'Tome'],
+    ['quiver', 'Quiver', [], b => b.Class === 'Quiver'],
+    ['helm', 'Helm', [2, 5], b => b.Slot === 'Helm'],
+    ['chest', 'Body armour', [2, 6], b => b.Slot === 'Chest'],
+    ['gloves', 'Gloves', [2, 7], b => b.Slot === 'Gloves'],
+    ['boots', 'Boots', [2, 8], b => b.Slot === 'Boots'],
+    ['ring', 'Ring', [3, 10], b => b.Slot === 'Ring'],
+    ['amulet', 'Amulet', [3, 11], b => b.Slot === 'Amulet'],
+    ['belt', 'Belt', [3, 12], b => b.Slot === 'Belt'],
+    ['idol', 'Idol', [14], b => b.Slot === 'Idol']];
+  const kind = id => KINDS.find(k => k[0] === id) || KINDS[0];
+  // Item type values that are not a class but something about the item (the tester's check boxes).
+  const FLAG_TYPES = { rune: 4, core: 13, sockets: 15, truesworn: 16 };
+  // Type values that hold others (for "never reached"): Armour holds helms ... boots, Jewellery holds rings, amulets, belts.
+  const TYPE_HOLDS = { 2: [5, 6, 7, 8], 3: [10, 11, 12] };
+  const RARITY = { 0: 'NMRU', 1: 'N', 2: 'M', 3: 'NM', 4: 'R', 5: 'RU' };
+  const RARITY_NAME = { N: 'Normal', M: 'Magic', R: 'Rare', U: 'Unique' };
+  const LEVEL = { 0: [0, Infinity], 1: [0, 20], 2: [0, 40], 3: [0, 60], 4: [0, 75], 5: [60, Infinity], 6: [75, Infinity], 7: [82, Infinity] }; // [from, below)
+  const COUNT = { 0: 1, 1: 2, 2: 3 };   // "1 line" = at least one
+  const QUALITY = { 0: 0, 1: 1, 2: 2 }; // a line's roll: 0 normal, 1 good, 2 top; "Good roll" takes good or top
+  const ROLLS = [[0, 'Normal roll'], [1, 'Good roll'], [2, 'Top roll']];
+  // Lines that also count toward another group (guess): a fire, cold, lightning or poison res line is also a Resistance line.
+  const ALSO = { 16: [2], 17: [2], 18: [2], 19: [2] };
+  const groupsOf = g => new Set([g].concat(ALSO[g] || []));
+  const READING = [
+    'A rule that is off is skipped. Only the first ' + DEFAULTS.maxRules + ' rules count.',
+    'Armour = helms, body armour, gloves and boots. Jewellery = rings, amulets and belts. A tome counts as a focus; a quiver only as "Any gear".',
+    '"Normal & magic" and "Rare & unique" take either rarity. "Below 40" means item level 39 or lower; "60+" means 60 or higher.',
+    'The line conditions count the item\'s lines that are in the picked group (any group if "Any lines") and roll at least as well as picked ("Good roll" takes good and top rolls). The rule needs at least that many: 1, 2 or 3. With all three left on Any / 1 line, the lines are not tested at all.',
+    'A fire, cold, lightning or poison res line also counts as a Resistance line.',
+    'Uniques and idols are never hidden: a Hide rule that catches one shows it anyway.'];
+
+  const has = (tbl, v) => Object.prototype.hasOwnProperty.call(tbl, v);
+  const trivialLines = r => !r.line && !r.quality && !r.count;
+  // Why rule r does not catch item it (null = it does). The tester's item: { kind, rarity: 'N'|'M'|'R'|'U', ilvl, flags: {rune, core, sockets, truesworn}, lines: [{ g, roll }] }.
+  function miss(r, it) {
+    if (r.type) {
+      const flag = Object.keys(FLAG_TYPES).find(f => FLAG_TYPES[f] === r.type), tn = '"' + label('type', r.type) + '"';
+      if (!flag && !KINDS.some(k => k[2].includes(r.type))) return 'the page does not know how item type ' + tn + ' tests an item';
+      if (flag ? !it.flags[flag] : !kind(it.kind)[2].includes(r.type)) return 'it is not in ' + tn;
+    }
+    if (!has(RARITY, r.rarity)) return 'the page does not know rarity ' + r.rarity;
+    if (!RARITY[r.rarity].includes(it.rarity)) return 'it is ' + RARITY_NAME[it.rarity].toLowerCase() + ', the rule wants ' + label('rarity', r.rarity).toLowerCase();
+    if (!has(LEVEL, r.level)) return 'the page does not know item level value ' + r.level;
+    const [lo, hi] = LEVEL[r.level];
+    if (!(it.ilvl >= lo && it.ilvl < hi)) return 'item level ' + it.ilvl + ', the rule wants ' + label('level', r.level).toLowerCase();
+    if (trivialLines(r)) return null;
+    if (!has(QUALITY, r.quality) || !has(COUNT, r.count)) return 'the page does not know a line value of this rule';
+    const n = it.lines.filter(l => (!r.line || groupsOf(l.g).has(r.line)) && l.roll >= QUALITY[r.quality]).length;
+    if (n < COUNT[r.count]) {
+      const what = (r.line ? label('line', r.line) + ' ' : '') + 'line' + (COUNT[r.count] > 1 ? 's' : '') + (r.quality ? ' with a ' + label('quality', r.quality).toLowerCase() + ' or better' : '');
+      return 'it has ' + n + ' of the ' + COUNT[r.count] + '+ ' + what + ' the rule wants';
+    }
+    return null;
+  }
+  // The rule that decides the item: { i, rule, trace: [[i, why]] } (i = -1: no rule, the item is shown).
+  function decide(it) {
+    const lf = L(), trace = [];
+    for (let i = 0; i < Math.min(F.rules.length, lf.maxRules); i++) {
+      const r = F.rules[i];
+      if (!r.on) { trace.push([i, 'the rule is off']); continue; }
+      const why = miss(r, it);
+      if (!why) return { i, rule: r, trace };
+      trace.push([i, why]);
+    }
+    return { i: -1, rule: null, trace };
+  }
+  // Does rule a catch every item rule b catches? (Then b, below a, is never reached.) Unknown values: no.
+  function covers(a, b) {
+    if (a.type && a.type !== b.type && !(TYPE_HOLDS[a.type] || []).includes(b.type)) return false;
+    if (!has(RARITY, a.rarity) || !has(RARITY, b.rarity) || ![...RARITY[b.rarity]].every(x => RARITY[a.rarity].includes(x))) return false;
+    if (!has(LEVEL, a.level) || !has(LEVEL, b.level)) return false;
+    const [alo, ahi] = LEVEL[a.level], [blo, bhi] = LEVEL[b.level];
+    if (blo < alo || bhi > ahi) return false;
+    if (trivialLines(a)) return true;
+    if (trivialLines(b) || !has(QUALITY, a.quality) || !has(QUALITY, b.quality) || !has(COUNT, a.count) || !has(COUNT, b.count)) return false;
+    if (a.line && !groupsOf(b.line).has(a.line)) return false;
+    return QUALITY[b.quality] >= QUALITY[a.quality] && COUNT[b.count] >= COUNT[a.count];
+  }
+  // Warnings per rule index: never reached, or a Hide that the game ignores for some items.
+  function warnings() {
+    const lf = L(), out = {};
+    const add = (i, t) => { (out[i] = out[i] || []).push(t); };
+    const live = F.rules.map((r, i) => [r, i]).filter(([r, i]) => r.on && i < lf.maxRules);
+    for (const [b, j] of live) {
+      const a = live.find(([r, i]) => i < j && covers(r, b));
+      if (a) add(j, 'Never reached: rule ' + (a[1] + 1) + ' above catches every item this rule would' + (a[0].action === b.action ? ' (and does the same)' : '') + '.');
+      if (isHide(b) && b.type === 14) add(j, 'Idols are never hidden, so this rule changes nothing.');
+      else if (isHide(b) && b.rarity === 5) add(j, 'Uniques are never hidden: this rule hides rares only.');
+    }
+    return out;
+  }
+
+  // ---------- the test item (kept in this browser) ----------
+  const TKEY = 'bods:lootfilter:test';
+  const blankItem = () => ({ kind: 'boots', base: '', rarity: 'M', ilvl: 30, flags: { rune: false, core: false, sockets: false, truesworn: false }, lines: [{ g: 1, roll: 0 }] });
+  function cleanItem(x) {
+    const it = blankItem(); if (!x || typeof x !== 'object') return it;
+    if (KINDS.some(k => k[0] === x.kind)) it.kind = x.kind;
+    if (typeof x.base === 'string') it.base = x.base.slice(0, 60);
+    if (RARITY_NAME[x.rarity]) it.rarity = x.rarity;
+    if (isFinite(+x.ilvl)) it.ilvl = Math.max(1, Math.min(100, Math.round(+x.ilvl)));
+    if (x.flags && typeof x.flags === 'object') for (const f of Object.keys(it.flags)) it.flags[f] = !!x.flags[f];
+    if (Array.isArray(x.lines)) it.lines = x.lines.slice(0, 8).filter(l => l && isFinite(+l.g)).map(l => ({ g: +l.g, roll: [0, 1, 2].includes(+l.roll) ? +l.roll : 0 }));
+    return it;
+  }
+  let T = (() => { try { return cleanItem(JSON.parse(localStorage.getItem(TKEY) || 'null')); } catch (e) { return blankItem(); } })();
+  const keepT = () => { try { localStorage.setItem(TKEY, JSON.stringify(T)); } catch (e) { /* storage off */ } };
+  const testOn = true; // whether the tester's result marks a rule in the list
+
+  // ---------- drawing ----------
+  // Linear RGB (the game's numbers) -> a CSS colour.
+  const srgb = c => Math.round(255 * Math.max(0, Math.min(1, c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055)));
+  const css = rgb => 'rgb(' + rgb.map(srgb).join(',') + ')';
+  const colour = v => (L().colours || []).find(c => c[0] === v);
+  const label = (key, v) => name(key, v) || ('value ' + v);
+  const isHide = r => r.action === 0, isLit = r => r.action === 2 || r.action === 3;
+  function chips(r) {
+    const c = [];
+    if (r.rarity) c.push(label('rarity', r.rarity));
+    c.push(r.type ? label('type', r.type) : 'Any gear');
+    if (r.level) c.push('Item level ' + label('level', r.level).replace(/^Below/, 'below'));
+    if (r.line) c.push(label('line', r.line) + ' line');
+    if (r.quality) c.push(label('quality', r.quality));
+    if (r.count) c.push(label('count', r.count));
+    return c;
+  }
+  function actionChip(r) {
+    const col = isLit(r) && colour(r.colour);
+    return '<span class="lf-act a' + (+r.action || 0) + '"' + (col ? ' style="--lf-c:' + css(col[2]) + '"' : '') + '>' + esc(label('action', r.action)) + '</span>';
+  }
+  function options(key, v) {
+    const l = L()[key] || [], has = l.some(o => o[0] === v);
+    return (has ? '' : '<option value="' + esc(String(v)) + '" selected>Value ' + esc(String(v)) + ' (not in the list)</option>') +
+      l.map(o => '<option value="' + o[0] + '"' + (o[0] === v ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join('');
+  }
+  const field = (key, title, r, hint) => '<label class="field"><span>' + title + '</span><select data-lf-field="' + key + '">' + options(key, r[key]) + '</select>' + (hint ? '<small class="hint">' + hint + '</small>' : '') + '</label>';
+
+  function ruleList() {
+    const lf = L();
+    if (!F.rules.length) return '<p class="hint lf-empty">No rules yet. With no rules every item is shown. Add a rule to start.</p>';
+    const warn = warnings(), hit = testOn ? decide(T).i : -1;
+    return '<ol class="lf-rules">' + F.rules.map((r, i) => {
+      const over = i >= lf.maxRules;
+      return '<li class="lf-rule' + (i === sel ? ' sel' : '') + (r.on ? '' : ' off') + (over ? ' over' : '') + (i === hit ? ' hit' : '') + '">' +
+        '<span class="lf-num">' + (i + 1) + '</span>' +
+        '<label class="lf-on"><input type="checkbox" data-lf-on="' + i + '"' + (r.on ? ' checked' : '') + ' aria-label="Rule ' + (i + 1) + ' on"></label>' +
+        '<button type="button" class="lf-pick" data-lf-sel="' + i + '">' + actionChip(r) +
+        '<span class="lf-sum">' + (r.name ? '<b>' + esc(r.name) + '</b>' : '') + '<span class="lf-chips">' + chips(r).map(c => '<span class="lf-chip">' + esc(c) + '</span>').join('') + '</span>' +
+        (over ? '<small class="lf-warn">Past the game\'s ' + lf.maxRules + '-rule limit</small>' : '') +
+        (warn[i] || []).map(w => '<small class="lf-warn">' + esc(w) + '</small>').join('') +
+        (i === hit ? '<small class="lf-hitnote">Catches the test item</small>' : '') + '</span></button>' +
+        '<span class="lf-tools">' +
+        '<button type="button" class="lf-ic" data-lf-move="' + i + ':-1"' + (i ? '' : ' disabled') + ' aria-label="Move rule ' + (i + 1) + ' up" title="Move up">↑</button>' +
+        '<button type="button" class="lf-ic" data-lf-move="' + i + ':1"' + (i < F.rules.length - 1 ? '' : ' disabled') + ' aria-label="Move rule ' + (i + 1) + ' down" title="Move down">↓</button>' +
+        '<button type="button" class="lf-ic" data-lf-dup="' + i + '"' + (F.rules.length < lf.maxRules ? '' : ' disabled') + ' aria-label="Duplicate rule ' + (i + 1) + '" title="Duplicate">⧉</button>' +
+        '<button type="button" class="lf-ic lf-x" data-lf-del="' + i + '" aria-label="Remove rule ' + (i + 1) + '">✕</button>' +
+        '</span></li>';
+    }).join('') + '</ol>';
+  }
+
+  // The tester: describe an item in the filter's own terms and see which rule decides it.
+  function tester() {
+    const lf = L(), gd = ctx.gd && ctx.gd(), k = kind(T.kind);
+    const bases = gd && gd.bases ? Object.values(gd.bases).filter(k[3]).sort((a, b) => (a.Level || 0) - (b.Level || 0) || String(a.Name).localeCompare(String(b.Name))) : [];
+    const opt = (v, t, on) => '<option value="' + esc(String(v)) + '"' + (on ? ' selected' : '') + '>' + esc(t) + '</option>';
+    let h = '<div class="card lf-test-card"><h2>Test an item</h2><p class="hint">Describe an item and see which rule decides what happens to it. This follows the page\'s reading of the rules (below), not yet checked in game.</p>';
+    h += '<div class="lf-tgrid">' +
+      '<label class="field"><span>Item type</span><select data-lft="kind">' + KINDS.map(x => opt(x[0], x[1], x[0] === T.kind)).join('') + '</select></label>' +
+      '<label class="field"><span>Base (optional)</span><select data-lft="base">' + opt('', 'Any ' + k[1].toLowerCase(), !T.base) + bases.map(b => opt(b.Id, b.Name + (b.Level ? ' (level ' + b.Level + ')' : ''), b.Id === T.base)).join('') + '</select></label>' +
+      '<label class="field"><span>Rarity</span><select data-lft="rarity">' + Object.keys(RARITY_NAME).map(r => opt(r, RARITY_NAME[r], r === T.rarity)).join('') + '</select></label>' +
+      '<label class="field"><span>Item level</span><input type="number" min="1" max="100" step="1" data-lft="ilvl" value="' + T.ilvl + '"></label></div>';
+    h += '<div class="lf-flags">' + Object.keys(FLAG_TYPES).map(f => '<label class="lf-flag"><input type="checkbox" data-lft-flag="' + f + '"' + (T.flags[f] ? ' checked' : '') + '> ' + esc(label('type', FLAG_TYPES[f])) + '</label>').join('') + '</div>';
+    const groups = (lf.line || []).filter(o => o[0]);
+    h += '<h3>Lines <span class="hint">' + T.lines.length + '</span></h3>';
+    h += T.lines.length ? '<ul class="lf-tlines">' + T.lines.map((l, i) => '<li>' +
+      '<select data-lft-line="' + i + ':g" aria-label="Line ' + (i + 1) + ' group">' + (groups.some(o => o[0] === l.g) ? '' : opt(l.g, 'Value ' + l.g, true)) + groups.map(o => opt(o[0], o[1], o[0] === l.g)).join('') + '</select>' +
+      '<select data-lft-line="' + i + ':roll" aria-label="Line ' + (i + 1) + ' roll">' + ROLLS.map(o => opt(o[0], o[1], o[0] === l.roll)).join('') + '</select>' +
+      '<button type="button" class="lf-ic lf-x" data-lft-del="' + i + '" aria-label="Remove line ' + (i + 1) + '">✕</button></li>').join('') + '</ul>' : '<p class="hint">No lines (a normal item).</p>';
+    h += '<button class="btn small ghost" type="button" data-lft-add' + (T.lines.length < 8 ? '' : ' disabled') + '>+ Add line</button>';
+    // The verdict.
+    const d = decide(T), r = d.rule;
+    let verdict;
+    if (!r) verdict = '<b>No rule catches it:</b> it is shown (the game\'s default).';
+    else if (isHide(r) && (T.rarity === 'U' || T.kind === 'idol')) verdict = '<b>Rule ' + (d.i + 1) + '</b> would hide it, but the game never hides ' + (T.kind === 'idol' ? 'idols' : 'uniques') + ': it is shown.';
+    else {
+      const col = isLit(r) && colour(r.colour);
+      verdict = '<b>Rule ' + (d.i + 1) + (r.name ? ' (' + esc(r.name) + ')' : '') + '</b> catches it: ' + actionChip(r) + (col ? ' in ' + esc(col[1]) : '');
+    }
+    h += '<div class="lf-verdict' + (r ? ' a' + r.action : '') + '">' + verdict + '</div>';
+    if (d.trace.length) h += '<ul class="lf-trace">' + d.trace.map(([i, why]) => '<li><span>Rule ' + (i + 1) + '</span> skips it: ' + esc(why) + '.</li>').join('') + '</ul>';
+    return h + '</div>';
+  }
+
+  // ---------- starting points: a stage preset, shaped by the character on screen ----------
+  // Our own advice, not the game's: a filter made from a few switches, which the player then edits like any other.
+  // Stages: Levelling (hide only plain items), Mid-game, Endgame (strict: rares without the wanted lines are hidden).
+  // SSF keeps more bases for crafting. "Wanted lines" come from the character on screen (ctx.build(), app.js): its
+  // main skill's tags and damage type, curses on the bar, crit on the main skill, and resistances below the cap.
+  const STAGES = [['level', 'Levelling'], ['mid', 'Mid-game'], ['end', 'Endgame']];
+  const DMG_GROUP = { Fire: 11, Cold: 12, Lightning: 13, Physical: 14, Poison: 15 };
+  const RES_GROUP = { Fire: 16, Cold: 17, Lightning: 18, Poison: 19 };
+  const BASIC_WANTS = [1, 2]; // Life, Resistance: every build
+  let P = { stage: 'end', ssf: false, wants: null, auto: true }; // wants: null = from the build (or the basics)
+  // What the character on screen wants, in priority order: { primary, wants: [group], short: [res group], why: {group: text} }.
+  function fromBuild(b) {
+    const why = {}, wants = [], add = (g, t) => { if (!wants.includes(g)) { wants.push(g); why[g] = t; } };
+    let primary = null;
+    if (b && b.main) {
+      const tags = b.main.tags || [], sk = b.main.name;
+      if (tags.includes('Minion')) { primary = 3; add(3, sk + ' is a minion skill'); add(5, 'Minion skills gain from skill levels'); }
+      else {
+        const dg = DMG_GROUP[b.main.type];
+        if (dg) { primary = dg; add(dg, sk + ' deals ' + b.main.type.toLowerCase() + ' damage'); }
+        if (tags.includes('Spell')) { if (!primary) primary = 6; add(6, sk + ' is a spell'); add(9, sk + ' is a spell'); add(5, 'Spells gain from skill levels'); }
+        if (tags.includes('Attack')) add(8, sk + ' is an attack');
+        if (b.crit >= 25) add(7, sk + ' crits ' + Math.round(b.crit) + '% of the time');
+      }
+      if ((b.bar || []).some(s => (s.tags || []).includes('Curse'))) add(25, 'A curse is on your skill bar');
+    }
+    add(1, 'Every build'); add(2, 'Every build');
+    const short = [];
+    if (b && b.res) for (const [el, g] of Object.entries(RES_GROUP)) if (isFinite(b.res[el]) && b.res[el] < b.cap) { short.push(g); why[g] = el + ' res ' + Math.round(b.res[el]) + '% (cap ' + b.cap + '%)'; }
+    return { primary, wants, short, why };
+  }
+  // The rules for the switches. Shows and highlights first (top rule wins), hides last.
+  function makeRules(opt) {
+    const lf = L(), max = lf.maxRules, end = opt.stage === 'end', mid = opt.stage === 'mid', lvl = opt.stage === 'level';
+    const R = o => Object.assign(newRule(), o), gname = g => label('line', g);
+    const top = [
+      R({ name: 'Truesworn', type: 16, action: 3, colour: 3 }),
+      R({ name: 'Core-touched', type: 13, action: 2, colour: 3 }),
+      R({ name: 'Oathword bases', type: 15, action: lvl ? 1 : 2, colour: lvl ? 0 : 2 })];
+    if (opt.ssf) top.push(R({ name: 'Rune bases', type: 4, action: 1 }));
+    const hides = lvl ? [R({ name: 'Plain items', rarity: 1, action: 0 })]
+      : opt.ssf ? (end ? [R({ name: 'Old normal & magic', rarity: 3, level: 4, action: 0 }), R({ name: 'Old rares', rarity: 4, level: 3, action: 0 })] : [R({ name: 'Early normal & magic', rarity: 3, level: 2, action: 0 })])
+      : end ? [R({ name: 'Normal & magic', rarity: 3, action: 0 }), R({ name: 'Rares without wanted lines', rarity: 4, action: 0 })]
+      : [R({ name: 'Normal & magic', rarity: 3, action: 0 }), R({ name: 'Early rares', rarity: 4, level: 2, action: 0 })];
+    const mid_ = [];
+    if (opt.primary && !lvl) mid_.push(R({ name: 'Top ' + gname(opt.primary), rarity: 4, level: end ? 6 : 0, line: opt.primary, quality: 2, count: 1, action: 3, colour: 1 }));
+    // Short on two or more resistances: one Resistance rule (the page reads an element's res line as a Resistance line too).
+    const short = opt.short.length > 1 ? [2] : opt.short;
+    for (const g of short) mid_.push(R({ name: gname(g) + ' (you are short)', rarity: lvl ? 0 : 4, line: g, quality: end ? 1 : 0, action: 2, colour: 2 }));
+    // Levelling shows every magic and rare item anyway, so there the wanted lines are highlighted instead of shown.
+    const wants = opt.wants.filter(g => !short.includes(g)).map(g => R({ name: gname(g), rarity: 4, line: g, quality: end ? 1 : 0, action: lvl ? 2 : 1, colour: lvl ? 2 : 0 }));
+    const boots = R({ name: 'Move speed boots', type: 8, rarity: end ? 4 : 0, line: 4, quality: end ? 1 : 0, action: 2, colour: 1 });
+    mid_.push(...wants.slice(0, 2), boots, ...wants.slice(2));
+    const room = Math.max(0, max - top.length - hides.length);
+    return { rules: top.concat(mid_.slice(0, room), hides), left: mid_.slice(room).map(r => r.name) };
+  }
+  function presetCard() {
+    const b = ctx.build ? ctx.build() : null, fb = fromBuild(P.auto ? b : null);
+    // The wanted lines follow the character (and its main skill) until the player changes them.
+    const key = P.auto && b ? b.id + '|' + (b.main ? b.main.id : '') : '';
+    if (P.wants == null || P.key !== key) { P.wants = fb.wants.slice(); P.key = key; }
+    const lf = L(), groups = (lf.line || []).filter(o => o[0]);
+    let h = '<div class="card lf-preset-card"><h2>Start from a preset</h2><p class="hint">Makes a filter from a few choices; edit it like any other afterwards. This is our own advice, not the game\'s.</p>';
+    h += '<div class="field"><span>Stage</span><div class="lf-seg" role="radiogroup" aria-label="Stage">' + STAGES.map(s => '<button type="button" role="radio" aria-checked="' + (P.stage === s[0]) + '" class="' + (P.stage === s[0] ? 'on' : '') + '" data-lfp-stage="' + s[0] + '">' + s[1] + '</button>').join('') + '</div></div>';
+    h += '<label class="lf-flag"><input type="checkbox" data-lfp-ssf' + (P.ssf ? ' checked' : '') + '> Solo self-found (keep more bases and rares for crafting)</label>';
+    h += '<label class="lf-flag"><input type="checkbox" data-lfp-auto' + (P.auto ? ' checked' : '') + (b ? '' : ' disabled') + '> ' + (b ? 'Fit it to <b>' + esc(b.name) + '</b> (' + esc(b.main ? b.main.name : 'no skill') + ')' : 'Fit it to a character (load one, or open a Ladder build in the planner)') + '</label>';
+    h += '<div class="field"><span>Wanted lines (rares with these are kept; tap to change)</span><div class="lf-wants">' + groups.map(o => {
+      const on = P.wants.includes(o[0]), t = fb.why[o[0]];
+      return '<button type="button" class="lf-want' + (on ? ' on' : '') + (o[0] === fb.primary ? ' primary' : '') + '" aria-pressed="' + on + '" data-lfp-want="' + o[0] + '"' + (t ? ' title="' + esc(t) + '"' : '') + '>' + esc(o[1]) + '</button>';
+    }).join('') + '</div></div>';
+    if (fb.short.length) h += '<p class="hint">Short on resistance: ' + fb.short.map(g => esc(fb.why[g])).join(', ') + '. ' + (P.stage === 'level' ? 'Gear' : 'Rares') + ' with ' + (fb.short.length > 1 ? 'a resistance line' : 'that line') + ' get highlighted.</p>';
+    const plan = makeRules({ stage: P.stage, ssf: P.ssf, primary: P.wants.includes(fb.primary) ? fb.primary : P.wants[0] || null, wants: P.wants, short: fb.short });
+    h += '<div class="lf-row"><button class="btn small" type="button" data-lf="preset">Make this filter (' + plan.rules.length + ' rules)</button><span class="hint">Replaces the rules above; Undo brings them back.</span></div>';
+    if (plan.left.length) h += '<p class="hint">No room in ' + lf.maxRules + ' rules for: ' + plan.left.map(esc).join(', ') + '.</p>';
+    return h + '</div>';
+  }
+  function applyPreset() {
+    const b = ctx.build ? ctx.build() : null, fb = fromBuild(P.auto ? b : null);
+    const plan = makeRules({ stage: P.stage, ssf: P.ssf, primary: P.wants.includes(fb.primary) ? fb.primary : P.wants[0] || null, wants: P.wants, short: fb.short });
+    const stage = STAGES.find(s => s[0] === P.stage)[1];
+    load({ filter: { title: (P.auto && b ? b.name + ' ' : '') + stage + (P.ssf ? ' SSF' : ''), preset: '0', rules: plan.rules }, notes: [] }, 'Made a ' + stage.toLowerCase() + ' filter' + (P.auto && b ? ' for ' + b.name : '') + '.');
+  }
+
+  function details() {
+    const r = F.rules[sel];
+    if (!r) return '<div class="card lf-side"><h2>Rule</h2><p class="hint">Pick a rule to change it.</p></div>';
+    const lf = L();
+    let h = '<div class="card lf-side"><h2>Rule ' + (sel + 1) + '</h2>';
+    h += '<label class="field"><span>Name (only on this page and in links: the game code has no names)</span><input type="text" maxlength="60" data-lf-name value="' + esc(r.name) + '" placeholder="e.g. Hide early boots"></label>';
+    h += '<div class="field"><span>What happens</span><div class="lf-seg" role="radiogroup" aria-label="What happens">' + (lf.action || []).map(o =>
+      '<button type="button" role="radio" aria-checked="' + (o[0] === r.action) + '" class="' + (o[0] === r.action ? 'on' : '') + '" data-lf-action="' + o[0] + '">' + esc(o[1]) + '</button>').join('') + '</div></div>';
+    if (isLit(r)) {
+      h += '<div class="field"><span>Colour</span><div class="lf-swatches">' + (lf.colours || []).map(c =>
+        '<button type="button" class="lf-sw' + (c[0] === r.colour ? ' on' : '') + '" data-lf-colour="' + c[0] + '" aria-pressed="' + (c[0] === r.colour) + '"><i style="background:' + css(c[2]) + '"></i>' + esc(c[1].charAt(0).toUpperCase() + c[1].slice(1)) + '</button>').join('') + '</div>' +
+        (colour(r.colour) ? '' : '<small class="hint">No colour picked (code value ' + esc(String(r.colour)) + ').</small>') + '</div>';
+    }
+    if (!isHide(r)) h += field('sound', 'Sound', r, 'Auto lets the game choose.');
+    h += '<h3>Item</h3>';
+    h += field('type', 'Item type', r) + field('rarity', 'Rarity', r) + field('level', 'Item level', r);
+    h += '<h3>Lines</h3>';
+    h += field('line', 'Has a line', r) + field('quality', 'Line roll', r) + field('count', 'How many lines', r);
+    h += '<p class="hint">The game\'s list does not say which affixes count toward each line group.</p>';
+    if (r.extra && r.extra.length) h += '<p class="hint">This rule carries ' + r.extra.length + ' more field' + (r.extra.length === 1 ? '' : 's') + ' from its code that this page does not know (' + esc(r.extra.join(', ')) + '); they are kept as they are.</p>';
+    return h + '</div>';
+  }
+
+  function render() {
+    const el = $('#lootFilterPane'); if (!el || el.hidden) return;
+    const lf = L(), n = F.rules.length, code = encode(F);
+    let h = '<div class="cmp-intro"><div class="eyebrow">LOOT</div><h2>Loot Filter</h2><p>Make a loot filter and paste its code into the game\'s filter panel. The game takes up to ' + lf.maxRules +
+      ' rules. The top rule an item matches decides what happens to it; an item no rule matches is shown.</p></div>';
+    h += '<div class="lf-wrap">';
+    // Rules
+    h += '<div class="card lf-rules-card"><h2>Rules <span class="hint">' + n + ' / ' + lf.maxRules + '</span><span class="cmp-side-acts">' +
+      '<button class="btn small ghost" type="button" data-lf="paste">Paste code</button>' +
+      '<button class="btn small ghost" type="button" data-lf="new"' + (n || F.title ? '' : ' disabled') + '>New filter</button></span></h2>';
+    h += '<label class="field"><span>Filter name (only on this page and in links)</span><input type="text" maxlength="80" data-lf-title value="' + esc(F.title) + '" placeholder="My filter"></label>';
+    if (pasting) h += '<div class="lf-paste"><label class="field"><span>Paste a code from the game (BOFILTER:1,...) or a filter link</span><textarea rows="3" data-lf-pastebox spellcheck="false">' + esc(pasteText) + '</textarea></label>' +
+      '<div class="lf-row"><button class="btn small" type="button" data-lf="load">Load</button><button class="btn small ghost" type="button" data-lf="cancel">Cancel</button><span class="hint">Replaces the rules here.</span></div></div>';
+    if (msg) h += '<p class="hint pl-status lf-msg">' + esc(msg) + (msgUndo ? ' <button class="btn small ghost" type="button" data-lf="undo">Undo</button>' : '') + '</p>';
+    h += ruleList();
+    h += '<button class="btn wide" type="button" data-lf="add"' + (n < lf.maxRules ? '' : ' disabled') + '>' + (n < lf.maxRules ? '+ Add rule' : 'The game takes ' + lf.maxRules + ' rules at most') + '</button>';
+    h += '</div>';
+    h += presetCard();
+    h += tester();
+    // Code
+    h += '<div class="card lf-code-card"><h2>Share code</h2><p class="hint">Copy it, then in the game open the loot filter panel and paste it there.</p>' +
+      '<textarea class="lf-code" rows="3" readonly spellcheck="false" aria-label="Share code">' + esc(code) + '</textarea>' +
+      '<div class="lf-row"><button class="btn small" type="button" data-lf="copy">Copy code</button><button class="btn small ghost" type="button" data-lf="link">Copy link</button>' +
+      '<span class="hint lf-copied" aria-live="polite"></span></div></div>';
+    // Notes
+    h += '<div class="card lf-notes"><h2>Good to know</h2><ul>' +
+      '<li>Never hidden, whatever the rules say: ' + esc((lf.neverHidden || []).join(', ')) + '.</li>' +
+      '<li>Each rule tests one line group. For two groups (say Life and Resistance), use two rules: the higher one wins.</li>' +
+      (lf.later ? '<li>' + esc(lf.later.title) + ': ' + esc(lf.later.text.replace(/\s*The share code will keep.*$/, '')) + '</li>' : '') +
+      '<li>The options come from the developer\'s loot filter list in the Broken Oath public API' + (ctx.gd && ctx.gd() && ctx.gd().lootFilter ? '' : ' (build 73 copy)') + '.</li>' +
+      '</ul><details class="lf-reading"' + (readingOpen ? ' open' : '') + '><summary>How the page reads the rules (not yet checked in game)</summary><p class="hint">The game\'s list names each value but not exactly how it tests an item. The tester and the "Never reached" warnings use this reading:</p><ul>' +
+      READING.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul></details></div>';
+    h += details() + '</div>';
+    el.innerHTML = h;
+  }
+
+  // ---------- events ----------
+  let readingOpen = false;
+  function testChange() { keepT(); render(); }
+  function change(fn, keepMsg) { fn(); keep(); if (!keepMsg) { msg = ''; msgUndo = null; } render(); }
+  async function copy(text, done) {
+    const out = $('#lootFilterPane .lf-copied');
+    try { await navigator.clipboard.writeText(text); if (out) out.textContent = done; } catch (e) { window.prompt('Copy this:', text); }
+  }
+  function bind() {
+    const el = $('#lootFilterPane'); if (!el || el.dataset.bound) return; el.dataset.bound = '1';
+    el.addEventListener('click', e => {
+      const t = e.target.closest('button'); if (!t || t.disabled) return;
+      const d = t.dataset, lf = L();
+      if (d.lfSel != null) { sel = +d.lfSel; render(); return; }
+      if (d.lfMove) { const [i, s] = d.lfMove.split(':').map(Number), j = i + s; if (j < 0 || j >= F.rules.length) return; change(() => { const x = F.rules.splice(i, 1)[0]; F.rules.splice(j, 0, x); if (sel === i) sel = j; else if (sel === j) sel = i; }); return; }
+      if (d.lfDup != null) { const i = +d.lfDup; if (F.rules.length >= lf.maxRules) return; change(() => { F.rules.splice(i + 1, 0, JSON.parse(JSON.stringify(F.rules[i]))); sel = i + 1; }); return; }
+      if (d.lfDel != null) { const i = +d.lfDel; change(() => { F.rules.splice(i, 1); if (sel >= F.rules.length) sel = F.rules.length - 1; else if (sel > i) sel--; }); return; }
+      if (d.lfAction != null) { const r = F.rules[sel]; if (!r) return; change(() => { r.action = +d.lfAction; if (isLit(r) && !colour(r.colour)) r.colour = (lf.colours[0] || [1])[0]; if (!isLit(r)) r.colour = 0; }); return; }
+      if (d.lfColour != null) { const r = F.rules[sel]; if (r) change(() => { r.colour = +d.lfColour; }); return; }
+      if (d.lfpStage) { P.stage = d.lfpStage; render(); return; }
+      if (d.lfpWant) { const g = +d.lfpWant, i = P.wants.indexOf(g); if (i >= 0) P.wants.splice(i, 1); else P.wants.push(g); render(); return; }
+      if (d.lftAdd != null) { if (T.lines.length < 8) { const used = new Set(T.lines.map(l => l.g)), g = ((L().line || []).find(o => o[0] && !used.has(o[0])) || [1])[0]; T.lines.push({ g, roll: 0 }); testChange(); } return; }
+      if (d.lftDel != null) { T.lines.splice(+d.lftDel, 1); testChange(); return; }
+      switch (d.lf) {
+        case 'preset': applyPreset(); render(); return;
+        case 'add': if (F.rules.length < lf.maxRules) change(() => { F.rules.push(newRule()); sel = F.rules.length - 1; }); return;
+        case 'new': { const before = JSON.stringify(F); F = blank(); sel = -1; keep(); msg = 'Started a new filter.'; msgUndo = before; render(); return; }
+        case 'undo': if (msgUndo) { F = clean(JSON.parse(msgUndo)) || blank(); sel = F.rules.length ? 0 : -1; keep(); msg = 'Brought the earlier filter back.'; msgUndo = null; render(); } return;
+        case 'paste': pasting = true; pasteText = ''; render(); setTimeout(() => { const b = el.querySelector('[data-lf-pastebox]'); if (b) b.focus(); }, 0); return;
+        case 'cancel': pasting = false; render(); return;
+        case 'load': {
+          const txt = (el.querySelector('[data-lf-pastebox]') || {}).value || '';
+          if (/#f=/.test(txt)) { pasting = false; openFromHash(txt.slice(txt.indexOf('#'))); render(); return; }
+          try { load(decode(txt), 'Filter loaded from the code.'); pasting = false; } catch (err) { pasteText = txt; msg = err.message; msgUndo = null; }
+          render(); return;
+        }
+        case 'copy': copy(encode(F), 'Code copied.'); return;
+        case 'link': copy(link(), 'Link copied.'); return;
+      }
+    });
+    el.addEventListener('change', e => {
+      const t = e.target;
+      if (t.dataset.lfOn != null) { const r = F.rules[+t.dataset.lfOn]; if (r) change(() => { r.on = t.checked ? 1 : 0; }); return; }
+      if (t.dataset.lfField) { const r = F.rules[sel]; if (r) change(() => { r[t.dataset.lfField] = +t.value; }); return; }
+      // The tester.
+      const v = t.dataset.lft;
+      if (v === 'kind') { T.kind = t.value; T.base = ''; if (T.kind === 'idol') T.flags.sockets = false; return testChange(); }
+      if (v === 'base') { T.base = t.value; return testChange(); }
+      if (v === 'rarity') { T.rarity = t.value; return testChange(); }
+      if (v === 'ilvl') { const n = Math.round(+t.value); T.ilvl = isFinite(n) ? Math.max(1, Math.min(100, n)) : T.ilvl; return testChange(); }
+      if (t.dataset.lfpSsf != null) { P.ssf = t.checked; render(); return; }
+      if (t.dataset.lfpAuto != null) { P.auto = t.checked; P.wants = null; render(); return; }
+      if (t.dataset.lftFlag) { T.flags[t.dataset.lftFlag] = t.checked; return testChange(); }
+      if (t.dataset.lftLine) { const [i, f] = t.dataset.lftLine.split(':'), l = T.lines[+i]; if (l) { l[f] = +t.value; testChange(); } return; }
+    });
+    el.addEventListener('toggle', e => { if (e.target.classList && e.target.classList.contains('lf-reading')) readingOpen = e.target.open; }, true);
+    // Names: kept as typed, without redrawing (that would take the focus away); the list catches up on blur.
+    el.addEventListener('input', e => {
+      const t = e.target;
+      if (t.dataset.lfName != null) { const r = F.rules[sel]; if (r) { r.name = t.value.slice(0, 60); keep(); } }
+      else if (t.dataset.lfTitle != null) { F.title = t.value.slice(0, 80); keep(); }
+      else if (t.dataset.lfPastebox != null) pasteText = t.value;
+    });
+    el.addEventListener('focusout', e => { const t = e.target; if (t.dataset && (t.dataset.lfName != null || t.dataset.lfTitle != null)) setTimeout(() => { if (!el.contains(document.activeElement) || !document.activeElement.matches('input,textarea')) render(); }, 0); });
+  }
+
+  return { render: () => { bind(); render(); }, openFromHash: h => { bind(); return openFromHash(h); }, encode: () => encode(F), decode };
+};
+
+;
 // Item Search tab: every unique, Oathword, item base, item mod (affix), rune, jewel, skill gem and support gem in the game data, with
 // filters (category, slot, type, tier, level range, text) and a sort (level low to high by default; "New this patch
 // first" puts what the latest game patch added on top, then the patch before it, and so on).
@@ -6345,12 +6877,44 @@ window.BOPatches = function (ctx) {
     while (j < m) { ob += /^\s+$/.test(B[j]) ? B[j] : '<ins>' + esc(B[j]) + '</ins>'; j++; }
     return [oa, ob];
   }
+  // Keywords (owner, 14 Nov 2026): "Effectiveness" and its ramp fields get a dotted underline and a plain hover explanation.
+  const KW = {
+    'Effectiveness': 'How hard the skill hits. 1 is normal, 2 is twice as hard. Higher number = more damage.',
+    'Effectiveness Late': 'How hard the skill hits once the gem is high level. The skill grows to this number as the gem levels up. Higher number = more damage at high levels.',
+    'Effectiveness Late From': 'The gem level where the skill starts growing stronger. Lower number = it starts sooner.',
+    'Effectiveness Late At': 'The gem level where the skill is fully grown. Lower number = it gets there sooner.',
+    'Effectiveness Early': 'Extra damage for a young gem (above 1 is a boost, below 1 a cut). It fades away as the gem levels up. Higher number = more damage at low levels.',
+    'Effectiveness Early Hold': 'The gem level where the young-gem boost (or cut) starts to fade.',
+    'Effectiveness Early Full': 'The gem level where the young-gem boost (or cut) is completely gone.'
+  };
+  const kw = html => html.replace(/\bEffectiveness(?: Late From| Late At| Late| Early Hold| Early Full| Early)?\b/g,
+    m => '<span class="pt-kw" tabindex="0" data-kw="' + m + '">' + m + '</span>');
+  function kwTip(k) { return KW[k] ? '<b>' + esc(k) + '</b><span class="pl-tip-sub">Keyword</span><span class="pl-tip-desc">' + esc(KW[k]) + '</span>' : ''; }
+  // A rough buff/nerf note for an effectiveness line whose number changed: "(about 36% buff at high levels)".
+  function trend(o, n) {
+    const re = /^(Effectiveness(?: Late From| Late At| Late| Early Hold| Early Full| Early)?): (-?[\d.]+)$/;
+    const a = re.exec(o || ''), b = re.exec(n || '');
+    if (!a || !b || a[1] !== b[1]) return '';
+    const f = a[1], x = +a[2], y = +b[2]; if (!(x > 0) || x === y) return '';
+    const note = (t, cls) => ' <span class="pt-trend ' + cls + '">(' + t + ')</span>';
+    if (f === 'Effectiveness' || f === 'Effectiveness Late' || f === 'Effectiveness Early') {
+      const p = Math.round(Math.abs(y / x - 1) * 100), up = y > x;
+      return note('about ' + (p || '<1') + '% ' + (up ? 'buff' : 'nerf') + (f === 'Effectiveness Late' ? ' at high levels' : f === 'Effectiveness Early' ? ' at low levels' : ''), up ? 'pt-buff' : 'pt-nerf');
+    }
+    const d = Math.round(Math.abs(y - x)), lv = d + ' level' + (d === 1 ? '' : 's');
+    if (f === 'Effectiveness Late From' || f === 'Effectiveness Late At') {
+      const up = y < x;
+      return note((f === 'Effectiveness Late From' ? 'starts growing ' : 'fully grown ') + lv + (up ? ' sooner: buff' : ' later: nerf'), up ? 'pt-buff' : 'pt-nerf');
+    }
+    // Early Hold / Full: a boost lasting longer is good, a cut lasting longer is bad, and the line alone does not say which.
+    return note('young-gem effect lasts ' + lv + (y > x ? ' longer' : ' less'), 'pt-flat');
+  }
   function linesHtml(c) {
     if (c.kind === 'added') return '<p class="pt-note">New in this build.</p>';
     if (c.kind === 'removed') return '<p class="pt-note">Taken out of the game data in this build.</p>';
     return '<ul class="pt-lines">' + c.lines.map(([o, n]) => {
-      if (o && n && (o.length > 60 || n.length > 60)) { const [a, b] = wordDiff(o, n); return '<li class="pt-text"><div class="pt-old">' + a + '</div><div class="pt-new">' + b + '</div></li>'; }
-      return '<li>' + (o ? '<span class="pt-old">' + esc(o) + '</span>' : '') + (o && n ? '<span class="pt-arrow" aria-label="becomes">→</span>' : '') + (n ? '<span class="pt-new">' + (o ? '' : '<b>New line:</b> ') + esc(n) + '</span>' : '<span class="pt-new pt-gone">line removed</span>') + '</li>';
+      if (o && n && (o.length > 60 || n.length > 60)) { const [a, b] = wordDiff(o, n); return '<li class="pt-text"><div class="pt-old">' + kw(a) + '</div><div class="pt-new">' + kw(b) + '</div></li>'; }
+      return '<li>' + (o ? '<span class="pt-old">' + kw(esc(o)) + '</span>' : '') + (o && n ? '<span class="pt-arrow" aria-label="becomes">→</span>' : '') + (n ? '<span class="pt-new">' + (o ? '' : '<b>New line:</b> ') + kw(esc(n)) + trend(o, n) + '</span>' : '<span class="pt-new pt-gone">line removed</span>') + '</li>';
     }).join('') + '</ul>';
   }
   const KIND = { added: 'New', removed: 'Removed', changed: 'Changed' };
@@ -6410,18 +6974,23 @@ window.BOPatches = function (ctx) {
   let tipEl = null;
   const hideTip = () => { if (tipEl) { tipEl.hidden = true; tipEl.dataset.key = ''; } };
   function showTip(e) {
-    const t = e.target.closest && e.target.closest('[data-ptip]');
-    if (!t || !ctx.tip) return hideTip();
-    const key = t.dataset.ptip, i = key.indexOf(':');
-    let html = ''; try { html = ctx.tip(key.slice(0, i), key.slice(i + 1)); } catch (err) { html = ''; }
+    const t = e.target.closest && e.target.closest('[data-kw],[data-ptip]');
+    if (!t) return hideTip();
+    const isKw = !!t.dataset.kw, key = isKw ? 'kw:' + t.dataset.kw : t.dataset.ptip, i = key.indexOf(':');
+    if (!isKw && !ctx.tip) return hideTip();
+    let html = ''; try { html = isKw ? kwTip(t.dataset.kw) : ctx.tip(key.slice(0, i), key.slice(i + 1)); } catch (err) { html = ''; }
     if (!html) return hideTip();
     if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'pl-tip'; tipEl.setAttribute('role', 'tooltip'); document.body.appendChild(tipEl); }
-    if (tipEl.dataset.key !== key) { tipEl.innerHTML = html + '<span class="pl-tip-desc pt-tip-now">As in the latest game data.</span>'; tipEl.dataset.key = key; }
+    if (tipEl.dataset.key !== key) { tipEl.innerHTML = html + (isKw ? '' : '<span class="pl-tip-desc pt-tip-now">As in the latest game data.</span>'); tipEl.dataset.key = key; }
     tipEl.hidden = false;
     const r = t.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
     let y = r.bottom + 6; if (y + h > innerHeight - 8) y = Math.max(8, r.top - h - 6);
     tipEl.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px'; tipEl.style.top = y + 'px';
   }
+  // Keyword tips work wherever patch entries show (this tab and the Character tab's skill history).
+  const kwOnly = e => { if (e.target.closest && e.target.closest('[data-kw]')) showTip(e); else if (tipEl && !tipEl.hidden && String(tipEl.dataset.key).startsWith('kw:')) hideTip(); };
+  document.addEventListener('mouseover', e => { if (!e.target.closest || !e.target.closest('#patchPane')) kwOnly(e); });
+  document.addEventListener('focusin', e => { if (!e.target.closest || !e.target.closest('#patchPane')) kwOnly(e); });
   function render() {
     hideTip();
     const el = $('#patchPane'); if (!el || el.hidden) return;
@@ -9630,6 +10199,26 @@ window.BOCharacter = function (ctx) {
       res.notes.push('Flashfire: Fire hits in the ' + (ff.Window || 2) + ' s after a Flame Dash deal ' + (ff.More || 40) + '% more (counted as if you dash every ' + (ff.Window || 2) + ' s).');
     }
 
+    // Focus keystone (r98_focus_k0, Patch 74 notes 14 Nov 2026: "your main skill deals 25% more, your other skills 40% less";
+    // public API game data build 76: Mods FocusMain98 Flat 25 / FocusOther98 Flat 40, switch r98.META bFocus98 = True; node
+    // text "Your main skill is the one you Ctrl+click in the Skills panel, else the damage skill you use most"). Main = the
+    // save's MainSkillPin / the planner's main skill; with none set, the skill being simmed counts as main. From the
+    // developer's data and notes only, not yet seen in a tooltip or the log.
+    {
+      const fMain = mods.filter(m => m.stat === 'FocusMain98'), fOther = mods.filter(m => m.stat === 'FocusOther98');
+      if (fMain.length || fOther.length) {
+        const mainId = o.mainSkill || ch.mainSkill || '';
+        const isMain = !mainId || lc(mainId) === lc(skillId);
+        const pick = isMain ? fMain : fOther;
+        const v = pick.reduce((s, m) => s + (m.v || 0), 0);
+        if (v) {
+          for (const m of pick) use(m, 'Focus');
+          mods.push({ stat: 'Damage', mode: 'More', tags: [], v: isMain ? v : -v, v2: 0, local: false, src: 'Keystone · Focus (' + (isMain ? 'main skill' : 'not your main skill') + ')', key: 'keystone:focus' });
+          res.notes.push('Focus: ' + (isMain ? 'this is your main skill' + (mainId ? '' : ' (no main skill set, so the one you sim counts)') + ', ' + v + '% more damage.' : 'your main skill is ' + ((GD.skills[lc(mainId)] || {}).Name || mainId) + ', so this skill deals ' + v + '% less.'));
+        }
+      }
+    }
+
     // Attributes.
     const cls = GD.classes[lc(ch.classId)] || {};
     const attr = attrsFrom(GD, ch, mods, use);
@@ -10346,6 +10935,20 @@ window.BOCharacter = function (ctx) {
         let strikeEvery = gather ? +ev[1] / Math.sqrt(Math.max(speedRate, 1)) : +ev[1];
         let sparkRate = 0; for (const m of pickMods(mods, 'SparkRate', 'Inc')) if (applies(ctx, m)) { sparkRate += m.v; use(m); }
         if (sparkRate) strikeEvery /= Math.max(0.1, 1 + sparkRate / 100);
+        // Convergence (Patch 76 notes 14 Nov 2026: "While all your Sparks come from one Spark skill, each Spark latched on a
+        // Rare or a Guardian strikes 2% faster every second, up to 50% faster. Packs are not affected"; public API game data
+        // build 76 switches r99.META bConverge99 = True, fConvergePerSec99 0.02, fConvergeMax99 0.5). Counted at its full 50%
+        // (reached after 25 s on the target), on Rares and Guardians only, when this is the only Spark skill on the bar.
+        // Assumed to multiply the strike rate apart from the increased Spark strike rate lines. Not yet seen in a tooltip or the log.
+        if (ruleNum(GD, 'r99.META.bConverge99', 0) && /spark/i.test(sk.Name || '') && o.convergence !== false && ['rare', 'boss'].includes(o.enemyRarity || 'rare')) {
+          const isSparkSk = id => { const k = GD.skills[lc(id)]; return k && k.Delivery === 'Brand' && /spark/i.test(k.Name || ''); };
+          const kinds = o.sparkSkills > 0 ? Math.floor(o.sparkSkills) : new Set((ch.hotbar || []).map(lc).filter(isSparkSk).concat(lc(skillId))).size;
+          const cMax = ruleNum(GD, 'r99.META.fConvergeMax99', 0.5), cPer = ruleNum(GD, 'r99.META.fConvergePerSec99', 0.02);
+          if (kinds === 1 && cMax > 0) {
+            strikeEvery /= 1 + cMax; res.convergence = { max: cMax, perSec: cPer };
+            res.notes.push('Convergence: ' + (sk.Name || skillId) + ' is your only Spark skill, so on a Rare or Guardian its Sparks strike ' + Math.round(cPer * 100) + '% faster every second, counted at the full ' + Math.round(cMax * 100) + '% (reached after ' + Math.round(cMax / cPer) + ' s). Packs do not get it.');
+          }
+        }
         // Strikes a second for n sparks: each full group of 3 is one body striking x(3 x 0.85); leftovers strike alone.
         // 0.56.5: leftovers form a body too, at 0.85 a spark (same log: "SparkFill90: storm_brand body carries 2 Sparks
         // (strike x1.70)" next to a body of 3 at x2.55; "5 sparks -> 2 bodies, each strikes x2.12"). So n sparks strike
@@ -12514,6 +13117,7 @@ window.BOStartApp = function () {
   let planner = null; // the Build tab (planner.js), made at the start
   let creator = null; // the Save Creator tab (creator.js)
   let fossil = null; // the Fossil Planner tab (fossil.js)
+  let lootFilter = null; // the Loot Filter tab (lootfilter.js)
   let scaling = null; // the Skills tab (scaling.js)
   let faq = null; // the FAQ / Game Mechanics tab (faq.js)
   let character = null; // the Character tab (character.js)
@@ -12652,6 +13256,7 @@ window.BOStartApp = function () {
     store.set('char', ch.id);
     if (character && !$('#characterPane').hidden) character.render();
     if (brewery && !$('#breweryPane').hidden) brewery.render(); // the Brewery shows this character's potions
+    if (lootFilter && !$('#lootFilterPane').hidden) setTimeout(() => lootFilter.render(), 0); // its preset fits the character (after the skill is picked)
     st.curses = {};
     for (const c of Object.values(GD.curses)) st.curses[c.Id] = { on: ch.hotbar.includes(c.Skill), dread: 0 };
     st.enemyLevel = null; $('#enemyLevel').value = ''; $('#enemyLevel').placeholder = ch.level;
@@ -14439,6 +15044,7 @@ window.BOStartApp = function () {
     } catch (err) { alert('Could not open that share link:\n' + err.message); }
   }
   window.addEventListener('hashchange', () => {
+    if (/^#f=/.test(location.hash) && lootFilter && lootFilter.openFromHash(location.hash)) { history.replaceState(null, '', location.pathname + location.search); return showTab('lootfilter'); }
     const bdb = /^#b=/.test(location.hash) && brokedCode(location.hash);
     if (bdb) { history.replaceState(null, '', location.pathname + location.search); return openBroked(bdb); }
     const code = linkCode(location.hash), id = linkId(location.hash); if (!code && !id) return;
@@ -15991,10 +16597,10 @@ window.BOStartApp = function () {
   // Share codes (#b=, #s=) stay in the hash. window.SITE_BASE is the way up to the site root ('' on the root page);
   // the local DamageSim.html doesn't set it (opened from a file it can't use addresses).
   const ROUTES = { character: 'build/character', tree: 'build/tree', 'build:skills': 'build/skills', damage: 'build/damage',
-    compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', patch: 'patch', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', faq: 'faq',
+    compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', patch: 'patch', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', lootfilter: 'lootfilter', faq: 'faq',
     skillscaling: 'skills', minions: 'skills/minions', creator: 'creator', plan: 'plan', code: 'code' };
   const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', 'build:skills': 'Skills', damage: 'Damage Analysis',
-    compare: 'Item Simulator', items: 'Item Search', grail: 'Grail', ladder: 'Ladder', patch: 'Recent Patch', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery",
+    compare: 'Item Simulator', items: 'Item Search', grail: 'Grail', ladder: 'Ladder', patch: 'Recent Patch', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery", lootfilter: 'Loot Filter',
     faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code' };
   // The Skills tab holds two views: Skill Scaling (scaling.js) and Minion Scaling (faq.js's minions section).
   let skillsView = 'scaling';
@@ -16052,9 +16658,10 @@ window.BOStartApp = function () {
     document.body.classList.toggle('plan-page', tab === 'plan'); // the plan setup page: no Damage-tab controls beside it
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'lootfilter' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character');
     document.body.classList.toggle('character-page', tab === 'character');
-    document.body.classList.toggle('ladder-page', tab === 'ladder'); // no character strip on the Ladder tab
+    document.body.classList.toggle('ladder-page', tab === 'ladder');
+    document.body.classList.toggle('lootfilter-page', tab === 'lootfilter'); // nor on the Loot Filter tab // no character strip on the Ladder tab
     document.body.classList.toggle('creator-page', tab === 'creator'); // the Save Creator has no use for the build views
     if (tab === 'supports') {
       showConfigTab('supports', false);
@@ -16066,7 +16673,7 @@ window.BOStartApp = function () {
     // Character, Passive tree and Damage Analysis are sub-tabs of Build Planner: keep that main tab lit.
     document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'damage'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
     if (tab === 'tree' || tab === 'damage' || tab === 'character') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character';
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#lootFilterPane').hidden = tab !== 'lootfilter'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     renderBuildStats();
@@ -16075,6 +16682,7 @@ window.BOStartApp = function () {
     if (tab === 'creator') creator.render();
     if (tab === 'fossil') fossil.render();
     if (tab === 'brewery') brewery.render();
+    if (tab === 'lootfilter') lootFilter.render();
     if (tab === 'items') itemSearch.render();
     if (tab === 'grail') grail.render();
     if (tab === 'ladder') ladder.render();
@@ -16302,6 +16910,20 @@ window.BOStartApp = function () {
   });
   // The Fossil Planner tab (fossil.js): idol layouts for the Fossil grid.
   fossil = window.BOFossil({ $, esc, gd: () => GD, chars: () => CHARS });
+  // The Loot Filter tab (lootfilter.js): rules for the game's loot filter, as its BOFILTER share code.
+  lootFilter = window.BOLootFilter({ $, esc, gd: () => GD, siteUrl: SITE_URL,
+    // The character on screen for the preset's "wanted lines": its main skill (the Damage tab's), the skills on its bar,
+    // the main skill's crit chance (sim) and its resistances as the strip shows them (lines added up, not capped).
+    build: () => {
+      const ch = st.ch; if (!ch) return null;
+      const sk = id => { const s = id && GD.skills[id]; return s ? { id, name: s.Name, tags: s.Tags || [], type: s.DamageType } : null; };
+      const main = sk(st.skill) || sk(ch.mainSkill) || (ch.hotbar || []).map(sk).find(s => s && s.type);
+      let crit = 0;
+      if (main && !main.tags.includes('Minion')) try { const r = S.calcSkill(GD, ch, main.id, opts()); crit = r && r.crit ? r.crit.chance : 0; } catch (e) { /* no crit */ }
+      let res = null;
+      try { res = Object.fromEntries(heroDefence(ch).resParts.map(x => [x[0], +x[1]])); } catch (e) { /* no res */ }
+      return { id: ch.id, name: ch.name, level: ch.level, main, bar: (ch.hotbar || []).map(sk).filter(Boolean), crit, res, cap: (GD.scaling.Hero || {}).ResistCap || 75 };
+    } });
   // The Brewery tab (brewery.js): Brewmaw's potions; the active ones count in the damage sim.
   brewery = window.BOBrewery({ $, esc, gd: () => GD, current: () => st.ch, onChange: () => { breweryDirty = true; },
     redraw: () => { if (character) character.render(); if (planner) planner.render(); } }); // the belt cards behind the slot overlay
@@ -16442,13 +17064,15 @@ window.BOStartApp = function () {
   if (CHARS.length) selectChar($('#charSelect').value); else render();
   // Landing: Build Planner > Character for anyone with a character; a first visit with none gets the welcome page (Damage view).
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
-  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'items', 'grail', 'ladder', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
   routingReady = true; // from here on, switching tabs changes the address
   // Opened from a share link: load it as a plan, then drop it from the address so a refresh doesn't add it again.
   const bdbHash = /^#b=/.test(location.hash) && brokedCode(location.hash);
   if (bdbHash) { history.replaceState(null, '', location.pathname + location.search); openBroked(bdbHash); }
   // A ladder hero link (#hero=<league>/<Class>/<id>): open the Ladder tab on that build. The hash stays, so it can be copied again.
   if (/^#hero=/.test(location.hash) && ladder.openFromHash(location.hash)) showTab('ladder');
+  // A loot filter link (#f=<code>...): load it on the Loot Filter tab, then drop it from the address (the filter is kept in this browser).
+  if (/^#f=/.test(location.hash) && lootFilter.openFromHash(location.hash)) { history.replaceState(null, '', location.pathname + location.search); showTab('lootfilter'); }
   const sharedCode = linkCode(location.hash), sharedId = linkId(location.hash);
   if (sharedCode || sharedId) { history.replaceState(null, '', location.pathname + location.search); openShared(sharedCode, sharedId); }
 };

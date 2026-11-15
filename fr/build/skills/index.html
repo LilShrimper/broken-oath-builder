@@ -12,7 +12,7 @@
 <meta property="og:url" content="https://lilshrimper.github.io/broken-oath-builder/fr/build/skills/"><meta property="og:image" content="https://lilshrimper.github.io/broken-oath-builder/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=300">
+<link rel="stylesheet" href="../../../style.css?v=302">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -101,6 +101,9 @@
       </button>
       <button class="tab" type="button" role="tab" data-tab="brewery" aria-selected="false" aria-label="Brewmaw's Brewery">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h4M10.5 3v5.2L5.6 17a2.6 2.6 0 0 0 2.3 4h8.2a2.6 2.6 0 0 0 2.3-4l-4.9-8.8V3M7.6 14h8.8"/></svg><span>Brewmaw's Brewery</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="lootfilter" aria-selected="false" aria-label="Loot Filter">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18l-7 8.5V19l-4 2v-8.5z"/></svg><span>Loot Filter</span>
       </button>
       <button class="tab" type="button" role="tab" data-tab="creator" aria-selected="false" aria-label="Save Creator">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v15H5zM8 3v5h7V3M8 21v-7h8v7"/></svg><span>Save Creator</span>
@@ -370,6 +373,7 @@
     <section class="build-pane compare-pane" id="comparePane" hidden></section>
     <section class="build-pane compare-pane creator-pane" id="creatorPane" hidden></section>
     <section class="build-pane compare-pane fossil-pane" id="fossilPane" hidden></section>
+    <section class="build-pane compare-pane lootfilter-pane" id="lootFilterPane" hidden></section>
     <section class="build-pane compare-pane brewery-pane" id="breweryPane" hidden></section>
     <section class="build-pane compare-pane itemsearch-pane" id="itemSearchPane" hidden></section>
     <section class="build-pane compare-pane grail-pane" id="grailPane" hidden></section>
@@ -552,7 +556,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":300,"at":"2026-11-15T01:27:55.366Z"};
+window.SITE_VERSION = {"v":302,"at":"2026-11-15T02:42:59.690Z"};
 window.SITE_LANG = 'fr';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -561,6 +565,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=14188d03","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../../app.js?v=300"></script>
+<script src="../../../app.js?v=302"></script>
 </body>
 </html>

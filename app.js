@@ -2929,7 +2929,7 @@ window.BOPlanner = function (ctx) {
       let band = -1; for (let i = 0; i < lv.length; i++) if ((it.level || 0) >= lv[i]) band = i;
       const from = cnt.slice(0, band).reduce((x, y) => x + y, 0);
       const power = band < 0 || !word.PowerBandMods ? word.PowerMods || [] : word.PowerBandMods.slice(from, from + cnt[band]);
-      h += '<ul>' + word.Mods.map(mm => li(modLine(mm.Mod))).join('') + power.map(mm => li(modLine(mm.Mod, (mm.Mod.Value || 0) * pm, (mm.Mod.Value2 || 0) * pm))).join('') + '</ul>';
+      h += '<ul>' + word.Mods.map(mm => li(mm.Text || modLine(mm.Mod))).join('') + power.map(mm => li(modLine(mm.Mod, (mm.Mod.Value || 0) * pm, (mm.Mod.Value2 || 0) * pm))).join('') + '</ul>';
     }
     const weaponSlot = slot === 'MainHand' || slot === 'OffHand';
     const runes = it.runes.map(r => GD.runes[lc(r)]).filter(Boolean);
@@ -2939,23 +2939,8 @@ window.BOPlanner = function (ctx) {
   // Skills view: a skill gem's tooltip (its data, plus the sim's numbers for this character).
   const fmt = (v, d = 0) => (+v || 0).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: 0 });
   const tagList = t => (t || []).join(', ');
-  // The game's skill text has placeholders it fills in itself ({OrbitCount}, {Projectiles}, "{X}|plural(one=..,other=..)").
-  // Fill them from the skill's own data at the gem level (display only; the sim reads the same fields on its own).
-  function skillDesc(sk, lvl) {
-    const L = +lvl || 1, n = (base, at) => (+base || 0) + (at || []).filter(x => L >= x).length, o = sk.Orbit || {}, b = sk.Brand || {};
-    // Thousand Sparks: "{Flights} flights: 4, 1 more at gem level 10 and at 20" (older text) or
-    // "{Flights} flights (4, plus 1 at gem level 10, 1 at 20 and 1 for each Chain)" (b76); Chains from supports stay in the words.
-    const fl = /\{Flights\} flights(?::| \() ?(\d+), (?:1 more at gem level|plus 1 at gem level) (\d+),? (?:and at|1 at) (\d+)/.exec(sk.Description || '');
-    const V = {
-      Chains: sk.Chains, BrandChains: sk.BrandChains != null ? sk.BrandChains : b.Chains, BrandLife: sk.BrandDuration != null ? sk.BrandDuration : b.Duration, Pierce: sk.Pierce,
-      Projectiles: sk.Projectiles != null ? n(sk.Projectiles, sk.ProjectilesAtLevels) : null,
-      OrbitCount: o.Count != null ? n(o.Count, o.CountPerLevels) : null, OrbitMax: o.Max,
-      Flights: fl ? n(fl[1], [+fl[2], +fl[3]]) : null,
-    };
-    return String(sk.Description || '')
-      .replace(/\{(\w+)\}\|plural\(one=([^,]+),other=([^)]+)\)/g, (m, k, one, many) => V[k] == null ? m : (+V[k] === 1 ? one : many))
-      .replace(/\{(\w+)\}/g, (m, k) => V[k] == null ? m : V[k]);
-  }
+  // The game's skill text has placeholders ({OrbitCount}, "{X}|plural(...)"): filled by sim.js skillDesc (shared with the patch history).
+  const skillDesc = (sk, lvl) => window.BOSim.skillDesc(sk, lvl);
   // own: true when the skill is already on the character (adds the sim's numbers); false for the picker (game data only).
   const ATTR_NAME = { Str: 'Strength (red)', Dex: 'Dexterity (green)', Int: 'Intelligence (blue)' };
   // noScaling: the Skill Scaling tab's hover leaves out the level rows and the Scaling list (the card shows them).
@@ -6052,6 +6037,9 @@ window.BOItemSearch = function (ctx) {
     return S.modText(GD, Object.assign(base, { v: MARK, v2: MARK2 })).split(String(MARK)).join(rng(a, b)).split(String(MARK2)).join(rng(a2, b2)).replace(/\+-/g, '-');
   }
   const plain = (GD, m) => rangeText(GD, m);
+  // An Oathword line: the game's own wording (runewords.json Text) when the line has one. Trigger lines and the secret words'
+  // special lines (ChainLoop, SpectralRise, ...) have no stat wording and read as raw data otherwise ("Trigger Trigger 100 [...]").
+  const wordLine = (GD, mm) => mm.Text || plain(GD, mm.Mod);
   function uniqueLine(GD, um) {
     if (um.Text) return String(um.Text).replace(/\{(0|v)\}/g, rng(um.Min, um.Max)).replace(/\{1\}/g, rng(um.Min2, um.Max2));
     return rangeText(GD, um.Mod, um.Min, um.Max, um.Min2, um.Max2);
@@ -6114,7 +6102,7 @@ window.BOItemSearch = function (ctx) {
       const tier = w.Crowned ? 'Crowned' : w.Secret ? 'Secret' : w.Combo ? 'Two-class' : 'Standard';
       ALL.push({ cat: 'oathword', id: w.Id, name: w.Name, level: w.Level || 1, slots: uniqSorted(bs.map(b => slotName(b.Slot)), SLOT_ORDER), types: uniqSorted(bs.map(baseType)),
         tiers: [tier], tierSort: ['Standard', 'Two-class', 'Secret', 'Crowned'].indexOf(tier), icon: 'oathword', w, secret: !!w.Secret,
-        text: [w.Name, w.Class, ...(w.Combo || []), ...(w.Mods || []).map(mm => plain(GD, mm.Mod)), ...(w.PowerMods || []).map(mm => plain(GD, mm.Mod))].join(' '),
+        text: [w.Name, w.Class, ...(w.Combo || []), ...(w.Mods || []).map(mm => wordLine(GD, mm)), ...(w.PowerMods || []).map(mm => wordLine(GD, mm))].join(' '),
         runeText: (w.Runes || []).map(r => (GD.runes[lc(r)] || {}).Name || r).join(' ') });
     }
     for (const a of Object.values(GD.affixes || {})) {
@@ -6287,13 +6275,13 @@ window.BOItemSearch = function (ctx) {
       if (st && st.held.length) badges.push(badge('Held: ' + st.held.map(h => h.where).join(', '), 'held'));
       else if (st && st.craftable && !hide) badges.push(badge('Craftable' + (st.bases.length ? ' · ' + st.bases.length + ' empty base' + (st.bases.length > 1 ? 's' : '') + ' fit' : ''), 'craft'));
       const into = (w.Bases || []).map(x => BASE_WORDS[x] || x).join(', ');
-      body = runes + (into ? '<p class="is-into">Cut into: ' + esc(into) + '</p>' : '') + '<ul class="is-lines oathword">' + (w.Mods || []).map(mm => li(plain(GD, mm.Mod))).join('') + '</ul>';
+      body = runes + (into ? '<p class="is-into">Cut into: ' + esc(into) + '</p>' : '') + '<ul class="is-lines oathword">' + (w.Mods || []).map(mm => li(wordLine(GD, mm))).join('') + '</ul>';
       const lv = w.PowerBandILvl || [], cnt = w.PowerBandCount || [];
       if ((w.PowerMods || []).length) {
-        const rows = [['Below item level ' + (lv[0] || '?'), w.PowerMods]];
+        const rows = [[lv[0] ? 'Below item level ' + lv[0] : 'At any item level', w.PowerMods]]; // the secret words have no item level bands
         let from = 0; lv.forEach((l, i) => { if (w.PowerBandMods && cnt[i]) rows.push(['Item level ' + l + '+', w.PowerBandMods.slice(from, from + cnt[i])]); from += cnt[i] || 0; });
         // The top band shows open (what a crafted endgame word gets); the lower bands fold away (player report, 12 Nov 2026).
-        const band = ([k, mods]) => '<div class="is-band"><b>' + esc(k) + (S.wordPower2H(w, true) > 1 ? ' <small>(×' + S.wordPower2H(w, true) + ' on two-handed)</small>' : '') + '</b><ul class="is-lines oathword">' + mods.map(mm => li(plain(GD, mm.Mod))).join('') + '</ul></div>';
+        const band = ([k, mods]) => '<div class="is-band"><b>' + esc(k) + (S.wordPower2H(w, true) > 1 ? ' <small>(×' + S.wordPower2H(w, true) + ' on two-handed)</small>' : '') + '</b><ul class="is-lines oathword">' + mods.map(mm => li(wordLine(GD, mm))).join('') + '</ul></div>';
         const top = rows[rows.length - 1], lower = rows.slice(0, -1);
         body += '<div class="is-power is-power-top">' + band(top) + '</div>';
         if (lower.length) body += '<details class="is-power"><summary>Lower item levels</summary>' + lower.reverse().map(band).join('') + '</details>';
@@ -13248,6 +13236,62 @@ window.BOCharacter = function (ctx) {
   }
 
   // Readable text for a mod, using the game's own stat_text templates where possible.
+  // Wording for a line the game's stat_text.json has none for (display text only, no effect on numbers). Before 16 Nov 2026
+  // these read as raw data ("Trigger Trigger 100 [SkillUse, Eruption, Slam, Nth=4, ...]", "RepeatOwnDamage More -20") in
+  // Item Search, tooltips and the patch history. Where the game gives a line its own Text (uniques, Oathwords) that text is
+  // shown instead and this is not used. Trigger lines (passive_tree.json, see the Trigger notes above): tags = when, shape,
+  // skill kinds, Key=Value; Value = chance %, Value2 = the wait between triggers in seconds.
+  const FALLBACK_TEXT = {
+    'RepeatOwnDamage.More': ['{n}% more Damage with each repeat', '{n}% less Damage with each repeat'],
+    'HeraldEffect.Inc': ['{n}% increased effect of the extra Damage your Heralds grant', '{n}% reduced effect of the extra Damage your Heralds grant'],
+    'ManaRegen.Flat': ['+{n} Mana Regeneration per second', '-{n} Mana Regeneration per second'],
+  };
+  const TRIGGER_WHEN = { Hit: 'On hit', SkillUse: 'When used', Block: 'When you Block', Roll: 'When you roll', Kill: 'On kill', Crit: 'On critical strike', Pulse: 'Every pulse', Cast: 'On cast' };
+  const TRIGGER_SHAPE = { Nova: 'a nova', Eruption: 'the ground erupts', SkySwords: 'blades fall from the sky', DawnPillar: 'a pillar of light falls', Whirl: 'a whirl' };
+  const ORDINAL = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+  const camelWords = s => String(s).replace(/\d+$/, '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Z])([A-Z][a-z])/g, '$1 $2');
+  function triggerText(m, fmt) {
+    const kv = {}, plain = [];
+    for (const t of m.tags) { const i = String(t).indexOf('='); if (i > 0) kv[t.slice(0, i)] = t.slice(i + 1); else plain.push(t); }
+    const [when, shape, ...kinds] = plain;
+    const kindWords = kinds.filter(k => k !== 'VsBoss').map(k => /_/.test(k) ? k.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : camelWords(k));
+    let head = kv.Nth && +kv.Nth > 1 ? 'Every ' + ORDINAL(+kv.Nth) + ' ' + (when === 'SkillUse' ? 'use' : when === 'Block' ? 'Block' : 'hit') : TRIGGER_WHEN[when] || camelWords(when || 'Trigger');
+    if (kindWords.length) head += ' (' + kindWords.join(', ') + ')';
+    if (kinds.includes('VsBoss')) head += ' against a Guardian';
+    const what = (m.v > 0 && m.v < 100 ? fmt(m.v) + '% chance: ' : '') + (kv.Count && +kv.Count > 1 ? kv.Count + '× ' : '') + (TRIGGER_SHAPE[shape] || camelWords(shape || 'an effect').toLowerCase());
+    const dmg = kv.Pct ? ' for ' + kv.Pct + '% of the hit' + (kv.Element ? ' as ' + kv.Element + ' Damage' : '') : '';
+    const extra = [kv.Radius ? fmt(+kv.Radius / 100) + ' metre radius' : '', m.v2 ? 'at most once every ' + fmt(m.v2) + ' s' : ''].filter(Boolean);
+    return head + ': ' + what + dmg + (extra.length ? ' (' + extra.join(', ') + ')' : '');
+  }
+  function fallbackText(m, fmt) {
+    if (m.stat === 'Trigger') return triggerText(m, fmt);
+    const kinds = m.tags.filter(t => !/[_=]/.test(String(t))).map(camelWords), tagNote = kinds.length ? ' (' + kinds.join(', ') + ')' : '';
+    const own = FALLBACK_TEXT[m.stat + '.' + m.mode];
+    if (own) return own[m.v < 0 ? 1 : 0].replace('{n}', fmt(Math.abs(m.v))) + tagNote;
+    const name = camelWords(m.stat), num = fmt(Math.abs(m.v)) + (m.v2 ? '-' + fmt(m.v2) : '');
+    if (m.mode === 'Inc') return num + '% ' + (m.v < 0 ? 'reduced ' : 'increased ') + name + tagNote;
+    if (m.mode === 'More') return num + '% ' + (m.v < 0 ? 'less ' : 'more ') + name + tagNote;
+    if (m.mode === 'Flat') return (m.v < 0 ? '-' : '+') + num + ' ' + name + tagNote;
+    return name + tagNote;
+  }
+  // The game's skill text has placeholders it fills in itself ({OrbitCount}, {Projectiles}, "{X}|plural(one=..,other=..)").
+  // Fill them from the skill's own data at the gem level (display only; the sim reads the same fields on its own).
+  function skillDesc(sk, lvl) {
+    const L = +lvl || 1, n = (base, at) => (+base || 0) + (at || []).filter(x => L >= x).length, o = sk.Orbit || {}, b = sk.Brand || {};
+    // Thousand Sparks: "{Flights} flights: 4, 1 more at gem level 10 and at 20" (older text) or
+    // "{Flights} flights (4, plus 1 at gem level 10, 1 at 20 and 1 for each Chain)" (b76); Chains from supports stay in the words.
+    const fl = /\{Flights\} flights(?::| \() ?(\d+), (?:1 more at gem level|plus 1 at gem level) (\d+),? (?:and at|1 at) (\d+)/.exec(sk.Description || '');
+    const V = {
+      Chains: sk.Chains, BrandChains: sk.BrandChains != null ? sk.BrandChains : b.Chains, BrandLife: sk.BrandDuration != null ? sk.BrandDuration : b.Duration, Pierce: sk.Pierce,
+      Projectiles: sk.Projectiles != null ? n(sk.Projectiles, sk.ProjectilesAtLevels) : null,
+      OrbitCount: o.Count != null ? n(o.Count, o.CountPerLevels) : null, OrbitMax: o.Max,
+      Flights: fl ? n(fl[1], [+fl[2], +fl[3]]) : null,
+    };
+    return String(sk.Description || '')
+      .replace(/\{(\w+)\}\|plural\(one=([^,]+),other=([^)]+)\)/g, (m, k, one, many) => V[k] == null ? m : (+V[k] === 1 ? one : many))
+      .replace(/\{(\w+)\}/g, (m, k) => V[k] == null ? m : V[k]);
+  }
+
   function modText(GD, m) {
     const { types, conds, gemScaled } = splitTags(m.tags);
     // The untagged wording comes last: a line tagged only with damage types (Nightshade's "+1.5 Poison" gem levels, typed
@@ -13257,9 +13301,9 @@ window.BOCharacter = function (ctx) {
     const sm = m.stat + '.' + m.mode, plus = GD.statText[sm + '+'];
     const typed = types.length && plus && (plus.includes('{tags}') || !conds.length) ? sm + '+' : null;
     const keys = [sm + (m.tags.length ? '+' + m.tags.join('+') : ''), typed, sm + (conds[0] ? '+' + conds[0] : ''), sm + (gemScaled ? '+GemScaled' : ''), sm + '+', sm].filter(Boolean);
-    let t = null; for (const k of keys) if (GD.statText[k]) { t = GD.statText[k]; break; }
+    let t = null, tk = ''; for (const k of keys) if (GD.statText[k]) { t = GD.statText[k]; tk = k; break; }
     const fmt = x => (Math.round(x * 100) / 100).toString();
-    if (!t) return m.stat + ' ' + m.mode + ' ' + fmt(m.v) + (m.v2 ? '-' + fmt(m.v2) : '') + (m.tags.length ? ' [' + m.tags.join(', ') + ']' : '');
+    if (!t) return fallbackText(m, fmt);
     // Fire + Cold + Lightning (the Elemental tag) reads "Elemental", as the game's tooltip does (owner, 13 Nov 2026:
     // idol "5% increased Elemental Damage"); other sets of types read as a list ("Cold and Lightning").
     // Display text only, no effect on numbers.
@@ -13269,7 +13313,9 @@ window.BOCharacter = function (ctx) {
     const tagWords = [typeWords, ...conds].filter(Boolean).join(' ');
     return t.replace('{v}', fmt(m.v)).replace('{v2}', fmt(m.v2)).replace('{abs}', fmt(Math.abs(m.v))).replace('{tags}', tagWords || '').replace('{skills}', (conds.join(' ') || (typeWords ? typeWords + ' Skills' : 'Skills')))
       .replace('{tag0}', m.tags[0] || '').replace('{tag1}', m.tags[1] || '').replace(/\{n\}\|plural\(one=([^,]+),other=([^)]+)\)/, (_, a, b) => Math.abs(m.v) === 1 ? a : b).replace(/\s+/g, ' ').trim()
-      + (conds.length && !/\{tags\}|\{skills\}/.test(t) && !t.includes(conds[0]) ? ' (' + conds.join(', ') + ')' : '');
+      // A wording picked for this condition already says it ("Block.Flat+HoldingShield": "... while holding a Shield"), so the
+      // condition is not added again as "(HoldingShield)". Display text only.
+      + (conds.length && !/\{tags\}|\{skills\}/.test(t) && !t.includes(conds[0]) && !('+' + tk.split('+').slice(1).join('+') + '+').includes('+' + conds[0] + '+') ? ' (' + conds.join(', ') + ')' : '');
   }
 
   // ---------- support search ----------
@@ -13560,7 +13606,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
+  const api = { hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
     // The share at which a support works on minion skills despite "Minion" in its ExcludeTags (0 = it does not), for tooltips.
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -17911,7 +17957,7 @@ window.BOStartApp = function () {
     }
     if (sec === 'runewords') {
       const w = byId('runewords'); if (!w) return '';
-      return head(w.Name, 'Oathword · ' + (w.Runes || []).join(' + ')) + list('pl-tip-base', (w.Mods || []).map(m => modLine(m.Mod || m))) + ((w.Bases || []).length ? '<span class="pl-tip-desc">Goes in: ' + esc(w.Bases.join(', ')) + '</span>' : '');
+      return head(w.Name, 'Oathword · ' + (w.Runes || []).join(' + ')) + list('pl-tip-base', (w.Mods || []).map(m => m.Text || modLine(m.Mod || m))) + ((w.Bases || []).length ? '<span class="pl-tip-desc">Goes in: ' + esc(w.Bases.join(', ')) + '</span>' : '');
     }
     if (sec === 'affixes') {
       const a = GD.affixes[lid] || GD.affixes[id]; if (!a || !a.Mod) return '';

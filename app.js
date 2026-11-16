@@ -13624,7 +13624,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
+  const api = { hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
     // The share at which a support works on minion skills despite "Minion" in its ExcludeTags (0 = it does not), for tooltips.
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -14519,17 +14519,21 @@ window.BOStartApp = function () {
   // Life, energy shield and resistances as the summary strip and the Character tab show them (r: the main skill's sheet).
   function defenceStats(r) {
     // Read-only display of the lines on gear and tree (no defensive sim). Lines with conditions are skipped.
-    let life = '–', es = '–', res = '–', resTip = 'Not shown', resParts = null;
+    let life = '–', mana = '–', es = '–', res = '–', resTip = 'Not shown', resParts = null;
     if (r && st.ch) {
       try {
         const mods = S.collectMods(GD, st.ch, opts()).mods.filter(m => !S.splitTags(m.tags).conds.length);
         const d = defenceCore(st.ch, mods, r.attr || {});
         life = num(d.life, 0); es = num(d.es, 0); resParts = d.resParts;
+        // Max mana as the sim reads it (sim.js heroMaxMana); the skill's own sheet only has it when the skill costs mana.
+        const mx = r.mana && r.mana.max != null ? r.mana.max : S.heroMaxMana(GD.scaling.Hero || {}, st.ch, mods, r.attr || {});
+        // Rounded to nearest: Shrimpslam's Maximum Mana tooltip, 16 Nov 2026 (level 53, Int 61): 504 + 30.5 + 105 = 639.5 shows 640.
+        mana = num(Math.round(mx), 0);
         res = resParts.map(x => x[1]).join(' / ');
         resTip = 'Fire / Cold / Lightning / Poison resistance, added up from gear and tree lines (all-elemental counted in each). Not capped.';
       } catch (e) { /* leave the dashes */ }
     }
-    return { life, es, res, resTip, resParts, attr: r && r.attr };
+    return { life, mana, es, res, resTip, resParts, attr: r && r.attr };
   }
   // A ladder hero's life, energy shield and resistances, the same way (Ladder tab sorting). No skill sheet is run, so
   // the attributes are added up here as sim.js does (class base + per level, then flat and % lines).
@@ -14587,8 +14591,8 @@ window.BOStartApp = function () {
     const fromSave = st.ch && !st.ch.plan && (st.ch.file || st.ch.from === 'folder' || st.ch.from === 'file');
     $('#bsSpell').textContent = st.ch ? st.ch.classId + ' · level ' + st.ch.level + (fromSave && window.BOGrail ? ' · ' + window.BOGrail.leagueLabel(st.ch.league) : '') + (ok && r.skill ? ' · ' + r.skill.Name : '') : '';
     $('#bsDps').textContent = ok ? num(r.totalDps) : '–';
-    const { life, es, res, resTip, resParts, attr } = defenceStats(ok ? r : null);
-    $('#bsLife').textContent = life; $('#bsEs').textContent = es; $('#bsRes').innerHTML = resParts ? resParts.map(x => '<span style="color:' + typeColor(x[0]) + '">' + x[1] + '</span>').join(' / ') : esc(res);
+    const { life, mana, es, res, resTip, resParts, attr } = defenceStats(ok ? r : null);
+    $('#bsLife').textContent = life; $('#bsMana').textContent = mana; $('#bsEs').textContent = es; $('#bsRes').innerHTML = resParts ? resParts.map(x => '<span style="color:' + typeColor(x[0]) + '">' + x[1] + '</span>').join(' / ') : esc(res);
     $('#bsAttr').textContent = attr ? attr.Str + ' / ' + attr.Dex + ' / ' + attr.Int : '–';
     $('#bsRes').parentNode.title = resTip;
     el.hidden = !st.ch;

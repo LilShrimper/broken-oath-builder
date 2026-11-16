@@ -3,7 +3,7 @@
 :root {
   --bg: #0b0f1e; --bg-2: #0e1428; --panel: #131a2e; --panel-2: #1a2240; --line: #273152; --text: #e7e9f4; --muted: #a0a8c4; --faint: #6f789a;
   --accent: #a78bfa; --accent-strong: #7c3aed; --accent-2: #6366f1; --accent-ink: #fff; --good: #34d399; --bad: #f87171;
-  --t-physical: #cbb9a2; --t-fire: #f0834f; --t-cold: #73b9ea; --t-lightning: #e9d45c; --t-poison: #82c76c;
+  --t-physical: #cbb9a2; --t-fire: #f0834f; --t-cold: #73b9ea; --t-lightning: #e9d45c; --t-poison: #82c76c; --life: #e5484d; --mana: #5b8def;
   --mix-poison: #bb8ae8; --mix-ignite: #f0b663; --mix-bleeding: #cf6473; --dashboard-gold: #d7b66d; --dashboard-green: #42d392;
   --radius: 14px; --radius-sm: 9px;
   --shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 8px 28px rgba(2,4,16,.45);
@@ -13,7 +13,7 @@
 :root[data-theme="light"] {
   --bg: #f7f3ff; --bg-2: #efe8ff; --panel: #ffffff; --panel-2: #f5f0ff; --line: #d9cbf5; --text: #1f2138; --muted: #4d5678; --faint: #7581a8;
   --accent: #6b4ce6; --accent-strong: #5a38d8; --accent-2: #7a5ef5; --accent-ink: #fff; --good: #0f7d4d; --bad: #b63d3b;
-  --t-physical: #8a7356; --t-fire: #c4521f; --t-cold: #2c7fb8; --t-lightning: #a68a0a; --t-poison: #3f8a2e;
+  --t-physical: #8a7356; --t-fire: #c4521f; --t-cold: #2c7fb8; --t-lightning: #a68a0a; --t-poison: #3f8a2e; --life: #c62828; --mana: #1f5fc4;
   --shadow: 0 1px 2px rgba(31,33,56,.06), 0 12px 30px rgba(107,76,230,.12);
   --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent), 0 10px 30px rgba(107,76,230,.16);
   color-scheme: light;
@@ -1141,7 +1141,7 @@ body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page) 
 .build-stats[hidden] { display: none; }
 @media (max-width: 520px) { .build-stats { grid-template-columns: 1fr; } }
 /* Summary strip: class + spell, boss DPS, life, energy shield, resistances, share link */
-.build-summary { display: grid; grid-template-columns: minmax(150px, 1.5fr) repeat(5, minmax(90px, 1fr)) auto; gap: 1px; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--line); overflow: hidden; }
+.build-summary { display: grid; grid-template-columns: minmax(150px, 1.5fr) minmax(90px, 1fr) minmax(130px, 1fr) repeat(3, minmax(90px, 1fr)) auto; gap: 1px; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--line); overflow: hidden; }
 .build-summary[hidden] { display: none; }
 .bs-cell { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; padding: 8px 14px; background: var(--panel); }
 .bs-label { color: var(--muted); font: 600 10px/1.2 Inter, "Segoe UI", sans-serif; letter-spacing: .1em; text-transform: uppercase; }
@@ -1856,6 +1856,15 @@ body.io-open { overflow: hidden; }
   .io-aff select { max-width: 100%; }
 }
 .bs-cell b#bsRes, .bs-cell b#bsAttr { white-space: normal; font-size: 16px; }
+/* Life over Mana in one summary cell, each in its pool colour (owner, 16 Nov 2026). */
+/* Two equal halves split by a line; labels right-aligned in one shared column, numbers left-aligned in the next. */
+.bs-cell.bs-pools { display: grid; grid-template-columns: minmax(0, 1fr) auto auto minmax(0, 1fr); grid-template-rows: 1fr 1fr; column-gap: 0; padding-top: 0; padding-bottom: 0; }
+.bs-pool { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: baseline; align-content: center; min-width: 0; }
+.bs-pool + .bs-pool { border-top: 1px solid var(--line); }
+.bs-pool .bs-label { grid-column: 2; text-align: right; margin-right: 8px; }
+.bs-cell .bs-pool b { grid-column: 3; font-size: 20px; overflow: visible; font-variant-numeric: lining-nums tabular-nums; }
+.bs-cell b#bsLife { color: var(--life); }
+.bs-cell b#bsMana { color: var(--mana); }
 
 /* Item Search tab (itemsearch.js) */
 .is-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }

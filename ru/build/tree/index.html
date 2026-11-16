@@ -46,7 +46,7 @@
 <meta property="og:url" content="https://builder.lilshrimper.dev/ru/build/tree/"><meta property="og:image" content="https://builder.lilshrimper.dev/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=325">
+<link rel="stylesheet" href="../../../style.css?v=326">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -163,7 +163,10 @@
     <div class="build-summary" id="buildSummary" hidden aria-label="Build summary">
       <div class="bs-cell bs-wide"><span class="bs-label">Character name</span><b id="bsClass">–</b><small id="bsSpell"></small></div>
       <div class="bs-cell" title="Total DPS of the selected skill against the enemy set on the Damage tab"><span class="bs-label">Boss DPS (est)</span><b id="bsDps">–</b></div>
-      <div class="bs-cell" title="Maximum life from level, Strength and life lines on gear and tree"><span class="bs-label">Life</span><b id="bsLife">–</b></div>
+      <div class="bs-cell bs-pools">
+        <div class="bs-pool" title="Maximum life from level, Strength and life lines on gear and tree"><span class="bs-label">Life</span><b id="bsLife">–</b></div>
+        <div class="bs-pool" title="Maximum mana from level, Intelligence and mana lines on gear and tree"><span class="bs-label">Mana</span><b id="bsMana">–</b></div>
+      </div>
       <div class="bs-cell" title="Energy shield lines on gear and tree, added up"><span class="bs-label">Energy Shield</span><b id="bsEs">–</b></div>
       <div class="bs-cell" title="Strength, Dexterity and Intelligence"><span class="bs-label">Strength / Dex / Int</span><b id="bsAttr">–</b></div>
       <div class="bs-cell"><span class="bs-label">Resistances</span><b id="bsRes">–</b></div>
@@ -606,7 +609,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":325,"at":"2026-11-16T18:38:52.255Z"};
+window.SITE_VERSION = {"v":326,"at":"2026-11-16T19:25:32.485Z"};
 window.SITE_LANG = 'ru';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -615,6 +618,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=14188d03","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../../app.js?v=325"></script>
+<script src="../../../app.js?v=326"></script>
 </body>
 </html>

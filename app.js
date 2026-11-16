@@ -6991,7 +6991,10 @@ window.BOItemSearch = function (ctx) {
     // not published, so measured DPS past 100 is not in the sim's unit.
     // The ladder's game_build runs one behind the patch number: the owner's game said "build 77" (Copy stats, 15 Nov 2026) with
     // Patch 78's rescaled numbers already on screen, and the ladder said 77 too. So the ladder's 77 is Patch 78.
-    const rescaled = rl => +((S.ladder && S.ladder.game_build) || (S.version && S.version.game_build) || 0) >= 77 && (rl || 0) > 100;
+    // Patch 79 (notes pasted 16 Nov 2026): "Real numbers everywhere. The Patch 78 display scale is gone". Ladder game_build 78 is
+    // Patch 79: its Rupture 200 heroes measured 1.1B-2.2B Guardian DPS on 16 Nov (notes: median 1.29B real), not ~20M. So only
+    // game_build 77 is on the scale; the hero's own measured.game_build wins over the ladder's.
+    const rescaled = (rl, m) => +((m && m.game_build) || (S.ladder && S.ladder.game_build) || (S.version && S.version.game_build) || 0) === 77 && (rl || 0) > 100;
     const metric = r => {
       const x = roster()[r.hero];
       if (S.sort === 'sim') return x && x.sim > 0 ? x.sim : null;
@@ -7141,7 +7144,7 @@ window.BOItemSearch = function (ctx) {
       const measured = m.guardian_kills || m.guardian_losses ?
         '<div class="lad-stats"><div><span>Guardian DPS</span><b>' + fmt(m.guardian_dps_median) + '</b></div><div><span>Kill time</span><b>' + secs(m.guardian_kill_seconds_median) + '</b></div><div><span>Kills / losses</span><b>' + (m.guardian_kills || 0) + ' / ' + (m.guardian_losses || 0) + '</b></div></div>' +
         '<p class="hint">Measured by the game: medians over the last ' + (m.window_days || 1) + ' day' + ((m.window_days || 1) > 1 ? 's' : '') + ' of Guardian fights' + (m.at ? ', ' + esc(ago(m.at)) : '') + '.' +
-          (rescaled(h.rupture_level) ? ' Since patch 78 the game shows damage past Rupture 100 on that Rupture\'s own scale, so this number is smaller than the sim\'s and does not compare with heroes under Rupture 100.' : '') + '</p>'
+          (rescaled(h.rupture_level, m) ? ' On patch 78 the game shows damage past Rupture 100 on that Rupture\'s own scale, so this number is smaller than the sim\'s and does not compare with heroes under Rupture 100.' : '') + '</p>'
         : '<p class="hint">No Guardian fights measured yet (the game measures them every 6 hours).</p>';
       return '<div class="card lad-hero">' +
         '<div class="lad-hero-head"><div><div class="eyebrow">' + esc(h.league || '') + ' · hero ' + esc(String(h.hero).slice(0, 8)) + '</div><h3 class="lad-hero-title">' + esc(h.class) + (h.ascendancy && h.ascendancy !== 'None' ? ' · ' + esc(h.ascendancy) : '') + ' · level ' + (h.level || '?') + ' · Rupture ' + (h.rupture_level || 0) + '</h3>' +

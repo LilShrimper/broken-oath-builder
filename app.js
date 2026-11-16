@@ -6984,7 +6984,9 @@ window.BOItemSearch = function (ctx) {
     const rupText = r => (r.rupture_level || 0) + (riven(r) != null ? ' · T' + riven(r) : '');
     // Patch 78: "Damage numbers past Rupture 100 now read on that Rupture's own scale, so the numbers are smaller". The scale is
     // not published, so measured DPS past 100 is not in the sim's unit.
-    const rescaled = rl => +((S.ladder && S.ladder.game_build) || (S.version && S.version.game_build) || 0) >= 78 && (rl || 0) > 100;
+    // The ladder's game_build runs one behind the patch number: the owner's game said "build 77" (Copy stats, 15 Nov 2026) with
+    // Patch 78's rescaled numbers already on screen, and the ladder said 77 too. So the ladder's 77 is Patch 78.
+    const rescaled = rl => +((S.ladder && S.ladder.game_build) || (S.version && S.version.game_build) || 0) >= 77 && (rl || 0) > 100;
     const metric = r => {
       const x = roster()[r.hero];
       if (S.sort === 'sim') return x && x.sim > 0 ? x.sim : null;

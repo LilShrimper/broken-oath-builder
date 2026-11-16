@@ -244,14 +244,14 @@ window.PAGE_LANGS = {
       const o = pick(s, SKILL_KEYS);
       if (s.Channel) o.Channel = pick(s.Channel, ['CostPerSec', 'Tick', 'MoveMult', 'bStrike', 'StrikeScale']);
       if (s.Orb && typeof s.Orb === 'object') o.Orb = pick(s.Orb, ['Duration', 'Interval', 'Max', 'ExplodeScale']); // Winter Orb: icicle clock and the closing burst
-      if (s.Minion) o.Minion = pick(s.Minion, ['MonsterId', 'Count', 'Cap', 'CountEvery', 'PerLevels', 'DamageMult', 'AttackEvery', 'Affinity', 'AffinityDamage', 'AffinityCap', 'LevelDamage', 'GolemAuras']);
+      if (s.Minion) o.Minion = pick(s.Minion, ['MonsterId', 'Count', 'Cap', 'CountEvery', 'PerLevels', 'DamageMult', 'AttackEvery', 'Affinity', 'AffinityDamage', 'AffinityCap', 'LevelDamage', 'GolemAuras', 'ShareBeyond', 'SharePerBody', 'ReserveHomeClass', 'ReserveHomeMult', 'SlamEvery', 'SlamShare', 'GrowPerLevel', 'GrowMax']); // ShareBeyond..GrowMax: build 79 fields (Shared Light read by the sim; reservation and the zombie slam/grow kept for display, not simmed)
       if (s.Ground) o.Ground = pick(s.Ground, ['Duration', 'Tick', 'TickScale', 'Radius', 'HallowedTakenPct', 'HallowedCrit']); // Hallowed*: the ground's damage taken and crit (Consecrated Ground, Hallowed Slam)
       if (s.Totem) o.Totem = typeof s.Totem === 'object' ? Object.assign({ on: true }, pick(s.Totem, ['Kind', 'Interval', 'Duration', 'Max', 'PerLevels', 'Effectiveness'])) : true;
       if (s.Rain) o.Rain = pick(s.Rain, ['Delay', 'Waves', 'Interval', 'Arrows']);
       if (s.Brand) { o.Brand = true; if (typeof s.Brand === 'object') { o.BrandDuration = s.Brand.Duration; o.BrandMax = s.Brand.Max; o.BrandChains = s.Brand.Chains; } } // duration and max: the tooltip of Venom/Rime/Ember shows {BrandLife}, not a number; BrandChains fills {BrandChains} in the gem text (display only, the sim does not read it)
       // Thousand Cuts: a chain of hops on a fixed timer, the last one heavier.
       if (s.Mirage) o.Mirage = pick(s.Mirage, ['Hops', 'Interval', 'HopTime', 'FinalScale']);
-      if (s.Orbit) o.Orbit = typeof s.Orbit === 'object' ? pick(s.Orbit, ['Count', 'CountPerLevels', 'Max', 'AngularSpeed', 'SweepPeriod', 'HitInterval', 'RingSplitAt', 'EmpowerSpeed']) : true;
+      if (s.Orbit) o.Orbit = typeof s.Orbit === 'object' ? pick(s.Orbit, ['Count', 'CountPerLevels', 'Max', 'AngularSpeed', 'SweepPeriod', 'HitInterval', 'RingSplitAt', 'EmpowerSpeed', 'EmpowerMore', 'EmpowerExtra']) : true; // Empower*: Hammerstorm (sim.js orbit ring)
       skills[s.Id.toLowerCase()] = Object.assign(skills[s.Id.toLowerCase()] || {}, o);
     }
 
@@ -303,6 +303,30 @@ window.PAGE_LANGS = {
       masteries[m.Id] = Object.assign(pick(m, ['Id', 'Name', 'X', 'Y', 'Notables', 'Class']), { Oaths: (m.Oaths || []).map(x => x.Id) });
       for (const x of m.Oaths || []) oaths[x.Id] = pick(x, ['Id', 'Name', 'Text', 'Vow', 'Mods']);
     }
+    // Oath seats (game data build 79): the passive tree carries one "Oath seat" node per socket (om103_<place>, Kind Notable, no lines,
+    // text "Oath seat. Swear one of its Oaths here, from the Oath panel.", Flavour "Reach it, then choose what you swear"), each linked
+    // from one notable. oath_masteries.json is still the older file (TreeVersion 18): one socket per mastery opened by any of many
+    // notables, and it lacks the extra seats (om_warrior_fury_c1 ... _c6). The owner's saves already key their sworn Oaths by seat
+    // (OathMasteries95 "om_warrior_fury_c4", "om_necromancer_legion_c2", ...: om_ + the seat id without om103_), and the sim dropped
+    // every Oath sworn at a seat the old file did not list (17 Nov 2026: 7 of Shrimpskelemage's 16). So with seats in the tree the
+    // masteries are rebuilt from them: one per seat, at the seat, its Oaths from the mastery of the same id, else of the same name
+    // (same class first). Open rule: the seat node itself is taken ("Reach it, then choose"). An Oath a save swore at a seat that is not
+    // taken does NOT count, even with the notable it hangs from taken: owner's curse tooltips 17 Nov 2026 (Shrimpskelemage, Sentence of Rot 87.8% = 45 x 1.951, Woe of
+    // Withering x1.951 x 1.25) show 95% increased curse effect, the character's lines minus Oath of the Dread Word's 5%, sworn in the save at
+    // om_necromancer_blight, whose notable (grave_sermon_n0) is taken but whose seat node is not.
+    // Not in the API file: Oaths the seats added later (oath_long_fight, oath_grave_choir, oath_shepherd in the owner's saves): not counted. Masteries with no seat are left out: the build 79 tree has no socket for them.
+    const seats = Object.values(tree.nodes || {}).filter(n => /^om103_/.test(n.Id));
+    if (seats.length) {
+      const old = Object.assign({}, masteries);
+      for (const k of Object.keys(masteries)) delete masteries[k];
+      for (const s of seats) {
+        const id = 'om_' + s.Id.slice('om103_'.length);
+        const cls = (s.Region || '').toLowerCase();
+        const base = old[id] || Object.values(old).find(m => m.Name === s.Name && (m.Class || '').toLowerCase() === cls) || Object.values(old).find(m => m.Name === s.Name);
+        if (!base) continue;
+        masteries[id] = { Id: id, Name: s.Name, X: s.X, Y: s.Y, Notables: [s.Id], Class: base.Class || '', Oaths: base.Oaths.slice(), Seat: s.Id };
+      }
+    }
 
     const affixes = {};
     for (const a of J('Items/affixes.json').affixes) affixes[a.Id.toLowerCase()] = Object.assign(pick(a, ['Id', 'Type', 'Group', 'Mod', 'BaseTags', 'ExcludeTags']), { Tiers: (a.Tiers || []).map(t => pick(t, ['ILvl', 'Min', 'Max', 'Min2', 'Max2', 'Name'])) });
@@ -326,7 +350,7 @@ window.PAGE_LANGS = {
 
     const uniques = {};
     for (const u of J('Items/uniques.json').uniques) uniques[u.Id.toLowerCase()] = Object.assign({ Id: u.Id, Name: u.Name, BaseId: u.BaseId, Mods: u.Mods.map(m => pick(m, ['Mod', 'Text', 'Min', 'Max', 'Min2', 'Max2'])) },
-      pick(u, ['Level', 'Flavour', 'DropWeight', 'Chase', 'Primal', 'Signature', 'Limited', 'Core', 'DwarvenSockets'])); // Level .. DwarvenSockets: Item Search and Grail tabs only (DwarvenSockets marks the Deep-forged)
+      pick(u, ['Level', 'Flavour', 'DropWeight', 'Chase', 'Primal', 'Signature', 'Limited', 'Core', 'DwarvenSockets', 'Forged'])); // Level .. DwarvenSockets: Item Search and Grail tabs only (DwarvenSockets marks the Deep-forged)
 
     const bases = {};
     for (const b of J('Items/item_bases.json').bases) bases[b.Id.toLowerCase()] = pick(b, ['Id', 'Name', 'Slot', 'Class', 'TypeName', 'Tags', 'Implicits', 'DamageMin', 'DamageMax', 'AttacksPerSecond', 'Crit', 'bTwoHanded', 'Weapon', 'Level', 'Armour', 'Evasion', 'EnergyShield', 'Block', 'Width', 'Height', 'ReqStr', 'ReqDex', 'ReqInt', 'DropWeight']); // defences: shown on items and compared, not used for damage (item_bases.json)
@@ -366,9 +390,11 @@ window.PAGE_LANGS = {
     const dragonFile = J('Gameplay/dragonling.json');
     const asc = dragonFile.Tree.Ascendancy || {};
     const DT_ = dragonFile.Tree;
-    // Rules76 (zeroes the Ascended rules' downsides, e.g. Virulence DurMult 1) is not used yet: no log proof so far
-    // that Virulence poisons stopped lasting 25% shorter (6 Nov 2026; the tested Necromancer has no Plague Wyrm).
-    const rules = DT_.Rules71 || {};
+    // Rules76 (the Ascended rules without their downsides, and some reworked: Backdraft and Grounded Storm crit chance, Arcane Overflow
+    // full at half mana, Virulence DurMult 1) laid over Rules71. The game runs them: log 16 Nov 2026 (build 79) "Ascend76: on (mix the
+    // Ascendancies, no prices)", and the nodes' Pos76 texts (used for the page since 6 Nov) say the same. Before 17 Nov only Rules71 was read.
+    const rules = JSON.parse(JSON.stringify(DT_.Rules71 || {}));
+    for (const [k, v] of Object.entries(DT_.Rules76 || {})) rules[k] = Object.assign({}, rules[k] || {}, v);
     const dragon = { aspects: {}, classes: {}, classAspect: dragonFile.ClassAspect || {}, ascend: { enabled: !!asc.bEnabled, classes: (asc.Classes || []).map(c => c.toLowerCase()) }, rules,
       // The tree's own rules (Build tab): points from milestone levels, +1 once hatched, + Gate kills / Pinnacle;
       // one Keystone or Capstone at a time.
@@ -393,9 +419,16 @@ window.PAGE_LANGS = {
         dragon.classes[cls.toLowerCase()][n.Id] = o;
       }
     }
+    // Dragon Hearts (Patch 79 notes: "every Dragonling Aspect gets its own 4 node Heart ... and your Dragonling dives into the fight
+    // with it"). The API's dragonling.json (build 79) keeps them apart in Tree.Hearts103.Classes: 4 nodes a class beside the core
+    // whose lines follow the Aspect (AspectMods, as other nodes), the last one a Dragonling flag the sim counts as a dive (sim.js).
+    for (const [cls, list] of Object.entries((DT_.Hearts103 || {}).Classes || {})) {
+      const into = dragon.classes[cls.toLowerCase()] || (dragon.classes[cls.toLowerCase()] = {});
+      for (const n of list) into[n.Id] = Object.assign(pick(n, ['Id', 'Name', 'Kind', 'Path', 'Icon', 'Mods', 'AspectMods', 'AspectText', 'Text', 'X', 'Y', 'Links']), { Heart: true });
+    }
 
     const curses = {};
-    for (const c of J('Gameplay/curses.json').curses) curses[c.Id] = pick(c, ['Id', 'Name', 'Kind', 'Skill', 'TakenPct', 'ElementTakenPct', 'ResistDown', 'BossEffect', 'Dread', 'Tough', 'Text']);
+    for (const c of J('Gameplay/curses.json').curses) curses[c.Id] = pick(c, ['Id', 'Name', 'Kind', 'Skill', 'TakenPct', 'ElementTakenPct', 'ResistDown', 'BossEffect', 'Dread', 'Tough', 'Text', 'DotTakenPct', 'DealtLessPct']); // DotTakenPct: Sentence of Rot (patch 77); DealtLessPct: Woe of Faltering, Sentence of Chains (shown, not simmed)
     const blessings = {};
     for (const b of J('Gameplay/blessings.json').blessings) blessings[b.Id] = pick(b, ['Id', 'Name', 'Kind', 'Skill', 'Mods', 'Text', 'Vowbreak', 'ReserveFlat', 'ReserveFlatPerLevel', 'ReservePct']);
 
@@ -534,7 +567,23 @@ window.PAGE_LANGS = {
         boss: T.Oathbreaker ? pick(T.Oathbreaker, ['Id', 'Life', 'PhaseAt', 'AddsPerGate']) : null, ownReds: T.OwnReds95 || [] };
     } catch (e) { /* older game files: no Tundra Desert */ }
 
-    return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {},
+    // Drop odds for the FAQ (display only, 17 Nov 2026): scaling.json Loot (unique, Primal chances), Rift.GuardianUniqueChance, runes.json
+    // Rules (rune, jewel and red rune chances, leans by Rupture Level), the Heralds' kill effects (blessings.json Herald) and the affix
+    // lean lines (affixes.json LeanTag / LeanOn / LeanOff). Whether the Loot numbers already carry Patch 79's halving of red drops is not known.
+    let loot = null;
+    try {
+      const SL = J('Gameplay/scaling.json'), L0 = SL.Loot || {}, RR = J('Items/runes.json').Rules || {};
+      loot = {
+        unique: pick(L0, ['GuardianUniqueChance', 'BossUniqueChance', 'EliteUniqueChance', 'NamedUniqueChance', 'GateUniqueMult', 'PinnacleUniqueMult', 'PinnacleUniqueRolls', 'UniqueFromML', 'UniqueOutlevelFade', 'UniqueOutlevelFadeFrom']),
+        primal: pick(L0, ['PrimalFromML', 'PrimalChance', 'PrimalChance71', 'PinnaclePrimalChance', 'CorePrimalChance', 'LordPrimalChance']),
+        riftGuardianUnique: (SL.Rift || {}).GuardianUniqueChance,
+        runes: pick(RR, ['SocketChance', 'DropChance', 'JewelFromML', 'JewelDropChance', 'JewelSocketFromML', 'JewelSocketChance', 'JewelSocketChanceWeapon', 'RedChance', 'DeepHallRedChance', 'RedLeanFromRL', 'RedLeanToRL', 'RedLeanMult', 'RedHomeMult', 'TierLeanFromRL', 'TierLeanToRL', 'TierLeanMult', 'DwarvenLeanFromRL', 'DwarvenLeanToRL', 'DwarvenLeanMult']),
+        heralds: J('Gameplay/blessings.json').blessings.filter(b => b.Herald).map(b => Object.assign({ Id: b.Id, Name: b.Name }, b.Herald)),
+        lean: J('Items/affixes.json').affixes.filter(x => x.LeanTag).map(x => ({ Id: x.Id, Tag: x.LeanTag, On: x.LeanOn, Off: x.LeanOff, Group: x.Group })),
+      };
+    } catch (e) { /* older files: no drop block */ }
+
+    return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {}, { loot },
       { skills, classes, supports, nodes, masteries, oaths, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
         affixes, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, sigRuneRule, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice, gemPoison, rules: gameRules });
   }
@@ -2574,7 +2623,10 @@ window.BOPlanner = function (ctx) {
   // Gate kills + Pinnacle cap: only Gates 4 to 7 give a point (dragonling.json MinGateBand 4; the game's tree panel,
   // owner's screenshot 14 Nov 2026: "14 taken · Levels 8/8 · Gates 4 to 7: 4/4 · Pinnacle 1/1 · Ascendancy egg +1").
   const DGATE_TOP = 7;
-  const dExtraMax = () => { const R = dRules(); return Math.max(0, DGATE_TOP - (R.minGate || 4) + 1) * (R.perGate || 1) + (R.pinnacle != null ? R.pinnacle : 1); };
+  // Patch 79 notes: "Seal of 80: breaking it gives +1 Dragonling point, a permanent power step" (switches r103.BUGS-B bSealSrc103,
+  // bDragonPts103). From API game data build 79.
+  const dSeal80 = () => +GD.apiBuild >= 79 ? 1 : 0;
+  const dExtraMax = () => { const R = dRules(); return Math.max(0, DGATE_TOP - (R.minGate || 4) + 1) * (R.perGate || 1) + (R.pinnacle != null ? R.pinnacle : 1) + dSeal80(); };
   const dExtra = ch => Math.min(dExtraMax(), ch.dragonExtra != null ? ch.dragonExtra : Math.max(0, (ch.dragonNodes || []).length - dBase(ch)));
   function dPoints(ch) { return dBase(ch) + dExtra(ch); }
   function dAdj(T) {
@@ -2647,7 +2699,7 @@ window.BOPlanner = function (ctx) {
     h += asp ? '<p class="dl-aspect"><b>' + esc(asp.Name || ch.dragonAspect) + ' Aspect:</b> ' + esc(asp.Text || '') + '</p>'
       : '<p class="hint">No Aspect chosen: each one gives its own bonuses (pick one above to see them).</p>';
     h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.' :
-      'Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, +1 each for Gates 4 to 7 and the Pinnacle (' + (dBase({ level: 100 }) + dExtraMax()) + ' at most). ' + (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + 'Paths can be mixed; one Keystone or Capstone at a time. Hover a node for its lines.') + '</p>';
+      'Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, +1 each for Gates 4 to 7' + (dSeal80() ? ', the Seal of 80' : '') + ' and the Pinnacle (' + (dBase({ level: 100 }) + dExtraMax()) + ' at most). ' + (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + 'Paths can be mixed; one Keystone or Capstone at a time. Hover a node for its lines.') + '</p>';
     h += '<svg class="dl-tree" viewBox="-560 -640 1120 1100" role="img" aria-label="Dragonling tree">' + '<g class="dl-links">' + lines + '</g>' + dots + '</svg>';
     if (list) h += '<ul class="dl-list">' + list + '</ul>';
     return h + '</div>';
@@ -6254,6 +6306,11 @@ window.BOItemSearch = function (ctx) {
       ico = art('uniq', u.Id, 'unique', ICON_NAMES[e.icon]) || icon(e.icon, 'unique');
       sub = (b ? b.Name + ' · ' + baseType(b) : u.BaseId);
       body = implicits(GD, b) + '<ul class="is-lines unique">' + e.lines.map(t => li(t)).join('') + '</ul>' + (u.Flavour ? '<p class="is-flavour">' + esc(u.Flavour) + '</p>' : '');
+      // Forged copies (uniques.json Forged, game data build 79: one factor per line, 1 to 1.35). Ladder items marked forged hold values
+      // inside these raised ranges (17 Nov 2026: Ossuary Stride x1.20-1.36 over its normal max). Lines that stay x1 are left out.
+      const fg = Array.isArray(u.Forged) ? (u.Mods || []).map((m, i) => [m, +u.Forged[i] || 1]).filter(([m, f]) => f > 1 && m.Max != null) : [];
+      if (fg.length) body += '<details class="is-forged"><summary>Forged copy: ' + fg.length + ' line' + (fg.length > 1 ? 's' : '') + ' roll higher</summary><ul class="is-lines unique">' +
+        fg.map(([m, f]) => { const i = u.Mods.indexOf(m), sm = S.uniqueLineShown(u.Id, i, m) || m; return li(uniqueLine(GD, Object.assign({}, sm, { Min: Math.round(sm.Min * f), Max: Math.round(sm.Max * f), Min2: sm.Min2 != null ? Math.round(sm.Min2 * f) : sm.Min2, Max2: sm.Max2 != null ? Math.round(sm.Max2 * f) : sm.Max2 })) + ' <small class="meta">×' + f + '</small>'); }).join('') + '</ul></details>';
       // Where it drops (grail.js dropText: Guardian chase / signature, the Core, or any item level).
       const og = ctx.owned && ctx.owned();
       const from = og && og.dropText ? og.dropText(u) : [];
@@ -6619,7 +6676,11 @@ window.BOItemSearch = function (ctx) {
     // Where a unique comes from (bosses.json Guardian lists, uniques.json Primal / DwarvenSockets / Core / DropWeight).
     function dropText(u) {
       const g = GD(), out = [], gs = Object.values(g.guardians || {});
-      for (const x of gs) if (lc(x.chase) === lc(u.Id)) out.push(x.name + ' (chase, ' + fmtChance(x.chaseChance) + ' a kill)');
+      // Patch 79 notes: "Reds: drop chance halved across every source (world, elites, Guardians and their chase reds, ...). Sure drops stay
+      // sure." The chase chance comes from the frozen game snapshot (bosses.json, build 26617933), so it is halved here once the API's game
+      // data is build 79 or later.
+      const redK = +g.apiBuild >= 79 ? 0.5 : 1;
+      for (const x of gs) if (lc(x.chase) === lc(u.Id)) out.push(x.name + ' (chase, ' + fmtChance(x.chaseChance >= 1 ? x.chaseChance : x.chaseChance * redK) + ' a kill)');
       const sig = gs.filter(x => (x.sig || []).map(lc).includes(lc(u.Id))).map(x => x.name);
       if (sig.length) out.push('Signature drop: ' + sig.join(', '));
       if (u.Primal) out.push("The Core's jackpot (Primal)");
@@ -7055,6 +7116,20 @@ window.BOItemSearch = function (ctx) {
     // ---------- Meta (meta/<league>.json) ----------
     // share / max of the bar: shares are out of 100; the Rupture box is out of its deepest skill.
     function bar(share, max) { return '<span class="lad-bar"><i style="width:' + Math.max(2, Math.min(100, (share / (max || 100)) * 100)).toFixed(1) + '%"></i></span>'; }
+    function metaExtra(M, li, cnt, box) {
+      let h = '';
+      const bands = Object.entries(M.rupture_level_bands || {}).map(([k, n]) => [+k, +n || 0]).filter(([k]) => isFinite(k)).sort((a, b) => a[0] - b[0]);
+      if (bands.length) {
+        const maxB = Math.max(...bands.map(b => b[1]), 1);
+        h += box('Rupture Level spread', 'Active heroes by their best Rupture Level, in steps of 25.', '<ul>' + bands.map(([k, n]) => '<li><div class="lad-meta-row"><span class="lad-meta-name">' + k + '–' + (k + 24) + '</span>' + bar(n, maxB) + '<span class="lad-meta-num">' + n + '</span></div></li>').join('') + '</ul>');
+      }
+      const sample = (M.sample && M.sample.heroes) || 0;
+      const keys = (M.keystones || []).filter(k => !isHidden(k.id)).slice(0, 8);
+      if (keys.length) h += box('Most taken keystones', 'In the published builds' + (sample ? ' (' + sample + ' heroes)' : '') + '.', '<ul>' + keys.map(k => { const n = (GD().nodes || {})[nodeId(k.id)]; return li('data-k="' + esc(k.id) + '"', esc(n ? n.Name : k.id), '', k.share, 100, cnt(k)); }).join('') + '</ul>');
+      const asc = (M.ascendancies || []).slice(0, 8);
+      if (asc.length) h += box('Ascendancies', 'Class and Dragonling Aspect of the published builds.', '<ul>' + asc.map(a => { const [c, e] = String(a.id).split('/'); return li('data-f-cls="' + esc(c) + '"', clsIco(c) + esc(c), esc(e || ''), a.share, 100, cnt(a)); }).join('') + '</ul>');
+      return h;
+    }
     function metaBody() {
       const M = S.meta;
       if (!M) return '<p class="hint">' + (S.loading ? 'Loading…' : 'No meta for this league yet.') + '</p>';
@@ -7072,6 +7147,9 @@ window.BOItemSearch = function (ctx) {
         box('Most played skills', 'Main skill of each active hero. Click one to filter the ladder.', '<ul>' + topSkills.map(s => li('data-f-skill="' + esc(s.skill) + '" data-f-scls="' + esc(s.class || '') + '"', esc(skillName(s.skill)), esc(s.class || ''), s.share, 100, cnt(s))).join('') + '</ul>') +
         box('Most used uniques', 'Worn by the published builds (top 50 of each class).' + (hiddenU ? ' ' + hiddenU + ' undiscovered.' : ''), uniques.length ? '<ul>' + uniques.map(u => li('data-f-unique="' + esc(u.id) + '"', esc(uniqueName(u.id)), '', u.share, 100, cnt(u))).join('') + '</ul>' : '<p class="meta">None yet.</p>') +
         box('Deepest Rupture by top 5 skills', 'The five most played main skills, by the deepest Rupture Level reached (median in brackets).', '<ul>' + deep.map(s => li('data-f-skill="' + esc(s.skill) + '" data-f-scls="' + esc(s.class || '') + '"', esc(skillName(s.skill)), esc(s.class || ''), s.best_rupture_level || 0, maxD, (s.best_rupture_level || 0) + ' <small class="meta">(' + (s.median_rupture_level || 0) + ')</small>')).join('') + '</ul>') +
+        // The meta file's other parts (API meta/<league>.json, read 17 Nov 2026): rupture_level_bands (25 levels wide, every active hero),
+        // and keystones / ascendancies (the published builds, described in "sample"). Display only.
+        metaExtra(M, li, cnt, box) +
         '</div>' + (M.generated_at ? '<p class="hint">Meta updated ' + esc(ago(M.generated_at)) + ' (hourly).</p>' : '');
     }
     function table() {
@@ -7134,11 +7212,18 @@ window.BOItemSearch = function (ctx) {
         '<p class="hint">Measured by the game: medians over the last ' + (m.window_days || 1) + ' day' + ((m.window_days || 1) > 1 ? 's' : '') + ' of Guardian fights' + (m.at ? ', ' + esc(ago(m.at)) : '') + '.' +
           (rescaled(h.rupture_level, m) ? ' On patch 78 the game shows damage past Rupture 100 on that Rupture\'s own scale, so this number is smaller than the sim\'s and does not compare with heroes under Rupture 100.' : '') + '</p>'
         : '<p class="hint">No Guardian fights measured yet (the game measures them every 6 hours).</p>';
+      // Best clear (ladder row best_seconds / best_at) and the tree version the build was saved on (build tree_version vs the game data's
+      // passive_tree Version). API fields read 17 Nov 2026; display only.
+      const row = ((S.ladder && S.ladder.heroes) || []).find(r => r.hero === h.hero) || {};
+      const tvNow = +(GD().treeVersion || 0), tv = +(b.tree_version || 0);
+      const extraHint = (row.best_seconds ? 'Best clear of Rupture ' + (row.rupture_level || h.rupture_level || 0) + ': ' + secs(row.best_seconds) + (row.best_at ? ', ' + esc(ago(row.best_at)) : '') + '. ' : '') +
+        (tv && tvNow && tv < tvNow ? 'Saved on an older passive tree (version ' + tv + ', the game is on ' + tvNow + '): some nodes may have moved or changed, so the sim may differ from what the hero has now.' : '');
+      const measuredAll = measured + (extraHint ? '<p class="hint">' + extraHint + '</p>' : '');
       return '<div class="card lad-hero">' +
         '<div class="lad-hero-head"><div><div class="eyebrow">' + esc(h.league || '') + ' · hero ' + esc(String(h.hero).slice(0, 8)) + '</div><h3 class="lad-hero-title">' + esc(h.class) + (h.ascendancy && h.ascendancy !== 'None' ? ' · ' + esc(h.ascendancy) : '') + ' · level ' + (h.level || '?') + ' · Rupture ' + (h.rupture_level || 0) + '</h3>' +
         '<small class="meta">Class rank ' + (h.class_rank || '?') + (h.dead ? ' · dead' : '') + (h.updated_at ? ' · build updated ' + esc(ago(h.updated_at)) : '') + '</small></div>' +
         '<div class="lad-actions"><button type="button" class="btn" id="ladOpen">Open in Build Planner</button><button type="button" class="btn ghost" id="ladLink">Copy link</button><button type="button" class="btn ghost" id="ladClose" aria-label="Close hero">Close</button></div></div>' +
-        measured +
+        measuredAll +
         '<h3>Skills</h3><ul class="lad-skills">' + (skills || '<li class="meta">None listed</li>') + '</ul>' +
         '<h3>Passives</h3><p>' + nodes.length + ' points' + (b.bonus_passive_points ? ' (' + b.bonus_passive_points + ' bonus)' : '') + (hiddenNodes ? ', ' + hiddenNodes + ' undiscovered' : '') + '.' +
         (keys.length ? '<br><b>Keystones:</b> ' + esc(keys.join(', ')) : '') + (notables.length ? '<br><b>Notables:</b> ' + esc(notables.join(', ')) : '') + '</p>' +
@@ -7657,7 +7742,7 @@ window.BOFaq = function (ctx) {
   const { $, esc } = ctx;
   const GROUPS = [
     ['Game mechanics', [['ailments', 'Ailments'], ['multipliers', 'Damage Multipliers'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
-      ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep'], ['tundra', 'Tundra Desert'], ['items', 'Item Quality, Riven & Mythic'], ['leagues', 'Custom Leagues']]],
+      ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep'], ['tundra', 'Tundra Desert'], ['items', 'Item Quality, Riven & Mythic'], ['drops', 'Drop Chances'], ['leagues', 'Custom Leagues']]],
     ['About this site', [['sim', 'Sim vs the Game Panel'], ['data', 'Game Data & Patches'], ['privacy', 'Privacy']]],
   ];
   const ALL = GROUPS.flatMap(g => g[1]);
@@ -7754,7 +7839,9 @@ window.BOFaq = function (ctx) {
       ]));
     h += grid;
     h += card('Rules for all minions', list([
-      +GD.apiBuild >= 78
+      +GD.apiBuild >= 79
+        ? 'Most of your own damage lines do not reach minions: only the summon gem\'s own supports, the lines for minions, half of the defence "more damage per 1,000" lines, the passive tree\'s and Dragonling\'s "physical as extra" element lines, and item and tree lines that name only an element ("increased Poison damage" from patch 78, "more" ones from patch 79) count. Lines that name Spell or Attack stay yours.'
+        : +GD.apiBuild >= 78
         ? 'Your own damage lines do not reach minions: only the summon gem\'s own supports, the lines for minions, half of the defence "more damage per 1,000" lines and the passive tree\'s and Dragonling\'s "physical as extra" element lines count (patch 78).'
         : 'Your own damage lines do not reach minions: only the summon gem\'s own supports, the lines for minions and the defence "more damage per 1,000" lines count.',
       'Harmony: more damage for each different kind of minion you command, up to 4 kinds.',
@@ -8037,7 +8124,7 @@ window.BOFaq = function (ctx) {
     if (D.EffectPct) h += card('Dread', list([
       'While you channel a Woe it builds <b>Dread</b>: each point is +' + D.EffectPct + '% curse effect, up to ' + D.Cap + ' (' + D.BossCap + ' on Guardians).',
       T.Holds ? 'On Rares, Uniques and Guardians a Woe holds and builds Dread by itself, up to ' + T.Cap + '.' : '',
-      'Curse effect lines raise it further. Intelligence does not raise a curse\'s damage taken (game note).',
+      'Curse effect lines raise it further. Intelligence does not raise a curse\'s damage taken, only its slow ("+1% curse slow" per 10 Int; checked against the game\'s curse tooltips, 17 Nov 2026).',
     ]));
     return h;
   }
@@ -8298,7 +8385,45 @@ window.BOFaq = function (ctx) {
     return h;
   }
 
-  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, tundra, items, leagues, sim, data, privacy };
+  // ---------- Drop chances ----------
+  // Display only, from GD.loot (gamedata.js, 17 Nov 2026): scaling.json Loot and Rift, runes.json Rules, blessings.json Herald, affixes.json
+  // lean lines. The game's numbers as its files hold them; Patch 79's "reds drop half as often" may or may not be in them yet.
+  function drops(GD) {
+    const L = GD.loot;
+    let h = intro('Drop Chances', 'Chances a kill drops a unique, a Primal item or a rune, as the game data holds them. Not checked in play.');
+    if (!L) return needData(h);
+    const one = c => !c ? '–' : c >= 0.01 ? pct(c) + '%' : '1 in ' + Math.round(1 / c).toLocaleString('en-US');
+    const curve = arr => (arr || []).map(p => 'monster level ' + p.ML + ': ' + one(p.V)).join(' · ');
+    const U = L.unique || {}, P = L.primal || {}, R = L.runes || {};
+    h += card('Uniques (reds)', list([
+      U.GuardianUniqueChance ? 'A Guardian kill: ' + curve(U.GuardianUniqueChance) + (L.riftGuardianUnique ? '; a Rupture Guardian rolls ' + one(L.riftGuardianUnique) : '') + '.' : '',
+      U.BossUniqueChance ? 'A boss kill: ' + curve(U.BossUniqueChance) + '.' : '',
+      U.EliteUniqueChance ? 'An elite (rare) monster: ' + one(U.EliteUniqueChance) + '; a named monster: ' + one(U.NamedUniqueChance) + '.' : '',
+      U.GateUniqueMult ? 'Gate Guardians x' + U.GateUniqueMult + ', the Pinnacle x' + U.PinnacleUniqueMult + (U.PinnacleUniqueRolls ? ' with ' + U.PinnacleUniqueRolls + ' rolls' : '') + '.' : '',
+      U.UniqueFromML ? 'Uniques drop from monster level ' + U.UniqueFromML + '.' : '',
+      'Patch 79: "Reds drop half as often now ... Sure drops stay sure", and your weapon class lean is capped at x2. Whether the numbers above already include that is not known.',
+    ]));
+    h += card('Primal items', list([
+      P.PrimalChance != null ? 'From monster level ' + (P.PrimalFromML || '?') + ': ' + one(P.PrimalChance71 || P.PrimalChance) + ' a drop' + (P.PinnaclePrimalChance ? ', the Pinnacle ' + one(P.PinnaclePrimalChance) : '') + '.' : '',
+      P.CorePrimalChance ? 'The Core\'s jackpot: ' + one(P.CorePrimalChance) + '; a Riven Lord: ' + one(P.LordPrimalChance) + '.' : '',
+    ]));
+    const tiers = (R.DropChance || []).map((c, i) => 'tier ' + (i + 1) + ' ' + one(c)).join(', ');
+    h += card('Runes and jewels', list([
+      tiers ? 'Rune drop chance by tier: ' + tiers + '.' : '',
+      R.JewelDropChance ? 'Jewel drop chance by tier: ' + R.JewelDropChance.map((c, i) => 'tier ' + (i + 1) + ' ' + one(c) + ' (from monster level ' + ((R.JewelFromML || [])[i] || '?') + ')').join(', ') + '.' : '',
+      R.SocketChance ? 'An item drops with sockets ' + pct(R.SocketChance) + '% of the time' + (R.JewelSocketChance ? '; a jewel socket from monster level ' + R.JewelSocketFromML + ' (' + pct(R.JewelSocketChance) + '%, weapons ' + pct(R.JewelSocketChanceWeapon) + '%)' : '') + '.' : '',
+      R.RedChance ? 'A red rune: ' + one(R.RedChance) + (R.DeepHallRedChance ? ', in a Deep Hall ' + one(R.DeepHallRedChance) : '') + '; it leans up to x' + R.RedLeanMult + ' from Rupture ' + R.RedLeanFromRL + ' to ' + R.RedLeanToRL + (R.RedHomeMult ? ', and x' + R.RedHomeMult + ' toward your class' : '') + '.' : '',
+      R.TierLeanMult ? 'Higher rune tiers lean in from Rupture ' + R.TierLeanFromRL + ' to ' + R.TierLeanToRL + ' (x' + R.TierLeanMult.join(' / x') + ' by tier); Dwarven Runes x' + R.DwarvenLeanMult + ' from ' + R.DwarvenLeanFromRL + ' to ' + R.DwarvenLeanToRL + '.' : '',
+    ]));
+    if ((L.lean || []).length) {
+      const by = {}; for (const x of L.lean) (by[x.Tag + ' x' + x.On + ' / x' + x.Off] = by[x.Tag + ' x' + x.On + ' / x' + x.Off] || []).push(x.Id.replace(/_/g, ' '));
+      h += card('Item lines that lean', hint('These lines carry a lean in the affix file: they roll more often (the first number) or less often (the second) depending on a condition the file does not name, likely your class.') + list(Object.entries(by).map(([k, ids]) => '<b>' + esc(k) + '</b>: ' + esc(ids.join(', ')))));
+    }
+    if ((L.heralds || []).length) h += card('Herald kill effects', list(L.heralds.map(x => '<b>' + esc(x.Name) + '</b>: a kill ' + esc(String(x.OnKill || '').toLowerCase()) + 's for ' + x.PctMaxLife + '% of the slain enemy\'s maximum life as ' + esc(x.Element || '') + (x.Count ? ', to ' + x.Count + ' enemies' : '') + ' within ' + r1((x.Radius || 0) / 100) + ' m.')) + hint('Kill effects only, so the sim (one enemy) leaves them out. Patch 79: a monster killed by a kill effect fires its own at half strength.'));
+    return h;
+  }
+
+  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, tundra, items, drops, leagues, sim, data, privacy };
   function show() {
     const nav = $('#faqNav'), GD = ctx.gd() || {};
     nav.innerHTML = GROUPS.map(g => '<div class="faq-group"><span class="faq-group-label">' + g[0] + '</span><div class="sc-chips">' +
@@ -9721,7 +9846,11 @@ window.BOCharacter = function (ctx) {
     // 11 Nov 2026 (from the game data and support texts; see each rule)
     'LeechingMore', 'ChilledLightningMore', 'FocusVolley', 'FocusShare', 'OrbCount', 'OrbRate',
     // 13 Nov 2026: Sleepy's Continental Strap (switches.json r76.UNIQUES Every)
-    'PoisonBurst76']);
+    'PoisonBurst76',
+    // 16 Nov 2026: Patch 79 supports (their texts; see calcSkill / collectMods / minionSheet)
+    'WoeWeave103', 'WoeWeaveLess103', 'BleedTear103', 'HeraldFocus103', 'MinionQuarry103', 'MinionQuarryLess103',
+    // 17 Nov 2026: lines from the API field audit (see calcSkill, collectMods, golemBlessing)
+    'DexAttackMore', 'ChannelRamp', 'OrbitMovingDamage', 'CooldownRecovery', 'VowEffect', 'HeraldEffect', 'TrogNote100', 'BleedStacks', 'BallistaVolley76', 'GolemAuraStack76']);
   // Skyfall second fall: "falls again 0.4 seconds later for X% of their Damage". The game caps the sum at
   // 100% (log 1 Nov: 190% of sources -> "second fall for 100%", "SkyfallSheet68 ... on the sheet (x2.00)")
   // and the second fall strikes each enemy once per cast (one boss hit per cast in every Guardian fight).
@@ -9807,6 +9936,26 @@ window.BOCharacter = function (ctx) {
   // Shield). Golems stay the tanky damage dealers they are, just without billions." Taken as half of each defence-engine line.
   // Not checked against a minion panel yet.
   const minionDefShare = GD => is078(GD) ? 0.5 : 1;
+  // Patch 79 (developer's patch notes, Discord 16 Nov 2026 11:56 AM local, full text from its message.txt). Switches on with the
+  // API's game data build 79 (16 Nov 2026 20:13 UTC); its rule numbers sit in switches.json r103.* (AILMENTS, MAIN-SKILL, META-BALANCE).
+  const is079 = GD => apiBuildAtLeast(GD, 79, '2026-11-16T17');
+  // Patch 79 notes: "To keep each skill whole I raised the late damage of the 16 attack skills that leaned on [gem-scaled added damage
+  // growing with bonus levels]". These lifts are NOT in the API's build 79 skills.json (16 Nov 2026: Glacial Shards, Viper Fang, Blade
+  // Vortex, Lightning Arrow ... unchanged from build 76, while the other 78/79 lifts in the same notes are in: Arc x1.4, Shield Throw
+  // x1.5 x1.5, Rain of Arrows x1.45). So the sim lays them on the late effectiveness itself, only while the data still holds the value
+  // it had in build 79 (`at`): once the API folds a lift in, the value moves and this one stops.
+  // [lift, EffectivenessLate in build 79]. Piercing Shot = power_shot, Gravereap = grave_reap.
+  const ATK_ADD_LIFT_79 = {
+    glacial_shards: [1.72, 5.6949], thunderfall: [1.40, 4.421], viper_fang: [1.40, 4.48], blade_vortex: [1.32, 4.9333],
+    wheeling_axe: [1.29, 6.9875], lightning_arrow: [1.28, 9.6003], power_shot: [1.27, 4.7737], grave_reap: [1.25, 4.9522], shuriken_fan: [1.20, 10.5878],
+    split_shot: [1.19, 13.4436], fuse_arrow: [1.18, 9.4218], summon_ballista: [1.18, 4], flurry: [1.17, 2.0792], crescent_slash: [1.17, 8.6801],
+    arrow_rain: [1.13, 10.2721], caustic_arrow: [1.07, 9.8213],
+  };
+  const atkAddLift = (GD, sk) => {
+    const e = is079(GD) && sk && ATK_ADD_LIFT_79[lc(sk.Id)];
+    if (!e || sk.EffectivenessLate == null) return 1;
+    return e[1] == null || Math.abs(sk.EffectivenessLate - e[1]) < 1e-3 ? e[0] : 1;
+  };
   // Patch 73 notes: "On a Guardian only your strongest damage taken effect counts". The game data carries it as a switch
   // (scaling.json Meta.bGuardianStrongestTaken: false in build 70, true in build 73), read from there when present.
   const guardianStrongestTaken = GD => { const v = ((GD.scaling || {}).Meta || {}).bGuardianStrongestTaken; return v != null ? !!v : is073(GD); };
@@ -9842,6 +9991,14 @@ window.BOCharacter = function (ctx) {
     if (!Array.isArray(fade)) return Math.pow(fade, n);
     let p = 1; for (let i = 0; i < n; i++) p *= fade[Math.min(i, fade.length - 1)];
     return p;
+  }
+  // Patch 79 Kindle / Deep Wound: E[min(cap, max(0, N - 1))] for N ~ Poisson(mu): the ailments laid in one ailment life beyond the one
+  // already burning or bleeding, each feeding a share on top, at most cap at once.
+  function feedsOnTop(mu, cap) {
+    if (!(mu > 0)) return 0;
+    let p = Math.exp(-mu), e = 0, cum = 0;
+    for (let k = 0; k <= cap; k++) { if (k >= 2) e += Math.min(cap, k - 1) * p; cum += p; p *= mu / (k + 1); }
+    return e + cap * Math.max(0, 1 - cum);
   }
   // Spell (and minion, with its own fade) growth for gem level own + bonus.
   function spellLevelGrowth(g, own, bonus, fade) {
@@ -10232,7 +10389,51 @@ window.BOCharacter = function (ctx) {
       const brk = o.vowbreak && o.vowbreak.has(b.Id) && b.Vowbreak ? b.Vowbreak.Mult : 1;
       sources.push({ key, label: b.Name + ' (gem ' + lvl + (trying ? ', what-if, not on bar' : '') + ')', group: 'Vows & Heralds', vowbreak: !!b.Vowbreak, vowId: b.Id, defaultOff: !/herald/i.test(b.Id) });
       if (off.has(key)) continue;
-      for (const m of b.Mods || []) add(m, ((m.Value || 0) + (m.PerLevel || 0) * (lvl - 1)) * brk, m.Value2, b.Name + (brk > 1 ? ' (Vowbreak x' + brk + ')' : ''), key);
+      // Lone Herald (Patch 79 support, HeraldFocus103 30): "The linked Herald's extra damage and its kill effect are 30% stronger for each
+      // other Herald you have not sworn. Alone it is 90% stronger: at gem level 20 its 19.5% of hit damage as extra becomes 37%" (19.5 x 1.9
+      // = 37.05, so the share multiplies the line). Heralds sworn = Herald gems on the bar (what-if ones included). From the support text.
+      let lone = 1;
+      if (/herald/i.test(b.Id) && is079(GD)) {
+        const so = (ch.sockets || []).find(s => lc(s.skill) === lc(b.Skill));
+        const per = ((GD.supports.lone_herald || {}).Mods || []).find(m => m.Stat === 'HeraldFocus103');
+        if (so && per && so.supports.some(sid => lc(sid) === 'lone_herald')) {
+          const all = Object.values(GD.blessings).filter(x => x.Kind === 'Vow' && /herald/i.test(x.Id) && x.Skill);
+          const sworn = all.filter(x => ch.hotbar.includes(x.Skill) || (tryH[x.Id] > 0)).length;
+          lone = 1 + per.Value / 100 * Math.max(0, all.length - Math.max(1, sworn));
+          if (lone > 1) notes.push(b.Name + ' with Lone Herald: ' + (all.length - Math.max(1, sworn)) + ' other Herald' + (all.length - sworn === 1 ? '' : 's') + ' not sworn, so its extra damage is ' + Math.round((lone - 1) * 100) + '% stronger (patch 79 support text).');
+        }
+      }
+      // Vow and Herald effect (read 17 Nov 2026; stat texts "{v}% increased effect of your Vows" (Templar's Troth 18-25), "Linked Vow's
+      // lines are {v}% stronger" (Fervent Vow 30: "Every line of the linked Vow is 30% stronger ... Heralds grow with Herald Effect
+      // instead"), "{v}% increased effect of the extra Damage your Heralds grant" (Clarion 40)). Increased lines add up; the linked
+      // support multiplies on top (its text gives 44% -> 57.2%). Heralds take Herald effect on their extra damage only. Not checked.
+      const herald = /herald/i.test(b.Id);
+      let eff = 1;
+      if (herald) eff = 1 + mods.filter(m => m.stat === 'HeraldEffect' && m.mode === 'Inc').reduce((x, m) => x + m.v, 0) / 100;
+      else {
+        const inc = mods.filter(m => m.stat === 'VowEffect' && m.mode === 'Inc').reduce((x, m) => x + m.v, 0);
+        const so = (ch.sockets || []).find(s => lc(s.skill) === lc(b.Skill));
+        const linked = so ? so.supports.reduce((x, sid) => x + ((GD.supports[lc(sid)] || {}).Mods || []).filter(m => m.Stat === 'VowEffect' && m.Mode === 'Flat').reduce((y, m) => y + (m.Value || 0), 0), 0) : 0;
+        eff = (1 + inc / 100) * (1 + linked / 100);
+      }
+      const effOn = m => herald ? m.Stat === 'DamageAsExtra' : true;
+      for (const m of b.Mods || []) add(m, ((m.Value || 0) + (m.PerLevel || 0) * (lvl - 1)) * brk * (m.Stat === 'DamageAsExtra' ? lone : 1) * (effOn(m) ? eff : 1), m.Value2, b.Name + (brk > 1 ? ' (Vowbreak x' + brk + ')' : '') + (lone > 1 ? ' (Lone Herald x' + +lone.toFixed(2) + ')' : '') + (eff !== 1 ? ' (' + (herald ? 'Herald' : 'Vow') + ' effect x' + +eff.toFixed(2) + ')' : ''), key);
+    }
+    // Patch 79 companions and the statue (new skills, API game data build 79): Cinder Mites, Rime Sprites and Brass Sentinels "Each mite
+    // within 6 metres of you grants 3% more fire damage (9% with 3 mites)" (blessings ns103_cinder_near / rime_near / brass_near, a Stack
+    // of Damage More 3 [element]); they "scuttle at your heels", so all count: 2, 3 from gem level 10 (Minion Count 2, PerLevels [10]).
+    // Ancestral Warrior "While you stand within 6 metres of it you have 10% increased attack speed" (ns103_ancestral_near): counted as on
+    // while it is on your bar (you fight beside it). Kill-based ones (Oath of the Fallen spirits, Elemental Echo) need kills: not counted.
+    if (is079(GD)) for (const id of new Set(ch.hotbar || [])) {
+      const sk0 = GD.skills[lc(id)]; if (!sk0 || !/^ns103_/.test(lc(id))) continue;
+      const tagsK = sk0.Tags || [];
+      const near = Object.values(GD.blessings).find(b => b.Kind === 'Stack' && /_near$/.test(b.Id) && b.Name === sk0.Name);
+      if (!near) continue;
+      const key = 'companion:' + lc(id);
+      const n = tagsK.includes('Companion') ? (sk0.Minion ? (sk0.Minion.Count || 2) + (sk0.Minion.PerLevels || []).filter(l => (ch.gemLevels[id] || 1) >= l).length : 2) : 1;
+      sources.push({ key, label: sk0.Name + (n > 1 ? ' x' + n : '') + ' (near you)', group: 'Vows & Heralds' });
+      if (off.has(key)) continue;
+      for (const m of near.Mods || []) add(m, (m.Value || 0) * (m.PerStack ? n : 1), m.Value2, sk0.Name + (n > 1 ? ' x' + n : '') + ' (patch 79, counted as near you)', key);
     }
     // Charges: Fury / Insight / Resolve, counted by the user.
     // Bloodlust (blessings.json Stack): until 0.56.7 0.6% more damage a stack, from 0.56.8 melee Increased (0.5% damage, 0.2% attack speed, 0.1% move speed; the lines come from the data), at most 50 + BloodlustMax lines (tree, The Red
@@ -10566,10 +10767,25 @@ window.BOCharacter = function (ctx) {
     }
     res.supports = [];
     const totemAttack = !!(sk.Totem && sk.Totem.Interval > 0 && isAttack);
+    // Patch 79 notes: "Support slots 5 and 6 now ask for the skill's attribute: 110 and 160 for a gem of your class's attribute, 140 and
+    // 190 for an off class gem (its own attribute). Below it the support goes dark: it stays socketed, does nothing". Game log 16 Nov 2026
+    // (build 79): "StatSlots103: rending_slam slot 5 ruthless dark - needs 110 Str, has 0 (home)", "slot 6 woeweaver ... needs 160 Str",
+    // "venom_spark slot 5 life_leech ... needs 110 Int", then "lit again ... has 600". Home = the gem's HomeClasses hold your class (as
+    // the gem play-level rule; the log says "(home)"). The socket's own skill decides (the channel's for a Conduit spell).
+    const slotSk = (hostSk || sk), slotAttr = slotSk.Attribute || 'Int';
+    const slotHome = !slotSk.HomeClasses || !ch.classId || slotSk.HomeClasses.some(c => lc(c) === lc(ch.classId));
+    const slotNeed = is079(GD) ? (slotHome ? [110, 160] : [140, 190]) : null;
+    const slotHave = slotNeed ? attrsFrom(GD, ch, col.mods)[slotAttr] || 0 : 0;
+    let slotIdx = 0;
     for (const raw of supportList) {
       const granted = raw.endsWith('@granted'); const id = raw.replace('@granted', '');
       const sd = GD.supports[lc(id)];
       const key = 'support:' + lc(id);
+      const slot = granted ? 0 : ++slotIdx;
+      if (slotNeed && slot >= 5 && slot <= 6 && slotHave < slotNeed[slot - 5]) {
+        res.supports.push({ id, key, name: (sd ? sd.Name : id) + ' (dark)', ok: false, dark: true, why: 'slot ' + slot + ' is dark: needs ' + slotNeed[slot - 5] + ' ' + slotAttr + ', you have ' + slotHave + (slotHome ? '' : ' (a gem of another class asks more)') + '. Patch 79: support slots 5 and 6 need the skill\'s attribute.', desc: sd ? sd.Description : '' });
+        continue;
+      }
       if (!sd) { res.supports.push({ id, key, name: id, ok: false, why: 'unknown support' }); continue; }
       const req = sd.RequiresAnyTag || [];
       // Ballista-type totems take Trap and Skyfall although both list Totem under ExcludeTags. Ballista tooltip
@@ -10661,6 +10877,56 @@ window.BOCharacter = function (ctx) {
       res.notes.push('Flashfire: Fire hits in the ' + (ff.Window || 2) + ' s after a Flame Dash deal ' + (ff.More || 40) + '% more (counted as if you dash every ' + (ff.Window || 2) + ' s).');
     }
 
+    // Ascendancy rules that are a plain "more" on one enemy (dragonling.json Tree.Rules71 with Rules76 laid over: the game runs the
+    // versions without downsides, log 16 Nov 2026 "Ascend76: on (mix the Ascendancies, no prices)"; texts from the nodes' Pos76).
+    // Added 17 Nov 2026 from the data and node texts; only Far Shot + Point Blank is log-checked (below). The page's enemy is one
+    // Rare or Guardian you fight standing (o.moving = true for a moving fight), at o.enemyDistance metres (default: 6 m for your own
+    // projectiles, 2 m otherwise).
+    {
+      const R = (GD.dragon || {}).rules || {}, big = ['rare', 'boss', 'unique'].includes(o.enemyRarity || 'rare');
+      const own = !isSummon(sk) && !(sk.Totem && sk.Totem.Interval > 0) && !host;
+      const proj = ctx.tags.has('projectile'), slam = ctx.tags.has('slam'), melee = ctx.tags.has('melee'), orbitSk = ctx.tags.has('orbit');
+      const dist = o.enemyDistance != null ? +o.enemyDistance : proj ? 6 : 2;
+      const asc = (flag, v, tags, why) => {
+        if (!(v > 0)) return;
+        mods.push({ stat: 'Damage', mode: 'More', tags: tags || [], v, v2: 0, local: false, src: 'Dragonling · ' + why.split(':')[0], key: 'dragon:' + flag });
+        res.notes.push(why + ' (+' + +v.toFixed(1) + '%; from the node text and the game\'s rule file, not checked in game).');
+      };
+      if (ascFlag('Asc71_MountainsWeight') && slam && big) asc('MountainsWeight', (R.MountainsWeight || {}).BigMore ?? 35, [], "Mountain's Weight: your Slams deal more to Rare, Unique and Guardian enemies");
+      if (ascFlag('Asc71_HuntersMark') && proj && own && big) asc('HuntersMark', (R.HuntersMark || {}).More ?? 35, [], "Hunter's Mark: your projectile hits on the marked Rare or Guardian you shot");
+      // Far Shot and Point Blank multiply each other. Game log 16 Nov 2026 (Rangtest, both taken, Training Post): "Asc71: FarShot
+      // PointBlank split_shot on BOTrainingDummy (509 cm): x1.32" = (1 + 30% x (5.09 - 3) / 6) x (1 + 30% x (1 - (5.09 - 3) / 6)) =
+      // 1.1045 x 1.1955 = 1.3204: Far Shot grows from none at 3 m to 30% at 9 m, Point Blank 30% within 3 m fading to none at 9 m.
+      if (proj && own && (ascFlag('Asc71_FarShot') || ascFlag('Asc71_PointBlank'))) {
+        const F = R.FarShot || {}, P = R.PointBlank || {}, near = (F.Near || 300) / 100, far = (F.Far || 900) / 100;
+        const t = clamp((dist - near) / Math.max(0.1, far - near), 0, 1);
+        if (ascFlag('Asc71_FarShot')) asc('FarShot', (F.FarMore ?? 30) * t, [], 'Far Shot: the enemy is ' + dist + ' m away (set in Configure Enemy)');
+        if (ascFlag('Asc71_PointBlank')) asc('PointBlank', (P.NearMore ?? 30) * (1 - t), [], 'Point Blank: the enemy is ' + dist + ' m away');
+      }
+      if (ascFlag('Asc71_StillWater') && !o.moving) asc('StillWater', (R.StillWater || {}).StillMore ?? 25, [], 'Still Water: your hits while you stand still (counted as standing)');
+      if (ascFlag('Asc71_GaleMomentum') && o.moving) asc('GaleMomentum', (R.GaleMomentum || {}).MoveMore ?? 25, [], 'Gale Momentum: your hits while you move');
+      // Arcane Overflow (Rules76 FullAt 0.5): the full 30% from half your unreserved mana up; counted full.
+      if (ascFlag('Asc71_ArcaneOverflow') && isSpell && own) asc('ArcaneOverflow', (R.ArcaneOverflow || {}).MaxMore ?? 30, ['Spell'], 'Arcane Overflow: your spells with half your unreserved mana or more (counted full)');
+      if (ascFlag('Asc71_Hurricane') && sk.Channel) asc('Hurricane', (R.Hurricane || {}).Cap ?? 25, [], 'Eye of the Hurricane: your channelling hits after 10 s of channelling (counted at the cap)');
+      if (ascFlag('Asc71_EndlessHunger') && sk.Channel) asc('EndlessHunger', 20, [], 'Endless Hunger: your channelling skills');
+      if (ascFlag('Asc71_HammerAndAnvil') && melee && (ch.hotbar || []).some(id => { const k = GD.skills[lc(id)]; return k && (k.Delivery === 'Orbit' || (k.Tags || []).includes('Orbit')); }))
+        asc('HammerAndAnvil', (R.HammerAndAnvil || {}).More ?? 30, [], 'Hammer and Anvil: your Melee hits on an enemy your Orbit skill struck in the last 2 s (an Orbit skill is on your bar, counted as always)');
+      if (ascFlag('Asc71_SigilSurge') && isSpell && own && (ch.hotbar || []).some(id => { const k = GD.skills[lc(id)]; return k && ((k.Totem && k.Totem.Interval > 0) || k.Delivery === 'Orb'); }))
+        asc('SigilSurge', (R.SigilSurge || {}).More ?? 25, ['Spell'], 'Sigil Surge: your spells in the 4 s after you place a Totem or cast an Orb (one is on your bar, counted as always)');
+      if (ascFlag('Asc71_RingingBlows') && orbitSk) {
+        const G2 = R.RingingBlows || {}, n2 = (G2.Near || 200) / 100, f2 = (G2.Far || 500) / 100;
+        asc('RingingBlows', (G2.NearMore ?? 25) * (1 - clamp((dist - n2) / Math.max(0.1, f2 - n2), 0, 1)), [], 'Ringing Blows: your Orbit hits on an enemy ' + dist + ' m from you');
+      }
+      // Eye of the Tempest (Rules71 Tempest ShockMore 50; text "Your Lightning hits always Shock, and your Shocks are 50% stronger"; its 10% more
+      // Lightning is a data line, its price gone in Rules76): +100% shock chance and shock effect x1.5 (as a More line on ShockEffect).
+      if (ascFlag('Asc71_Tempest')) {
+        mods.push({ stat: 'ShockChance', mode: 'Flat', tags: [], v: 100, v2: 0, local: false, src: 'Dragonling · Eye of the Tempest (always Shock)', key: 'dragon:Tempest' });
+        mods.push({ stat: 'ShockEffect', mode: 'More', tags: [], v: (R.Tempest || {}).ShockMore ?? 50, v2: 0, local: false, src: 'Dragonling · Eye of the Tempest (Shocks stronger)', key: 'dragon:Tempest' });
+      }
+      // Not counted on one enemy: First Strike (enemies not hit for 3 s), Aegis of the Oath (needs blocks), Final Draw / Shade Step
+      // (after movement skills), Thunderclap / Rain of Bolts / Pyre / Shatterquake (other enemies or kills).
+    }
+
     // Focus keystone (r98_focus_k0, Patch 74 notes 14 Nov 2026: "your main skill deals 25% more, your other skills 40% less";
     // public API game data build 76: Mods FocusMain98 Flat 25 / FocusOther98 Flat 40, switch r98.META bFocus98 = True; node
     // text "Your main skill is the one you Ctrl+click in the Skills panel, else the damage skill you use most"). Main = the
@@ -10684,6 +10950,21 @@ window.BOCharacter = function (ctx) {
     // Attributes.
     const cls = GD.classes[lc(ch.classId)] || {};
     const attr = attrsFrom(GD, ch, mods, use);
+    // Lines read from 17 Nov 2026 (game data build 79 stats the sim skipped; wording from stat_text.json; none checked in game):
+    //   DexAttackMore "{v}% more Attack Damage for every 10 Dexterity" (Thousand Feathers 0.5);
+    //   ChannelRamp "Up to {v}% more Damage over the first second of Channelling" (Unending Gale 20, Siphoning Lattice 15-20): a boss
+    //     channel is past its first second, so the full value;
+    //   OrbitMovingDamage "Orbiting projectiles (Blade Vortex, Orbiting Hammers and the Orbit support) deal {v}% more Damage while you
+    //     move": only when the page is set to a moving fight (o.moving).
+    {
+      const sumOf = st => { let v = 0; for (const m of mods) if (m.stat === st && m.mode === 'Flat' && !m.local && condsOk(ctx, splitTags(m.tags).conds)) { v += m.v; use(m); } return v; };
+      const dexMore = isAttack ? sumOf('DexAttackMore') : 0;
+      if (dexMore) mods.push({ stat: 'Damage', mode: 'More', tags: ['Attack'], v: dexMore * (attr.Dex || 0) / 10, v2: 0, local: false, src: dexMore + '% more Attack damage per 10 Dexterity (' + (attr.Dex || 0) + ' Dex)', key: 'dexmore' });
+      const ramp = sk.Channel ? sumOf('ChannelRamp') : 0;
+      if (ramp) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: ramp, v2: 0, local: false, src: 'Channel ramp (full after the first second)', key: 'channelramp' });
+      const orbMove = o.moving && ctx.tags.has('orbit') ? sumOf('OrbitMovingDamage') : 0;
+      if (orbMove) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: orbMove, v2: 0, local: false, src: 'Orbit damage while you move', key: 'orbitmove' });
+    }
     res.attr = attr;
     const per10 = (a, k) => attr[a] / 10 * (H[k] || 0); // not rounded down (Shrimpbow tooltips: 107 Dex = +10.7% attack speed, 52 Int = 4.21 s bleed)
     // Mountainborn: "{v}% more Melee Physical Damage for every 10 Strength" (one more multiplier, unrounded like
@@ -10808,6 +11089,25 @@ window.BOCharacter = function (ctx) {
     bonus = Math.floor(bonus);
     const L = own + bonus;
     res.gem = { own, bonus, total: L };
+    // Links carry the damage (Patch 79 notes): "A damage skill now deals its full damage only fully linked: at gem 20, 6 of 6 supports
+    // deal 100%, 5 of 6 86%, 4 of 6 71%, 2 of 6 43%, unlinked 14%. The rule ramps in from gem level 9 ... Utility gems ... and weapon
+    // granted skills are untouched." Those five points are (1 + links) / 7, so each empty socket costs 1/7. Switch r103.MAIN-SKILL
+    // fLinkFrom103 = 9. ASSUMPTIONS (no tooltip or log line yet): the ramp is a straight line from gem 9 (none) to gem 20 (all), on the
+    // level the gem plays at (the one that opens sockets); an empty socket is one the gem's level has opened and no lit support fills
+    // (granted supports and dark slots 5-6 do not fill one); a gem past 20 keeps the gem-20 rule. Weapon skills (no gem) are left out.
+    if (is079(GD) && sk.Kind === 'Gem' && !(sk.Tags || []).includes('Movement') && !o.noLinkRule) {
+      const from = ruleNum(GD, 'r103.MAIN-SKILL.fLinkFrom103', 9);
+      const w = clamp((L - from) / Math.max(1, 20 - from), 0, 1);
+      const open = Math.min(6, (G.SocketsAtLevel || [1, 2, 5, 12, 15, 20]).filter(l => L >= l).length);
+      const links = res.supports.filter(s => s.ok && !s.granted && !(o.off && o.off.has(s.key))).length;
+      const empty = Math.max(0, open - links);
+      const f = 1 - w * empty / 7;
+      res.links = { links, open, empty, ramp: w, factor: f };
+      if (f < 1) {
+        mods.push({ stat: isSummon(sk) ? 'MinionDamage' : 'Damage', mode: 'More', tags: [], v: (f - 1) * 100, v2: 0, local: false, src: 'Links (patch 79): ' + links + ' of ' + open + ' sockets filled', key: 'links' });
+        res.notes.push('Links (patch 79): ' + links + ' of ' + open + ' open sockets hold a working support, so ' + sk.Name + ' deals x' + f.toFixed(2) + ' (each empty socket costs 1/7' + (w < 1 ? ', ' + Math.round(w * 100) + '% of that at gem level ' + L + ': the rule ramps in from gem ' + from + ' to 20' : '') + '). From the patch notes; not yet checked in game.');
+      }
+    }
     if (isSummon(sk)) {
       // Defence engine on minions. Game's skill panel 11 Nov 2026 (Bone Armour 1.8% per 1,000 armour, Vow of Iron toggled): armour
       // 2,904 -> 3,666 moved Skeletal Mage 136,210 -> 137,606, Raise Zombie 334,564 -> 337,993 and Vampire Dash 476 -> 481, all
@@ -10834,7 +11134,8 @@ window.BOCharacter = function (ctx) {
       let e = baseEff;
       if (sk.EffectivenessLate != null && sk.EffectivenessLateAt) {
         const f = sk.EffectivenessLateFrom || 1, a = sk.EffectivenessLateAt;
-        e = baseEff + (sk.EffectivenessLate - baseEff) * clamp(((o._lateOwn ? own : L) - f) / Math.max(1, a - f), 0, 1);
+        const late = sk.EffectivenessLate * atkAddLift(GD, sk); // Patch 79 attack lifts the API data lacks (ATK_ADD_LIFT_79)
+        e = baseEff + (late - baseEff) * clamp(((o._lateOwn ? own : L) - f) / Math.max(1, a - f), 0, 1);
       }
       if (sk.EffectivenessEarly != null) {
         const h = sk.EffectivenessEarlyHold || 1, fu = sk.EffectivenessEarlyFull || h + 1;
@@ -10908,7 +11209,12 @@ window.BOCharacter = function (ctx) {
     // Gear levels past +5 grow it like a spell's (x1.04 each, patch 0.55), not x1.19: Ballista 20+11 swap tests
     // 5 Nov, Added Lightning 1-6 -> 19,037-114,224 fits 1.19^24 x 1.04^6 within 0.7% (1.19^30 was 2.26x over);
     // up to +5 it is the same 1.19^(L-1) as before (the Cyclone fit above).
-    const gemGrowth = spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, BONUS_FADE_ADDED);
+    // Patch 79: "the Added Fire, Cold, Lightning and Poison supports grew 23% per bonus level on an attack while the weapon part grew
+    // 3% ... They now grow at the attack rate like the rest of the hit." Game log 16 Nov 2026 (build 79): "AtkAdd103: summon_ballista
+    // gem 20+7, gem-scaled adds x73.07 -> x27.25" and "ns103_ancestral_warrior gem 13+2, x11.42 -> x8.06": 27.25 = 1.19^19 and
+    // 8.06 = 1.19^12 exactly, so the adds keep only the gem's own levels (old: 1.19^24 x 1.06^2 = 73.1, 1.19^14 = 11.42); the bonus
+    // levels reach them through attackMult like the weapon part.
+    const gemGrowth = isAttack && is079(GD) ? spellLevelGrowth(G.DamageGrowth || 1.19, own, 0, BONUS_FADE_ADDED) : spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, BONUS_FADE_ADDED);
     for (const m of pickMods(mods, 'AddedDamage', 'Flat')) {
       const { types, conds, gemScaled } = splitTags(m.tags);
       if (!condsOk(ctx, conds) || !types.length) continue;
@@ -11124,7 +11430,17 @@ window.BOCharacter = function (ctx) {
     const hallowSrc = o.enemyHallowedGround ? hallowedSources(GD, ch, mods) : [];
     const hallowCrit = hallowSrc.reduce((b, s) => Math.max(b, s.crit || 0), 0);
     const critBase = clamp((baseCrit + critFlat) * (1 + critInc / 100) * critMore, 0, 95);
-    const critChance = hallowCrit ? Math.min(95, critBase + hallowCrit) : critBase;
+    let critChance = hallowCrit ? Math.min(95, critBase + hallowCrit) : critBase;
+    // Grounded Storm (live version, Rules76 BigCrit 12 / OtherCritLess 25; node text "Your Lightning hits on Rare, Unique and Guardian enemies
+    // have +12% to final critical strike chance and keep their full critical bonus · your Lightning hits on other enemies have 25% less
+    // critical strike chance"). A skill that deals Lightning counts as a Lightning hit. From the node text and rule file; not checked.
+    const bigFoe = ['rare', 'boss', 'unique'].includes(o.enemyRarity || 'rare');
+    if (ascFlag('Asc71_GroundedStorm') && ctx.dealt.has('Lightning')) {
+      const gs = ((GD.dragon || {}).rules || {}).GroundedStorm || {};
+      const before = critChance;
+      critChance = bigFoe ? Math.min(95, critChance + (gs.BigCrit ?? 12)) : critChance * (1 - (gs.OtherCritLess ?? 25) / 100);
+      res.notes.push('Grounded Storm: your Lightning hits ' + (bigFoe ? 'on a Rare or Guardian get +' + (gs.BigCrit ?? 12) + '% final critical strike chance' : 'on normal enemies have ' + (gs.OtherCritLess ?? 25) + '% less critical strike chance') + ' (' + +before.toFixed(1) + '% -> ' + +critChance.toFixed(1) + '%; from the node text, not checked).');
+    }
     multi = Math.max(100, multi);
     // Elemental Overload (keystone, tooltip 9 Nov 2026): "Critical strikes grant 60% more elemental damage for 8 seconds.
     // Price: Your critical strike multiplier is 100%." The data line has no stat mods, only the text.
@@ -11138,7 +11454,14 @@ window.BOCharacter = function (ctx) {
     const ijRule = ((GD.dragon || {}).rules || {}).InevitableJudgement || {};
     const ijBonus = ijRule.CritBonusMult != null ? +ijRule.CritBonusMult : 1.5, ijNonCrit = 1 - (ijRule.NonCritLess != null ? +ijRule.NonCritLess : 10) / 100;
     const hallowedCritBonus = ascFlag('Asc71_InevitableJudgement') && !!o.enemyHallowedGround;
-    const effectiveMulti = hallowedCritBonus ? 100 + (multi - 100) * ijBonus : multi;
+    let effectiveMulti = hallowedCritBonus ? 100 + (multi - 100) * ijBonus : multi;
+    // Moonlit Stance (Rules71 BigCritMore 20; live text "Your critical strikes on Rare, Unique and Guardian enemies deal 20% more damage", its
+    // non-crit price gone in Rules76): a crit on a big enemy x1.2. From the node text and rule file; not checked.
+    if (ascFlag('Asc71_MoonlitStance') && bigFoe) {
+      const mm = (((GD.dragon || {}).rules || {}).MoonlitStance || {}).BigCritMore ?? 20;
+      effectiveMulti *= 1 + mm / 100;
+      res.notes.push('Moonlit Stance: your critical strikes on a Rare or Guardian deal ' + mm + '% more (critical damage counted as ' + Math.round(effectiveMulti) + '%).');
+    }
     const nonCritMult = hallowedCritBonus ? ijNonCrit : 1;
     const critFactor = (1 - critChance / 100) * nonCritMult + critChance / 100 * effectiveMulti / 100;
     res.crit = { base: baseCrit, chance: critChance, multi: effectiveMulti, factor: critFactor, inc: critInc };
@@ -11237,7 +11560,10 @@ window.BOCharacter = function (ctx) {
       const cdBase = sk.Cooldown + ((sk.CooldownLate || 0) - sk.Cooldown) * lateT;
       const moveRecharge = ctx.tags.has('movement') && H.DexMoveRechargePer10 > 0 ? 1 + (attr.Dex || 0) / 10 * H.DexMoveRechargePer10 / 100 : 0;
       // No floor here: the game shows 0.3 s although MinCooldown is 0.5 (the floor only limits speed recovery below).
-      cooldown = cdBase * Math.max(0.1, 1 + cdInc / 100);
+      // "{v}% increased Cooldown Recovery Rate" (CooldownRecovery, an amulet and weapon suffix up to 14%, game data build 79; stat text): the
+      // cooldown runs that much faster, cooldown / (1 + rate). Read 17 Nov 2026; before that the line was not counted. Not checked.
+      let cdRec = 0; for (const m of pickMods(mods, 'CooldownRecovery', 'Inc')) if (applies(ctx, m)) { cdRec += m.v; use(m, 'cooldown recovery'); }
+      cooldown = cdBase * Math.max(0.1, 1 + cdInc / 100) / Math.max(0.1, 1 + cdRec / 100);
       const cdBeforeSpeed = cooldown;
       // scaling.json Meta59 bRainCooldownBySpeed: a Rain attack's cooldown recovers with attack speed, down to
       // RainCooldownFloor (Rain of Arrows tooltip: 0.8 s at 1.65 APS on a 1.31 bow -> 0.64 s, 1.57 uses/s).
@@ -11395,7 +11721,13 @@ window.BOCharacter = function (ctx) {
         // 10 Nov 2026 (Shrimpmage, cast speed x0.97 after Spell Echo and Controlled Destruction): Ember Spark tooltip "every 0.59 s"
         // = 0.8 / 1.35, and "Cooldown 1.0 s, 1.00 casts a second" while the cast time is 0.51 s: a cast speed under 1 does not
         // slow Sparks or their cooldown, only a faster one speeds them up (the sim said 0.60 s and 1.03 s).
-        let strikeEvery = gather ? +ev[1] / Math.sqrt(Math.max(speedRate, 1)) : +ev[1];
+        // Patch 79 notes: "Spark spells and Winter Orb now follow the same cast speed cap as every other direct hit spell. Their strike
+        // interval sped up with cast speed past the cap, so cast speed kept adding damage there and nowhere else." So the cast speed
+        // that quickens the strikes stops where the cast itself hits the use-time floor (CastTime / floor; 0.12 s, formulas.md section 0).
+        // Winter Orb: the sim never counted cast speed on its icicles, so nothing changes there. Not checked in game.
+        const sparkSpeedCap = is079(GD) && floor > 0 ? (sk.CastTime || 0.5) / floor : Infinity;
+        if (speedRate > sparkSpeedCap) res.notes.push('Spark strikes: your cast speed (x' + speedRate.toFixed(2) + ') is past the cast speed cap (x' + sparkSpeedCap.toFixed(2) + '), and from patch 79 the strikes stop speeding up there.');
+        let strikeEvery = gather ? +ev[1] / Math.sqrt(Math.max(Math.min(speedRate, sparkSpeedCap), 1)) : +ev[1];
         let sparkRate = 0; for (const m of pickMods(mods, 'SparkRate', 'Inc')) if (applies(ctx, m)) { sparkRate += m.v; use(m); }
         if (sparkRate) strikeEvery /= Math.max(0.1, 1 + sparkRate / 100);
         // Convergence (Patch 76 notes 14 Nov 2026: "While all your Sparks come from one Spark skill, each Spark latched on a
@@ -11414,6 +11746,14 @@ window.BOCharacter = function (ctx) {
             strikeEvery /= 1 + cMax; res.convergence = { max: cMax, perSec: cPer };
             res.notes.push('Convergence: ' + (sk.Name || skillId) + ' is your only Spark skill, so on a Rare or Guardian its Sparks strike ' + Math.round(cPer * 100) + '% faster every second, counted at the full ' + Math.round(cMax * 100) + '% (reached after ' + Math.round(cMax / cPer) + ' s). Packs do not get it.');
           }
+        }
+        // Wild Trog's Thunderchord (TrogNote100 80-100, stat text "While all your Sparks are of one Spark skill, they strike {v}% faster";
+        // switch r100.ITEMS bTrogWand100): counted when this is the only Spark skill on the bar. From the item text; not checked.
+        {
+          let trog = 0; for (const m of pickMods(mods, 'TrogNote100', 'Flat')) { trog += m.v; use(m, 'Sparks strike faster'); }
+          const isSparkSk2 = id => { const k = GD.skills[lc(id)]; return k && k.Delivery === 'Brand'; };
+          const kinds2 = o.sparkSkills > 0 ? Math.floor(o.sparkSkills) : new Set((ch.hotbar || []).map(lc).filter(isSparkSk2).concat(lc(skillId))).size;
+          if (trog > 0 && kinds2 === 1) { strikeEvery /= 1 + trog / 100; res.notes.push("Wild Trog's Thunderchord: your only Spark skill, so its Sparks strike " + Math.round(trog) + '% faster.'); }
         }
         // Strikes a second for n sparks: each full group of 3 is one body striking x(3 x 0.85); leftovers strike alone.
         // 0.56.5: leftovers form a body too, at 0.85 a spark (same log: "SparkFill90: storm_brand body carries 2 Sparks
@@ -11463,7 +11803,16 @@ window.BOCharacter = function (ctx) {
       for (const m of pickMods(mods, 'OrbitCount', 'Flat')) if (applies(ctx, m)) { count += m.v; use(m); }
       // 0.56.5: "Orbiting blades and hammers turn {v}% faster" (OrbitRate; Zeal, Dawn, Orbit nodes).
       let orbInc = 0; for (const m of pickMods(mods, 'OrbitRate', 'Inc')) if (applies(ctx, m)) { orbInc += m.v; use(m); }
-      const turns = ob.AngularSpeed / 360 * Math.max(0.1, 1 + orbInc / 100);
+      let turns = ob.AngularSpeed / 360 * Math.max(0.1, 1 + orbInc / 100);
+      // Hammerstorm on the bar (its text: "for 6 seconds your spinning hammers turn half again as fast, reach 35% farther, hit 40% harder and
+      // three more hammers join them in a second ring"; skills.json Orbit EmpowerSpeed 1.5, EmpowerMore 40, EmpowerExtra 3; cooldown 5 s, and
+      // the log shows it recovering with speed, "CdPass87: hammerstorm cooldown 5.00 s / speed 1.57 -> 3.18 s"): 6 s of buff on a shorter
+      // cooldown, so counted as always on (o.hammerstorm = false turns it off). From the text and data; the panel was not compared.
+      if (o.hammerstorm !== false && (ch.hotbar || []).some(id => lc(id) === 'hammerstorm') && ob.EmpowerSpeed > 0) {
+        count += ob.EmpowerExtra || 0; turns *= ob.EmpowerSpeed;
+        if (ob.EmpowerMore) hitFactor *= 1 + ob.EmpowerMore / 100;
+        res.notes.push('Hammerstorm (on your bar, counted as always up: 6 s on a ' + ((GD.skills.hammerstorm || {}).Cooldown || 5) + ' s cooldown): +' + (ob.EmpowerExtra || 0) + ' hammers, turning x' + ob.EmpowerSpeed + ', ' + (ob.EmpowerMore || 0) + '% harder.');
+      }
       usesPerSec = count * turns; useTime = 1 / usesPerSec;
       res.orbitRing = { count, turnsPerSec: turns };
       res.notes.push(sk.Name + ': ' + count + ' in the ring, turning ' + turns.toFixed(2) + ' times a second, so a target is struck ' + usesPerSec.toFixed(2) + ' times a second (cast speed does not change it).');
@@ -11480,6 +11829,15 @@ window.BOCharacter = function (ctx) {
       let tsInc = 0; for (const m of pickMods(mods, 'TotemSpeed', 'Inc')) if (applies(ctx, m)) { tsInc += m.v; use(m); }
       const every = tt.Interval / Math.max(0.25, 1 + tsInc / 100); // formulas.md section 3 (public API archive, 12 Nov 2026): "interval = Totem.Interval / max(0.25, 1 + increased totem speed)", which also settles that totem speed fires a Ballista faster
       usesPerSec = count / every; useTime = 1 / usesPerSec;
+      // Bina's Spotter's Helm (BallistaVolley76, text "When you land a Critical Strike, each of your Ballistas fires an extra volley at that
+      // enemy (each Ballista at most once every 3 seconds)"): crits from the Ballistas' own volleys (crit chance x volleys a second), at most
+      // one extra volley per Ballista every 3 s. Your other skills' crits would also count: not added. From the item text; not checked.
+      if (tt.Kind === 'Ballista' && pickMods(mods, 'BallistaVolley76', 'Flat').length) {
+        pickMods(mods, 'BallistaVolley76', 'Flat').forEach(m => use(m, 'extra volleys on crit'));
+        const extra = Math.min(count / 3, usesPerSec * critChance / 100 * count);
+        usesPerSec += extra; useTime = 1 / usesPerSec;
+        res.notes.push("Bina's Spotter's Helm: crits make each Ballista fire an extra volley (at most one every 3 s each): +" + extra.toFixed(2) + ' volleys a second.');
+      }
       res.totem = { count, every };
       // Patch 0.56.0: Ancestral Host and Siege Pact cost "Each Totem or Ballista past the first deals 20% less damage"
       // (their text in the 0.56 data, Steam build 26495270), so only a hero holding one of them pays it, averaged
@@ -11867,8 +12225,12 @@ window.BOCharacter = function (ctx) {
     }
     const armour = o.enemyArmour != null ? o.enemyArmour : lvl * M.ArmourPerLevel;
     // Curses: more damage taken (all types) and per-element taken. A Guardian/boss only takes the strongest.
-    // Int does not scale a curse's damage taken (game note: "Int never scales it"); the in-game tip
-    // shows Woe of Withering on a poison skill as +30% = its 10% taken + 20% Poison taken, added.
+    // Int does NOT raise a curse's damage taken. scaling.json Hero.IntCurseEffectPer10 = 1 and the Intelligence tooltip says "Every 10: +1%
+    // ailment duration · +1% curse slow": the slow only. PROVEN 17 Nov 2026 (owner's tooltips, Shrimpskelemage, Int 549, build 79): Sentence
+    // of Rot "Takes 87.8% more damage from Bleed, Poison and Ignite" = 45 x 1.951, Woe of Withering "24.4% more damage and 48.8% more Poison"
+    // = 10 / 20 x 1.951 x 1.25 (Deepened Woe multiplies apart, as assumed below). The character's curse effect lines here add to 100% with
+    // the Oath of the Dread Word's 5% (its seat node not taken, so the game leaves it out: 95%); with Int counted it would be +150%.
+    // Older evidence agrees: game note "Int never scales it", and a Woe of Withering tip of +30% = 10% taken + 20% Poison taken.
     let curseEffInc = 0;
     for (const m of pickMods(mods, 'CurseEffect', 'Inc')) { curseEffInc += m.v; use(m); }
     const curseRows = [];
@@ -11892,7 +12254,9 @@ window.BOCharacter = function (ctx) {
       let curseMore = 0;
       for (const sid of woeSups) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'CurseMore' && m.Mode === 'Flat') curseMore += m.Value;
       const eff = (1 + curseEffInc / 100) * (1 + dreadPct / 100) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
-      const row = { id, name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, more: curseMore };
+      // dot: "takes X% more damage from Bleed, Poison and Ignite" (Sentence of Rot, curses.json DotTakenPct 45, patch 77 notes: strongest-only on
+      // Guardians like the others). Read from 17 Nov 2026; before that the field was never copied and the Sentence did nothing here.
+      const row = { id, name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, more: curseMore, dot: (c.DotTakenPct || 0) * eff };
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
       // Woes of Cinders / Rime / the Tempest lower a resistance instead (curses.json ResistDown), grown by
       // Dread and halved on a Guardian like the rest of the Woe.
@@ -11907,7 +12271,10 @@ window.BOCharacter = function (ctx) {
     let woeExtra = 0; for (const m of pickMods(mods, 'CurseLimit', 'Flat')) { woeExtra += m.v; use(m); }
     const LIMIT = { Sentence: 1, Woe: 2 + woeExtra };
     const hitTotal = Object.values(hit).reduce((a, h) => a + h.avg, 0) || 1;
-    const worth = r => Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTotal * (r.taken + (r.elem[d] || 0) + (r.resDown[d] || 0)), 0);
+    // A DoT-taken curse (Sentence of Rot) is weighed at half its value when this skill can lay ailments (the DoT share is not known yet here;
+    // ASSUMPTION), else nothing.
+    const laysDot = !!hit.Poison || ['PoisonChance', 'BleedChance', 'IgniteChance'].some(st => mods.some(m => m.stat === st && m.v > 0)) || (A.IgniteChance > 0 && !!hit.Fire);
+    const worth = r => Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTotal * (r.taken + (r.elem[d] || 0) + (r.resDown[d] || 0)), 0) + (laysDot ? (r.dot || 0) / 2 : 0);
     const kindOf = r => (GD.curses[r.id] || {}).Kind || '';
     let activeCurses = [];
     for (const kind of new Set(curseRows.map(kindOf))) {
@@ -11934,7 +12301,7 @@ window.BOCharacter = function (ctx) {
     res.marks = markPct ? { pct: markPct } : null;
     // Venom golem (Grave Golem with a poison support): "the venom golem makes enemies take 7.5% more damage" (skill
     // tooltip 9 Nov 2026; blessings radius 900 = 9 m). Counted as always in range, like the flame golem's blessing.
-    const golemB = golemBlessing(GD, ch, sk, o);
+    const golemB = golemBlessing(GD, ch, sk, o, mods);
     const golemTaken = golemB && golemB.stat === 'EnemyTaken' ? 1 + golemB.v / 100 : 1;
     if (golemTaken !== 1) res.notes.push('Your ' + golemB.name + ' makes enemies near it take ' + golemB.v + '% more damage (counted as if it is always within 9 m of the enemy).');
     // Different damage-taken sources MULTIPLY. Log 13 Nov 2026 (Nectest, normal monster, PoisonTaken63): Death Sentence
@@ -11967,8 +12334,8 @@ window.BOCharacter = function (ctx) {
     // Configure Enemy extra; not the venom golem, see takenOf) no longer multiply: the biggest one alone counts. Lines inside one curse still add (one effect).
     // Shock stays outside (the notes of Patch 72 make it a stronger hit, not a taken effect): not checked in the game yet.
     const strongestTaken = isBoss && guardianStrongestTaken(GD); // scaling.json Meta.bGuardianStrongestTaken (true from data build 73)
-    const takenOf = (d, phys) => {
-      const parts = [...activeCurses.map(r => 1 + (r.taken + (d ? r.elem[d] || 0 : 0)) / 100), 1 + (o.extraTakenPct || 0) / 100, 1 + markPct / 100];
+    const takenOf = (d, phys, dot) => {
+      const parts = [...activeCurses.map(r => 1 + (r.taken + (d ? r.elem[d] || 0 : 0) + (dot ? r.dot || 0 : 0)) / 100), 1 + (o.extraTakenPct || 0) / 100, 1 + markPct / 100];
       if (phys) parts.push(1 + maimPct / 100);
       // The venom golem is NOT in that choice: it multiplies on top. Game log 13 Nov 2026 23:20 (Rangtest, RL 130
       // cyclops_tyrant, Armoured = LessTakenPct 23; Death Sentence growing 0.75 a second, Marks up, golem within 9 m):
@@ -11981,7 +12348,7 @@ window.BOCharacter = function (ctx) {
       return strongestTaken ? Math.max(1, ...parts) * golemTaken : parts.reduce((a, b) => a * b, 1) * golemTaken;
     };
     if (strongestTaken) {
-      const n = activeCurses.filter(r => r.taken > 0 || Object.values(r.elem).some(v => v > 0)).length + (o.extraTakenPct > 0) + (markPct > 0) + (maimPct > 0);
+      const n = activeCurses.filter(r => r.taken > 0 || r.dot > 0 || Object.values(r.elem).some(v => v > 0)).length + (o.extraTakenPct > 0) + (markPct > 0) + (maimPct > 0);
       if (n > 1) res.notes.push('Guardian: only your strongest damage taken effect counts (patch 73), so of your ' + n + ' sources only the biggest is counted here.' + (golemTaken > 1 ? ' The venom golem is not one of them: it multiplies on top (game log 13 Nov).' : ''));
     }
     const enemy = { level: lvl, rarity, resist, pen, armour, guardian, curses: curseRows, activeCurses: activeCurses.map(r => r.id), curseEffInc };
@@ -12007,6 +12374,42 @@ window.BOCharacter = function (ctx) {
       const v = hit[d].avg * critFactor * hitsPerSec * perHitFactor * mitig[d].k * mitig[d].taken * groundTaken;
       byType[d] = v; hitDpsVs += v;
     }
+    // Patch 79 supports that raise this skill's hits on one enemy (their texts, API game data build 79). Hits only (not ailments).
+    //   Woeweaver (WoeWeave103 25, WoeWeaveLess103 15): "25% more damage to an enemy that bears exactly one Woe, 10% more if it bears two,
+    //     and no more with three or more". Game log 16 Nov 2026: "NewSupports103: Woeweaver rending_slam hits ... bearing 1 Woe(s) x1.25".
+    //     Woes = the Woes counted on this enemy (Configure Enemy curses), Sentences not counted.
+    //   Haemorrhage (BleedTear103 40): "40% more damage to an enemy Bleeding from another of your skills. Its own bleeds do not count."
+    //     Counted as on when another skill on your bar can bleed (a linked support or a gear/tree line with Bleed chance), as if it keeps
+    //     the enemy bleeding. ASSUMPTION; not checked.
+    //   Frostbreak (FreezeBreak103 50): only on a Brittle Guardian (5.5 s after its freeze bar fills): not counted (the sim has no freeze bar).
+    {
+      let k = 1; const why = [];
+      const sv = id => (GD.supports[id] || {}).Mods || [];
+      const lit = id => res.supports.some(x => x.ok && lc(x.id) === id && !(o.off && o.off.has(x.key)));
+      if (lit('woeweaver')) {
+        const woes = activeCurses.filter(r => ((GD.curses[r.id] || {}).Kind || '') === 'Woe').length;
+        const w1 = (sv('woeweaver').find(m => m.Stat === 'WoeWeave103') || {}).Value || 25, wl = (sv('woeweaver').find(m => m.Stat === 'WoeWeaveLess103') || {}).Value || 15;
+        const more = woes === 1 ? w1 : woes === 2 ? w1 - wl : 0;
+        k *= 1 + more / 100; why.push('Woeweaver: ' + woes + ' Woe' + (woes === 1 ? '' : 's') + ' on the enemy, ' + more + '% more' + (woes ? '' : ' (lay one Woe for 25%)'));
+      }
+      if (lit('haemorrhage')) {
+        const bleeds = id => { const so = (ch.sockets || []).find(x => lc(x.skill) === lc(id)); return !!so && so.supports.some(sid => sv(lc(sid)).some(m => m.Stat === 'BleedChance')); };
+        const gearBleed = col.mods.some(m => m.stat === 'BleedChance' && !String(m.key || '').startsWith('support:'));
+        const other = (ch.hotbar || []).filter(id => id && lc(id) !== lc(skillId) && GD.skills[lc(id)]).some(id => bleeds(id) || (gearBleed && ((GD.skills[lc(id)].Tags || []).includes('Attack'))));
+        const more = other ? ((sv('haemorrhage').find(m => m.Stat === 'BleedTear103') || {}).Value || 40) : 0;
+        k *= 1 + more / 100; why.push('Haemorrhage: ' + (other ? more + '% more, counted as if another skill on your bar keeps the enemy bleeding' : 'no other skill on your bar bleeds, so nothing'));
+      }
+      // Tempest Edge (Rules71 PerHit 3, Cap 25): "Your Melee hits deal 3% more damage for every Melee hit you landed in the last second,
+      // up to 25%": your melee hits a second x 3%, at most 25. From the node text; not checked.
+      if (ascFlag('Asc71_TempestEdge') && ctx.tags.has('melee')) {
+        const te = ((GD.dragon || {}).rules || {}).TempestEdge || {};
+        const more = Math.min(te.Cap ?? 25, (te.PerHit ?? 3) * hitsPerSec);
+        k *= 1 + more / 100; why.push('Tempest Edge: ' + hitsPerSec.toFixed(1) + ' melee hits a second, ' + +more.toFixed(1) + '% more');
+      }
+      if (lit('frostbreak')) why.push('Frostbreak: its 50% more needs a Brittle Guardian (after its freeze bar fills); not counted');
+      if (k !== 1) { for (const d of Object.keys(byType)) byType[d] *= k; hitDpsVs *= k; }
+      if (why.length) res.notes.push(why.join('. ') + '. Patch 79 supports, from their texts.');
+    }
     res.hitDpsByType = byType;
     res.hitDps = hitDpsVs;
 
@@ -12019,7 +12422,7 @@ window.BOCharacter = function (ctx) {
     // Ticks are not reduced by resistance (the log: "tick 23520 = 47039.7/s x 0.5, poison taken x1.00");
     // they are raised by damage taken.
     let shockF = 1; // set below once the ailment modifiers are read; shocks raise all damage taken
-    const dotTakenFor = d => (o.dotElementTaken ? mitig[d].taken : takenOf(undefined, false)) * shockF;
+    const dotTakenFor = d => (o.dotElementTaken ? mitig[d].taken * takenOf(undefined, false, true) / takenOf(undefined, false) : takenOf(undefined, false, true)) * shockF;
     let dotMulti = 0;
     for (const m of pickMods(mods, 'DotMulti', 'Flat')) { dotMulti += m.v; use(m); }
     const sumMod = (stat, mode) => { let s = mode === 'More' ? 1 : 0; for (const m of pickMods(mods, stat, mode)) if (applies(ctx, m)) { s = mode === 'More' ? s * (1 + m.v / 100) : s + m.v; use(m); } return s; };
@@ -12052,11 +12455,19 @@ window.BOCharacter = function (ctx) {
           // RL 66 added 14 Nov 2026: log "Guardian: model at RL 66 - target 45 s x median boss DPS 499513 = life 22437324"
           // (ashen_wyrm, life 24,681,056 = model x 1.32 / 1.2); the straight line from 62 to 130 gave 18.0M there.
           const pts = [[62, 15.24e6], [66, 22437324], [130, 257153696], [150, 1755677184 / 1.4]];
-          if (rl <= 62) return pts[0][1] * Math.pow(1.1315, rl - 62);
-          if (rl >= 150) return pts[pts.length - 1][1] * Math.pow(D.LadderLifePerLevel || 1.03, rl - 150);
-          const last = pts.length - 1; let k = 0; while (k < last - 1 && rl > pts[k + 1][0]) k++;
-          const [r0, l0] = pts[k], [r1, l1] = pts[k + 1];
-          return l0 * Math.pow(l1 / l0, (rl - r0) / (r1 - r0));
+          // Patch 79 notes: "Guardians at Rupture Level 41 to 79 have 1.3x life and at 81 to 129 have 1.85x life ... The Lord levels
+          // (80 and 130) and the Gates are untouched." The fights above were all before 79, so the factor goes on top of them.
+          // Gates are RL 10 to 70 (every 10th), Lords 80 and 130: those keep their life.
+          const fixed = (rl % 10 === 0 && rl <= 80) || rl === 130;
+          const p79 = !is079(GD) || fixed ? 1 : rl >= 41 && rl <= 79 ? 1.3 : rl >= 81 && rl <= 129 ? 1.85 : 1;
+          const raw = (() => {
+            if (rl <= 62) return pts[0][1] * Math.pow(1.1315, rl - 62);
+            if (rl >= 150) return pts[pts.length - 1][1] * Math.pow(D.LadderLifePerLevel || 1.03, rl - 150);
+            const last = pts.length - 1; let k = 0; while (k < last - 1 && rl > pts[k + 1][0]) k++;
+            const [r0, l0] = pts[k], [r1, l1] = pts[k + 1];
+            return l0 * Math.pow(l1 / l0, (rl - r0) / (r1 - r0));
+          })();
+          return raw * p79;
         };
         const life = o.enemyLife || (isBoss ? guardianLife() : 30 * ML.Base * Math.exp(ML.K * Math.pow(lvl, ML.P)) * (rar.Life || 1));
         const lightHit = hit.Lightning.avg * critFactor * mitig.Lightning.k * mitig.Lightning.taken;
@@ -12070,6 +12481,20 @@ window.BOCharacter = function (ctx) {
         // be 22%. Patch 73: "On a Guardian only your strongest damage taken effect counts".
         const stackLines = Math.max(1, Math.round(1 + sumMod('ShockStacks', 'Flat')));
         const stacks = isBoss ? 1 : stackLines;
+        // Static Build (Patch 79 notes): "every lightning hit on a shocked rare or better adds 1% to its strongest shock, up to that
+        // shock's cap" (switch r103.AILMENTS StaticPerHit103 1; log "AilParity103: ON - ... static build +1.0% a hit"). Counted as the
+        // strongest shock growing from its first size at (lightning hits a second x 1%) through its life, then a fresh one taking
+        // over: the average of min(cap, size + rate x t) over the shock's duration. ASSUMPTION: it grows by 1 point, not 1% of itself.
+        let staticAvg = 0;
+        if (is079(GD) && (rarity === 'rare' || isBoss)) {
+          const per = ruleNum(GD, 'r103.AILMENTS.StaticPerHit103', 1), r = hitsPerSec * perHitFactor * hitFactor * per;
+          const T = A.ShockSeconds * (1 + ailDur / 100);
+          if (r > 0 && T > 0 && size < cap) {
+            const tc = (cap - size) / r; // seconds to reach the cap
+            staticAvg = tc >= T ? size + r * T / 2 : (size * tc + r * tc * tc / 2 + cap * (T - tc)) / T;
+            staticAvg -= size;
+          }
+        }
         const ls = /at most (d+)% more damage taken/i.exec((GD.supports.living_storm || {}).Description || '');
         // 0.56.4: "stacked Shocks reach 75% (was 60%)"; the data's ShockStackCap and Living Storm's text say 75.
         const allCap = stacks > 1 ? (ls ? +ls[1] : is0564(GD) ? (A.ShockStackCap || 75) : 60) : cap;
@@ -12079,12 +12504,44 @@ window.BOCharacter = function (ctx) {
         // Shocks on the enemy at once: E[min(N, stacks)] with N ~ Poisson(rate x duration).
         const mu = rate * dur; let avg = 0, p = Math.exp(-mu), cum = 0;
         for (let k = 0; k < stacks; k++) { cum += p; avg += 1 - cum; p *= mu / (k + 1); }
-        const pct = Math.min(allCap, size * avg);
+        const pct = Math.min(allCap, (size + staticAvg) * avg);
         shockF = 1 + pct / 100;
-        ail.shock = { chance, life, lightHit, raw, size, cap, stacks, allCap, duration: dur, rate, avg, pct, effInc: (effK - 1) * 100 };
+        ail.shock = { chance, life, lightHit, raw, size, cap, stacks, allCap, duration: dur, rate, avg, pct, effInc: (effK - 1) * 100, staticBuild: staticAvg };
+        if (staticAvg > 0) res.notes.push('Static Build (patch 79): your lightning hits grow the shock on a rare or Guardian by 1% each up to its ' + Math.round(cap) + '% cap, about +' + staticAvg.toFixed(1) + '% over a shock\'s life. From the patch notes; not checked in game.');
         for (const d of Object.keys(byType)) byType[d] *= shockF;
         hitDpsVs *= shockF; res.hitDps = hitDpsVs;
         res.notes.push('Shock: ' + Math.round(chance) + '% chance a hit, each shock ' + size.toFixed(1) + '% more damage taken (' + (raw < A.ShockMin ? "the game's " + A.ShockMin + '% floor: your lightning hit is small next to its ~' + Math.round(life).toLocaleString('en-US') + ' life' : 'from your lightning hit vs its ~' + Math.round(life).toLocaleString('en-US') + ' life') + (effK !== 1 ? ', shock effect x' + effK.toFixed(2) : '') + '), ' + avg.toFixed(2) + ' of ' + stacks + ' on it on average = +' + pct.toFixed(1) + '%.' + (isBoss ? (stackLines > 1 ? ' On a Guardian only one shock counts (game log 13 Nov), so your extra shock stacks do nothing here.' : '') + (o.enemyLife ? '' : ' Guardian life is an estimate from the Rupture level; type the real one in the life box for an exact shock.') : ' Not checked against the game yet.'));
+      }
+    }
+    // ----- Patch 79: chill raises damage taken, Crack -----
+    // Notes: "chill now raises damage taken by 0.5% per 1% chill (the strongest of chill, shock or brittle counts)"; switch r103.AILMENTS
+    // ChillTakenPer103 0.5; log "AilParity103: ON - ... chill taken x0.50 of chill". Chill size is not in the data: the game logs
+    // "ChillLine98: cold 69 of 684, slow 10% to 30%" and "Chill59: ... slowed 10% for 2.1s (cold hit 0.2% of life)", so a Guardian (whose
+    // life dwarfs any hit) is taken at the 10% floor, raised by increased chill effect up to 30%; uptime from how often cold hits land in
+    // 2 s. Brittle has no source in the sim. Counted as max(shock, chill), replacing the shock factor above when bigger.
+    // Crack: "rares, uniques and Guardians store 40% of the cold they take (raised by your damage over time multiplier and freeze
+    // duration) and it breaks as one cold hit on a freeze or every 3 s" (CrackPct103 40, CrackSeconds103 3): taken as 40% of the cold
+    // hit damage dealt, x (1 + DoT multiplier + increased freeze duration), added, never lost (a break every 3 s pays it all).
+    // ASSUMPTIONS: chill size and uptime; the two raises add; the break is not cut again by resistance. None checked in game.
+    if (is079(GD) && A.bEnabled && byType.Cold > 0) {
+      let ce = 0; for (const m of pickMods(mods, 'ChillEffect', 'Inc')) if (applies(ctx, m)) { ce += m.v; use(m, 'chill size'); }
+      const chill = Math.min(30, 10 * Math.max(0, 1 + ce / 100));
+      const coldRate = hitsPerSec * perHitFactor * hitFactor;
+      const up = 1 - Math.exp(-coldRate * 2);
+      const chillF = 1 + ruleNum(GD, 'r103.AILMENTS.ChillTakenPer103', 0.5) * chill * up / 100;
+      ail.chill = { size: chill, uptime: up, taken: (chillF - 1) * 100, counted: chillF > shockF };
+      if (chillF > shockF) {
+        const k = chillF / shockF;
+        for (const d of Object.keys(byType)) byType[d] *= k;
+        hitDpsVs *= k; res.hitDps = hitDpsVs; shockF = chillF;
+        res.notes.push('Chill (patch 79): ' + Math.round(chill) + '% chill makes the enemy take ' + ((chillF - 1) * 100).toFixed(1) + '% more damage, more than your shock, so it counts instead (only the strongest of chill, shock or brittle counts). Chill size is an estimate (the game\'s 10% floor on a big enemy).');
+      } else res.notes.push('Chill (patch 79): ' + ((chillF - 1) * 100).toFixed(1) + '% more damage taken from your chill, less than your shock, so the shock counts (only the strongest counts).');
+      if (rarity === 'rare' || isBoss) {
+        let fd = 0; for (const m of pickMods(mods, 'FreezeDuration', 'Inc')) if (applies(ctx, m)) { fd += m.v; use(m, 'Crack'); }
+        const crack = byType.Cold * ruleNum(GD, 'r103.AILMENTS.CrackPct103', 40) / 100 * Math.max(0, 1 + (dotMulti + fd) / 100);
+        byType.Cold += crack; hitDpsVs += crack; res.hitDps = hitDpsVs;
+        ail.crack = { dps: crack, freezeInc: fd };
+        res.notes.push('Crack (patch 79): the ' + (isBoss ? 'Guardian' : 'rare') + ' stores 40% of the cold it takes (x' + Math.max(0, 1 + (dotMulti + fd) / 100).toFixed(2) + ' from your damage over time multiplier and freeze duration) and it breaks as a cold hit every 3 s: +' + Math.round(crack).toLocaleString('en-US') + ' DPS. From the patch notes; not checked in game.');
       }
     }
     let poisonDps = 0, igniteDps = 0, bleedDps = 0;
@@ -12136,7 +12593,7 @@ window.BOCharacter = function (ctx) {
         }
         const panelStacks = Math.min(rate * tipDur, A.PoisonMaxStacks);
         ail.poison = { chance: pChance, eligible, duration: dur, tipDuration: tipDur, virulence: !!virulence, perStack, stacks, stacksRaw, cap, panelStacks, inc: pInc, more: pMore, dps: poisonDps, burstDps, burstPct, perHitTotal: perStack * dur };
-        if (virulence) res.notes.push('Virulence (Dragonling): poisons last ' + dur.toFixed(2) + ' s in combat instead of the tooltip\'s ' + tipDur.toFixed(2) + ' s; Rares and Guardians hold up to ' + virulence.Cap + ' stacks. The skill panel DPS uses the tooltip duration, like the game.');
+        if (virulence) res.notes.push('Virulence (Dragonling): ' + (dur < tipDur ? 'poisons last ' + dur.toFixed(2) + ' s in combat instead of the tooltip\'s ' + tipDur.toFixed(2) + ' s; ' : 'poisons keep their full time (the game runs the rule without its price: log 16 Nov 2026 "Ascend76: on"); ') + 'Rares and Guardians hold up to ' + virulence.Cap + ' stacks.' + (dur < tipDur ? ' The skill panel DPS uses the tooltip duration, like the game.' : ''));
       }
       const igChance = clamp((hit.Fire ? A.IgniteChance : 0) + sumMod('IgniteChance', 'Flat'), 0, 100);
       if (hit.Fire && igChance > 0) {
@@ -12153,7 +12610,14 @@ window.BOCharacter = function (ctx) {
         stacks = Math.max(1, Math.round(stacks));
         let burning = uptime;
         if (stacks > 1) { burning = 0; let p = Math.exp(-mu), cum = 0; for (let k = 0; k < stacks; k++) { cum += p; burning += 1 - cum; p *= mu / (k + 1); } }
-        igniteDps = dps1 * burning * dotTakenFor('Fire');
+        // Kindle (Patch 79; switches r103.AILMENTS KindlePct103 40, KindleMax103 20). Game log 16 Nov 2026 (build 79): "kindle on
+        // cultist_tomb - ignite 115436.4/s feeds 46174.6/s for 8.2 s (room for 20 feedings), fed 1 times, the fire 165722.4/s (strongest
+        // 119547.9/s + kindle 46174.6/s)": each ignite laid on a burning enemy adds 40% of ITS OWN burn for its own duration, on top
+        // of the strongest ignite, up to 20 at once. So the fire = the ignite burning + 40% x the average ignite x the ignites laid in
+        // one ignite life beyond the one burning (Poisson count, capped at 20). Spread on death (fed 3 times) is for packs.
+        const kindle = is079(GD) ? feedsOnTop(mu, ruleNum(GD, 'r103.AILMENTS.KindleMax103', 20)) * ruleNum(GD, 'r103.AILMENTS.KindlePct103', 40) / 100 : 0;
+        igniteDps = dps1 * (burning + kindle) * dotTakenFor('Fire');
+        if (kindle > 0) res.notes.push('Kindle (patch 79): ignites on a burning enemy feed the fire 40% of their own burn, ' + (kindle / 0.4).toFixed(1) + ' feedings on average = x' + ((burning + kindle) / Math.max(burning, 1e-9)).toFixed(2) + ' ignite (the game log shows the same rule).');
         // The game's skill panel counts the Ignite by plain arithmetic: ignites a second x duration burning at once (at most the
         // slots), not the chance that one is burning. Owner's Pyre of Faith tooltip, 12 Nov 2026 (2 ticks a second, 6% a hit,
         // 4.31 s): "Ignite 2,421 a second ... Includes 1,333 ignite a second on one enemy: about 0.5 burning at your hit rate";
@@ -12167,8 +12631,22 @@ window.BOCharacter = function (ctx) {
         // does not show the 80% figure; it comes from the node text and rules.Backdraft.MultiKeep (0.8), so that part is
         // unverified. Ignited share of Fire hits = the ignite uptime above. Only the Fire part of the hit is forced;
         // ignite damage itself keeps the normal crit factor (not checked).
-        if (ascFlag('Asc71_Backdraft') && byType.Fire !== undefined && critFactor > 0) {
-          const keep = ((GD.dragon.rules || {}).Backdraft || {}).MultiKeep || 0.8;
+        // Live version (Rules76 laid over Rules71, log 16 Nov 2026 "Ascend76: on ... no prices"; node text "your Fire hits on Ignited enemies
+        // have +40% to final critical strike chance and keep their full critical bonus · your Fire hits on enemies that are not Ignited
+        // have 25% less critical strike chance"): no forced crit any more. Counted with the ignite uptime; from the text, not checked.
+        const bdR = (GD.dragon.rules || {}).Backdraft || {};
+        const bdNew = bdR.BigCrit != null;
+        const bdOn = bdNew ? Math.min(100, critChance + bdR.BigCrit) : 100, bdOff = bdNew ? critChance * (1 - (bdR.OtherCritLess ?? 25) / 100) : critChance;
+        if (ascFlag('Asc71_Backdraft')) res.backdraftCrit = uptime * bdOn + (1 - uptime) * bdOff;
+        if (ascFlag('Asc71_Backdraft') && bdNew && byType.Fire !== undefined && critFactor > 0) {
+          const fOf = c => (1 - c / 100) * nonCritMult + c / 100 * effectiveMulti / 100;
+          const blended = uptime * fOf(bdOn) + (1 - uptime) * fOf(bdOff);
+          const delta = byType.Fire * (blended / critFactor - 1);
+          byType.Fire += delta; hitDpsVs += delta; res.hitDps = hitDpsVs;
+          res.backdraft = { uptime, critOn: bdOn, critOff: bdOff, blendedFactor: blended, normalFactor: critFactor };
+          res.notes.push('Backdraft: your Fire hits on Ignited enemies have ' + Math.round(bdOn) + '% crit chance (+' + bdR.BigCrit + '%), ' + Math.round(bdOff) + '% on the rest (25% less); Ignited ' + Math.round(uptime * 100) + '% of the time, so Fire hit damage x' + (blended / critFactor).toFixed(2) + '. From the node text; not checked.');
+        } else if (ascFlag('Asc71_Backdraft') && byType.Fire !== undefined && critFactor > 0) {
+          const keep = bdR.MultiKeep || 0.8;
           const forcedMulti = 100 + (effectiveMulti - 100) * keep;
           const blended = uptime * (forcedMulti / 100) + (1 - uptime) * critFactor;
           const delta = byType.Fire * (blended / critFactor - 1);
@@ -12217,8 +12695,27 @@ window.BOCharacter = function (ctx) {
           }
           kept = e / Math.max(uptime, 1e-9); // the strongest bleed while one is up
         }
-        const dpsKept = kept * coef;
-        bleedDps = dpsKept * uptime * dotTakenFor('Physical');
+        let dpsKept = kept * coef;
+        // Deep Wound (Patch 79; WoundPct103 15, WoundMax103 8). Game log 16 Nov 2026: "deep wound on cultist_tomb - bleed 265595.1/s
+        // deepens 39839.3/s for 8.2 s (room for 8 deepenings), the wound 39839.3/s on top of the strongest bleed 364776.6/s": each bleed
+        // laid on a bleeding enemy adds 15% of its own bleed, on top of the strongest, up to 8 at once (same count as Kindle).
+        // Tear (TearPct103 50, once a second): "tear ... 5961910 bleed still coming, 50% = 2980955 cashed on the next tick, the wound
+        // keeps 2980955": it pays half of what is left at once and the wound keeps the other half, so it moves damage forward but adds
+        // none to a long fight; not counted in the DPS.
+        // Veinwrit Grips (BleedStacks 5; Bloodletter node 3): "Your Bleeds stack: up to {v} more on each enemy, but every Bleed deals 65% less".
+        // Counted as: bleeds laid in one bleed life (Poisson count) up to 1 + v at once, each the average bleed x 0.35, in place of the
+        // strongest-holds rule. From the item text; not checked.
+        let bStacks = 0; for (const m of pickMods(mods, 'BleedStacks', 'Flat')) { bStacks += m.v; use(m, 'bleed stacks'); }
+        if (bStacks > 0) {
+          const capB = 1 + Math.round(bStacks), mu = rollsPerSec * dur;
+          let onAt = 0, p = Math.exp(-mu), cum = 0; for (let k = 0; k < capB; k++) { cum += p; onAt += 1 - cum; p *= mu / (k + 1); }
+          const stackDps = dps1 * 0.35 * onAt;
+          res.notes.push('Bleeds stack (+' + Math.round(bStacks) + '): ' + onAt.toFixed(2) + ' of ' + capB + ' on the enemy on average, each 65% weaker: ' + Math.round(stackDps) + '/s against ' + Math.round(dpsKept * uptime) + '/s for the strongest bleed alone.');
+          dpsKept = stackDps / Math.max(uptime, 1e-9); // so dpsKept x uptime below equals the stacked bleed
+        }
+        const wound = is079(GD) ? feedsOnTop(rollsPerSec * dur, ruleNum(GD, 'r103.AILMENTS.WoundMax103', 8)) * ruleNum(GD, 'r103.AILMENTS.WoundPct103', 15) / 100 * dps1 : 0;
+        bleedDps = (dpsKept * uptime + wound) * dotTakenFor('Physical');
+        if (wound > 0) res.notes.push('Deep Wound (patch 79): bleeds on a bleeding enemy deepen it by 15% of their own bleed, +' + Math.round(wound).toLocaleString('en-US') + '/s on top of the strongest (the game log shows the same rule). Tear (Slams and crits cash 50% of the bleed left) only makes it land sooner.');
         ail.bleed = { chance: bleedChance, dps1, dpsKept, keptX: dpsKept / dps1, rollsPerLife: rollsPerSec * dur, uptime, duration: dur, dps: bleedDps, more: bMore, inc: bInc };
         res.notes.push('Bleeding: ' + Math.round(bleedChance) + '% chance, ' + (rollsPerSec * dur).toFixed(1) + ' bleeds rolled in one ' + dur + ' s bleed life; the strongest holds: ' + Math.round(dpsKept) + '/s (x' + (dpsKept / dps1).toFixed(2) + ' a bleed from the average hit), up ' + Math.round(uptime * 100) + '% of the time. Counted on a standing enemy: bleeds deal 50% more while it moves.');
       }
@@ -12252,6 +12749,10 @@ window.BOCharacter = function (ctx) {
         // (Rangtest, 3 Guardian kills): "Trigger: Hit -> Nova (lightning_arrow, fired N) el Lightning pct 50 nth 0", and
         // "DmgSrc91: guardian_fight ... lightning_arrow:0.653,trig:nova:0.304" (also 0.654 / 0.334 and 0.575 / 0.295):
         // novas = 0.47-0.51 of the arrow's damage; this sheet (quiver + One Breath) gives about the same share.
+        // Brutality does NOT cancel an element-typed gear burst (log 16 Nov 2026, Rangtest, The Siege-Wright's Vow, Ballista
+        // + Brutality on the Training Post: "TrustFix91: noelem summon_ballista loses 7217 per hit (Brutality)", then 52
+        // "Trigger: Hit -> Nova (summon_ballista, fired N) el Fire pct 80 nth 3" in 10 s with fire explosions and an ignite;
+        // 74 in 16 s with Brutality taken out). The Brutality tooltip also lists the Vow's burst, not idle. So no check here.
         const named = t.conds.filter(x => GD.skills[lc(x)]);
         if (named.length) { if (!named.some(x => lc(x) === lc(skillId))) continue; t.conds = t.conds.filter(x => !GD.skills[lc(x)]); }
         if (!condsOk(ctx, t.conds)) continue;
@@ -12262,6 +12763,51 @@ window.BOCharacter = function (ctx) {
         if (t.state.includes('VsBurningOrShocked')) { const ig = ail.ignite ? ail.ignite.uptime : 0, sh = ail.shock ? 1 - Math.exp(-ail.shock.rate * ail.shock.duration) : 0; share = 1 - (1 - ig) * (1 - sh); }
         if (!share) continue;
         trig.push({ m, t, share });
+      }
+      // Dragon Hearts (Patch 79): the Heart's last node (API dragonling.json Tree.Hearts103, "Dragon's Heart") is a Dragonling flag
+      // whose AspectText names the dive: Dragon's Breath "Every 5th Fire hit ... 40% of that hit as Fire damage ... 30% more against a
+      // Burning enemy"; Hoarfrost Dive "Every 5th Cold hit ... 35% of that hit as Cold damage ... 50% more against a Frozen or Brittle
+      // enemy" (not counted: a Guardian is rarely frozen); Lightning Rod "Every 5th Lightning hit ... 40% of that hit as Lightning"
+      // (its arcs to others not counted); Plague Wings "Every 5th Poison hit ... 35% of that hit as Poison"; Dragon Strike "Every 6th
+      // Attack hit, of any element ... 50% of that hit as Physical"; Dragon Sigil "Every 4th critical hit ... 32% of that hit, as the
+      // hit's own main element". Counted like the tree's Hit / Crit triggers above (a "Fire hit" = a hit that carries Fire). From the
+      // node text only; not checked in game (the notes: "Each Heart is worth x1.12 to x1.17 on the builds it fits").
+      const HEART_DIVES = {
+        Asc71_DragonsBreath: { need: 'Fire', nth: 5, pct: 40, element: 'Fire' },
+        Asc71_HoarfrostDive: { need: 'Cold', nth: 5, pct: 35, element: 'Cold' },
+        Asc71_LightningRod: { need: 'Lightning', nth: 5, pct: 40, element: 'Lightning' },
+        Asc71_PlagueWings: { need: 'Poison', nth: 5, pct: 35, element: 'Poison' },
+        Asc71_DragonStrike: { need: 'Attack', nth: 6, pct: 50, element: 'Physical' },
+        Asc71_DragonSigil: { need: 'Crit', nth: 4, pct: 32, element: 'Main' },
+      };
+      // Ascendancy bursts on one enemy (Rules71 numbers, node texts): Aftershock "Your Slams strike the same ground again 0.6 s later for
+      // 40% of the damage they dealt" (log 16 Nov 2026: "AscRaw89: Aftershock from 6445 (before defences) instead of 7777 (dealt)", so it is
+      // 40% of the raw hit, cut by the enemy again: a Hit trigger with no element); Blade Burst "Every 5th Melee hit on the same enemy bursts
+      // for 100% of that hit as Physical damage (up to 6 bursts a second)"; Anvil of Heaven "Every 6th Orbit hit ... 150% ... Physical (up to
+      // 6 a second)". Only Aftershock's size is seen in the log.
+      {
+        const R2 = (GD.dragon || {}).rules || {};
+        const AB = [
+          ['Asc71_Aftershock', ctx.tags.has('slam'), { nth: 1, pct: ((R2.Aftershock || {}).Pct ?? 0.4) * 100, element: null, cooldown: 0, name: 'Aftershock' }],
+          ['Asc71_BladeBurst', ctx.tags.has('melee'), { nth: (R2.BladeBurst || {}).Every ?? 5, pct: ((R2.BladeBurst || {}).Pct ?? 1) * 100, element: 'Physical', cooldown: 1 / ((R2.BladeBurst || {}).PerSec ?? 6), name: 'Blade Burst' }],
+          ['Asc71_AnvilOfHeaven', ctx.tags.has('orbit'), { nth: (R2.AnvilOfHeaven || {}).Every ?? 6, pct: ((R2.AnvilOfHeaven || {}).Pct ?? 1.5) * 100, element: 'Physical', cooldown: 1 / ((R2.AnvilOfHeaven || {}).PerSec ?? 6), name: 'Anvil of Heaven' }],
+        ];
+        for (const [flag, fits, t0] of AB) if (fits && ascFlag(flag)) {
+          const m = mods.find(x => x.stat === 'Dragonling' && (x.tags || []).includes(flag));
+          trig.push({ m: Object.assign({}, m, { src: 'Dragonling · ' + t0.name }), share: 1, t: { when: 'Hit', nth: t0.nth, pct: t0.pct, count: 1, element: t0.element, cooldown: t0.cooldown, perTarget: 0, state: [], conds: [], types: [] } });
+        }
+      }
+      for (const m of mods) if (m.stat === 'Dragonling' && m.mode === 'Flag') for (const f of m.tags || []) {
+        const dv0 = HEART_DIVES[f]; if (!dv0) continue; const dv = Object.assign({}, dv0);
+        if (dv.need === 'Attack' ? !isAttack : dv.need !== 'Crit' && !(byType[dv.need] > 0)) continue;
+        const main = Object.keys(byType).sort((a, b) => byType[b] - byType[a])[0];
+        // The numbers come from the rule file when it has them (dragonling.json Tree.Rules71 <name>: Every, Pct, BurningMult; build 79).
+        const rr = (((GD.dragon || {}).rules || {})[f.replace('Asc71_', '')]) || {};
+        if (rr.Every > 0) dv.nth = rr.Every;
+        let pct = rr.Pct > 0 ? rr.Pct * 100 : dv.pct;
+        if (f === 'Asc71_DragonsBreath') pct *= 1 + ((rr.BurningMult || 1.3) - 1) * (ail.ignite ? ail.ignite.uptime : 0);
+        trig.push({ m: Object.assign({}, m, { src: 'Dragonling · ' + (m.src || '').replace(/^Dragonling · /, '') }), share: 1, // nth below from dv (rule file or text)
+          t: { when: dv.need === 'Crit' ? 'Crit' : 'Hit', nth: dv.nth, pct, count: 1, element: dv.element === 'Main' ? main : dv.element, cooldown: 0, perTarget: 0, state: [], conds: [], types: [] } });
       }
       // The hit as the sheet has it so far (Backdraft's forced crits included, as the Pyre burst counted them before),
       // with the enemy's mitigation taken back out: raw damage a second, per type.
@@ -12297,8 +12843,8 @@ window.BOCharacter = function (ctx) {
         const name = (m.src || '').replace(/^Passive · /, '');
         (res.triggers = res.triggers || []).push({ src: name, when: t.when, nth: t.nth, pct: t.pct, count: t.count, element: t.element, perSec: events, dps });
         const what = t.when === 'Hit' ? (t.nth > 1 ? 'every ' + t.nth + 'th hit' : 'every hit') + (t.state.length ? ' on a ' + (t.state.includes('VsBurningOrShocked') ? 'Burning or Shocked' : 'Burning') + ' enemy (' + Math.round(share * 100) + '% of the time)' : '')
-          : t.when === 'Crit' ? 'every crit' : (t.nth > 1 ? 'every ' + t.nth + 'th use' : 'every use');
-        res.notes.push(name + ': ' + what + ' adds ' + (t.count > 1 ? t.count + ' x ' : '') + t.pct + '% of the hit' + (t.element ? ' as ' + t.element : '') + capped + ', ' + events.toFixed(2) + ' a second = +' + Math.round(hitDpsNow > 0 ? dps / hitDpsNow * 100 : 0) + '% hit damage on one enemy (splash to others not counted).' + (/Pyre|Overclock|Ninth Storm|One Breath/.test(name) ? '' : ' From the node text; not checked against the game yet.'));
+          : t.when === 'Crit' ? (t.nth > 1 ? 'every ' + t.nth + 'th crit' : 'every crit') : (t.nth > 1 ? 'every ' + t.nth + 'th use' : 'every use');
+        res.notes.push(name + ': ' + what + ' adds ' + (t.count > 1 ? t.count + ' x ' : '') + +(+t.pct).toFixed(1) + '% of the hit' + (t.element ? ' as ' + t.element : '') + capped + ', ' + events.toFixed(2) + ' a second = +' + Math.round(hitDpsNow > 0 ? dps / hitDpsNow * 100 : 0) + '% hit damage on one enemy (splash to others not counted).' + (/Pyre|Overclock|Ninth Storm|One Breath/.test(name) ? '' : ' From the node text; not checked against the game yet.'));
       }
     }
     // Elemental Overload's buff: up for 8 s after any crit, so the share of time it is up is 1 - exp(-crits a second x 8).
@@ -12306,7 +12852,7 @@ window.BOCharacter = function (ctx) {
     // burn, other skills' crits and the skill panel figure are not counted (not checked against the game).
     if (overload) {
       const u = ail.ignite && ascFlag('Asc71_Backdraft') ? ail.ignite.uptime : 0;
-      const critsPerSec = hitsPerSec * (u + (1 - u) * critChance / 100);
+      const critsPerSec = hitsPerSec * (res.backdraftCrit != null && u > 0 && ((GD.dragon.rules || {}).Backdraft || {}).BigCrit != null ? res.backdraftCrit / 100 : (u + (1 - u) * critChance / 100));
       const ovMore = is0569(GD) ? (((GD.scaling || {}).Hero || {}).ElementalOverloadMore || 25) : 60; // 0.56.9 notes: 25% (was 60%); the data's Hero.ElementalOverloadMore says the same
       const up = 1 - Math.exp(-critsPerSec * 8), ovF = 1 + ovMore / 100 * up;
       for (const d of ['Fire', 'Cold', 'Lightning']) if (byType[d] !== undefined) { hitDpsVs += byType[d] * (ovF - 1); byType[d] *= ovF; }
@@ -12606,8 +13152,17 @@ window.BOCharacter = function (ctx) {
     const isRuthless = m => / \(every 3rd blow, averaged\)$/.test(m.src || '');
     let ruthPct = 0;
     for (const m of mods) if (fromSupport(m) && isRuthless(m)) { ruthPct += m.v; use(m, 'minion, in the DPS'); }
+    // Item and tree lines that name only an element reach the minions. Patch 78 (switches r102.BUGSB.bMinionElem102): the increased
+    // ones; game log 15 Nov 2026 (build 78, a Necromancer): "MinionElem102: a minion keeps the line Damage Inc 30" (x3), 15, 8, 6 (x3):
+    // the hero's [Poison] lines from the chest, weapon, idols and tree; the Dragonling's 20% Poison is not among them, so Dragonling
+    // increased lines stay out. Patch 79 notes: "Item and tree lines that name only an element (for example more Poison damage) now
+    // reach your minions too, as increased Poison and Venomcraft already did. Lines that name Spell or Attack stay yours alone."
+    // (switch r103.BUGS-D.bMinionMore103): the "more" ones from build 79. Not checked against a minion panel.
+    const elemOnly = m => !m.local && (m.key === 'passives' || /^item:/.test(String(m.key || ''))) && (() => { const st = splitTags(m.tags); return st.types.length > 0 && !st.conds.length && st.types.every(t => t !== 'Physical') ? st.types : null; })();
+    const elemInc = is078(GD) && bSwitch(GD, 'r102.BUGSB.bMinionElem102', true), elemMore = is079(GD) && bSwitch(GD, 'r103.BUGS-D.bMinionMore103', true);
     const moreFor = d => {
       let k = 1;
+      if (elemMore) for (const m of mods) if (m.stat === 'Damage' && m.mode === 'More') { const t = elemOnly(m); if (t && t.includes(d)) { k *= 1 + m.v / 100; use(m, 'minion (patch 79: element lines reach minions)'); } }
       for (const m of mods) {
         if (!(fromSupport(m) || m.key === 'engine') || m.mode !== 'More' || isRuthless(m)) continue;
         const t = fit(m); if (!t || (t.length && !t.includes(d))) continue;
@@ -12652,11 +13207,25 @@ window.BOCharacter = function (ctx) {
     const incFor = d => {
       let v = attr.Int / 10 * (H.IntMinionDamagePer10 || 0);
       for (const m of pickMods(mods, 'MinionDamage', 'Inc')) { const t = fit(m); if (t && (!t.length || t.includes(d))) { v += m.v; use(m, 'minion'); } }
+      if (elemInc) for (const m of pickMods(mods, 'Damage', 'Inc')) { const t = elemOnly(m); if (t && t.includes(d)) { v += m.v; use(m, 'minion (patch 78: element lines reach minions)'); } }
       if (spellbound) for (const m of pickMods(mods, 'Damage', 'Inc')) { const t = spellboundLine(m); if (t && (!t.length || t.includes(d))) { v += m.v * spellbound; use(m, 'minion, Spellbound Dead x' + spellbound); } }
       return v;
     };
     let minionMore = 1;
     for (const m of pickMods(mods, 'MinionDamage', 'More')) if (fit(m)) { minionMore *= 1 + m.v / 100; use(m, 'minion'); }
+    // Quarry Command (Patch 79 support, MinionQuarry103 30 / MinionQuarryLess103 30): "The linked minions hunt your quarry: the last enemy you
+    // hit yourself in the last 6 seconds ... deal 30% more damage to it, and 30% less to every other enemy". This sheet is one enemy, taken
+    // as your quarry (you hit it now and then). From the support text; not checked.
+    // The Abomination (Necromancer Ascendancy, Rules71 Abomination DamagePer 0.05, MaxFused 12; text "Casting Grave Golem fuses your Skeleton
+    // Warriors and Zombies into it; each one fused adds 5% more damage ... up to 12: x1.6 damage ... raised while it stands feed it too"):
+    // counted at 12 fused when Raise Zombie or Summon Skeletons is on your bar (they keep feeding it). From the text; not checked.
+    if (lc(sk.Id) === 'summon_bone_golem' && mods.some(m => m.stat === 'Dragonling' && (m.tags || []).includes('Asc71_Abomination'))) {
+      const ab = (((GD.dragon || {}).rules || {}).Abomination) || {};
+      const feeds = (ch.hotbar || []).some(id => ['summon_skeletons', 'summon_zombie'].includes(lc(id)));
+      const n = feeds ? (ab.MaxFused ?? 12) : 0, k = 1 + (ab.DamagePer ?? 0.05) * n;
+      if (k > 1) { minionMore *= k; res.notes.push('The Abomination: ' + n + ' Skeleton Warriors and Zombies fused into the golem, x' + k.toFixed(2) + ' damage (counted full while one of them is on your bar).'); }
+    }
+    for (const m of mods) if (m.stat === 'MinionQuarry103' && m.mode === 'Flat' && fromSupport(m)) { minionMore *= 1 + m.v / 100; use(m, 'minion, vs your quarry'); res.notes.push('Quarry Command: your minions deal ' + m.v + '% more to your quarry, counted as this enemy (you must hit it yourself every 6 s; other enemies take 30% less).'); }
     // Legion of One (MinionOneKind): "You can command only one kind of Minion: raising a kind dismisses the others. Its maximum
     // number is doubled (at least +2) and each raise brings twice as many, and your Minions deal 30% less Damage".
     // Game log 12 Nov 2026 (build 71, owner's Necromancer, node taken at 16:40:39):
@@ -12679,7 +13248,7 @@ window.BOCharacter = function (ctx) {
     for (const m of pickMods(mods, 'MinionKindMore', 'Flat')) { kind *= 1 + m.v / 100 * kinds; use(m, 'minion, ' + kinds + ' kinds'); }
     // A Grave Golem on your bar blesses every minion near it by its supports' element, itself included: flame (fire
     // supports) 12.5% more damage, storm (lightning) 15% faster. The game's panel counts it (2 Nov Skeletons and Golem).
-    const golem = oneKind && !mi.GolemAuras ? null : golemBlessing(GD, ch, sk, o);
+    const golem = oneKind && !mi.GolemAuras ? null : golemBlessing(GD, ch, sk, o, mods);
     if (golem && golem.stat === 'MinionDamage') minionMore *= 1 + golem.v / 100;
     if (o.graveCall) minionMore *= 1.3; // Grave Call: 30% more damage (speed is added below)
     const aff = mi.Affinity && mi.AffinityDamage ? 1 + Math.min(mi.AffinityCap || 50, (attr[mi.Affinity] || 0) * mi.AffinityDamage) / 100 : 1;
@@ -12774,6 +13343,14 @@ window.BOCharacter = function (ctx) {
     // (PetSheet68 at 06:32:37, 7 s after a call: pace 0.534 s, unchanged), so it is off by default.
     if (o.graveCall) { spMore *= 1.2; res.notes.push('Grave Call active: minions deal 30% more damage and attack 20% faster (lasts 4 s after each cast; not in the game\'s panel).'); }
     const pace = (mi.AttackEvery || 1) * MINION_PACE / Math.max(0.05, (1 + spInc / 100) * spMore);
+    // Shared Light (Holy Elemental, skills.json Minion ShareBeyond 4, SharePerBody 0.04; gem text "past 4 elementals, each deals 4% less per
+    // extra elemental standing (12: 32% less each)"): every blow is cut when more than 4 stand. From the data and text; not checked.
+    if (mi.ShareBeyond > 0 && mi.SharePerBody > 0 && alive > mi.ShareBeyond) {
+      const sk2 = Math.max(0, 1 - mi.SharePerBody * (alive - mi.ShareBeyond));
+      for (const d of Object.keys(hit)) { hit[d].min *= sk2; hit[d].max *= sk2; hit[d].avg *= sk2; }
+      avg *= sk2;
+      res.notes.push('Shared Light: ' + alive + ' elementals stand, so each blow deals ' + Math.round((1 - sk2) * 100) + '% less (4% per elemental past ' + mi.ShareBeyond + ').');
+    }
     const hitsPerSec = alive * strikes / pace;
     const physShare = avg > 0 && hit.Physical ? hit.Physical.avg / avg : 0;
     const ruthK = 1 + ruthPct / 100 * physShare;
@@ -13003,7 +13580,7 @@ window.BOCharacter = function (ctx) {
   // The Grave Golem's blessing: its element comes from the supports in its sockets (the first non-physical element
   // they add or convert to). Fire: 12.5% more minion damage; Lightning: 15% faster minions; the others do not
   // change minion damage. Needs the golem gem on the bar.
-  function golemBlessing(GD, ch, sk, o) {
+  function golemBlessing(GD, ch, sk, o, mods) {
     if (o.golemAura === false) return null;
     const gid = ch.hotbar.find(id => { const k = GD.skills[lc(id)]; return k && k.Minion && k.Minion.GolemAuras; });
     if (!gid) return null;
@@ -13026,7 +13603,11 @@ window.BOCharacter = function (ctx) {
     const a =(g.Minion.GolemAuras || {})[el || 'Default'];
     if (!a || !['MinionDamage', 'MinionSpeed', 'EnemyTaken'].includes(a.Stat)) return null;
     const name = el === 'Fire' ? 'flame golem' : el === 'Lightning' ? 'storm golem' : el === 'Poison' ? 'venom golem' : 'golem';
-    return { element: el, stat: a.Stat, v: a.Value, name, text: a.Stat === 'MinionDamage' ? a.Value + '% more damage' : a.Stat === 'EnemyTaken' ? 'enemies take ' + a.Value + '% more damage' : a.Value + '% faster' };
+    // Aaron's Golemheart (GolemAuraStack76 40-60, its text "Your Golems' auras stack, one blessing for every Golem, and are {v}% stronger"):
+    // the Grave Golem is always one (PetSheet68 cap 1), so only the "stronger" part counts. From the item text; not checked.
+    const gh = (mods || []).filter(m => m.stat === 'GolemAuraStack76').reduce((x, m) => x + (m.v || 0), 0);
+    const v = a.Value * (1 + gh / 100);
+    return { element: el, stat: a.Stat, v, name: name + (gh ? ' (Golemheart +' + gh + '%)' : ''), text: a.Stat === 'MinionDamage' ? +v.toFixed(2) + '% more damage' : a.Stat === 'EnemyTaken' ? 'enemies take ' + +v.toFixed(2) + '% more damage' : +v.toFixed(2) + '% faster' };
   }
 
   function earlyDamage(cls, level) {
@@ -13343,7 +13924,10 @@ window.BOCharacter = function (ctx) {
     'woebringer', 'pass_sentence', 'swift_step', 'bone_guard', 'ravening_host', 'minion_damage', 'minion_life',
     'minion_speed', 'channel_conduit', 'channel_mastery', 'woe_bearer', 'cast_on_minion_death',
     // New 5 Nov: Funeral Pyre bursts only on kills; Volatile Dead's blasts come when minions die (not modelled).
-    'funeral_pyre', 'volatile_dead']);
+    'funeral_pyre', 'volatile_dead',
+    // Patch 79 supports that act only on other enemies (their own texts): Arc Conduit "adds nothing against a lone Guardian", Wildfire
+    // leaps to enemies that are not burning. Their chance lines (+20% Shock, +15% Ignite) still count when socketed.
+    'arc_conduit', 'wildfire']);
   // Supports that only help mana: searched when the search must keep mana sustained.
   const MANA_ONLY = new Set(['siphon', 'tithe']);
   // On a summon gem only these lines change the minions' damage (minionSheet); other supports add nothing there.
@@ -14546,7 +15130,12 @@ window.BOStartApp = function () {
       attr[a] = Math.floor(flat * (1 + inc / 100));
     }
     const tot = s => { try { return S.defenceTotal(GD, ch, mods, attr, s) || 0; } catch (e) { return 0; } };
-    return Object.assign(defenceCore(ch, mods, attr), { attr, armour: tot('Armour'), evasion: tot('Evasion'), block: tot('Block') });
+    // Patch 79 notes: "Scholar's Blood takes 12% and Clear Mind 15% of damage taken from Mana before Life ... it applies after the
+    // shield" (tree stat ManaBeforeLife, API game data build 79). Kept here as the share and the hero's max mana (reserved mana not
+    // taken off); gsDefence turns it into a bigger life pool. Lines from two sources taken as added (not checked).
+    const manaFirst = +GD.apiBuild >= 79 ? Math.min(100, mods.filter(m => m.stat === 'ManaBeforeLife' && m.mode === 'Flat').reduce((a, m) => a + m.v, 0)) : 0;
+    const mana = manaFirst > 0 ? S.heroMaxMana(GD.scaling.Hero || {}, ch, mods, attr) : 0;
+    return Object.assign(defenceCore(ch, mods, attr), { attr, armour: tot('Armour'), evasion: tot('Evasion'), block: tot('Block'), manaFirst, mana });
   }
   function defenceCore(ch, mods, attr) {
     const life = Math.floor(S.heroMaxLife(GD, ch, mods, attr)); // the game rounds down: 467.5 shows as 467
@@ -16580,7 +17169,8 @@ window.BOStartApp = function () {
   const masteryText = m => (m.Name + ' oath mastery ' + m.Oaths.map(id => { const o = GD.oaths[id] || {}; return (o.Name || '') + ' ' + (o.Text || '') + ' ' + (o.Vow || ''); }).join(' ')).toLowerCase();
   // Why this Oath cannot be sworn here right now ('' = it can).
   function oathBlocked(m, oid, have, sw) {
-    if (!masteryOpen(m, have)) return 'Take one of this mastery\'s notables first';
+    // Build 79 seats (gamedata.js): the seat node, or the notable it hangs from, opens it.
+    if (!masteryOpen(m, have)) return m.Seat ? 'Take this Oath seat first (reach it from the notable next to it)' : 'Take one of this mastery\'s notables first';
     if (OATH_ONCE) for (const [mid, o] of sw) if (mid !== m.Id && o.Id === oid) return 'Already sworn at another ' + GD.masteries[mid].Name + ' socket';
     return '';
   }
@@ -17151,14 +17741,17 @@ window.BOStartApp = function () {
   //     attacks can be evaded." Attacker level = the enemy level set on the page, else the hero's. Glancing blows are left out.
   //   Block: the sheet's block chance (capped at BlockMax); a blocked hit is taken as Hero.BlockReduction % smaller, against every
   //     hit. That reading of BlockReduction is ours: not checked against a tooltip or log.
-  // The resistance penalty is not counted.
+  // The resistance penalty counts as the owner sets it (GS.set.resPenalty, 17 Nov 2026).
   // miss: resistance points still short of the target, added up over the resistances asked for.
   const gsResCap = () => (GD.scaling.Hero || {}).ResistCap || 75;
   const gsResTarget = () => GS.set.resTarget > 0 ? GS.set.resTarget : gsResCap();
   function gsDefence(items) {
     const d = heroDefence(Array.isArray(items) ? Object.assign({}, st.ch, { items }) : items), cap = gsResCap(), target = gsResTarget();
     const res = {}; for (const [k, v] of d.resParts) res[k] = v;
-    const avg = d.resParts.reduce((a, x) => a + Math.min(cap, x[1]), 0) / d.resParts.length;
+    // Resistance penalty (scaling.json Hero ResistPenaltyPerAct 10, ResistPenaltyMax 50; Patch 79 notes: "Each 10% step lands when you break a
+    // Gate (20, 30, 40, 50, 60), still 50% in total"): taken off each resistance before the cap, as the owner sets it (GS.set.resPenalty).
+    const pen = Math.max(0, +GS.set.resPenalty || 0);
+    const avg = d.resParts.reduce((a, x) => a + Math.min(cap, x[1] - pen), 0) / d.resParts.length;
     let miss = 0; for (const k of ['Fire', 'Cold', 'Lightning'].concat(GS.set.resPoison ? ['Poison'] : [])) miss += Math.max(0, target - (res[k] || 0));
     const H = GD.scaling.Hero || {}, L = GS.set.layers, R = GD.rules || {};
     const esArm = +(R['r85.DEFENCE59.EsAsArmourPct'] != null ? R['r85.DEFENCE59.EsAsArmourPct'] : 50) || 0;
@@ -17170,16 +17763,19 @@ window.BOStartApp = function () {
     const block = Math.min(H.BlockMax || 75, d.block) / 100, blockCut = (H.BlockReduction || 0) / 100;
     // Share of the assumed hit taken: half physical (armour), half elemental (resistance); half the hits attacks (evasion); block on all.
     const taken = (0.5 * (1 - (L.armour ? armDR : 0)) + 0.5 * (1 - avg / 100)) * (1 - 0.5 * (L.evasion ? evade : 0)) * (1 - (L.block ? block * blockCut : 0));
-    return { life: d.life, es: d.es, res, armour: d.armour, armDR, evasion: d.evasion, evade, block, ehp: (d.life + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
+    // Mana before life (patch 79): a share s of what gets past the shield comes off mana, so life lasts min(life / (1 - s), life + mana).
+    const s = (d.manaFirst || 0) / 100, lifePool = s > 0 ? Math.min(s < 1 ? d.life / (1 - s) : Infinity, d.life + (d.mana || 0)) : d.life;
+    return { life: d.life, es: d.es, res, armour: d.armour, armDR, evasion: d.evasion, evade, block, manaFirst: d.manaFirst || 0, ehp: (lifePool + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
   }
   // Which defences the estimate counts (one setting everywhere, with the slider). Life and resistances always count.
   const GS_LAYERS = [['es', 'Energy Shield', 'EnergyShield'], ['armour', 'Armour', 'Armour'], ['evasion', 'Evasion', 'Evasion'], ['block', 'Block', 'Block']];
   const gsLayersInner = off => '<span class="meta" title="Tick the defences your build uses: the estimate counts only these (life and resistances always), so the searches go for that kind. Armour + Evasion, Evasion + Energy Shield and so on: tick both">Defences that count</span>' +
-    GS_LAYERS.map(([k, n]) => '<label class="check-row"><input type="checkbox" data-gs-layer="' + k + '"' + (GS.set.layers[k] ? ' checked' : '') + (off ? ' disabled' : '') + '><span>' + n + '</span></label>').join('');
+    GS_LAYERS.map(([k, n]) => '<label class="check-row"><input type="checkbox" data-gs-layer="' + k + '"' + (GS.set.layers[k] ? ' checked' : '') + (off ? ' disabled' : '') + '><span>' + n + '</span></label>').join('') +
+    '<label class="check-row gs-pen" title="The Rupture resistance penalty: 10% for each Gate you broke (Gates 20 to 60), 50% at most. Taken off each resistance before the cap"><span>Res. penalty</span><select data-gs-pen' + (off ? ' disabled' : '') + '>' + [0, 10, 20, 30, 40, 50].map(v => '<option value="' + v + '"' + ((+GS.set.resPenalty || 0) === v ? ' selected' : '') + '>' + (v ? '-' + v + '%' : 'none') + '</option>').join('') + '</select></label>';
   const gsLayersHtml = off => '<span class="gs-layers">' + gsLayersInner(off) + '</span>';
   const gsLayerNames = () => ['life', 'resistances'].concat(GS_LAYERS.filter(([k]) => GS.set.layers[k]).map(x => x[1].toLowerCase()));
   const gsDefStats = () => ['Life', 'Resist'].concat(GS_LAYERS.filter(([k]) => GS.set.layers[k]).map(x => x[2])).concat(GS.set.layers.armour || GS.set.layers.evasion || GS.set.layers.es ? ['Defences'] : []);
-  const gsDefNote = () => 'Defence is an estimate against a boss hit of ' + num((GD.scaling.Hero || {}).ArmourBigHitRef || 1000) + ' or more: half physical, half elemental, half of the hits attacks. Counted: ' + gsLayerNames().join(', ') + ' (resistances capped at ' + gsResCap() + '%). Glancing blows and the resistance penalty are not.';
+  const gsDefNote = () => 'Defence is an estimate against a boss hit of ' + num((GD.scaling.Hero || {}).ArmourBigHitRef || 1000) + ' or more: half physical, half elemental, half of the hits attacks. Counted: ' + gsLayerNames().join(', ') + ' (resistances capped at ' + gsResCap() + '%). Glancing blows are not' + ((+GS.set.resPenalty || 0) ? '; resistances count with a ' + GS.set.resPenalty + '% penalty.' : ', and no resistance penalty (set one under the defences).');
   // Armour, evasion and block before → after, for the ticked ones (A, B: gsDefence results).
   function gsLayerLine(A, B) {
     const L = GS.set.layers, p = x => Math.round(x * 100) + '%', out = [];
@@ -17188,6 +17784,7 @@ window.BOStartApp = function () {
     if (L.block) out.push('Block ' + p(A.block) + ' → ' + p(B.block));
     return out.join(' · ');
   }
+  function setGsPenalty(v) { GS.set.resPenalty = Math.max(0, Math.min(50, +v || 0)); store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) { clearOpt(); paintTree(); } }
   function setGsLayer(k, on) { GS.set.layers[k] = !!on; store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) { clearOpt(); paintTree(); } }
   // The DPS / Defence slider: one setting for Item Compare and Gear Set Sim.
   const gsPrioHtml = off => '<label class="field gs-prio" title="What counts when items are weighed. Defence is an estimate; tick the defences that count below"><span>Prioritize <b id="gsPrioText">' + gsPrioText(GS.set.prio) + '</b></span>' +
@@ -17230,7 +17827,7 @@ window.BOStartApp = function () {
   if ($('#optPrio')) {
     $('#optPrio').addEventListener('input', e => { $('#optPrioText').textContent = gsPrioText(+e.target.value); });
     $('#optPrio').addEventListener('change', e => { GS.set.prio = Math.max(0, Math.min(100, Math.round(+e.target.value / 10) * 10 || 0)); store.set('gearSim', GS.set); syncOptPrio(); clearOpt(); paintTree(); });
-    $('#optLayers').addEventListener('change', e => { const k = e.target.dataset && e.target.dataset.gsLayer; if (k) setGsLayer(k, e.target.checked); });
+    $('#optLayers').addEventListener('change', e => { const k = e.target.dataset && e.target.dataset.gsLayer; if (k) setGsLayer(k, e.target.checked); if (e.target.dataset && e.target.dataset.gsPen != null) setGsPenalty(e.target.value); });
     setTimeout(syncOptPrio, 0);
   }
   const gsPrioText = p => p <= 0 ? 'DPS only' : p >= 100 ? 'Defence only' : (100 - p) + '% DPS · ' + p + '% defence';
@@ -17530,6 +18127,7 @@ window.BOStartApp = function () {
       const t = e.target;
       if (t.id === 'cmpSkill') return selectSkill(t.value);
       if (t.dataset.gsLayer) { setGsLayer(t.dataset.gsLayer, t.checked); GS.msg = ''; return renderCompare(); }
+      if (t.dataset.gsPen != null) { setGsPenalty(t.value); GS.msg = ''; return renderCompare(); }
       if (t.dataset.gsSet) { GS.set[t.dataset.gsSet] = t.checked; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsPrio') { GS.set.prio = Math.max(0, Math.min(100, Math.round(+t.value / 10) * 10 || 0)); store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) clearOpt(); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsResTarget') { const v = Math.max(1, Math.min(200, Math.round(+t.value) || 0)); GS.set.resTarget = v === gsResCap() ? 0 : v; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }

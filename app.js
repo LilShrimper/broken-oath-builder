@@ -11663,6 +11663,7 @@ window.BOCharacter = function (ctx) {
     const orbitOn = shape === 'orbit';
     let focusShare = 0; for (const m of pickMods(mods, 'FocusShare', 'Flat')) if (applies(ctx, m)) { focusShare = Math.max(focusShare, m.v / 100); use(m); }
     let projOnTarget = 1, projWeight = 1;
+    let rollShares = null; // each projectile's share of a full hit, when they differ (Focused Volley, Orbit); for the bleed's strongest roll
     if (projectiles && shape === 'rain_support') {
       // Rain: every enemy inside is struck twice, three times with 4 or more projectiles.
       projOnTarget = o.projOnTarget || (projectiles >= 4 ? 3 : 2); projWeight = projOnTarget;
@@ -11681,6 +11682,7 @@ window.BOCharacter = function (ctx) {
       // ... Arrows you shoot yourself only (not a trap, totem or rain)". Its 15% less and +1 arrow are plain lines.
       projOnTarget = clamp(o.projOnTarget || projectiles, 1, projectiles);
       projWeight = (1 - Math.pow(focusShare, projOnTarget)) / (1 - focusShare);
+      rollShares = Array.from({ length: projOnTarget }, (_, k) => Math.pow(focusShare, k));
       res.notes.push('Focused Volley: all ' + projOnTarget + ' arrows strike this enemy, each after the first for ' + Math.round(focusShare * 100) + '% of the one before (worth ' + projWeight.toFixed(2) + ' full hits per use). From the support text; not checked in a fight.');
     } else if (projectiles) {
       // Orbit holds at most ORBIT_MAX_ARROWS arrows (attacks); extra projectiles fly as usual but do not circle.
@@ -11694,6 +11696,7 @@ window.BOCharacter = function (ctx) {
       let orbitLess = isAttack ? (orbTxt ? +orbTxt[2] : 90) : (orbTxt ? +orbTxt[1] : 60);
       if (!isAttack && is056(GD)) orbitLess = Math.max(orbitLess, 75);
       projWeight = orbitOn ? 1 + (projOnTarget - 1) * (1 - orbitLess / 100) : projOnTarget;
+      if (orbitOn && projOnTarget > 1) rollShares = Array.from({ length: projOnTarget }, (_, k) => k ? 1 - orbitLess / 100 : 1);
       if (orbitOn && projOnTarget > 1) res.notes.push('Orbit: all ' + projOnTarget + ' projectiles strike this enemy; each after the first deals ' + orbitLess + '% less (worth ' + projWeight.toFixed(2) + ' full hits per cast).');
     }
     // Skyfall second fall: one more strike on the target per cast at the repeat's share of the damage.
@@ -12193,13 +12196,40 @@ window.BOCharacter = function (ctx) {
         let baseDur = 4;
         for (const s of res.supports) { const d = s.ok && GD.supports[lc(s.id)] && /Bleeding[^.]*?for (\d+(?:\.\d+)?) seconds/i.exec(GD.supports[lc(s.id)].Description || ''); if (d) { baseDur = +d[1]; break; } }
         const dur = snap(baseDur * (1 + ailDur / 100));
-        const dps1 = hit.Physical.avg * critFactor * (A.BleedFracPerSec || 0.5) * Math.max(0, 1 + bInc / 100) * bMore * Math.max(0, 1 + dotMulti / 100);
+        const coef = (A.BleedFracPerSec || 0.5) * Math.max(0, 1 + bInc / 100) * bMore * Math.max(0, 1 + dotMulti / 100);
+        const dps1 = hit.Physical.avg * critFactor * coef; // a bleed from the average hit
         // Every arrow rolls (arrowShare above); the strongest bleed holds and a weaker one never replaces it (log 16 Nov 2026:
-        // a 2,120 hit rolled 3,562/s while 35,242/s kept bleeding), so dps1 stays the full hit's.
-        const uptime = 1 - Math.exp(-hitsPerSec * perHitFactor / arrowShare * hitFactor * bleedChance / 100 * dur);
-        bleedDps = dps1 * uptime * dotTakenFor('Physical');
-        ail.bleed = { chance: bleedChance, dps1, uptime, duration: dur, dps: bleedDps, more: bMore, inc: bInc };
-        res.notes.push('Bleeding: ' + Math.round(bleedChance) + '% chance, ' + Math.round(dps1) + '/s for ' + dur + ' s (strongest one holds, up ' + Math.round(uptime * 100) + '% of the time). Counted on a standing enemy: bleeds deal 50% more while it moves. Not checked against the game yet.');
+        // a 2,120 hit rolled 3,562/s while 35,242/s kept bleeding).
+        const rollsPerSec = hitsPerSec * perHitFactor / arrowShare * hitFactor * bleedChance / 100;
+        const uptime = 1 - Math.exp(-rollsPerSec * dur);
+        // So the bleed on the enemy is the strongest hit rolled in the last bleed life, not the average hit. Game log 16 Nov
+        // 2026 (Rangtest Split Shot + Rend 50% + Affliction, Training Post, 40 s each; tests/rangtest-focused-volley.md):
+        // the game's own "BleedMax96: the sheet's bleed = the strongest hit of the bleeds rolled in one bleed's life", and
+        // bleed dot / poison dot (same hit, same taken, so the post and Far Shot cancel) = 1.50 with Focused Volley (396
+        // poisons; average-hit reading 1.03, this model 1.52) and 4.61 without (36 poisons, +-17%; average 2.57, model 3.8).
+        // Expected strongest = integral of P(strongest > x): rolls come as a Poisson stream (rate x duration), each one's
+        // hit uniform between the physical min and max (an assumption), times the crit multi at the crit chance, times its
+        // projectile's share (Focused Volley 100/60/36%..., Orbit's weaker spheres).
+        const P = hit.Physical, shares = rollShares || [1];
+        let kept = P.avg * critFactor;
+        if (rollsPerSec > 0 && P.max > 0) {
+          const lo = P.min > 0 ? P.min : P.avg, span = Math.max(0, (P.max || P.avg) - lo);
+          const cc = critChance / 100, cm = effectiveMulti / 100, nc = nonCritMult;
+          const under = v => span > 0 ? clamp((v - lo) / span, 0, 1) : (v >= lo ? 1 : 0); // P(plain hit <= v)
+          const mu = rollsPerSec * dur / shares.length;
+          const top = (P.max || P.avg) * Math.max(cm, nc, 1) * Math.max(...shares), n = 400, dx = top / n;
+          let e = 0;
+          for (let i = 0; i < n; i++) {
+            const x = (i + 0.5) * dx; let L = 0;
+            for (const sh of shares) L += mu * (1 - ((1 - cc) * under(x / (sh * nc)) + cc * under(x / (sh * cm))));
+            e += (1 - Math.exp(-L)) * dx;
+          }
+          kept = e / Math.max(uptime, 1e-9); // the strongest bleed while one is up
+        }
+        const dpsKept = kept * coef;
+        bleedDps = dpsKept * uptime * dotTakenFor('Physical');
+        ail.bleed = { chance: bleedChance, dps1, dpsKept, keptX: dpsKept / dps1, rollsPerLife: rollsPerSec * dur, uptime, duration: dur, dps: bleedDps, more: bMore, inc: bInc };
+        res.notes.push('Bleeding: ' + Math.round(bleedChance) + '% chance, ' + (rollsPerSec * dur).toFixed(1) + ' bleeds rolled in one ' + dur + ' s bleed life; the strongest holds: ' + Math.round(dpsKept) + '/s (x' + (dpsKept / dps1).toFixed(2) + ' a bleed from the average hit), up ' + Math.round(uptime * 100) + '% of the time. Counted on a standing enemy: bleeds deal 50% more while it moves.');
       }
     }
     // ----- passive tree triggers (bursts, pillars, sky swords) -----
@@ -14592,7 +14622,7 @@ window.BOStartApp = function () {
       (ig ? '<h3>Ignite</h3><dl class="kv">' + kv('Ignite chance', num(ig.chance, 0) + '%') + kv('Burning while ignited', num(ig.dps1) + '/s') + kv('Uptime', num(ig.uptime * 100, 0) + '%') + kv('Ignite DPS vs enemy', num(ig.dps), true) + '</dl>' : '') +
       (r.ailments.shock ? (sh => '<h3>Shock</h3><dl class="kv">' + kv('Shock chance', num(sh.chance, 0) + '% a hit') + kv('Each shock', '+' + num(sh.size, 1) + '% damage taken' + (sh.raw < 5 ? ' (the game\'s floor)' : '')) +
         kv('Shocks on the enemy', num(sh.avg, 2) + ' of ' + sh.stacks + ' (' + num(sh.rate, 2) + '/s for ' + num(sh.duration, 1) + ' s)') + kv('More damage taken', '+' + num(sh.pct, 1) + '%', true) + '</dl>')(r.ailments.shock) : '') +
-      (bl ? '<h3>Bleeding</h3><dl class="kv">' + kv('Bleed chance', num(bl.chance, 0) + '%') + kv('Bleeding while it holds', num(bl.dps1) + '/s for ' + num(bl.duration, 1) + ' s') + kv('Uptime', num(bl.uptime * 100, 0) + '%') + kv('Bleeding DPS vs enemy', num(bl.dps), true) + '</dl>' : '') +
+      (bl ? '<h3>Bleeding</h3><dl class="kv">' + kv('Bleed chance', num(bl.chance, 0) + '%') + kv('Bleeds rolled per bleed life', num(bl.rollsPerLife, 1)) + kv('Bleeding while it holds', num(bl.dpsKept != null ? bl.dpsKept : bl.dps1) + '/s for ' + num(bl.duration, 1) + ' s') + kv('Uptime', num(bl.uptime * 100, 0) + '%') + kv('Bleeding DPS vs enemy', num(bl.dps), true) + '</dl>' : '') +
       '<h3>Your attributes</h3><dl class="kv">' + kv('Strength / Dexterity / Intelligence', r.attr.Str + ' / ' + r.attr.Dex + ' / ' + r.attr.Int) + '</dl>' +
       '</div></div></details>';
 

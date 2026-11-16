@@ -13263,6 +13263,9 @@ window.BOCharacter = function (ctx) {
     const extra = [kv.Radius ? fmt(+kv.Radius / 100) + ' metre radius' : '', m.v2 ? 'at most once every ' + fmt(m.v2) + ' s' : ''].filter(Boolean);
     return head + ': ' + what + dmg + (extra.length ? ' (' + extra.join(', ') + ')' : '');
   }
+  // Has the game a wording for this line (stat_text.json)? A tree node that has none for a line explains it in its own Text
+  // (Focus: "FocusMain98 Flat 25"), so the page shows that text instead of our fallback (16 Nov 2026). Display only.
+  const hasStatText = (GD, m) => { const sm = (m.Stat || m.stat) + '.' + (m.Mode || m.mode); return (m.Stat || m.stat) === 'Trigger' ? false : !!GD.statText[sm] || Object.keys(GD.statText).some(k => k.startsWith(sm + '+')); };
   function fallbackText(m, fmt) {
     if (m.stat === 'Trigger') return triggerText(m, fmt);
     const kinds = m.tags.filter(t => !/[_=]/.test(String(t))).map(camelWords), tagNote = kinds.length ? ' (' + kinds.join(', ') + ')' : '';
@@ -13292,7 +13295,22 @@ window.BOCharacter = function (ctx) {
       .replace(/\{(\w+)\}/g, (m, k) => V[k] == null ? m : V[k]);
   }
 
+  // Weapon conditions the game words as "while ..." (stat_text.json "Block.Flat+HoldingShield" and the like). A line with the
+  // condition and another tag ("Damage.More+Attack+HoldingShield") has no wording of its own and read "12% more Attack
+  // HoldingShield Damage"; it is worded without the condition, then the condition added (16 Nov 2026). Display only.
+  const WHILE_TEXT = { HoldingShield: 'while holding a Shield', DualWielding: 'while Dual Wielding', WieldingStaff: 'while wielding a Staff', TwoHanded: 'while wielding a Two Handed weapon' };
+  // Negative values read the game's way: "-3% increased Mana Cost" is "3% reduced Mana Cost", "-10% more" is "10% less",
+  // "+-6% to" is "-6% to" (tree tooltips, 16 Nov 2026). Display only.
+  const signWords = t => t.replace(/(^|\s)-(\d[\d.]*%) increased\b/g, '$1$2 reduced').replace(/(^|\s)-(\d[\d.]*%) more\b/g, '$1$2 less').replace(/\+-/g, '-');
   function modText(GD, m) {
+    const tags = m.tags || [], w = tags.find(t => WHILE_TEXT[t]);
+    if (w && tags.length > 1 && !GD.statText[m.stat + '.' + m.mode + '+' + tags.join('+')]) {
+      const t = modTextOne(GD, Object.assign({}, m, { tags: tags.filter(x => x !== w) }));
+      return t.includes(WHILE_TEXT[w]) ? t : t + ' ' + WHILE_TEXT[w];
+    }
+    return signWords(modTextOne(GD, m));
+  }
+  function modTextOne(GD, m) {
     const { types, conds, gemScaled } = splitTags(m.tags);
     // The untagged wording comes last: a line tagged only with damage types (Nightshade's "+1.5 Poison" gem levels, typed
     // leech, typed damage taken) must reach the "+" form, which has a {tags} slot, or its type drops out of the text.
@@ -13606,7 +13624,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
+  const api = { hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
     // The share at which a support works on minion skills despite "Minion" in its ExcludeTags (0 = it does not), for tooltips.
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -16632,16 +16650,40 @@ window.BOStartApp = function () {
   // DPS gain per point spent (a swap at an altar counts as one point).
   const perPt = s => s.d / Math.max(1, s.cost);
   const bestRows = (have, n) => [...T.scores].filter(([id, s]) => !have.has(id) && s.d > 0.0005).sort((a, b) => perPt(b[1]) - perPt(a[1])).slice(0, n);
+  // A node's region in words. The data names the shared areas between two classes by angle ("seam_60"); they read "Between
+  // Mage and Necromancer", from the two class starts nearest the area's middle (worked out from the tree data, so a patch
+  // that moves them still reads right; 16 Nov 2026). "hub" is the centre.
+  let REGION_NAMES = null, REGION_FOR = null;
+  function regionName(r) {
+    if (REGION_FOR !== GD) {
+      REGION_FOR = GD; REGION_NAMES = {};
+      const ang = n => Math.atan2(n.Y || 0, n.X || 0), nodes = Object.values(GD.nodes || {});
+      const starts = nodes.filter(n => n.Kind === 'Start' && n.Region).map(n => [n.Region, ang(n)]), sum = {};
+      for (const n of nodes) if (/^seam_/.test(n.Region || '')) { const a = sum[n.Region] = sum[n.Region] || [0, 0]; a[0] += Math.cos(ang(n)); a[1] += Math.sin(ang(n)); }
+      for (const [k, [x, y]] of Object.entries(sum)) {
+        const mid = Math.atan2(y, x), off = a => Math.abs(Math.atan2(Math.sin(a - mid), Math.cos(a - mid)));
+        const two = starts.slice().sort((p, q) => off(p[1]) - off(q[1])).slice(0, 2).map(p => p[0]).sort();
+        if (two.length === 2) REGION_NAMES[k] = 'Between ' + two[0] + ' and ' + two[1];
+      }
+    }
+    return REGION_NAMES[r] || (r === 'hub' || r === 'Hub' ? 'Centre' : String(r).replace(/_/g, ' '));
+  }
+  // A node's stat lines as the game words them. Keystone, trigger and Dragonling lines are left out (the node's Text says them),
+  // and so is a line the game has no wording for when the node has its own Text: Focus's "FocusMain98 Flat 25" is the Text's
+  // "Your main skill deals 25% more damage" (16 Nov 2026).
+  function treeLines(n) {
+    return (n.Mods || []).filter(m => !['Keystone', 'Trigger', 'Dragonling'].includes(m.Mode) && (!n.Text || S.hasStatText(GD, m))).map(modLine).filter(Boolean);
+  }
   // Lines on a node the DPS math does not count (triggers, keystone rules, Skyfall repeats ...).
   function uncounted(n) {
     return (n.Mods || []).filter(m => m.Mode === 'Trigger' || m.Mode === 'Flag' || !S.counted(m.Stat))
-      .map(m => m.Mode === 'Trigger' || m.Mode === 'Flag' ? (n.Text || n.Name) : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
+      .map(m => m.Mode === 'Trigger' || m.Mode === 'Flag' || (n.Text && !S.hasStatText(GD, m)) ? (n.Text || n.Name) : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
   }
   function tipHtml(id) {
     const n = GD.nodes[id]; if (!n) return '';
     const have = allocSet(), on = have.has(id);
-    let h = '<div class="tk">' + esc(n.Kind) + (n.Region ? ' · ' + esc(n.Region) : '') + '</div><b>' + esc(n.Name) + '</b>';
-    const lines = (n.Mods || []).filter(m => !['Keystone', 'Trigger', 'Dragonling'].includes(m.Mode)).map(modLine).filter(Boolean);
+    let h = '<div class="tk">' + esc(n.Kind) + (n.Region ? ' · ' + esc(regionName(n.Region)) : '') + '</div><b>' + esc(n.Name) + '</b>';
+    const lines = treeLines(n);
     if (lines.length) h += '<ul>' + lines.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>';
     if (n.Text && (n.Kind === 'Keystone' || n.Kind === 'Notable' || n.Kind === 'Socket') && n.Text !== lines.join(' ')) h += '<div>' + esc(n.Text) + '</div>';
     if (n.Price) h += '<div class="gain down">' + esc(n.Price) + '</div>';
@@ -16718,7 +16760,7 @@ window.BOStartApp = function () {
     for (const raw of st.ch.passives) {
       const id = realId(raw), n = GD.nodes[id]; if (!n || n.Kind === 'Start') continue;
       pt++;
-      if (['Notable', 'Keystone', 'Choice', 'Capstone'].includes(n.Kind)) rows.push('<li><span class="hn">' + (rows.length + 1) + '</span><span>' + esc(n.Name) + ' <span class="c">' + esc(n.Kind) + (n.Region ? ' · ' + esc(n.Region) : '') + '</span></span><span class="g">point ' + pt + '</span></li>');
+      if (['Notable', 'Keystone', 'Choice', 'Capstone'].includes(n.Kind)) rows.push('<li><span class="hn">' + (rows.length + 1) + '</span><span>' + esc(n.Name) + ' <span class="c">' + esc(n.Kind) + (n.Region ? ' · ' + esc(regionName(n.Region)) : '') + '</span></span><span class="g">point ' + pt + '</span></li>');
     }
     el.innerHTML = '<h2>Notable history <span class="hint">in the order taken</span></h2>' + (rows.length ? '<ol class="best-list hist-list">' + rows.join('') + '</ol>' : '<p class="hint">No notables taken yet.</p>') +
       '<p class="hint">Follows the click order on this tree' + (st.chOrig && st.chOrig.plan ? '' : ' (a loaded save shows the order its file lists)') + '. "New tree" copies it, so each leveling tree keeps its own.</p>';
@@ -17947,7 +17989,7 @@ window.BOStartApp = function () {
     }
     if (sec === 'nodes') {
       const n = GD.nodes[id]; if (!n) return '';
-      const ls = (n.Mods || []).filter(m => !['Keystone', 'Trigger', 'Dragonling'].includes(m.Mode)).map(modLine).filter(Boolean);
+      const ls = treeLines(n);
       return head(n.Name, (n.Kind || 'Passive') + ' passive') + list('pl-tip-base', ls.length ? ls : n.Text ? [n.Text] : []);
     }
     if (sec === 'runes') {
@@ -18016,7 +18058,7 @@ window.BOStartApp = function () {
     // Build notes: kept in this browser per character, and sent along in share links (liveCopy / keepSharedTabs).
     notes: { get: () => (st.chOrig ? store.get('notes:' + st.chOrig.id, '') : ''), set: v => { if (st.chOrig) store.set('notes:' + st.chOrig.id, String(v).slice(0, NOTES_MAX)); } },
     nodeLines: n => {
-      const lines = (n.Mods || []).filter(m => !['Keystone', 'Trigger', 'Dragonling'].includes(m.Mode)).map(modLine).filter(Boolean);
+      const lines = treeLines(n);
       return lines.length ? lines : n.Text ? [n.Text] : [];
     },
   });

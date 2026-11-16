@@ -3802,13 +3802,15 @@ window.BOCreator = function (ctx) {
   // link, or the Brewery belt kept with a plan (tier picks, valued from potions.json).
   function buildPotions(ch) {
     const P = GD.potions || {}, keys = (P.Slots || []).map(s => s.Key), out = [];
-    for (const p of ch.potItems || []) {
+    // A belt edited in the Brewery wins over the potions the character came with (its save or planner link).
+    const own = ctx.ownBelt && ctx.ownBelt(ch.id);
+    for (const p of own ? [] : ch.potItems || []) {
       const slot = keys.indexOf(p.s); if (slot < 0 || !(p.b || p.u)) continue;
       out.push({ slot, type: p.b, unique: p.u || '', rarity: p.r || 'Normal', vessel: p.v || 'clay', level: p.il || 84, quality: p.q || 0,
         lines: (p.a || []).map(([id, , v, v2]) => ({ id, tier: saveTier(potMod(id), v), v: +v || 0, v2: +v2 || 0 })) });
     }
     if (out.length || !ctx.belt) return out;
-    const b = ctx.belt(ch.id); if (!b) return out;
+    const b = own || ctx.belt(ch.id); if (!b) return out;
     b.slots.forEach((s, slot) => {
       if (!s || !(s.type || s.unique)) return;
       const picks = [...(s.pre || []), ...(s.suf || []), s.oath, s.core].filter(Boolean);
@@ -3816,7 +3818,7 @@ window.BOCreator = function (ctx) {
       if (s.pour) lines.push({ id: s.pour, tier: 0, v: 0, v2: 0 });
       const u = s.unique && (P.Uniques || []).find(x => x.Id === s.unique);
       out.push({ slot, type: u ? u.Type : s.type, unique: u ? u.Id : '', rarity: u ? 'Unique' : (s.pre || []).length + (s.suf || []).length > 2 ? 'Rare' : picks.length ? 'Magic' : 'Normal',
-        vessel: s.vessel || 'clay', level: b.rl || 100, quality: 20, lines });
+        vessel: s.vessel || 'clay', level: b.rl || 100, quality: s.q != null ? s.q : 20, lines });
     });
     return out;
   }
@@ -4676,9 +4678,9 @@ window.BOBrewery = function (ctx) {
     ['Seal', 'Seal'], ['Oath', 'Oath line'], ['Core', 'Core line'], ['Pour', 'Pour'], ['QualityPer2', 'Quality, each 2%']];
 
   // ---------- state: one belt per character (kept in this browser only) ----------
-  const emptySlot = () => ({ type: '', unique: '', vessel: '', pre: [], suf: [], oath: null, core: null, pour: '' });
+  const emptySlot = () => ({ type: '', unique: '', vessel: '', pre: [], suf: [], oath: null, core: null, pour: '', q: 20 }); // q: quality (Brewmaw sells up to 20%)
   function blankBelt() {
-    const b = { rl: 150, early: true, slots: [0, 1, 2, 3].map(emptySlot) };
+    const b = { rl: 150, ml: null, early: true, slots: [0, 1, 2, 3].map(emptySlot) }; // ml: best map level the flat lines scale with (null = rl)
     b.slots[0].type = 'life'; b.slots[1].type = 'mana'; b.slots[0].vessel = b.slots[1].vessel = 'clay';
     return b;
   }
@@ -4690,9 +4692,10 @@ window.BOBrewery = function (ctx) {
     const b = blankBelt();
     if (isFinite(+s.rl)) b.rl = Math.max(0, Math.min(999, Math.round(+s.rl)));
     if (typeof s.early === 'boolean') b.early = s.early;
+    if (s.ml != null && isFinite(+s.ml)) b.ml = Math.max(0, Math.min(999, Math.round(+s.ml)));
     s.slots.slice(0, 4).forEach((x, i) => {
       if (!x || typeof x !== 'object') return;
-      b.slots[i] = { type: str(x.type), unique: str(x.unique), vessel: str(x.vessel), pre: (Array.isArray(x.pre) ? x.pre : []).slice(0, 4).map(line), suf: (Array.isArray(x.suf) ? x.suf : []).slice(0, 4).map(line), oath: line(x.oath), core: line(x.core), pour: str(x.pour) };
+      b.slots[i] = { type: str(x.type), unique: str(x.unique), vessel: str(x.vessel), pre: (Array.isArray(x.pre) ? x.pre : []).slice(0, 4).map(line), suf: (Array.isArray(x.suf) ? x.suf : []).slice(0, 4).map(line), oath: line(x.oath), core: line(x.core), pour: str(x.pour), q: x.q != null && isFinite(+x.q) ? Math.max(0, Math.min(20, Math.round(+x.q))) : 20 };
     });
     return b;
   }
@@ -4719,7 +4722,7 @@ window.BOBrewery = function (ctx) {
       const type = u ? u.Type : String(it.b || '').toLowerCase(), t = p.Types.find(x => x.Id === type);
       if (!t || t.Role !== role) continue;
       const s = emptySlot(), ves = p.Vessels.find(v => v.Id === String(it.v || '').toLowerCase()) || p.Vessels[0];
-      s.type = type; s.unique = u ? u.Id : ''; s.vessel = ves.Id;
+      s.type = type; s.unique = u ? u.Id : ''; s.vessel = ves.Id; s.q = Math.max(0, Math.min(20, Math.round(+it.q || 0)));
       need = Math.max(need, g(ves.MinRL || 0), p.Slots[i].OpenAt ? (i === 3 ? (E || p.Unlock).Slot4 : (E || p.Unlock).Open) : 0);
       for (const [id, tier] of u ? [] : it.a || []) {
         if ((p.Pour || []).some(x => x.Id === id)) { s.pour = id; continue; }
@@ -4732,16 +4735,17 @@ window.BOBrewery = function (ctx) {
       b.slots[i] = s; any = true;
     }
     if (!any) return null;
-    b.rl = Math.max(+ch.rupture || 0, need); b.early = !!E;
+    b.rl = Math.max(+ch.rupture || 0, need); b.early = !!E; if (+ch.mapLevel > 0) b.ml = +ch.mapLevel;
     return b;
   }
   const charById = id => ctx.byId ? ctx.byId(id) : null;
   let B = blankBelt(), Bid = null, Bstored = false, Bsave = false;
+  let best = null; // the best-potions search (below): { run, n, results, now, none, msg }
   // Point B at the belt of the character on screen: the one kept in this browser, else the one its save carries.
   function use() {
     const ch = ctx.current && ctx.current(), id = ch ? ch.id : '';
     if (id === Bid) return;
-    Bid = id; Bsave = false; const got = id ? read(id) : null;
+    Bid = id; Bsave = false; best = null; const got = id ? read(id) : null;
     if (got) { B = got; Bstored = true; return; }
     const old = id ? legacy() : null;
     if (old) { B = old; Bstored = true; write(id, B); return; }
@@ -4806,16 +4810,29 @@ window.BOBrewery = function (ctx) {
 
     const out = { name, type: t, unique: u, lines, mods: [], notes: [], role };
     if (role === 'Utility') {
-      // "Potent: {v}% increased effect" is counted on every line while active (not yet checked in a fight).
+      // Owner's test, 16 Nov 2026 (game build 77, Rangtest, Lightning Arrow, four Copy stats sheets): R = Potent Veilwater of
+      // the Windward Answer (quality 20), T = Windglass of the Windward Answer (no Potent, quality 20). Sheet DPS 4.919M / R 6.669M
+      // / T 5.870M / both 7.944M, Evasion 50,647 / 67,942 / 50,647 / 67,942. (1) The Answer line is NOT raised by Potent: with it
+      // raised, the tree's Evasion engine lines would have to give -3% (they give about +44%); unraised, "both" is predicted to
+      // x1.6148, the game shows x1.6148. (2) Both potions' lines are up together and add into the damage engine. (3) The potion's
+      // own lines (+966 flat, 30% increased Evasion) rose about x1.6-1.7: Potent 40% + Quality 20% as increased effect, added
+      // (1.6; fits within the sim's Evasion estimate). So Potent and Quality raise the potion type's own lines (and a unique's),
+      // not its affix lines. (4) Tooltip: the type's +1150 Evasion shows +966 = x0.84 at RiftMap BestML 84 (early brewing,
+      // flats scale by map level / 100, 0.2-3): Evasion and Armour on the type counted scaled. Affix flats (Veil, Bulwark) are
+      // rolled 85-100% of the tier value in played saves and not map-scaled; counted at the tier value.
       const potent = byEffect('Potent'), linger = byEffect('Lingering'), brim = byEffect('Brimming');
-      const eff = 1 + (potent ? potent.t.Value : 0) / 100;
+      const eff = 1 + ((potent ? potent.t.Value : 0) + (s.q || 0)) / 100;
+      const E8 = p.Early80, mapLv = mapLevelNow();
+      const flatK = B.early && E8 && E8.FlatScaleRef ? Math.max(E8.FlatScaleMin || 0, Math.min(E8.FlatScaleMax || 9, mapLv / E8.FlatScaleRef)) : 1;
+      const scaled = m => m.Mode === 'Flat' && /^(Evasion|Armour|EnergyShield|Life|Mana)$/.test(m.Stat) ? flatK : 1;
       const C = p.Charges.Utility;
       out.seconds = C.Duration * (1 + (linger ? linger.t.Value : 0) / 100) * (1 - (potent ? potent.t.Value2 || 0 : 0) / 100);
       out.charges = { max: C.Max, use: C.PerUse, kill: C.PerKill.map(k => k * (1 + (brim ? brim.t.Value : 0) / 100)) };
-      for (const m of t.Mods || []) out.mods.push(Object.assign({}, m, { Value: (m.Value || 0) * eff }));
-      for (const x of picks) if (x.m.Effect === 'Stat' && x.m.Stat) out.mods.push(Object.assign({}, x.m.Stat, { Value: x.t.Value * (x.m.Sign || 1) * eff }));
+      for (const m of t.Mods || []) out.mods.push(Object.assign({}, m, { Value: (m.Value || 0) * scaled(m) * eff }));
+      for (const x of picks) if (x.m.Effect === 'Stat' && x.m.Stat) out.mods.push(Object.assign({}, x.m.Stat, { Value: x.t.Value * (x.m.Sign || 1) }));
       if (u) for (const l of u.Lines || []) if (l.Effect === 'Stat' && l.Stat) out.mods.push(Object.assign({}, l.Stat, { Value: l.Stat.Value * eff }));
-      if (potent) out.notes.push('Potent\'s increased effect is counted on every line while it is active. Not checked in a fight yet.');
+      if (eff > 1) out.notes.push('Potent and Quality raise the potion\'s own lines by ' + Math.round((eff - 1) * 100) + '% (not its affix lines; game sheets, 16 Nov 2026).');
+      if (flatK !== 1 && (t.Mods || []).some(m => scaled(m) !== 1)) out.notes.push('The potion\'s own flat Evasion or Armour scales with your best map level: x' + fmt(flatK) + ' at level ' + mapLv + '.');
       if (t.OnDrinkCharge) out.notes.push('Gives 1 ' + cap(t.OnDrinkCharge) + ' when drunk: set it under Fury, Insight, Resolve in Damage Analysis.');
     } else {
       // Life and Mana: recovery and duration after the "how it drinks" prefixes.
@@ -4835,11 +4852,13 @@ window.BOBrewery = function (ctx) {
     for (const x of picks) if (x.m.Effect === 'Charge') out.notes.push('Gives ' + x.t.Value + ' ' + cap(x.m.Charge) + ' when drunk: set it under Fury, Insight, Resolve in Damage Analysis.');
     if (byEffect('SpendFury')) out.notes.push('Fury Unbottled is not in the damage sim (it depends on how much Fury you spend).');
     if (byEffect('Bloodlust')) out.notes.push('Bloodlust from drinking: set your stacks under Bloodlust in Damage Analysis.');
-    if (B.early && out.mods.some(m => m.Mode === 'Flat')) out.notes.push('Flat values scale with Rupture Level in this build of the game (RL / 100, 0.2x to 3x). Shown and counted unscaled here.');
     return out;
   }
   const cap = s => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
   const isOpen = i => B.rl >= slotOpenAt(i);
+  // The level a potion's own flat lines scale with: the belt's, else the character's best map level (its save), else the
+  // belt's Rupture Level.
+  function mapLevelNow() { if (B.ml != null) return B.ml; const ch = Bid ? charById(Bid) || (ctx.current && ctx.current()) : null; return ch && +ch.mapLevel > 0 ? +ch.mapLevel : B.rl; }
 
   // What changes damage: the sim's stats, in plain words.
   const DMG = { Damage: 'Damage', CurseEffect: 'effect of your Curses', ManaCost: 'Mana Cost of Skills', LifeLeech: 'Damage Leeched as Life' };
@@ -4895,6 +4914,7 @@ window.BOBrewery = function (ctx) {
       if (v.Oath) h += modRow(i, 'oath', 0, 'Oath', s.oath, role, used);
       if (v.Core) h += modRow(i, 'core', 0, 'Core', s.core, role, used);
     }
+    if (role === 'Utility' && (s.type || s.unique)) h += field('Quality', '<select data-slot="' + i + '" data-f="q">' + [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20].map(q => opt(q, '+' + q + '%', (s.q || 0) === q)).join('') + '</select>');
     if (role === 'Utility' && (s.type || s.unique)) h += field('Pours itself', '<select data-slot="' + i + '" data-f="pour">' + opt('', 'No (drink it yourself)', !s.pour) + (p.Pour || []).map(x => opt(x.Id, cap(x.Name), s.pour === x.Id)).join('') + '</select>');
     if (!po) return h + '<p class="hint">Pick a potion for this slot.</p></div>';
 
@@ -4923,8 +4943,10 @@ window.BOBrewery = function (ctx) {
     if (!p || !p.Types) { el.innerHTML = h + '<div class="card"><p class="hint">This game data has no potions. Use game files from the 6 Nov 2026 patch or later.</p></div>'; return; }
     const joins = B.early && p.Early80 ? p.Early80.Open : p.Unlock.Open;
     h += '<div class="card bw-top"><div class="bw-row">' + field('Rupture Level', '<input type="number" id="bwRl" min="0" max="999" value="' + esc(B.rl) + '">') +
+      field('Best map level <span class="meta">flat Evasion and Armour on a potion scale with it</span>', '<input type="number" id="bwMl" min="0" max="999" placeholder="' + esc(mapLevelNow()) + '" value="' + esc(B.ml != null ? B.ml : '') + '">') +
       '<label class="check-row"><input type="checkbox" id="bwEarly"' + (B.early ? ' checked' : '') + '><span>Early brewing <span class="meta">On in the current game: Brewmaw at RL ' + (p.Early80 ? p.Early80.Open : 20) + ', slot 4 at RL ' + (p.Early80 ? p.Early80.Slot4 : 60) + ', lower tier gates</span></span></label></div>' +
       (B.rl < joins ? '<p class="hint">Brewmaw joins your wagon at Rupture Level ' + joins + '. Until then you have the plain Life and Mana potions.</p>' : '') + '</div>';
+    if (ch && ctx.score) h += bestCard();
     h += '<div class="bw-grid">' + [0, 1, 2, 3].map(slotCard).join('') + '</div>';
     const c = p.Costs || {};
     h += '<div class="card"><h2>Brewmaw\'s prices</h2><dl class="kv bw-prices">' + PRICE.filter(([k]) => c[k] && Object.keys(c[k]).length).map(([k, label]) =>
@@ -4933,10 +4955,142 @@ window.BOBrewery = function (ctx) {
     el.innerHTML = h;
   }
 
+  // ---------- best potions for damage ----------
+  // Fills the utility slots with the potions that give the most damage to the skill on the Damage tab, against the enemy
+  // set there (ctx.score(potionList) -> that skill's DPS). All by the sim: (1) each utility line on its own, then the ones
+  // that did nothing again with every helpful line beside them (Evasion only pays with an Evasion "Answer" line), (2) every
+  // potion type and unique with the helpful lines at the best tier this Rupture Level opens, in the roomiest vessel,
+  // (3) the best pairs for slots 3 and 4. Lines the sim cannot count (Bloodlust, Guardian hits, Flagellant) are never
+  // picked; room left over is the player's. The two slots hold different potions (not checked in game).
+  // Charges from drinking (Fury / Insight / Resolve Brew, Vowbreaker's "1 Fury on drink") count here only, as an
+  // ASSUMPTION: each drink's charges are held on top of the count set on the Damage tab, every open slot's added up.
+  // Nothing in the game data, rules.json, switches.json or formulas.md gives a charge cap or how long a charge lasts, and
+  // no log line shows potion charges (checked 16 Nov 2026). Players do build for it: build guides on the Discord (7, 13
+  // and 15 Nov 2026) ask for "Gain 2 Fury on Use", "an extra fury and insight charge mod" and "permanent fury on utility
+  // flasks". The damage sim itself still counts only the charges the player sets.
+  const clone = x => JSON.parse(JSON.stringify(x));
+  function chargesOf() {
+    const out = {};
+    for (let i = 0; i < 4; i++) {
+      if (!isOpen(i)) continue;
+      const s = B.slots[i], u = s.unique && uniqueById(s.unique), t = typeById(u ? u.Type : s.type); if (!t) continue;
+      if (t.OnDrinkCharge) out[t.OnDrinkCharge] = (out[t.OnDrinkCharge] || 0) + 1;
+      if (u) continue;
+      for (const x of [...s.pre, ...s.suf, s.oath, s.core].filter(Boolean)) {
+        const m = modById(x.id), tr = m && (m.Tiers || []).find(z => z.Tier === x.tier);
+        if (m && tr && m.Effect === 'Charge' && m.Charge) out[m.Charge] = (out[m.Charge] || 0) + tr.Value;
+      }
+    }
+    return out;
+  }
+  function scoreOf(belt, fix, noCharges) { const keepB = B; B = belt; try { return ctx.score(listNow(fix), noCharges ? null : chargesOf()); } finally { B = keepB; } }
+  function chargesIn(belt) { const keepB = B; B = belt; try { return chargesOf(); } finally { B = keepB; } }
+  function nameOf(belt, i) { const keepB = B; B = belt; try { const po = potion(i); return po ? { name: po.name, unique: !!po.unique, lines: po.lines.slice(1).map(l => l.text + (l.tier ? ' (T' + l.tier + ')' : '')), dmg: damageWords(po.mods) } : null; } finally { B = keepB; } }
+  const typeOfSlot = s => s.unique ? (uniqueById(s.unique) || {}).Type : s.type;
+  function* search() {
+    const p = P(), U = [2, 3].filter(isOpen);
+    if (!U.length) { best.msg = 'No utility slot is open at this Rupture Level.'; return; }
+    const blank = clone(B); U.forEach(i => { blank.slots[i] = emptySlot(); });
+    const none = scoreOf(blank); yield;
+    const now = scoreOf(clone(B), true); yield;
+    if (!(none > 0)) { best.msg = 'Pick a damage skill on the Damage tab first.'; return; }
+    best.now = now; best.none = none;
+    const ves = p.Vessels.filter(v => gate(v.MinRL) <= B.rl && !v.CoreOnly).sort((a, b) => (a.Prefixes + a.Suffixes + a.Oath) - (b.Prefixes + b.Suffixes + b.Oath)).pop();
+    const top = m => { const ts = tiersOk(m); return ts.length ? { id: m.Id, tier: ts[ts.length - 1].Tier } : null; };
+    const at = U[0], with1 = s => { const b = clone(blank); b.slots[at] = s; return b; };
+    const slot = (type, unique, pre, suf, oath) => Object.assign(emptySlot(), { type, unique: unique || '', vessel: unique ? '' : ves.Id, pre: pre || [], suf: suf || [], oath: oath || null });
+    const types = p.Types.filter(t => t.Role === 'Utility');
+    const kinds = { Prefix: ves.Prefixes ? modsFor('Utility', 'Prefix') : [], Suffix: ves.Suffixes ? modsFor('Utility', 'Suffix') : [], Oath: ves.Oath ? modsFor('Utility', 'Oath') : [] };
+    // (1) which lines change damage: on a potion that changes nothing itself (the type scoring lowest alone).
+    const alone = [];
+    for (const t of types) { alone.push([t, scoreOf(with1(slot(t.Id)))]); yield; }
+    const quiet = alone.slice().sort((a, b) => a[1] - b[1])[0][0].Id, s0 = scoreOf(with1(slot(quiet))); yield;
+    const put = (s, m) => { const k = top(m); if (!k) return; if (m.Kind === 'Prefix') s.pre.push(k); else if (m.Kind === 'Suffix') s.suf.push(k); else s.oath = k; };
+    const all = [...kinds.Prefix, ...kinds.Suffix, ...kinds.Oath], helps = new Set(), gain = 1 + 1e-4;
+    for (const m of all) { const s = slot(quiet); put(s, m); if (scoreOf(with1(s)) > s0 * gain) helps.add(m.Id); yield; }
+    if (helps.size) {
+      const first = all.filter(m => helps.has(m.Id)), withHelp = () => { const s = slot(quiet); first.forEach(m => put(s, m)); return s; }; // a fixed set, so each line is measured on its own
+      const sh = scoreOf(with1(withHelp())); yield;
+      for (const m of all.filter(m => !helps.has(m.Id) && !(m.Kind === 'Oath' && first.some(x => x.Kind === 'Oath')))) { const s = withHelp(); put(s, m); if (scoreOf(with1(s)) > sh * gain) helps.add(m.Id); yield; }
+    }
+    if (helps.size) kinds.Prefix.filter(m => m.Effect === 'Potent').forEach(m => helps.add(m.Id)); // Potent raises every stat line
+    // (2) each potion with the helpful lines that fit (every way to choose them when there are more than room).
+    const choose = (list, n) => { n = Math.min(n, list.length); const out = []; const go = (from, acc) => { if (acc.length === n) { out.push(acc.slice()); return; } for (let i = from; i < list.length; i++) { acc.push(list[i]); go(i + 1, acc); acc.pop(); } }; go(0, []); return out; };
+    const pre = choose(kinds.Prefix.filter(m => helps.has(m.Id)), ves.Prefixes), suf = choose(kinds.Suffix.filter(m => helps.has(m.Id)), ves.Suffixes);
+    const oaths = [null, ...kinds.Oath.filter(m => helps.has(m.Id))];
+    const cands = [];
+    for (const t of types) for (const a of pre) for (const b of suf) for (const o of oaths) {
+      const s = slot(t.Id, '', a.map(top), b.map(top), o ? top(o) : null);
+      cands.push({ s, v: scoreOf(with1(s)) }); yield;
+    }
+    for (const u of p.Uniques.filter(u => !u.Later && (typeById(u.Type) || {}).Role === 'Utility')) { const s = slot(u.Type, u.Id); cands.push({ s, v: scoreOf(with1(s)) }); yield; }
+    cands.sort((a, b) => b.v - a.v);
+    // (3) the pair: the best few of each kind, two different potions.
+    let res = [];
+    if (U.length < 2) res = cands.slice(0, 3).map(c => ({ slots: { [at]: c.s }, v: c.v }));
+    else {
+      const pool = []; for (const c of cands) { if (pool.filter(x => typeOfSlot(x.s) === typeOfSlot(c.s)).length < 3) pool.push(c); if (pool.length >= 10) break; }
+      for (let x = 0; x < pool.length; x++) for (let y = x + 1; y < pool.length; y++) {
+        if (typeOfSlot(pool[x].s) === typeOfSlot(pool[y].s)) continue;
+        const b = clone(blank); b.slots[U[0]] = pool[x].s; b.slots[U[1]] = pool[y].s;
+        res.push({ slots: { [U[0]]: pool[x].s, [U[1]]: pool[y].s }, v: scoreOf(b) }); yield;
+      }
+    }
+    const seen = new Set();
+    best.results = res.sort((a, b) => b.v - a.v).filter(r => { const k = JSON.stringify(r.slots); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 3)
+      .map(r => { const b = clone(blank); Object.entries(r.slots).forEach(([i, s]) => { b.slots[i] = s; }); return Object.assign(r, { names: Object.keys(r.slots).map(i => [+i, nameOf(b, +i)]), ch: chargesIn(b), vNo: scoreOf(b, false, true) }); });
+    best.nowNo = scoreOf(clone(B), true, true);
+  }
+  function runBest() {
+    if (best && best.run) { best.run = false; best = null; render(); return; }
+    use();
+    if (!ctx.score) return;
+    const job = search(); let n = 0;
+    best = { run: true, n: 0 };
+    const tick = () => {
+      if (!best || !best.run) return;
+      const t = performance.now();
+      try {
+        while (performance.now() - t < 40) { const r = job.next(); n++; if (r.done) { best.run = false; break; } }
+      } catch (e) { best = { msg: 'The search stopped: ' + e.message }; }
+      if (best) best.n = n;
+      render();
+      if (best && best.run) (ctx.soon || setTimeout)(tick);
+    };
+    render(); (ctx.soon || setTimeout)(tick);
+  }
+  function applyBest(k) {
+    const r = best && best.results && best.results[k]; if (!r) return;
+    use();
+    for (const [i, s] of Object.entries(r.slots)) { const old = B.slots[i]; B.slots[i] = Object.assign(clone(s), { pour: typeOfSlot(old) === typeOfSlot(s) ? old.pour : '' }); }
+    best = null; done();
+  }
+  const pctTxt = (a, b) => { const v = (a / b - 1) * 100; return (v >= 0 ? '+' : '') + (Math.abs(v) < 10 ? v.toFixed(1) : Math.round(v)) + '%'; };
+  // The charge part of a result: what it adds, and the result without it (the Damage tab counts potion charges only
+  // when they are set there by hand).
+  function chargeNote(r) {
+    const c = Object.entries(r.ch || {}).filter(([, n]) => n > 0); if (!c.length) return '';
+    return '<span class="meta">Counts ' + c.map(([id, n]) => '+' + n + ' ' + cap(id)).join(', ') + ' from drinking (not checked in game); without them ' + pctTxt(r.vNo, best.nowNo) + '. Damage Analysis counts these only if you add them under Fury, Insight, Resolve.</span>';
+  }
+  function bestCard() {
+    let h = '<div class="card bw-best"><h2>Best potions for damage</h2><p class="hint">Tries every utility potion and line this Rupture Level opens and keeps what gives ' + esc(ctx.skillName ? ctx.skillName() || 'your skill' : 'your skill') + ' the most damage against the enemy set on the Damage tab. Lines the sim cannot count (Bloodlust, Flagellant) are not picked; leftover line room is yours. Slots 3 and 4 get different potions.</p>' +
+      '<p class="hint">Charges from drinking (Fury, Insight, Resolve) count here as held on top of the ones you set on the Damage tab. Not checked in game: how long they last and how many you can hold are not known. Hunter&#39;s (charges when you hit a Guardian) keeps a potion up through a boss fight; the sim already counts potions as always up, so it is a good pick for leftover room.</p>';
+    h += '<button class="btn small" type="button" data-bw-best="1">' + (best && best.run ? 'Stop (' + best.n + ' tried)' : 'Find best damage potions') + '</button>';
+    if (best && best.msg) h += '<p class="hint">' + esc(best.msg) + '</p>';
+    if (best && best.results) {
+      if (!best.results.length || best.results[0].v <= best.none * 1.0001) h += '<p class="hint">No utility potion changes this skill\'s damage.</p>';
+      else h += '<ol class="bw-best-list">' + best.results.map((r, k) => '<li><div class="bw-best-head"><b>' + pctTxt(r.v, best.now) + '</b> <span class="meta">vs your belt now, ' + pctTxt(r.v, best.none) + ' vs no utility potions</span> <button class="btn small ghost" type="button" data-bw-use="' + k + '">Use these</button></div>' + chargeNote(r) +
+        r.names.map(([i, n]) => n ? '<div class="bw-best-pot"><span class="meta">Slot ' + (i + 1) + '</span> <b class="bw-name' + (n.unique ? ' unique' : '') + '">' + esc(n.name) + '</b>' + (n.lines.length ? '<span class="bw-belt-line">' + esc(n.lines.join(' · ')) + '</span>' : '') + '</div>' : '').join('') + '</li>').join('') + '</ol>';
+    }
+    return h + '</div>';
+  }
+
   function bind() {
     const el = $('#breweryPane'); if (!el || el.dataset.bound) return; el.dataset.bound = '1';
     el.addEventListener('change', onChange);
     el.addEventListener('click', e => {
+      if (e.target.closest('[data-bw-best]')) return runBest();
+      const u = e.target.closest('[data-bw-use]'); if (u) return applyBest(+u.dataset.bwUse);
       if (!e.target.closest('[data-bw-fromsave]')) return;
       use(); if (!Bid) return;
       try { localStorage.removeItem(KEY(Bid)); } catch (err) { /* storage off */ }
@@ -4949,12 +5103,14 @@ window.BOBrewery = function (ctx) {
       const t = e.target;
       if (t.id === 'bwRl') { B.rl = Math.max(0, Math.min(999, Math.round(+t.value || 0))); return done(); }
       if (t.id === 'bwEarly') { B.early = t.checked; return done(); }
+      if (t.id === 'bwMl') { B.ml = t.value === '' ? null : Math.max(0, Math.min(999, Math.round(+t.value || 0))); return done(); }
       const i = +t.dataset.slot, f = t.dataset.f, k = +t.dataset.k || 0; if (!f || !B.slots[i]) return;
       const s = B.slots[i];
       if (f === 'type') { s.type = t.value; if (s.type && !s.vessel) s.vessel = 'clay'; }
       else if (f === 'unique') { s.unique = t.value; }
       else if (f === 'vessel') s.vessel = t.value;
       else if (f === 'pour') s.pour = t.value;
+      else if (f === 'q') s.q = Math.max(0, Math.min(20, +t.value || 0));
       else if (f === 'pre' || f === 'suf') s[f][k] = t.value ? { id: t.value, tier: 99 } : null;
       else if (f === 'pret' || f === 'suft') s[f.slice(0, 3)][k].tier = +t.value;
       else if (f === 'oath' || f === 'core') s[f] = t.value ? { id: t.value, tier: 99 } : null;
@@ -4962,7 +5118,7 @@ window.BOBrewery = function (ctx) {
       done();
     }
   }
-  function done() { use(); B.slots.forEach((_, i) => { if (P()) tidy(i); }); keep(); render(); renderOv(); if (ctx.onChange) ctx.onChange(); if (ctx.redraw) ctx.redraw(); }
+  function done() { use(); if (best && !best.run) best = null; B.slots.forEach((_, i) => { if (P()) tidy(i); }); keep(); render(); renderOv(); if (ctx.onChange) ctx.onChange(); if (ctx.redraw) ctx.redraw(); }
 
   // ---------- slot overlay: click a belt slot on the Character tab or Gear view to edit it (same editor as the Brewery tab) ----------
   let ov = null, ovSlot = -1;
@@ -5036,10 +5192,15 @@ window.BOBrewery = function (ctx) {
   function simPotions() {
     if (!P() || !P().Types) return [];
     use(); if (!Bid) return [];
+    return listNow(true);
+  }
+  // The sim's potion list for B as it is (tidy: fix it to the vessel and gates first; the search builds valid slots itself
+  // and screens lines past the vessel's room).
+  function listNow(fix) {
     const out = [];
     for (let i = 0; i < 4; i++) {
       if (!isOpen(i)) continue;
-      tidy(i);
+      if (fix) tidy(i);
       const po = potion(i); if (!po || !po.mods.length) continue;
       out.push({ key: 'potion:' + (i + 1), label: 'Potion · ' + po.name + ' (slot ' + (i + 1) + ')', mods: po.mods.map(m => ({ Stat: m.Stat, Mode: m.Mode, Tags: m.Tags || [], Value: Math.round(m.Value * 1000) / 1000 })) });
     }
@@ -5048,6 +5209,9 @@ window.BOBrewery = function (ctx) {
 
   // For app.js: a character's belt for a code (null when it has none), and storing one from a code or a copied plan.
   const belt = id => { use(); return id && id === Bid ? (Bstored || Bsave ? JSON.parse(JSON.stringify(B)) : null) : read(id) || fromItems(charById(id)); };
+  // A belt the player made or changed here (kept in this browser), not one read from the character's save: the Save Creator
+  // writes this one in place of the save's own potions.
+  const ownBelt = id => { use(); return id && id === Bid ? (Bstored ? JSON.parse(JSON.stringify(B)) : null) : read(id); };
   function setBelt(id, b) { const c = cleanBelt(b); if (!id || !c) return; write(id, c); if (id === Bid) { B = c; Bstored = true; } }
   const copyBelt = (from, to) => { const b = belt(from); if (b) setBelt(to, b); };
 
@@ -5069,7 +5233,7 @@ window.BOBrewery = function (ctx) {
     return h + '</div><button class="btn small ghost" type="button" data-goto-brewery="1">Edit potions in the Brewery</button></div>';
   }
 
-  return { render: () => { bind(); render(); }, simPotions, belt, setBelt, copyBelt, beltCard, openSlot };
+  return { render: () => { bind(); render(); }, simPotions, belt, ownBelt, setBelt, copyBelt, beltCard, openSlot };
 };
 
 ;
@@ -6813,12 +6977,20 @@ window.BOItemSearch = function (ctx) {
       return '<span title="' + esc(skillName(x.simSkill)) + ' (the skill this hero has dealt the most damage with), sim estimate">' + short(x.sim) + '</span>' +
         (x.simSkill && x.simSkill !== r.main_skill ? '<br><small class="meta">' + esc(skillName(x.simSkill)) + '</small>' : '');
     };
+    // Patch 78 (developer's notes, 15 Nov 2026): "Rupture Level now ends at 200, and past it the climb never ends ... The ladder
+    // ranks Rupture Level, then Riven Tier, then time". The API had no Riven Tier field yet when this was written; riven_tier is
+    // a guess at its name, read only when it is a number (unknown fields are ignored otherwise).
+    const riven = r => (r && typeof r.riven_tier === 'number' && r.riven_tier >= 0) ? r.riven_tier : null;
+    const rupText = r => (r.rupture_level || 0) + (riven(r) != null ? ' · T' + riven(r) : '');
+    // Patch 78: "Damage numbers past Rupture 100 now read on that Rupture's own scale, so the numbers are smaller". The scale is
+    // not published, so measured DPS past 100 is not in the sim's unit.
+    const rescaled = rl => +((S.ladder && S.ladder.game_build) || (S.version && S.version.game_build) || 0) >= 78 && (rl || 0) > 100;
     const metric = r => {
       const x = roster()[r.hero];
       if (S.sort === 'sim') return x && x.sim > 0 ? x.sim : null;
       if (S.sort === 'ehp') return x ? x.ehp : null;
       if (S.sort === 'lifees') return x && x.life != null ? x.life + x.es : null;
-      if (S.sort === 'rupture') return r.rupture_level || 0;
+      if (S.sort === 'rupture') return (r.rupture_level || 0) * 1e6 + (riven(r) || 0);
       if (S.sort === 'dps') return r.guardian_dps_median || null;
       if (S.sort === 'level') return r.level || 0;
       return null;
@@ -6838,7 +7010,8 @@ window.BOItemSearch = function (ctx) {
     }
     function header() {
       const rows = (S.ladder && S.ladder.heroes) || [];
-      const deepest = rows.reduce((m, r) => Math.max(m, r.rupture_level || 0), 0);
+      const deepRow = rows.reduce((m, r) => !m || (r.rupture_level || 0) * 1e6 + (riven(r) || 0) > (m.rupture_level || 0) * 1e6 + (riven(m) || 0) ? r : m, null);
+      const deepest = deepRow ? rupText(deepRow) : 0;
       const best = rows.reduce((m, r) => Math.max(m, r.guardian_dps_median || 0), 0);
       const ro = roster();
       const bestSim = rows.reduce((m, r) => Math.max(m, (ro[r.hero] && ro[r.hero].sim) || 0), 0);
@@ -6918,7 +7091,7 @@ window.BOItemSearch = function (ctx) {
           '<td class="num">' + (r.rank || '') + '</td>' +
           '<td class="lad-cls">' + clsIco(r.class) + esc(r.class || '') + (r.class_rank ? ' <small class="meta" title="Rank inside the class">#' + r.class_rank + '</small>' : '') + (r.ascendancy && r.ascendancy !== 'None' ? ' <small class="meta">' + esc(r.ascendancy) + '</small>' : '') + (hc && r.dead ? ' <span class="lad-dead">dead</span>' : '') + '</td>' +
           '<td class="lad-skill">' + (r.main_skill ? '<b>' + (ctx.skillDot && !isHidden(r.main_skill) ? ctx.skillDot(r.main_skill) : '') + esc(skillName(r.main_skill)) + '</b>' : '<span class="meta">–</span>') + '</td>' +
-          '<td class="num">' + (r.level || '') + '</td><td class="num">' + (r.rupture_level || 0) + '</td>' +
+          '<td class="num">' + (r.level || '') + '</td><td class="num">' + rupText(r) + '</td>' +
           '<td class="num">' + (r.guardian_dps_median ? fmt(r.guardian_dps_median) : '<span class="meta">–</span>') + '</td>' +
           '<td class="num lad-sim">' + simCell(r) + '</td>' + ex +
           '<td class="go" aria-hidden="true">' + (r.has_build && r.build ? '›' : '') + '</td></tr>';
@@ -6960,7 +7133,8 @@ window.BOItemSearch = function (ctx) {
       const asc = b.ascendancy || {};
       const measured = m.guardian_kills || m.guardian_losses ?
         '<div class="lad-stats"><div><span>Guardian DPS</span><b>' + fmt(m.guardian_dps_median) + '</b></div><div><span>Kill time</span><b>' + secs(m.guardian_kill_seconds_median) + '</b></div><div><span>Kills / losses</span><b>' + (m.guardian_kills || 0) + ' / ' + (m.guardian_losses || 0) + '</b></div></div>' +
-        '<p class="hint">Measured by the game: medians over the last ' + (m.window_days || 1) + ' day' + ((m.window_days || 1) > 1 ? 's' : '') + ' of Guardian fights' + (m.at ? ', ' + esc(ago(m.at)) : '') + '.</p>'
+        '<p class="hint">Measured by the game: medians over the last ' + (m.window_days || 1) + ' day' + ((m.window_days || 1) > 1 ? 's' : '') + ' of Guardian fights' + (m.at ? ', ' + esc(ago(m.at)) : '') + '.' +
+          (rescaled(h.rupture_level) ? ' Since patch 78 the game shows damage past Rupture 100 on that Rupture\'s own scale, so this number is smaller than the sim\'s and does not compare with heroes under Rupture 100.' : '') + '</p>'
         : '<p class="hint">No Guardian fights measured yet (the game measures them every 6 hours).</p>';
       return '<div class="card lad-hero">' +
         '<div class="lad-hero-head"><div><div class="eyebrow">' + esc(h.league || '') + ' · hero ' + esc(String(h.hero).slice(0, 8)) + '</div><h3 class="lad-hero-title">' + esc(h.class) + (h.ascendancy && h.ascendancy !== 'None' ? ' · ' + esc(h.ascendancy) : '') + ' · level ' + (h.level || '?') + ' · Rupture ' + (h.rupture_level || 0) + '</h3>' +
@@ -7574,7 +7748,9 @@ window.BOFaq = function (ctx) {
       ]));
     h += grid;
     h += card('Rules for all minions', list([
-      'Your own damage lines do not reach minions: only the summon gem\'s own supports, the lines for minions and the defence "more damage per 1,000" lines count.',
+      +GD.apiBuild >= 78
+        ? 'Your own damage lines do not reach minions: only the summon gem\'s own supports, the lines for minions, half of the defence "more damage per 1,000" lines and the passive tree\'s and Dragonling\'s "physical as extra" element lines count (patch 78).'
+        : 'Your own damage lines do not reach minions: only the summon gem\'s own supports, the lines for minions and the defence "more damage per 1,000" lines count.',
       'Harmony: more damage for each different kind of minion you command, up to 4 kinds.',
       'One army across all your summon skills: 40 in all, and the oldest go first (game log, 6 Nov 2026).',
       'Grave Call: 30% more damage and 20% faster for 4 s after each cast. The game\'s skill panel leaves it out.',
@@ -9619,6 +9795,12 @@ window.BOCharacter = function (ctx) {
   const apiBuildAtLeast = (GD, n, day) => GD.apiBuild ? +GD.apiBuild >= n : String(GD.filesAt || '') >= day;
   const is072 = GD => apiBuildAtLeast(GD, 72, '2026-11-13T01');
   const is073 = GD => apiBuildAtLeast(GD, 73, '2026-11-13T20');
+  // Patch 78 (developer's patch notes, pasted by the owner 15 Nov 2026). Switches on with the API's game data build 78.
+  const is078 = GD => apiBuildAtLeast(GD, 78, '2026-11-16T00');
+  // Patch 78 notes: "Minions now take half of your defence to damage bonus (more damage per 1,000 Armour, Life and Energy
+  // Shield). Golems stay the tanky damage dealers they are, just without billions." Taken as half of each defence-engine line.
+  // Not checked against a minion panel yet.
+  const minionDefShare = GD => is078(GD) ? 0.5 : 1;
   // Patch 73 notes: "On a Guardian only your strongest damage taken effect counts". The game data carries it as a switch
   // (scaling.json Meta.bGuardianStrongestTaken: false in build 70, true in build 73), read from there when present.
   const guardianStrongestTaken = GD => { const v = ((GD.scaling || {}).Meta || {}).bGuardianStrongestTaken; return v != null ? !!v : is073(GD); };
@@ -9718,6 +9900,7 @@ window.BOCharacter = function (ctx) {
       // so the Brewery (brewery.js) and the Save Creator read both alike.
       potItems: savePotions(R),
       rupture: Math.max(+((R.RiftMap || {}).BestML) || 0, +((R.RiftMap || {}).RivenOpen) || 0), // Rupture Level as creator.js ruptureNow()
+      mapLevel: +((R.RiftMap || {}).BestML) || 0, // best map level: a potion's own flat Evasion scales with it (game tooltip, 16 Nov 2026: 1150 x 0.84 = 966 at BestML 84)
     };
   }
   const POT_SLOTS = ['LifeFlask', 'ManaFlask', 'UtilityPotion1', 'UtilityPotion2'];
@@ -10617,13 +10800,14 @@ window.BOCharacter = function (ctx) {
       // x1.0103: the minions' panel DPS takes the same defence-engine lines as your own hits. Only the defence lines (armour,
       // evasion, ES, life, block) go over; mana and attack-speed lines were not part of that test. The ratio is the engine's
       // own: log sheet armour 1,676 -> 2,262, (1 + 1.8% x 2.262) / (1 + 1.8% x 1.676) = 1.01025.
-      const dEng = engine.filter(e => e.def);
+      // Patch 78: minions take half (minionDefShare).
+      const dShare = minionDefShare(GD), dEng = engine.filter(e => e.def).map(e => Object.assign({}, e, { v: e.v * dShare }));
       if (dEng.length) {
         const U = sum(dEng.filter(e => !e.types.length).map(e => e.v)), byType = {};
         for (const e of dEng) for (const t of e.types) byType[t] = (byType[t] || 0) + e.v;
         if (U) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: U, v2: 0, local: false, src: 'Damage engine (defences, added together, patch 0.56.5)', key: 'engine' });
         for (const [t, S] of Object.entries(byType)) mods.push({ stat: 'Damage', mode: 'More', tags: [t], v: ((1 + (U + S) / 100) / (1 + U / 100) - 1) * 100, v2: 0, local: false, src: 'Damage engine, ' + t + ' only', key: 'engine' });
-        res.notes.push('Damage engine on minions: ' + dEng.map(e => e.src.replace(/^[^·]*·\s*/, '') + ' +' + e.v.toFixed(1) + '%').join(', ') + ' (game panel and log, 11 Nov 2026).');
+        res.notes.push('Damage engine on minions: ' + dEng.map(e => e.src.replace(/^[^·]*·\s*/, '') + ' +' + e.v.toFixed(1) + '%').join(', ') + ' (game panel and log, 11 Nov 2026)' + (dShare < 1 ? '; half for minions from patch 78 (patch notes)' : '') + '.');
       }
       return minionSheet(GD, ch, sk, res, mods, use, attr, L, o);
     }
@@ -11205,8 +11389,11 @@ window.BOCharacter = function (ctx) {
         // build 76 switches r99.META bConverge99 = True, fConvergePerSec99 0.02, fConvergeMax99 0.5). Counted at its full 50%
         // (reached after 25 s on the target), on Rares and Guardians only, when this is the only Spark skill on the bar.
         // Assumed to multiply the strike rate apart from the increased Spark strike rate lines. Not yet seen in a tooltip or the log.
-        if (ruleNum(GD, 'r99.META.bConverge99', 0) && /spark/i.test(sk.Name || '') && o.convergence !== false && ['rare', 'boss'].includes(o.enemyRarity || 'rare')) {
-          const isSparkSk = id => { const k = GD.skills[lc(id)]; return k && k.Delivery === 'Brand' && /spark/i.test(k.Name || ''); };
+        // Wayward Orb is a Spark skill too (build 77 log, 15 Nov 2026, Venom Spark + Wayward Orb on one Necromancer: "Spark87: ON ...
+        // 5 spark skills live 7.0 s longer" = the 5 Delivery Brand skills, and "SparkHost70: venom_spark strikes a host with 1 other
+        // Spark skill(s) (wayward_orb) = x0.70", the same for wayward_orb). So every Brand skill counts, not only "Spark" names.
+        if (ruleNum(GD, 'r99.META.bConverge99', 0) && o.convergence !== false && ['rare', 'boss'].includes(o.enemyRarity || 'rare')) {
+          const isSparkSk = id => { const k = GD.skills[lc(id)]; return k && k.Delivery === 'Brand'; };
           const kinds = o.sparkSkills > 0 ? Math.floor(o.sparkSkills) : new Set((ch.hotbar || []).map(lc).filter(isSparkSk).concat(lc(skillId))).size;
           const cMax = ruleNum(GD, 'r99.META.fConvergeMax99', 0.5), cPer = ruleNum(GD, 'r99.META.fConvergePerSec99', 0.02);
           if (kinds === 1 && cMax > 0) {
@@ -11240,11 +11427,11 @@ window.BOCharacter = function (ctx) {
         // Several Spark skills on one enemy (public API game-data/rules.json, game data build 70, read 12 Nov 2026:
         // "r96.META.fSparkHost70 = 0.6: a monster hit by Sparks of K different Spark skills takes each strike
         // x(1 + (K-1) x f) / K"): 2 skills x0.80 a strike, 3 x0.733, 4 x0.70. K = the Spark skills on the bar (the four
-        // Sparks; the Living Orb is not counted: the rule names Spark skills), assumed all kept up on this enemy.
+        // Sparks and Wayward Orb; the Living Orb is not counted: the rule names Spark skills), assumed all kept up on this enemy.
         // From the developer's rules file, not yet seen in a tooltip or the log. o.sparkSkills sets K by hand.
         if (is070(GD)) {
           const f = ruleNum(GD, 'r96.META.fSparkHost70', 0.6);
-          const isSpark = id => { const k = GD.skills[lc(id)]; return k && k.Delivery === 'Brand' && /spark/i.test(k.Name || ''); };
+          const isSpark = id => { const k = GD.skills[lc(id)]; return k && k.Delivery === 'Brand'; }; // Wayward Orb included (log above)
           const K = o.sparkSkills > 0 ? Math.floor(o.sparkSkills) : isSpark(skillId) ? new Set((ch.hotbar || []).map(lc).filter(isSpark).concat(lc(skillId))).size : 1;
           if (K > 1 && f < 1) {
             const share = (1 + (K - 1) * f) / K;
@@ -12375,7 +12562,14 @@ window.BOCharacter = function (ctx) {
     };
     const scaled = {}; for (const d of DT) { const k = moreFor(d); scaled[d] = [parts[d][0] * k, parts[d][1] * k]; }
     // "Gain X% of physical as extra fire" (Added Fire on a golem): taken from the physical after its own more lines.
-    for (const m of mods) if (fromSupport(m) && m.stat === 'DamageAsExtra' && m.mode === 'Flat') {
+    // Patch 78 notes (from players' reports): "the element lines of your passive tree (Venomcraft turning physical into extra
+    // poison, the Poison Dragonling adding poison damage, and the fire, cold and lightning ones) now reach your minions again".
+    // Taken as the tree's and the Dragonling's "physical as extra <element>" lines (Venomcraft 10% Poison, Poison Aspect 6%,
+    // Sanctified, Glass Saints, Black Ice, Frost Relic, Pitch Battery, Tireless Vigil, Sunfire, Blade Hymn ...), when the tags
+    // they name besides the elements fit the summon skill. Their increased-damage lines are not counted (the notes name only the
+    // extra damage). Not checked against a minion panel yet.
+    const treeExtra = m => is078(GD) && (m.key === 'passives' || m.key === 'dragon') && !!fit(m);
+    for (const m of mods) if ((fromSupport(m) || treeExtra(m)) && m.stat === 'DamageAsExtra' && m.mode === 'Flat') {
       const t = splitTags(m.tags).types; if (t.length < 2) continue;
       scaled[t[1]][0] += scaled[t[0]][0] * m.v / 100; scaled[t[1]][1] += scaled[t[0]][1] * m.v / 100; use(m, 'minion');
     }
@@ -17571,7 +17765,7 @@ window.BOStartApp = function () {
   // The Save Creator tab (creator.js): edits an offline save and hands back a new file.
   creator = window.BOCreator({
     GD, $, esc, planner, savePath: SAVE_PATH, sim: S, skillDot,
-    chars: () => CHARS, importCode: importAnyCode, belt: id => brewery && brewery.belt(id),
+    chars: () => CHARS, importCode: importAnyCode, belt: id => brewery && brewery.belt(id), ownBelt: id => brewery && brewery.ownBelt(id),
     preview: ch => { addChars([ch], 'file', ch.id); showTab('damage'); saveTip('Showing ' + ch.name + ' as the Save Creator would write it. Your save file is unchanged until you put the new one in place.'); },
   });
   // The Fossil Planner tab (fossil.js): idol layouts for the Fossil grid.
@@ -17591,7 +17785,18 @@ window.BOStartApp = function () {
       return { id: ch.id, name: ch.name, level: ch.level, main, bar: (ch.hotbar || []).map(sk).filter(Boolean), crit, res, cap: (GD.scaling.Hero || {}).ResistCap || 75 };
     } });
   // The Brewery tab (brewery.js): Brewmaw's potions; the active ones count in the damage sim.
-  brewery = window.BOBrewery({ $, esc, gd: () => GD, current: () => st.ch, byId: id => CHARS.find(c => c.id === id) || null, onChange: () => { breweryDirty = true; },
+  // score: the Damage tab's skill DPS against its enemy with these potions (the Brewery's best-potions search). The
+  // per-slot potion switches are cleared so every candidate counts.
+  // extra: charges from drinking ({ fury: 2, ... }), added to the ones set on the Damage tab (the search's assumption, brewery.js).
+  const potionScore = (list, extra) => {
+    if (!st.ch || !st.skill) return 0;
+    const o = opts({ potions: list }); o.off = new Set([...st.off].filter(k => !k.startsWith('potion:')));
+    if (extra) { o.charges = Object.assign({}, st.charges); for (const [id, n] of Object.entries(extra)) o.charges[id] = (+o.charges[id] || 0) + n; }
+    const r = S.calcSkill(GD, st.ch, st.skill, o);
+    return r && !r.error && !r.unsupported ? r.totalDps || 0 : 0;
+  };
+  brewery = window.BOBrewery({ $, esc, gd: () => GD, current: () => st.ch, byId: id => CHARS.find(c => c.id === id) || null, score: potionScore, soon,
+    skillName: () => st.skill ? ((GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill) : '', onChange: () => { breweryDirty = true; },
     redraw: () => { if (character) character.render(); if (planner) planner.render(); } }); // the belt cards behind the slot overlay
   const skillIcon = id => (window.GEM_ICONS && window.GEM_ICONS.idx[String(id).toLowerCase()] != null ? skillDot(id) : ''); // the icon only, no colour dot fallback
   scaling = window.BOScaling({ $, esc, gd: () => GD, skillIcon, tip: id => planner.skillTip(null, id, false, true) }); // hover tooltip on a card's title (the Build tab's skill tooltip, game data only)

@@ -1584,6 +1584,15 @@ body.lootfilter-page #buildSummary { display: none !important; } /* the characte
 .bw-belt-slot > div { display: grid; gap: 2px; min-width: 0; }
 .bw-belt-slot .bw-name { margin: 0; font-size: 14px; }
 .bw-belt-line { font-size: 12px; color: var(--muted); }
+/* best potions for damage (brewery.js bestCard) */
+.bw-best .hint { margin-top: 0; }
+.bw-best-list { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.bw-best-list > li { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); display: grid; gap: 6px; }
+.bw-best-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.bw-best-head > b { color: var(--good); font-size: 16px; }
+.bw-best-head .btn { margin-left: auto; }
+.bw-best-pot { display: grid; gap: 2px; min-width: 0; }
+.bw-best-pot .bw-name { margin: 0; font-size: 14px; }
 
 /* Skill Scaling tab (scaling.js): a square per skill, coloured like its gem */
 .sc-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin: 14px 0; }

@@ -314,7 +314,8 @@ window.PAGE_LANGS = {
     // taken does NOT count, even with the notable it hangs from taken: owner's curse tooltips 17 Nov 2026 (Shrimpskelemage, Sentence of Rot 87.8% = 45 x 1.951, Woe of
     // Withering x1.951 x 1.25) show 95% increased curse effect, the character's lines minus Oath of the Dread Word's 5%, sworn in the save at
     // om_necromancer_blight, whose notable (grave_sermon_n0) is taken but whose seat node is not.
-    // Not in the API file: Oaths the seats added later (oath_long_fight, oath_grave_choir, oath_shepherd in the owner's saves): not counted. Masteries with no seat are left out: the build 79 tree has no socket for them.
+    // Not in the API file: Oaths the seats added later (oath_long_fight, oath_grave_choir, oath_shepherd in the owner's saves): not counted
+    // unless EXTRA_OATHS below has them from an in-game tooltip. Masteries with no seat are left out: the build 79 tree has no socket for them.
     const seats = Object.values(tree.nodes || {}).filter(n => /^om103_/.test(n.Id));
     if (seats.length) {
       const old = Object.assign({}, masteries);
@@ -326,6 +327,39 @@ window.PAGE_LANGS = {
         if (!base) continue;
         masteries[id] = { Id: id, Name: s.Name, X: s.X, Y: s.Y, Notables: [s.Id], Class: base.Class || '', Oaths: base.Oaths.slice(), Seat: s.Id };
       }
+    }
+    // Oaths the game offers that the API's oath_masteries.json lacks, read from the in-game Oath panel. Owner's tooltip, 16 Nov 2026
+    // (Spin_win, Mastery of Fury at om_warrior_fury_c4): six Oaths, the file's four plus these two. Spin_win's Maximum Life sheet the
+    // same day shows "Increased (Vows and charges) +8%" = Deep Breath 5 + Long Fight 3 (5,868 = 1,822.5 x 3.22; without it 5,813).
+    // Taken as offered at every seat of the mastery's name (one seat seen each). Kept only while the API file does not have them.
+    const EXTRA_OATHS = {
+      'Mastery of Fury': [
+        { Id: 'oath_long_fight', Name: 'Oath of the Long Fight', Text: '3% increased maximum Life and 6% increased Melee damage', Vow: '', Mods: [{ Stat: 'Life', Mode: 'Inc', Tags: [], Value: 3 }, { Stat: 'Damage', Mode: 'Inc', Tags: ['Melee'], Value: 6 }] },
+        { Id: 'oath_crushing_blow', Name: 'Oath of the Crushing Blow', Text: '15% increased critical strike chance with Melee skills', Vow: '', Mods: [{ Stat: 'CritChance', Mode: 'Inc', Tags: ['Melee'], Value: 15 }] },
+      ],
+      // Owner's tooltip, 16 Nov 2026 (Nectest, Mastery of the Legion): the file's four plus Shepherd and Grave Choir.
+      'Mastery of the Legion': [
+        { Id: 'oath_shepherd', Name: 'Oath of the Shepherd', Text: '3% increased maximum Life and your minions have 8% increased maximum Life', Vow: '', Mods: [{ Stat: 'Life', Mode: 'Inc', Tags: [], Value: 3 }, { Stat: 'MinionLife', Mode: 'Inc', Tags: [], Value: 8 }] },
+        { Id: 'oath_grave_choir', Name: 'Oath of the Grave Choir', Text: 'Your Curses are 5% stronger and your minions deal 5% increased damage', Vow: '', Mods: [{ Stat: 'CurseEffect', Mode: 'Inc', Tags: [], Value: 5 }, { Stat: 'MinionDamage', Mode: 'Inc', Tags: [], Value: 5 }] },
+      ],
+      // Owner's tooltips, 16 Nov 2026 (Oath panels of Mastery of Dawn, the Snare and Stillness). Ids: the keys in the game's en.locres.
+      // With these, all 8 Oath names the game's text has beyond the API file are in.
+      'Mastery of Dawn': [
+        { Id: 'oath_high_sun', Name: 'Oath of the High Sun', Text: '15% increased critical strike chance with Holy skills', Vow: '', Mods: [{ Stat: 'CritChance', Mode: 'Inc', Tags: ['Holy'], Value: 15 }] },
+        { Id: 'oath_dawn_guard', Name: 'Oath of the Dawn Guard', Text: '6% increased Holy damage and 3% increased maximum Life', Vow: '', Mods: [{ Stat: 'Damage', Mode: 'Inc', Tags: ['Holy'], Value: 6 }, { Stat: 'Life', Mode: 'Inc', Tags: [], Value: 3 }] },
+      ],
+      // Written as two lines like the file's own Oath of the Patient Hunter ("8% increased Trap and Totem damage").
+      'Mastery of the Snare': [
+        { Id: 'oath_hidden_wire', Name: 'Oath of the Hidden Wire', Text: '15% increased critical strike chance with Trap and Totem skills', Vow: '', Mods: [{ Stat: 'CritChance', Mode: 'Inc', Tags: ['Trap'], Value: 15 }, { Stat: 'CritChance', Mode: 'Inc', Tags: ['Totem'], Value: 15 }] },
+      ],
+      'Mastery of Stillness': [
+        { Id: 'oath_settled_blade', Name: 'Oath of the Settled Blade', Text: '+10% to critical strike multiplier with Dash skills', Vow: '', Mods: [{ Stat: 'CritMulti', Mode: 'Flat', Tags: ['Dash'], Value: 10 }] },
+      ],
+    };
+    for (const [name, list] of Object.entries(EXTRA_OATHS)) for (const o of list) {
+      if (oaths[o.Id]) continue;
+      oaths[o.Id] = o;
+      for (const m of Object.values(masteries)) if (m.Name === name && !m.Oaths.includes(o.Id)) m.Oaths.push(o.Id);
     }
 
     const affixes = {};
@@ -17197,8 +17231,8 @@ window.BOStartApp = function () {
   // ---------- Oath Masteries (patch 0.56.8) ----------
   // A mastery socket opens once one of its notables is taken, and holds one sworn Oath (game log + save, 11 Nov 2026;
   // the proof is written out in sim.js collectMods). The sworn Oaths live on the character as oaths = { mastery id: Oath id }.
-  // NOT CHECKED: whether the same Oath can be sworn at two masteries of one name (Mastery of Frost has three sockets
-  // with the same four Oaths). The game keeps 84 Oaths for 318 choices, so the page lets each Oath be sworn once.
+  // Each Oath once on the tree: PROVEN 16 Nov 2026. The game's Oath panel says "One Oath per cluster, and each Oath only once on the
+  // tree" (Nectest, Mastery of the Legion) and marks Oaths sworn at another seat "SWORN ELSEWHERE" (Spin_win, Mastery of Fury).
   const OATH_ONCE = true;
   const masteryOpen = (m, have) => m.Notables.some(n => have.has(n));
   const swornNow = () => new Map(st.ch ? S.swornOaths(GD, st.ch).map(x => [x.mastery.Id, x.oath]) : []);

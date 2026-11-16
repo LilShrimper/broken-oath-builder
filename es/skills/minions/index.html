@@ -46,7 +46,7 @@
 <meta property="og:url" content="https://builder.lilshrimper.dev/es/skills/minions/"><meta property="og:image" content="https://builder.lilshrimper.dev/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=331">
+<link rel="stylesheet" href="../../../style.css?v=332">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -447,6 +447,7 @@
         <label class="field inline tree-search"><input type="text" id="treeSearch" placeholder="Find a node or stat" autocomplete="off"></label>
         <label class="check-row"><input type="checkbox" id="treeHeat" checked><span>Heat map</span></label>
         <button class="btn small ghost" type="button" id="treeBanClear" hidden title="Nodes you marked never take (right-click a node). Click to allow them all again.">Never take: 0 · clear</button>
+        <button class="btn small ghost" type="button" id="treeKeepClear" hidden title="Nodes you marked keep or must take (right-click a node). Click to clear them all.">Keep: 0 · clear</button>
         <button class="btn small ghost" type="button" id="treeUndo">Undo</button>
         <button class="btn small ghost" type="button" id="treeReset">Reset to save</button>
         <button class="btn small" type="button" id="treeCopy">Copy build code</button>
@@ -473,7 +474,7 @@
         <div class="tree-tip" id="treeTip" hidden></div>
         <div class="tree-sheet" id="treeSheet" hidden>
           <div class="tree-sheet-body tree-tip" id="treeSheetBody"></div>
-          <div class="tree-sheet-acts"><button type="button" class="btn small" id="treeSheetAct">Take</button><button type="button" class="btn small ghost" id="treeSheetBan">Never take</button><button type="button" class="tree-sheet-x" id="treeSheetClose" title="Close" aria-label="Close">×</button></div>
+          <div class="tree-sheet-acts"><button type="button" class="btn small" id="treeSheetAct">Take</button><button type="button" class="btn small ghost" id="treeSheetKeep">Keep</button><button type="button" class="btn small ghost" id="treeSheetBan">Never take</button><button type="button" class="tree-sheet-x" id="treeSheetClose" title="Close" aria-label="Close">×</button></div>
         </div>
         <button type="button" class="dragon-btn" id="dragonBtn" title="Dragonling tree" aria-label="Dragonling tree" aria-expanded="false">
           <span class="dragon-art" id="dragonTile" hidden></span>
@@ -609,7 +610,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":331,"at":"2026-11-16T22:38:51.185Z"};
+window.SITE_VERSION = {"v":332,"at":"2026-11-16T22:55:53.491Z"};
 window.SITE_LANG = 'es';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -618,6 +619,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=14188d03","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../../app.js?v=331"></script>
+<script src="../../../app.js?v=332"></script>
 </body>
 </html>

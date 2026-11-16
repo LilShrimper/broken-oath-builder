@@ -1320,7 +1320,12 @@ window.PAGE_LANGS = {
       else if (mods.some(m => m.Mode === 'Trigger' || m.Mode === 'Flag') || (big(n) && mods.some(isUncounted))) why[id] = 'has lines the sim does not count';
       else if (cfg.keepDefence && big(n) && mods.length && !mods.some(dmgish)) why[id] = 'no damage lines';
     }
+    // cfg.keep: node ids the user marked "keep" (a page feature, the damage model is untouched; player request 16 Nov 2026).
+    // A taken one is never refunded or swapped away; an untaken one is a must-take the search routes to before anything else.
+    const keepIds = [...new Set((cfg.keep || []).map(realId))].filter(id => walkable(id));
+    for (const id of keepIds) if (have.has(id)) why[id] = 'you marked it keep';
     const kept = new Set(Object.keys(why));
+    for (const id of keepIds) kept.add(id);
 
     // ---- graph helpers ----
     // Connected part of a set (from the class start).
@@ -1341,6 +1346,21 @@ window.PAGE_LANGS = {
     };
     const pathOf = (b, set, target) => { const p = []; let x = target; while (x && !set.has(x) && x !== s0) { p.push(x); x = b.prev.get(x); } return p.reverse(); };
     const dependents = (set, id) => { const s = new Set(set); s.delete(id); const keep = connected(s); return [...set].filter(x => !keep.has(x)); };
+    // The set plus the shortest paths to every untaken "keep" node, nearest first (null when one cannot be reached).
+    // steps (optional): records each path as a planned step.
+    const withKeeps = (set, steps) => {
+      const s = new Set(set);
+      for (;;) {
+        const left = keepIds.filter(id => !s.has(id)); if (!left.length) return s;
+        const b = bfs(s, v => !!otherAtAltar(s, v));
+        let pick = null, pd = Infinity;
+        for (const t of left) { const d = b.dist.get(t); if (d !== undefined && d < pd) { pick = t; pd = d; } }
+        if (!pick) return null;
+        const path = pathOf(b, s, pick), v0 = steps ? V(s) : 0;
+        for (const x of path) s.add(x);
+        if (steps) steps.push({ nodes: path, cost: path.length, gain: v0 > 0 ? V(s) / v0 - 1 : 0, swapped: null, keep: true });
+      }
+    };
 
     // ---- 1. what each taken node is worth on its own ----
     const own = {};
@@ -1352,7 +1372,7 @@ window.PAGE_LANGS = {
       own[id] = 1 - V(s) / base;
       if (++k % 8 === 0) yield { phase: 'Valuing your nodes', p: k / have.size, q: qVal * k / have.size };
     }
-    const targets = [...have].filter(id => kept.has(id) || own[id] >= OWN_KEEP);
+    const targets = [...have].filter(id => kept.has(id) || own[id] >= OWN_KEEP).concat(keepIds.filter(id => !have.has(id)));
 
     // ---- 3. spend points (used by 2 and 4) ----
     // Damage nodes worth trying, found once.
@@ -1458,22 +1478,39 @@ window.PAGE_LANGS = {
     };
 
     yield { phase: cfg.addOnly ? 'Planning points' : 'Re-routing', p: 0, q: qVal };
-    const starts = [];
-    if (budget > have.size) starts.push(new Set(have)); // free points: spend them on the tree as it is
+    const starts = [], fits = s => !!s && s.size <= budget;
+    if (budget > have.size) { const s = withKeeps(have); if (fits(s)) starts.push(s); } // free points: spend them on the tree as it is
     if (!cfg.addOnly) {
-      const pruned = prune(have); if (pruned.size < have.size) starts.push(pruned);
-      const rebuilt = rebuild(); if (rebuilt && rebuilt.size <= budget) starts.push(rebuilt);
+      const pruned = prune(have); if (pruned.size < have.size) { const s = withKeeps(pruned); if (fits(s)) starts.push(s); }
+      const rebuilt = rebuild(); if (fits(rebuilt)) starts.push(rebuilt);
+      // A must-take node too far for the points: drop the weakest leaves (never a kept one) until the tree fits.
+      if (keepIds.some(id => !have.has(id)) && !starts.length) {
+        const s = rebuilt || withKeeps(prune(have));
+        while (s && s.size > budget) {
+          let low = null;
+          for (const id of s) if (!kept.has(id) && dependents(s, id).length === 1 && (!low || (own[id] || 0) < (own[low] || 0))) low = id;
+          if (!low) break;
+          s.delete(low);
+        }
+        if (fits(s)) starts.push(s);
+      }
     }
-    let best = new Set(have), bestV = base;
-    // Add-only (plan my next points): keep every taken node, spend the free points in order.
+    // The tree as it is counts as a result only when it already holds every "keep" node.
+    const missing0 = keepIds.some(id => !have.has(id));
+    let best = new Set(have), bestV = missing0 ? -Infinity : base;
+    // Add-only (plan my next points): keep every taken node, reach the "keep" nodes first, then spend the free points in order.
     const steps = [];
-    if (cfg.addOnly) { best = yield* drain(spend(have, budget - have.size, steps)); bestV = V(best); starts.length = 0; }
+    if (cfg.addOnly) {
+      const s = withKeeps(have, steps), from = fits(s) ? s : (steps.length = 0, have);
+      best = yield* drain(spend(from, budget - from.size, steps)); bestV = V(best); starts.length = 0;
+    }
     for (let i = 0; i < starts.length; i++) {
       const t = yield* drain(spend(starts[i], budget - starts[i].size));
       const v = V(t);
       if (v > bestV) { best = t; bestV = v; }
       yield { phase: 'Re-routing', p: (i + 1) / starts.length, q: 0.3 + 0.3 * (i + 1) / starts.length };
     }
+    if (bestV === -Infinity) { best = new Set(have); bestV = base; } // no tree within the points reaches them all: shown as missed
 
     // ---- 4. swap weak branches for better ones ----
     for (let iter = 0; iter < (cfg.addOnly ? 0 : 14); iter++) {
@@ -1517,7 +1554,8 @@ window.PAGE_LANGS = {
       list: order(finalSet),
       add: add.map(id => ({ id, d: worth(finalSet, id) })).sort((a, b) => b.d - a.d),
       remove: remove.map(id => ({ id, d: own[id] })).sort((a, b) => b.d - a.d),
-      kept: [...kept].map(id => ({ id, why: why[id] })), steps, addOnly: !!cfg.addOnly,
+      kept: [...kept].filter(id => why[id]).map(id => ({ id, why: why[id] })), steps, addOnly: !!cfg.addOnly,
+      keepMissed: keepIds.filter(id => !finalSet.has(id)),
       skills, dropped, multi: multi && goals.length > 1,
       scored, defWeight: defW, def: scored ? { before: def0, after: cfg.defence(finalList) } : null,
       attrs: { Str: a1.Str - a0.Str, Dex: a1.Dex - a0.Dex, Int: a1.Int - a0.Int },
@@ -14134,13 +14172,15 @@ window.BOCharacter = function (ctx) {
   const exTagsFor = (sp, sk, GD) => (sp.ExcludeTags || []).filter(t => !(sk && sk.Totem && sk.Totem.Interval > 0 && (sk.Tags || []).includes('Attack') && lc(t) === 'totem' && ['trap_support', 'skyfall'].includes(lc(sp.Id))) && !(GD && lc(t) === 'minion' && minionEngine(GD, sp, sk)));
   // Every support that can go in this skill's sockets (or, for a Conduit spell, the channel's), for the page's picker.
   // packOnly: adds nothing against one enemy; shape: only one shape gem counts (Orbit, Skyfall, Rain, Trap, Totem).
+  // Tithe and Siphon add no damage (mana sustain only), so they sit under "Packs and extras" too (owner, 16 Nov 2026); the search still
+  // tries them when "Only setups my mana can sustain" is on (MANA_ONLY). Display only.
   function supportChoices(GD, ch, skillId, o) {
     const sk = GD.skills[lc(skillId)]; if (!sk) return [];
     const host = conduitHost(GD, ch, skillId, collectMods(GD, ch, o || {}).mods, (o || {}).conduit);
     const base = host ? GD.skills[lc(host.skill)] || sk : sk;
     const tags = socketTags(base);
     const fits = sp => (!(sp.RequiresAnyTag || []).length || sp.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(sp, base, GD).some(t => tags.has(lc(t))) && !noFit(sp, base);
-    return Object.values(GD.supports).filter(fits).map(sp => ({ id: lc(sp.Id), name: sp.Name, desc: sp.Description || '', packOnly: isSummon(sk) ? !minionCounts(sp, sk) : NO_SINGLE_TARGET.has(lc(sp.Id)) && !['cast_on_crit', 'channel_conduit', 'tithe', 'siphon'].includes(lc(sp.Id)), shape: SHAPES.includes(lc(sp.Id)) }))
+    return Object.values(GD.supports).filter(fits).map(sp => ({ id: lc(sp.Id), name: sp.Name, desc: sp.Description || '', packOnly: isSummon(sk) ? !minionCounts(sp, sk) : NO_SINGLE_TARGET.has(lc(sp.Id)) && !['cast_on_crit', 'channel_conduit'].includes(lc(sp.Id)), shape: SHAPES.includes(lc(sp.Id)) }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
@@ -14827,6 +14867,7 @@ window.BOStartApp = function () {
     // The Damage tab's "Also count" and the optimizer's are one setting (st.optW, a weight per skill).
     // An older page kept the Damage tab's list apart ('combo:'): moved in once, at weight 1.
     st.ban = new Set(store.get('ban:' + ch.id, []) || []);
+    st.keep = new Set(store.get('keep:' + ch.id, []) || []);
     st.optW = store.get('optw:' + ch.id, null);
     if (!st.optW) { st.optW = {}; for (const id of store.get('combo:' + ch.id, []) || []) st.optW[id] = 1; store.set('optw:' + ch.id, st.optW); }
     st.combo = [];
@@ -16751,17 +16792,35 @@ window.BOStartApp = function () {
   // DPS value, and Optimize / Plan never pick it. Kept per character in the browser. A page feature only: no game rule.
   const banned = id => !!(st.ban && st.ban.has(id));
   const banStoreKey = () => 'ban:' + (st.chOrig || st.ch).id;
+  // "Keep" marks (player request, 16 Nov 2026): a taken node marked keep is never refunded or swapped by Optimize; an
+  // untaken one is a must-take that Optimize and Plan route to first. Kept per character in the browser, like never take.
+  const keepMarked = id => !!(st.keep && st.keep.has(id));
+  const keepStoreKey = () => 'keep:' + (st.chOrig || st.ch).id;
+  // Right-click cycles the marks. A taken node: keep → never take → none. An untaken one: never take → keep (must take) → none.
+  const nextMark = id => { const on = allocSet().has(id), k = keepMarked(id), b = banned(id); return on ? (k ? 'ban' : b ? null : 'keep') : (b ? 'keep' : k ? null : 'ban'); };
+  const markHint = id => { const m = nextMark(id), on = allocSet().has(id); return m === 'keep' ? (on ? 'Right-click: keep (Optimize never moves it)' : 'Right-click: must take (Optimize and Plan route to it)') : m === 'ban' ? 'Right-click: never take' : 'Right-click: clear the mark'; };
+  function cycleMark(id) { const m = nextMark(id); if (m === 'keep') toggleKeep(id); else if (m === 'ban') toggleBan(id); else if (keepMarked(id)) toggleKeep(id); else if (banned(id)) toggleBan(id); }
+  function toggleKeep(id) {
+    const n = GD.nodes[id]; if (!st.ch || !n || n.Kind === 'Start' || blocked(id)) return;
+    if (!st.keep) st.keep = new Set();
+    const on = !st.keep.has(id);
+    if (on) { st.keep.add(id); if (banned(id)) { st.ban.delete(id); store.set(banStoreKey(), [...st.ban]); } } else st.keep.delete(id);
+    store.set(keepStoreKey(), [...st.keep]);
+    clearOpt(); paintTree(); if (T.sel === id) showSheet(id);
+    $('#treeStatus').textContent = !on ? n.Name + ' is no longer marked keep.' : allocSet().has(id) ? n.Name + ' is marked keep: Optimize never refunds it. Right-click it again for never take.' : n.Name + ' is marked must take: Optimize and Plan route to it first. Right-click it again to clear.';
+  }
   function toggleBan(id) {
     const n = GD.nodes[id]; if (!st.ch || !n || n.Kind === 'Start') return;
     if (!st.ban) st.ban = new Set();
     const on = !st.ban.has(id), have = allocSet();
     if (on) st.ban.add(id); else st.ban.delete(id);
+    if (on && keepMarked(id)) { st.keep.delete(id); store.set(keepStoreKey(), [...st.keep]); }
     store.set(banStoreKey(), [...st.ban]);
     clearOpt(); T.scores = new Map();
     let gone = 0;
     if (on && have.has(id)) { const r = new Set(refundList(have, id)); gone = r.size; setPassives([...have].filter(x => !r.has(x))); }
     else { paintTree(); scoreSoon(); if (T.sel === id) showSheet(id); }
-    $('#treeStatus').textContent = on ? n.Name + ' is marked never take' + (gone ? ' (refunded' + (gone > 1 ? ' with ' + (gone - 1) + ' node' + (gone > 2 ? 's' : '') + ' behind it' : '') + ')' : '') + ': Optimize, Plan and the node values skip it. Right-click it again to allow it.' : n.Name + ' can be taken again.';
+    $('#treeStatus').textContent = on ? n.Name + ' is marked never take' + (gone ? ' (refunded' + (gone > 1 ? ' with ' + (gone - 1) + ' node' + (gone > 2 ? 's' : '') + ' behind it' : '') + ')' : '') + ': Optimize, Plan and the node values skip it. Right-click it again to mark it must take instead, or once more to clear.' : n.Name + ' can be taken again.';
   }
   // Choice nodes sit at an altar (node.Choice): you keep one of its options.
   const altarOf = id => (GD.nodes[id] || {}).Choice || null;
@@ -17147,7 +17206,7 @@ window.BOStartApp = function () {
     const oa = T.opt && T.opt.addSet || new Set(), orm = T.opt && T.opt.remSet || new Set();
     for (const c of $('#treeSvg').querySelectorAll('circle.tn')) {
       const id = c.dataset.id, n = GD.nodes[id], on = have.has(id) || id === s0;
-      c.classList.toggle('alloc', on); c.classList.toggle('next', !on && next.has(id)); c.classList.toggle('ban', banned(id));
+      c.classList.toggle('alloc', on); c.classList.toggle('next', !on && next.has(id)); c.classList.toggle('ban', banned(id)); c.classList.toggle('keep', keepMarked(id));
       const ic = T.icons && T.icons.get(id);
       if (ic) { const want = on || oa.has(id) ? ic.key : dimKey(ic.key); if (ic.cur !== want) { ic.el.setAttribute('viewBox', iconBox(want)); ic.cur = want; } }
       c.classList.toggle('opt-add', oa.has(id)); c.classList.toggle('opt-rem', orm.has(id));
@@ -17185,6 +17244,7 @@ window.BOStartApp = function () {
     const order = pickOrder();
     for (const b of $('#treeSvg').querySelectorAll('text.tnum')) { const k = order.get(b.dataset.id); b.textContent = k || ''; b.style.display = k ? 'block' : 'none'; }
     const bc = $('#treeBanClear'), nb = st.ban ? st.ban.size : 0; bc.hidden = !nb; bc.textContent = 'Never take: ' + nb + ' · clear';
+    const kc = $('#treeKeepClear'), nk = st.keep ? st.keep.size : 0; kc.hidden = !nk; kc.textContent = 'Keep: ' + nk + ' · clear';
     // A red cross over every node marked never take (drawn on top; clicks pass through to the node).
     let bg = $('#treeSvg').querySelector('#treeBans');
     if (!bg) { bg = document.createElementNS('http://www.w3.org/2000/svg', 'g'); bg.id = 'treeBans'; $('#treeSvg').appendChild(bg); }
@@ -17192,6 +17252,10 @@ window.BOStartApp = function () {
       const c = $('#treeSvg').querySelector('circle.tn[data-id="' + id + '"]'); if (!c) return '';
       const x = +c.getAttribute('cx'), y = +c.getAttribute('cy'), r = (+c.getAttribute('r') || 20) * 0.8;
       return '<path class="tban" d="M' + (x - r) + ' ' + (y - r) + 'L' + (x + r) + ' ' + (y + r) + 'M' + (x - r) + ' ' + (y + r) + 'L' + (x + r) + ' ' + (y - r) + '"/>';
+    }).join('') + [...(st.keep || [])].map(id => {
+      // A gold ring (dashed while still untaken) around every node marked keep.
+      const c = $('#treeSvg').querySelector('circle.tn[data-id="' + id + '"]'); if (!c) return '';
+      return '<circle class="tkeep' + (have.has(id) ? '' : ' want') + '" cx="' + c.getAttribute('cx') + '" cy="' + c.getAttribute('cy') + '" r="' + ((+c.getAttribute('r') || 20) * 1.45) + '"/>';
     }).join('');
     const saved = (st.chOrig.passives || []).length;
     const free = S.freePoints(GD, st.chOrig || st.ch);
@@ -17220,6 +17284,7 @@ window.BOStartApp = function () {
     $('#treeSheetBody').innerHTML = tipHtml(id).replace(/<div class="tk">Click to (?:refund|take) · scoring…<\/div>/, st.skill ? '<div class="tk">Scoring…</div>' : '');
     const pl = !on && n.Kind !== 'Start' && !blocked(id) && !banned(id) ? planTake(have, id) : null, cost = s ? s.cost : pl && pl.cost;
     const bb = $('#treeSheetBan'); bb.hidden = n.Kind === 'Start'; bb.textContent = banned(id) ? 'Allow again' : 'Never take';
+    const kb = $('#treeSheetKeep'); kb.hidden = n.Kind === 'Start'; kb.textContent = keepMarked(id) ? 'Unkeep' : on ? 'Keep' : 'Must take';
     const act = $('#treeSheetAct');
     act.hidden = !on && !pl;
     act.textContent = on ? 'Refund' : s && s.swapped ? 'Swap' : cost > 1 ? 'Take (' + cost + ' points)' : 'Take';
@@ -17352,7 +17417,8 @@ window.BOStartApp = function () {
     if (n.Text && (n.Kind === 'Keystone' || n.Kind === 'Notable' || n.Kind === 'Socket') && n.Text !== lines.join(' ')) h += '<div>' + esc(n.Text) + '</div>';
     if (n.Price) h += '<div class="gain down">' + esc(n.Price) + '</div>';
     if (n.Kind === 'Start') return h;
-    if (banned(id) && !on) return h + '<div class="gain down">Marked never take: Optimize, Plan and the node values skip it.</div><div class="tk tk-ban">Right-click to allow it again</div>';
+    if (banned(id) && !on) return h + '<div class="gain down">Marked never take: Optimize, Plan and the node values skip it.</div><div class="tk tk-ban">' + markHint(id) + '</div>';
+    if (keepMarked(id)) h += '<div class="gain keep">' + (on ? 'Marked keep: Optimize never refunds it.' : 'Marked must take: Optimize and Plan route to it first.') + '</div>';
     const s = T.scores.get(id);
     const skillName = optLabel() + (optExtra().length ? ' weighted' : '');
     if (s) {
@@ -17364,7 +17430,7 @@ window.BOStartApp = function () {
     if ((n.Mods || []).some(m => m.Stat === 'MinionOneKind') && optExtra().length) h += '<div class="tk" style="margin-top:5px">Only one kind of minion stands with this node: of the summon skills you count, only the strongest is counted, the others as 0.</div>';
     const unc = [n, s && s.swapped ? GD.nodes[s.swapped] : null].filter(Boolean).flatMap(uncounted);
     if (unc.length) h += '<div class="tk" style="margin-top:5px">Not in the DPS number: ' + esc(unc.join(' · ')) + '</div>';
-    h += '<div class="tk tk-ban">Right-click: never take</div>';
+    h += '<div class="tk tk-ban">' + markHint(id) + '</div>';
     return h;
   }
 
@@ -17433,7 +17499,7 @@ window.BOStartApp = function () {
   // ---------- Optimize tree ----------
   // Same points, moved to where the chosen skill gains the most (src/treeopt.js). Shown as a proposal
   // (green = take, red = refund) until applied or dismissed; changing the tree or a setting clears it.
-  const optKey = () => GS.set.prio + JSON.stringify(GS.set.layers) + '|' + st.skill + '|' + JSON.stringify(optExtra()) + '|' + [...allocSet()].sort().join(',') + '|' + [...(st.ban || [])].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
+  const optKey = () => GS.set.prio + JSON.stringify(GS.set.layers) + '|' + st.skill + '|' + JSON.stringify(optExtra()) + '|' + [...allocSet()].sort().join(',') + '|' + [...(st.ban || [])].sort().join(',') + '|' + [...(st.keep || [])].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
   function clearOpt() {
     T.optJob = (T.optJob || 0) + 1; T.opt = null; $('#treeOpt').hidden = true;
     const b = $('#treeOptimize'); b.disabled = false; b.textContent = 'Optimize tree';
@@ -17460,7 +17526,7 @@ window.BOStartApp = function () {
     $('#treePlan').disabled = true; $('#treePlanAll').disabled = true; $('#treeOptimize').disabled = true;
     card.hidden = false; card.innerHTML = '<p class="hint">' + (plan ? 'Planning your next ' + extra + ' point' + (extra > 1 ? 's' : '') : 'Optimizing the tree') + ' for ' + esc(skillName) + '…</p>';
     // conduitMargin: keep a Conduit channel's tick 1% above the interval (the game's tick runs a hair faster).
-    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])],
+    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])], keep: [...(st.keep || [])],
       defWeight: GS.set.prio / 100, defStats: gsDefStats(), defence: list => gsDefence(Object.assign({}, st.ch, { passives: list })) });
     // Progress bar inside the running button (q = overall progress from treeopt), so it is clear it is still going.
     let phase = 'Starting', q = 0;
@@ -17503,7 +17569,7 @@ window.BOStartApp = function () {
     const o = T.opt, card = $('#treeOpt'); if (!o) { card.hidden = true; return; }
     card.hidden = false;
     if (o.addOnly) return showPlan(o, card);
-    const kept = o.kept.length ? '<p class="hint">Left where they are: ' + o.kept.map(k => esc(GD.nodes[k.id].Name) + ' (' + esc(k.why) + ')').join(', ') + '.</p>' : '';
+    const kept = (o.kept.length ? '<p class="hint">Left where they are: ' + o.kept.map(k => esc(GD.nodes[k.id].Name) + ' (' + esc(k.why) + ')').join(', ') + '.</p>' : '') + keepMissedHtml(o);
     if (!(o.gain > 0.001)) {
       card.innerHTML = '<h2>Your tree already looks right for ' + esc(o.skillName) + '</h2><p class="hint">Moving the same ' + o.points + ' points around gains less than 0.1% ' + (o.scored ? 'at ' + gsPrioText(Math.round(o.defWeight * 100)) : 'DPS') + '.</p>' + kept +
         '<div class="opt-actions"><button class="btn small ghost" type="button" id="optDismiss">Close</button></div>';
@@ -17541,15 +17607,20 @@ window.BOStartApp = function () {
     return h;
   }
   // Plan my next points: the picks in the order to take them, each with its path.
+  // Must-take nodes the points could not reach (too far for the points there are, or cut off).
+  function keepMissedHtml(o) {
+    const m = (o.keepMissed || []).filter(id => GD.nodes[id]);
+    return m.length ? '<p class="hint gain down">Not reached with these points (marked must take): ' + m.map(id => esc(GD.nodes[id].Name)).join(', ') + '.</p>' : '';
+  }
   function showPlan(o, card) {
     const tip = id => GD.nodes[id].Kind === 'Notable' || GD.nodes[id].Kind === 'Choice' || GD.nodes[id].Kind === 'Socket' ? '<b>' + esc(GD.nodes[id].Name) + '</b>' : esc(GD.nodes[id].Name);
     let n = 0;
     const rows = (o.steps || []).map(s => { const from = n + 1; n += s.cost;
-      return '<li data-focus="' + esc(s.nodes[s.nodes.length - 1]) + '"><span><span class="c">' + (s.cost > 1 ? 'Points ' + from + '–' + n : 'Point ' + from) + '</span> ' + s.nodes.map(tip).join(' › ') + '</span><span class="v">' + pct(s.gain) + '</span></li>'; }).join('');
+      return '<li data-focus="' + esc(s.nodes[s.nodes.length - 1]) + '"><span><span class="c">' + (s.cost > 1 ? 'Points ' + from + '–' + n : 'Point ' + from) + (s.keep ? ' · must take' : '') + '</span> ' + s.nodes.map(tip).join(' › ') + '</span><span class="v">' + pct(s.gain) + '</span></li>'; }).join('');
     const at = Object.entries(o.attrs).filter(([, v]) => v).map(([k, v]) => k + ' ' + (v > 0 ? '+' : '−') + Math.abs(v));
     const left = o.points - o.used;
     card.innerHTML = '<h2>Next ' + (o.points - o.base0) + ' points for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.scored ? 'score' : o.multi ? 'weighted DPS' : 'DPS') + '</span>' + (o.multi || o.scored ? '' : ' <span class="hint">' + num(o.base) + ' → ' + num(o.value) + '</span>') + '</h2>' + optScoredRows(o) + optSkillRows(o) +
-      (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">No node within reach adds ' + (o.scored ? 'anything at this setting' : 'DPS to this skill') + '.</p>') +
+      (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">No node within reach adds ' + (o.scored ? 'anything at this setting' : 'DPS to this skill') + '.</p>') + keepMissedHtml(o) +
       (left > 0 && rows ? '<p class="hint">' + left + ' point' + (left > 1 ? 's' : '') + ' left over: nothing else within reach adds DPS.</p>' : '') +
       (at.length ? '<p class="hint">Attributes from these picks: ' + esc(at.join(', ')) + '.</p>' : '') +
       '<p class="hint">Take them top to bottom: each row is worth most per point at that moment, its path included (gains are on top of the rows above). Keystones and skill-changing nodes are left out; Channel Conduit builds keep their channel 1% slower than the cast interval. Green on the tree. Click a row to find it.</p>' +
@@ -18475,7 +18546,9 @@ window.BOStartApp = function () {
   $('#treeSheetAct').onclick = () => { if (T.sel) clickNode(T.sel); }; // the repaint refreshes the panel
   $('#treeSheetClose').onclick = hideSheet;
   $('#treeSheetBan').onclick = () => { if (T.sel) toggleBan(T.sel); };
-  view.addEventListener('contextmenu', e => { const id = e.target.dataset && e.target.dataset.id; if (!id || inDragon(e) || !GD.nodes[id]) return; e.preventDefault(); tip.hidden = true; toggleBan(id); });
+  $('#treeSheetKeep').onclick = () => { if (T.sel) toggleKeep(T.sel); };
+  view.addEventListener('contextmenu', e => { const id = e.target.dataset && e.target.dataset.id; if (!id || inDragon(e) || !GD.nodes[id]) return; e.preventDefault(); tip.hidden = true; cycleMark(id); });
+  $('#treeKeepClear').onclick = () => { if (!st.keep || !st.keep.size) return; st.keep = new Set(); store.set(keepStoreKey(), []); clearOpt(); paintTree(); $('#treeStatus').textContent = 'No node is marked keep any more.'; };
   $('#treeBanClear').onclick = () => { if (!st.ban || !st.ban.size) return; st.ban = new Set(); store.set(banStoreKey(), []); clearOpt(); T.scores = new Map(); paintTree(); scoreSoon(); $('#treeStatus').textContent = 'Every node can be taken again.'; };
   $('#treeSheetBody').addEventListener('click', e => { const b = e.target.closest && e.target.closest('button[data-oath]'); if (b && T.selM && !b.disabled) swearOath(T.selM, b.dataset.oath); });
   $('#treeSearch').addEventListener('input', paintTree);

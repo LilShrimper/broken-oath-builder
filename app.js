@@ -2733,7 +2733,12 @@ window.BOPlanner = function (ctx) {
   }
   // Lines a rare holds on top of its 3 prefixes and 3 suffixes: the Cube's Oathsworn line (a 7th line) and a Scarred line (Unswear at the Forge).
   const extraTag = a => a.oath ? 'Oathsworn' : a.scar ? 'Scarred' : '';
-  const vowTag = n => { const sh = S.vowShare(GD, n); return 'Vow ' + (n + 1) + (sh < 1 ? ' · counts ' + Math.round(sh * 100) + '%' : ''); };
+  // A +skill level Vow also counts at S.vowLevelShare (half): the label gives the combined share and the line gets its own
+  // note (player report 16 Nov 2026: the label showed only the Vow share, so a level Vow read as counted in full).
+  // The note is its own element so the label keeps its translated form ("Vow # · counts #%").
+  const vowLevel = a => a && ((GD.affixes[lc(a.id)] || {}).Mod || {}).Stat === 'SkillLevel' ? S.vowLevelShare(GD) : 1;
+  const vowTag = (n, a) => { const sh = S.vowShare(GD, n) * vowLevel(a); return 'Vow ' + (n + 1) + (sh < 1 ? ' · counts ' + Math.round(sh * 100) + '%' : ''); };
+  const vowLevelNote = a => vowLevel(a) < 1 ? ' <span class="meta">(skill levels count half)</span>' : '';
   // One affix: its type (P / S, or "Vow" on a unique), tier, numbers and text.
   function affixRow(it, a, ai, edit, dis, tag) {
     const af = GD.affixes[lc(a.id)], x = edit ? '<button class="x" type="button" aria-label="Remove" data-act="rmaffix" data-ai="' + ai + '">×</button>' : '';
@@ -2746,7 +2751,7 @@ window.BOPlanner = function (ctx) {
     return '<div class="pl-affix" data-ai="' + ai + '"><span class="pl-type" title="' + (tag ? tag + ' · ' : '') + af.Type + '">' + (tag ? tag[0] : af.Type[0]) + '</span>' +
       '<select data-f="tier"' + dis + '>' + af.Tiers.map((y, ti) => opt(ti, (af.Kind || 'T' + (ti + 1)) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')', ti === a.tier)).join('') + '</select>' +
       '<input class="mini" type="number" step="any" data-f="v" value="' + a.v + '"' + (t ? lim(t.Min, t.Max) : '') + dis + '>' + (two ? '<input class="mini" type="number" step="any" data-f="v2" value="' + a.v2 + '"' + lim(t.Min2, t.Max2) + dis + '>' : '') +
-      '<span class="pl-text">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(modLine(af.Mod, a.v, a.v2)) + (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') + (off ? ' <span class="bad">outside its range</span>' : '') + '</span>' + x + '</div>';
+      '<span class="pl-text">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(modLine(af.Mod, a.v, a.v2)) + (tag && tag.startsWith('Vow') ? vowLevelNote(a) : '') + (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') + (off ? ' <span class="bad">outside its range</span>' : '') + '</span>' + x + '</div>';
   }
   function itemEditor(it, slot, idx, edit, dis, k = K) {
     const key = it ? idx : slot; // idols are found by index, other slots by name
@@ -2815,7 +2820,7 @@ window.BOPlanner = function (ctx) {
       const isIdol = slot === 'Idol', nVows = it.affixes.filter(a => !a.id.startsWith('unique:')).length;
       if (u && (edit || nVows)) h += '<div class="meta pl-vows"><b>Vows ' + nVows + '</b> (' + (isIdol ? 'Awakening turns a magic idol rare, and that rare idol can give a red idol its Vow' : 'a rare ' + SLOT_NAME[slot].toLowerCase() + ' gives this red item its finest line at the cube') + ')</div>';
       let vi = 0; // the 1st Vow counts in full, each later one less (sim.js vowShare)
-      it.affixes.forEach((a, ai) => { if (!a.id.startsWith('unique:')) h += affixRow(it, a, ai, edit, dis, vowTag(vi++)); });
+      it.affixes.forEach((a, ai) => { if (!a.id.startsWith('unique:')) h += affixRow(it, a, ai, edit, dis, vowTag(vi++, a)); });
       if (u && edit && nVows < VOW_MAX) {
         const all = isIdol ? Object.values(GD.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length) : affixesFor(base);
         const used = new Set(it.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
@@ -2908,7 +2913,7 @@ window.BOPlanner = function (ctx) {
         const af = GD.affixes[lc(a.id)];
         if (!af) { other.push(li('Unknown affix ' + a.id, 'bad')); continue; }
         const xt = u ? '' : extraTag(a);
-        (u ? vows : xt ? extra : af.Type === 'Prefix' ? pre : af.Type === 'Suffix' ? suf : other).push(roll((u ? vowTag(vi++) + ' ' : '') + (af.Kind || 'T' + ((a.tier || 0) + 1)), modLine(af.Mod, a.v, a.v2) + (xt ? ' (' + xt + ')' : ''), af.Tiers[a.tier] || af.Tiers[0]));
+        (u ? vows : xt ? extra : af.Type === 'Prefix' ? pre : af.Type === 'Suffix' ? suf : other).push(roll((u ? vowTag(vi++, a) + ' ' : '') + (af.Kind || 'T' + ((a.tier || 0) + 1)), modLine(af.Mod, a.v, a.v2) + (xt ? ' (' + xt + ')' : ''), af.Tiers[a.tier] || af.Tiers[0]).replace('</li>', (u ? vowLevelNote(a) : '') + '</li>'));
       }
     }
     if (!u && it.rarity !== 'Normal') {
@@ -2919,7 +2924,7 @@ window.BOPlanner = function (ctx) {
     const lines = uniq.concat(vows, pre, suf, extra, other);
     if (lines.length) h += '<ul>' + lines.join('') + '</ul>';
     if (word) {
-      const twoHand = base && (base.bTwoHanded || (base.Tags || []).includes('TwoHand')), pm = twoHand && word.Power2H ? word.Power2H : 1;
+      const twoHand = base && (base.bTwoHanded || (base.Tags || []).includes('TwoHand')), pm = S.wordPower2H(word, twoHand);
       const lv = word.PowerBandILvl || [], cnt = word.PowerBandCount || [];
       let band = -1; for (let i = 0; i < lv.length; i++) if ((it.level || 0) >= lv[i]) band = i;
       const from = cnt.slice(0, band).reduce((x, y) => x + y, 0);
@@ -6288,7 +6293,7 @@ window.BOItemSearch = function (ctx) {
         const rows = [['Below item level ' + (lv[0] || '?'), w.PowerMods]];
         let from = 0; lv.forEach((l, i) => { if (w.PowerBandMods && cnt[i]) rows.push(['Item level ' + l + '+', w.PowerBandMods.slice(from, from + cnt[i])]); from += cnt[i] || 0; });
         // The top band shows open (what a crafted endgame word gets); the lower bands fold away (player report, 12 Nov 2026).
-        const band = ([k, mods]) => '<div class="is-band"><b>' + esc(k) + (w.Power2H > 1 ? ' <small>(×' + w.Power2H + ' on two-handed)</small>' : '') + '</b><ul class="is-lines oathword">' + mods.map(mm => li(plain(GD, mm.Mod))).join('') + '</ul></div>';
+        const band = ([k, mods]) => '<div class="is-band"><b>' + esc(k) + (S.wordPower2H(w, true) > 1 ? ' <small>(×' + S.wordPower2H(w, true) + ' on two-handed)</small>' : '') + '</b><ul class="is-lines oathword">' + mods.map(mm => li(plain(GD, mm.Mod))).join('') + '</ul></div>';
         const top = rows[rows.length - 1], lower = rows.slice(0, -1);
         body += '<div class="is-power is-power-top">' + band(top) + '</div>';
         if (lower.length) body += '<details class="is-power"><summary>Lower item levels</summary>' + lower.reverse().map(band).join('') + '</details>';
@@ -9992,6 +9997,15 @@ window.BOCharacter = function (ctx) {
 
   // ---------- modifier collection ----------
   // How much the n-th Vow (0 = first) on a red item counts: GD.vowShares (cube_recipes.json Vows83), past the list its last share.
+  // How often an Oathword's power lines count on a two-handed base: once. runewords.json (API game data b76) still lists
+  // Power2H 2 for all 70 words, but the game's own rule line at every launch says x1.0: log 15-16 Nov 2026,
+  // "OathwordPower r54: ON (plague_wind +2 power lines, x1.0 on two-handers)" (a load-time rule summary like its neighbours
+  // "WordScale r77: ON"). Player report 16 Nov 2026: Bladesong on a two-hander showed far more physical damage than the game.
+  // Until then the sim used Power2H (from an older log: Nightshade's "+1.5" Poison levels read +3 on a staff).
+  const OATHWORD_2H = 1;
+  function wordPower2H(rw, twoHand) { return twoHand && rw && rw.Power2H > 1 ? OATHWORD_2H : 1; }
+  // A Vow that grants +skill levels counts at this share on top of its Vow share (patch 0.56.0 notes, r83.VOWS switch).
+  function vowLevelShare(GD) { return is056(GD) ? ruleNum(GD, 'r83.VOWS.VowSkillLevelShare', 0.5) : 1; }
   function vowShare(GD, n) { const s = GD.vowShares || []; return s.length ? s[Math.min(n, s.length - 1)] : 1; }
   // The game scales some red (unique) lines when it loads them; uniques.json, the public API and the save all keep the
   // unscaled numbers. Game log 12 Nov 2026 (build 26617933): "MetaSys85: UniqueLineScale ON, 37 line(s) on 16 unique(s):"
@@ -10103,7 +10117,7 @@ window.BOCharacter = function (ctx) {
           const isVow = it.rarity === 'Unique' && !a.crafted;
           let sh = isVow ? vowShare(GD, vowN++) : 1;
           // Patch 0.56.0 notes: "Vows that grant +skill levels count at half value" (on top of the Vow's share).
-          if (isVow && af.Mod && af.Mod.Stat === 'SkillLevel' && is056(GD)) sh *= ruleNum(GD, 'r83.VOWS.VowSkillLevelShare', 0.5);
+          if (isVow && af.Mod && af.Mod.Stat === 'SkillLevel') sh *= vowLevelShare(GD);
           // Patch 0.56.0 notes: "A rare with 4 or more lines at their top tier is a GREAT RARE and its rolled lines
           // count 10% more; a FLAWLESS RARE, every line at its top tier, counts 30% more." Saves keep each line's
           // tier (0 = the top one in affixes.json). NOT CHECKED: whether the save's value already has it.
@@ -10149,10 +10163,9 @@ window.BOCharacter = function (ctx) {
       for (const h of Object.values(halfLevels)) add(h.m, Math.ceil(h.sum - 1e-9), 0, label + ' · rune ' + h.names.join(' + ') + ' (half value, rounded up)', key);
       if (rw) {
         for (const mm of rw.Mods) add(mm.Mod, mm.Mod.Value, mm.Mod.Value2, label + ' · runeword ' + rw.Name, key);
-        // Power lines count Power2H times on a two-handed base (the game logs Poison gems at +3 from
-        // Nightshade's "+1.5" on a staff).
+        // Power lines on a two-handed base: wordPower2H (x1 since the game's r54 rule, log 16 Nov 2026).
         const twoHand = base.bTwoHanded || (base.Tags || []).includes('TwoHand');
-        const pm = twoHand && rw.Power2H ? rw.Power2H : 1;
+        const pm = wordPower2H(rw, twoHand);
         const power = runewordPower(rw, it.level);
         for (const mm of power.mods) add(mm.Mod, (mm.Mod.Value || 0) * pm, (mm.Mod.Value2 || 0) * pm, label + ' · runeword ' + rw.Name + ' (power' + (power.band ? ', item level ' + power.band + '+' : '') + (pm > 1 ? ' x' + pm + ' two-handed' : '') + ')', key);
       }
@@ -13495,7 +13508,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
+  const api = { hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
     // The share at which a support works on minion skills despite "Minion" in its ExcludeTags (0 = it does not), for tooltips.
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -14585,7 +14598,7 @@ window.BOStartApp = function () {
       '<li>Young gems get an early-level damage boost (<code>EffectivenessEarly</code>) that fades out by the gem level set in the game data.</li>' +
       '<li>More damage (patch 0.56.7): on your own hits every more multiplier counts in full up to × 8; past × 8 each doubling adds × 1.41. Minions keep their own rules.</li>' +
       '<li>Effectiveness ("of added damage" in the tooltip) moves linearly from its base (1 for spells) to <code>EffectivenessLate</code> between <code>EffectivenessLateFrom</code> and <code>EffectivenessLateAt</code>, at the level the gem plays at.</li>' +
-      '<li>Runeword power lines count twice on a two-handed weapon. All increased lines of a kind add up; each more line multiplies. Converted damage keeps its old type\'s modifiers and gains the new type\'s. An item line "X% … converted to Physical" with a skill tag converts that kind of skill\'s damage. Extra damage (Heralds) comes from the unscaled hit.</li>' +
+      '<li>All increased lines of a kind add up; each more line multiplies. Converted damage keeps its old type\'s modifiers and gains the new type\'s. An item line "X% … converted to Physical" with a skill tag converts that kind of skill\'s damage. Extra damage (Heralds) comes from the unscaled hit.</li>' +
       '<li>Crit: attacks use the weapon\'s chance; spells 6%, or a staff\'s own chance when you hold one; capped at 95%; base multiplier 150%.</li>' +
       '<li>Dragonling Ascendancy: on your chosen path some nodes are replaced by their Ascended version (Plague Wyrm becomes Virulence, Slow Death becomes Contagion of the Oath). Virulence makes poisons last 25% shorter in combat, which the game\'s tooltip leaves out, and lets Rares and Guardians hold 60 stacks.</li>' +
       '<li>Orbit: every projectile strikes; each one after the first on the same enemy deals 75% less (attacks 90% less), and its poison counts as part of a stack.</li>' +

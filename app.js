@@ -12470,7 +12470,8 @@ window.BOCharacter = function (ctx) {
       const v = hit[d].avg * critFactor * hitsPerSec * perHitFactor * mitig[d].k * mitig[d].taken * groundTaken;
       byType[d] = v; hitDpsVs += v;
     }
-    // Patch 79 supports that raise this skill's hits on one enemy (their texts, API game data build 79). Hits only (not ailments).
+    // Patch 79 supports that raise this skill's hits on one enemy (their texts, API game data build 79). Hits here; Woeweaver also
+    // raises the bleed (log-proven, see Bleeding); poison and ignite not checked, so not raised.
     //   Woeweaver (WoeWeave103 25, WoeWeaveLess103 15): "25% more damage to an enemy that bears exactly one Woe, 10% more if it bears two,
     //     and no more with three or more". Game log 16 Nov 2026: "NewSupports103: Woeweaver rending_slam hits ... bearing 1 Woe(s) x1.25".
     //     Woes = the Woes counted on this enemy (Configure Enemy curses), Sentences not counted.
@@ -12478,6 +12479,7 @@ window.BOCharacter = function (ctx) {
     //     Counted as on when another skill on your bar can bleed (a linked support or a gear/tree line with Bleed chance), as if it keeps
     //     the enemy bleeding. ASSUMPTION; not checked.
     //   Frostbreak (FreezeBreak103 50): only on a Brittle Guardian (5.5 s after its freeze bar fills): not counted (the sim has no freeze bar).
+    let woeWeaveK = 1; // Woeweaver's more also raises the skill's bleeds (see Bleeding below)
     {
       let k = 1; const why = [];
       const sv = id => (GD.supports[id] || {}).Mods || [];
@@ -12486,6 +12488,7 @@ window.BOCharacter = function (ctx) {
         const woes = activeCurses.filter(r => ((GD.curses[r.id] || {}).Kind || '') === 'Woe').length;
         const w1 = (sv('woeweaver').find(m => m.Stat === 'WoeWeave103') || {}).Value || 25, wl = (sv('woeweaver').find(m => m.Stat === 'WoeWeaveLess103') || {}).Value || 15;
         const more = woes === 1 ? w1 : woes === 2 ? w1 - wl : 0;
+        woeWeaveK = 1 + more / 100;
         k *= 1 + more / 100; why.push('Woeweaver: ' + woes + ' Woe' + (woes === 1 ? '' : 's') + ' on the enemy, ' + more + '% more' + (woes ? '' : ' (lay one Woe for 25%)'));
       }
       if (lit('haemorrhage')) {
@@ -12810,9 +12813,14 @@ window.BOCharacter = function (ctx) {
           dpsKept = stackDps / Math.max(uptime, 1e-9); // so dpsKept x uptime below equals the stacked bleed
         }
         const wound = is079(GD) ? feedsOnTop(rollsPerSec * dur, ruleNum(GD, 'r103.AILMENTS.WoundMax103', 8)) * ruleNum(GD, 'r103.AILMENTS.WoundPct103', 15) / 100 * dps1 : 0;
-        // "More Physical damage taken" curse lines (Woe of Sundering) raise the bleed too, once: the bleed is laid from the hit
-        // they raise; the tick itself is not raised again. FROM THE LOG'S SUGGESTION, not proven (owner asked, 16 Nov 2026).
-        // Game logs 16 Nov 2026, Warrior Rending Slam on the Training Post (counts as a Guardian), Sentence of Rot on:
+        // Woeweaver raises the bleed: the bleed is laid from the hit after Woeweaver's more, before defences. PROVEN, game logs
+        // 16 Nov 2026, Warrior Rending Slam + Woeweaver on the Training Post: bleed base / the same hit's raw damage ("AscRaw89:
+        // Aftershock from X (before defences)") = 0.873-0.917 (avg 0.887, the slam's phys share 0.89) with no Woe, against
+        // 1.097-1.162 (avg 1.135) with one Woe of Sundering on, in three tests (16:43, 16:48, 18:00): x1.28, Woeweaver's x1.25.
+        // Woe of Sundering's own "more Physical damage taken" does NOT raise the bleed base (it is a defence-side line: x1.25 x
+        // its Guardian x1.125 would be x1.41). Until 17 Nov the sim raised the bleed by the Woe's Physical taken instead (a guess
+        // from the log below, which was this same Woeweaver build).
+        // Older notes, game logs 16 Nov 2026, Warrior Rending Slam on the Training Post (counts as a Guardian), Sentence of Rot on:
         //   first slam, Rot only (16:45:10): "tear ... 7382262 bleed still coming ... the wound keeps 3691131", first tick
         //   "RotTaken100: ailment tick x1.472 ... bleed 487024.2" = 0.131944 of the wound; Rot + Woe (16:48:57, Woe laid in the
         //   same frame before the tick): wound 4763218, tick 628480.2 = 0.131944: the tick is not raised by the Woe.
@@ -12820,9 +12828,8 @@ window.BOCharacter = function (ctx) {
         //   2-3) against 16.3M, 17.1M (Rot + Woe) and 12.6M, 16.6M (Woe only), and the 10 s bleed totals Rot only 20.2M / 4
         //   slams, Woe only 19.7M / 4, both 25.8M / 3. Counted at the Woe's own Physical size (its Guardian half, Dread and
         //   Deepened Woe), the same as on the hit; the log's gap is bigger (crits and Fortify stacks differ per test).
-        const physTyped = activeCurses.reduce((p, r) => p * (1 + (r.elem.Physical || 0) / 100), 1);
-        bleedDps = (dpsKept * uptime + wound) * dotTakenFor('Physical') * physTyped;
-        if (physTyped > 1) res.notes.push('Bleeding: your "more Physical damage taken" curse (' + activeCurses.filter(r => r.elem.Physical > 0).map(r => r.name).join(', ') + ') also raises the bleed, x' + physTyped.toFixed(3) + ': the bleed is laid from the bigger hit. Suggested by the game log (16 Nov 2026), not proven.');
+        bleedDps = (dpsKept * uptime + wound) * dotTakenFor('Physical') * woeWeaveK;
+        if (woeWeaveK > 1) res.notes.push('Bleeding: Woeweaver raises the bleed too, x' + woeWeaveK.toFixed(2) + ': the bleed is laid from the bigger hit (game log, 16 Nov 2026).');
         if (wound > 0) res.notes.push('Deep Wound (patch 79): bleeds on a bleeding enemy deepen it by 15% of their own bleed, +' + Math.round(wound).toLocaleString('en-US') + '/s on top of the strongest (the game log shows the same rule). Tear (Slams and crits cash 50% of the bleed left) only makes it land sooner.');
         ail.bleed = { chance: bleedChance, dps1, dpsKept, keptX: dpsKept / dps1, rollsPerLife: rollsPerSec * dur, uptime, duration: dur, dps: bleedDps, more: bMore, inc: bInc };
         res.notes.push('Bleeding: ' + Math.round(bleedChance) + '% chance, ' + (rollsPerSec * dur).toFixed(1) + ' bleeds rolled in one ' + dur + ' s bleed life; the strongest holds: ' + Math.round(dpsKept) + '/s (x' + (dpsKept / dps1).toFixed(2) + ' a bleed from the average hit), up ' + Math.round(uptime * 100) + '% of the time. Counted on a standing enemy: bleeds deal 50% more while it moves.');

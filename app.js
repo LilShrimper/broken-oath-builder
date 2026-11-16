@@ -7326,8 +7326,8 @@ window.BOPatches = function (ctx) {
     // Early Hold / Full: a boost lasting longer is good, a cut lasting longer is bad, and the line alone does not say which.
     return note('young-gem effect lasts ' + lv + (y > x ? ' longer' : ' less'), 'pt-flat');
   }
-  function linesHtml(c) {
-    if (c.kind === 'added') return '<p class="pt-note">New in this build.</p>';
+  function linesHtml(c, compact) {
+    if (c.kind === 'added') return compact ? '' : '<p class="pt-note">New in this build.</p>';
     if (c.kind === 'removed') return '<p class="pt-note">Taken out of the game data in this build.</p>';
     return '<ul class="pt-lines">' + c.lines.map(([o, n]) => {
       if (o && n && (o.length > 60 || n.length > 60)) { const [a, b] = wordDiff(o, n); return '<li class="pt-text"><div class="pt-old">' + kw(a) + '</div><div class="pt-new">' + kw(b) + '</div></li>'; }
@@ -7335,11 +7335,11 @@ window.BOPatches = function (ctx) {
     }).join('') + '</ul>';
   }
   const KIND = { added: 'New', removed: 'Removed', changed: 'Changed' };
-  function entryHtml(c, withBuild) {
+  function entryHtml(c, withBuild, compact) {
     const b = withBuild && buildOf(c.b);
-    return '<div class="pt-entry pt-' + c.kind + '"><div class="pt-head">' + icon(c) + '<b' + tipAttr(c) + '>' + esc(c.name) + '</b><span class="pt-kind">' + KIND[c.kind] + '</span>' +
+    return '<div class="pt-entry pt-' + c.kind + (compact ? ' pt-compact' : '') + '"><div class="pt-head">' + icon(c) + '<b' + tipAttr(c) + '>' + esc(c.name) + '</b><span class="pt-kind">' + KIND[c.kind] + '</span>' +
       (withBuild && b ? '<span class="meta">' + esc(b.label) + ' · ' + esc(day(b.day)) + '</span>' + (b.src === 'game' ? SRC_TAG : '') : '<span class="meta">' + esc(secName(c.sec).replace(/s$/, '')) + '</span>') +
-      (!withBuild ? '<button type="button" class="btn small ghost pt-hist" data-pt="hist" data-sec="' + esc(c.sec) + '" data-id="' + esc(c.id) + '">History</button>' : '') + '</div>' + linesHtml(c) + '</div>';
+      (!withBuild ? '<button type="button" class="btn small ghost pt-hist" data-pt="hist" data-sec="' + esc(c.sec) + '" data-id="' + esc(c.id) + '">History</button>' : '') + '</div>' + linesHtml(c, compact) + '</div>';
   }
   const match = (c, q) => !q || lc(c.name).includes(q) || lc(c.id).includes(q) || c.lines.some(l => lc(l[0]).includes(q) || lc(l[1]).includes(q));
 
@@ -7361,7 +7361,15 @@ window.BOPatches = function (ctx) {
       const rows = all.filter(c => c.sec === s[0] && match(c, q)); if (!rows.length) continue;
       const order = { added: 0, changed: 1, removed: 2 };
       rows.sort((a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name));
-      h += '<div class="card pt-sec"><h2>' + esc(s[1]) + ' <small>' + rows.length + '</small></h2>' + rows.map(c => entryHtml(c, false)).join('') + '</div>';
+      // New passive nodes (owner, 16 Nov 2026): one dropdown, closed, so a big tree patch does not make the page scroll on and on.
+      // Opens by itself while a search narrows it.
+      let body;
+      if (s[0] === 'nodes' && rows.some(c => c.kind === 'added')) {
+        const add = rows.filter(c => c.kind === 'added'), rest = rows.filter(c => c.kind !== 'added');
+        body = '<details class="pt-group"' + (q ? ' open' : '') + '><summary>' + add.length + ' new node' + (add.length === 1 ? '' : 's') + ' <span class="count">' + esc([...new Set(add.map(c => c.name))].slice(0, 6).join(', ')) + (new Set(add.map(c => c.name)).size > 6 ? ', …' : '') + '</span></summary>' +
+          add.map(c => entryHtml(c, false, true)).join('') + '</details>' + rest.map(c => entryHtml(c, false)).join('');
+      } else body = rows.map(c => entryHtml(c, false)).join('');
+      h += '<div class="card pt-sec"><h2>' + esc(s[1]) + ' <small>' + rows.length + '</small></h2>' + body + '</div>';
     }
     if (q && !all.some(c => match(c, q))) h += '<div class="card"><p class="hint">Nothing in this patch matches "' + esc(V.q) + '".</p></div>';
     return h;
@@ -11702,6 +11710,12 @@ window.BOCharacter = function (ctx) {
     }
     const falls = skyRep > 0 ? 2 : 1;
     let perHitFactor = projWeight / projOnTarget * (1 + skyRep) / falls; // average share of a full hit per hit
+    // Each projectile on the target rolls its ailments at full chance, however weak (Focused Volley / Orbit): only the
+    // damage is weighted. Game log 16 Nov 2026, Rangtest Split Shot + Focused Volley (10 arrows) + Rend 50% + Affliction 35%
+    // on a Training Post: 5.45 bleeds and 3.67 poisons a shot (108 shots), 0.60 / 0.36 without Focused Volley (101 shots);
+    // the weighted reading said 1.24 / 0.87. Each poison stack is made from its own arrow's hit (stacks from 1,549 to
+    // 615,294 hits in one volley). Orbit is the same rule by its code path, not tested on its own.
+    const arrowShare = projWeight / projOnTarget;
     // A Rain struck by Cast on Crit with nothing linked drops one wave (patch notes 5 Nov).
     const rainWaves = sk.Delivery === 'Rain' && sk.Rain && sk.Rain.Waves > 0 ? (res.coc && res.coc.attack ? 1 : sk.Rain.Waves) : 0;
     const hopper = mirage || flight, hops = mirage ? mirage.Hops : flights;
@@ -12105,11 +12119,14 @@ window.BOCharacter = function (ctx) {
         const dur = virulence ? tipDur * virulence.DurMult : tipDur;
         const cap = virulence && (rarity === 'rare' || rarity === 'boss') ? virulence.Cap : A.PoisonMaxStacks;
         const perStack = eligible * A.PoisonFracPerSec * Math.max(0, 1 + pInc / 100) * pMore * Math.max(0, 1 + dotMulti / 100);
-        const rate = hitsPerSec * perHitFactor * hitFactor * pChance / 100;
-        const stacksRaw = rate * dur;
+        // rolls = poisons laid a second (every arrow rolls, see arrowShare); rate = the same in full-size stacks (the panel's count).
+        const rolls = hitsPerSec * perHitFactor / arrowShare * hitFactor * pChance / 100;
+        const rate = rolls * arrowShare;
+        const stackAvg = perStack * arrowShare; // a weaker arrow lays a smaller stack
+        const stacksRaw = rolls * dur;
         const stacks = Math.min(stacksRaw, cap);
         const m = A.bPoisonTakesDamageTaken ? dotTakenFor('Poison') : 1;
-        poisonDps = stacks * perStack * m;
+        poisonDps = stacks * stackAvg * m;
         // Poison burst (Sleepy's Continental Strap, PoisonBurst76): "Every 12th Poison you or your Minions lay on an enemy
         // bursts: {v}% of the Poison damage that enemy still has coming hits it at once". Evidence: the developer's
         // switches.json r76.UNIQUES bOn = True, Every = 12 (game data b76+). Model (not log-checked yet): poisons are laid at
@@ -12119,9 +12136,9 @@ window.BOCharacter = function (ctx) {
         let burstDps = 0;
         if (burstPct > 0) {
           const every = Math.max(1, ruleNum(GD, 'r76.UNIQUES.Every', 12));
-          burstDps = (rate / every) * (burstPct / 100) * stacks * perStack * dur / 2 * m;
+          burstDps = (rolls / every) * (burstPct / 100) * stacks * stackAvg * dur / 2 * m;
           poisonDps += burstDps;
-          res.notes.push('Poison burst: every ' + every + 'th poison bursts for ' + Math.round(burstPct) + '% of the poison still to come (~' + (rate / every).toFixed(2) + ' bursts/s) = +' + Math.round(burstDps).toLocaleString('en-US') + ' DPS. Model from the item text, not checked against the game yet.');
+          res.notes.push('Poison burst: every ' + every + 'th poison bursts for ' + Math.round(burstPct) + '% of the poison still to come (~' + (rolls / every).toFixed(2) + ' bursts/s) = +' + Math.round(burstDps).toLocaleString('en-US') + ' DPS. Model from the item text, not checked against the game yet.');
         }
         const panelStacks = Math.min(rate * tipDur, A.PoisonMaxStacks);
         ail.poison = { chance: pChance, eligible, duration: dur, tipDuration: tipDur, virulence: !!virulence, perStack, stacks, stacksRaw, cap, panelStacks, inc: pInc, more: pMore, dps: poisonDps, burstDps, burstPct, perHitTotal: perStack * dur };
@@ -12177,7 +12194,9 @@ window.BOCharacter = function (ctx) {
         for (const s of res.supports) { const d = s.ok && GD.supports[lc(s.id)] && /Bleeding[^.]*?for (\d+(?:\.\d+)?) seconds/i.exec(GD.supports[lc(s.id)].Description || ''); if (d) { baseDur = +d[1]; break; } }
         const dur = snap(baseDur * (1 + ailDur / 100));
         const dps1 = hit.Physical.avg * critFactor * (A.BleedFracPerSec || 0.5) * Math.max(0, 1 + bInc / 100) * bMore * Math.max(0, 1 + dotMulti / 100);
-        const uptime = 1 - Math.exp(-hitsPerSec * perHitFactor * hitFactor * bleedChance / 100 * dur);
+        // Every arrow rolls (arrowShare above); the strongest bleed holds and a weaker one never replaces it (log 16 Nov 2026:
+        // a 2,120 hit rolled 3,562/s while 35,242/s kept bleeding), so dps1 stays the full hit's.
+        const uptime = 1 - Math.exp(-hitsPerSec * perHitFactor / arrowShare * hitFactor * bleedChance / 100 * dur);
         bleedDps = dps1 * uptime * dotTakenFor('Physical');
         ail.bleed = { chance: bleedChance, dps1, uptime, duration: dur, dps: bleedDps, more: bMore, inc: bInc };
         res.notes.push('Bleeding: ' + Math.round(bleedChance) + '% chance, ' + Math.round(dps1) + '/s for ' + dur + ' s (strongest one holds, up ' + Math.round(uptime * 100) + '% of the time). Counted on a standing enemy: bleeds deal 50% more while it moves. Not checked against the game yet.');

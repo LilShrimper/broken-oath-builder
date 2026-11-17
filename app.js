@@ -1616,7 +1616,7 @@ window.PAGE_LANGS = {
 //     cfg.forged: uniques as forged copies (uniques.json Forged, one factor per line) at that roll.
 //   cfg.quality, cfg.grade: weapon quality (Hone 10%, 20%, Skyforged Hone past it) and Base Grade (1-100) of the items tried.
 //   These presets are our own reading of what a stage of the game looks like, not a game rule.
-// Not counted: attribute requirements, what the items cost.
+// Attribute requirements count (17 Nov 2026; see reqOk below; cfg.ignoreAttr leaves them out). Not counted: what the items cost.
 // Same item rules as planner.js (affixesFor, oathwordBases, rollUnique, topTier); keep them in step.
 (function (root) {
   'use strict';
@@ -1658,6 +1658,42 @@ window.PAGE_LANGS = {
     go(0, 0);
     return found;
   }
+  // Attribute requirements of one item (see reqOk in optimize): { Str, Dex, Int } or null when it asks for none.
+  const ATTRS = ['Str', 'Dex', 'Int'];
+  function itemNeeds(GD, it) {
+    const b = it && GD.bases[lc(it.base)]; if (!b || !(b.ReqStr || b.ReqDex || b.ReqInt)) return null;
+    let cut = 0;
+    for (const a of it.affixes || []) {
+      let stat;
+      if (!a.id.startsWith('unique:')) stat = ((GD.affixes[lc(a.id)] || {}).Mod || {}).Stat;
+      else { const u = GD.uniques[lc(it.unique)], m = u && u.Mods[+a.id.slice(7)]; stat = m && m.Mod && m.Mod.Stat; }
+      if (stat === 'ReqReduce') cut += +a.v || 0;
+    }
+    const k = Math.max(0, 1 - cut / 100), n = {};
+    for (const a of ATTRS) n[a] = Math.round((b['Req' + a] || 0) * k);
+    return n;
+  }
+  // The first attribute an item asks more of than attr holds: { attr, need, have }, or null when it fits.
+  function attrShort(GD, it, attr) {
+    const n = itemNeeds(GD, it); if (n) for (const a of ATTRS) if (n[a] > ((attr || {})[a] || 0)) return { attr: a, need: n[a], have: (attr || {})[a] || 0 };
+    return null;
+  }
+  // Str / Dex / Int from a mod list (sim.js collectMods; calcSkill keeps it as res.mods), leaving out the lines of one source key
+  // ('item:Helm' ...). Same sums and rounding as sim.js attrsFrom; keep them in step.
+  function attrsWithout(GD, ch, mods, key) {
+    const cls = GD.classes[lc(ch.classId)] || {}, attr = {};
+    for (const a of ATTRS) {
+      let flat = (cls[a] || 0) + (cls[a + 'PerLevel'] || 0) * Math.max(0, (ch.level || 1) - 1), inc = 0;
+      for (const m of mods || []) if ((m.stat === a || m.stat === 'Attributes') && m.key !== key) { if (m.mode === 'Flat') flat += m.v; else if (m.mode === 'Inc') inc += m.v; }
+      attr[a] = Math.round(flat * (1 + inc / 100));
+    }
+    return attr;
+  }
+  // Can the character put this item on? Checked against the attributes it has without the item's own lines: the game's tooltip
+  // compares the requirement with what you have before equipping ("Requires Level 74, Dex 63, Int 126 (you have 102)", player's
+  // screenshot 17 Nov 2026). mods: the character with the item on (its own lines are then left out). { attr, need, have } or null.
+  const sourceKey = it => 'item:' + it.slot;
+  function wearShort(GD, ch, mods, it) { return itemNeeds(GD, it) ? attrShort(GD, it, attrsWithout(GD, ch, mods, sourceKey(it))) : null; }
   const LIMIT = 3;      // prefixes and suffixes on a rare
   const VOW_MAX = 6;    // Vows on one red item (planner.js VOW_MAX)
   const MIN_GAIN = 1e-6;
@@ -1724,11 +1760,24 @@ window.PAGE_LANGS = {
     const dropped = goals.filter(gl => !(gl.base > 0) && gl.id !== mainSkill).map(gl => gl.id);
     goals = goals.filter(gl => gl.base > 0 || gl.id === mainSkill);
     const wSum = goals.reduce((a, gl) => a + gl.w, 0);
+    // Attribute requirements (player report, 17 Nov 2026: the search gave a character with 102 Int a Deathless Reaper, whose
+    // tooltip says "Requires Level 74, Dex 63, Int 126 (you have 102)"). An item asks for its base's ReqStr / ReqDex / ReqInt
+    // (item_bases.json; that tooltip's numbers are exactly the base's). A set is worth nothing when any item in it asks for more
+    // Str, Dex or Int than the character has with the rest of that set on (wearShort: the item's own lines do not count, as the
+    // tooltip's "you have" is before equipping), so the search only keeps sets the character can wear. ASSUMPTION, not checked
+    // in game: "reduced attribute requirements" (ReqReduce, the req_reduce line) cuts only the item it is on.
+    // Items worn now that already miss their requirement stay allowed, so a save that wears one can still be searched.
+    // cfg.ignoreAttr: leave requirements out (the search before 17 Nov 2026).
+    const checkReq = !cfg.ignoreAttr;
+    const mods0 = (goals[0] && goals[0].r && goals[0].r.mods) || null, attr0 = goals[0] && goals[0].r && goals[0].r.attr;
+    const missed0 = new Set(checkReq && mods0 ? (ch.items || []).filter(it => wearShort(GD, ch, mods0, it)) : []);
+    const reqOk = (items, r) => !checkReq || !r || !r.mods || items.every(it => missed0.has(it) || !wearShort(GD, ch, r.mods, it));
     // One skill: plain DPS (as before). Several: weighted mean of DPS / DPS with the gear worn now.
     const dpsV = items => {
-      if (!multi || goals.length === 1) return dpsOf(goals[0], items);
+      if (!multi || goals.length === 1) { const d = dpsOf(goals[0], items); return d > 0 && reqOk(items, goals[0].r) ? d : 0; }
       // Legion of One: only one kind of minion stands, so of the counted summons only the strongest deals damage.
       const d = goals.map(gl => gl.base > 0 ? dpsOf(gl, items) : 0), lost = S.oneKindLost ? S.oneKindLost(goals.map(gl => gl.base > 0 ? gl.r : null)) : [];
+      if (!reqOk(items, (goals.find(gl => gl.base > 0) || {}).r)) return 0;
       let v = 0; goals.forEach((gl, i) => { if (gl.base > 0 && !lost[i]) v += gl.w * d[i] / gl.base; });
       return v / wSum;
     };
@@ -2053,7 +2102,7 @@ window.PAGE_LANGS = {
       }).slice(0, Math.max(1, +cfg.slotRows || 40));
       const trialOf = it => { let its = put(items, slot, it); if (slot === 'MainHand' && !offOk(baseOf(it), baseOf(at(its, 'OffHand')))) its = put(its, 'OffHand', null); return its; };
       for (const row of rows) { row.gain = row.v / base0 - 1; row.dps = dpsOf(goals[0], trialOf(row.item)); row.dropsOff = slot === 'MainHand' && !!at(items, 'OffHand') && !at(trialOf(row.item), 'OffHand'); }
-      return { onlySlot: slot, rows, worn, base: base0, dps0: goals[0].base, empty: V(put(items, slot, null)), calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, gearLevel, scored, defWeight: defW, multi: multi && goals.length > 1, skills: goals.map(g => g.id), dropped, topKept: r.kept };
+      return { onlySlot: slot, rows, worn, base: base0, dps0: goals[0].base, empty: V(put(items, slot, null)), calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, gearLevel, reqChecked: checkReq, scored, defWeight: defW, multi: multi && goals.length > 1, skills: goals.map(g => g.id), dropped, topKept: r.kept };
     }
     const SLOTS = SINGLE.concat(items.filter(i => i.slot === 'DwarvenRune').length > 1 ? ['DwarvenRune2'] : []);
     const total = 1 + SLOTS.length + (idolN ? 1 : 0);
@@ -2133,11 +2182,18 @@ window.PAGE_LANGS = {
       }
     }
     const skills = goals.map(gl => { const v = dpsOf(gl, items); return { id: gl.id, w: gl.w, base: gl.base, value: v, gain: gl.base > 0 ? v / gl.base - 1 : 0 }; });
-    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, gearLevel, idolN, idolCells, idolLayout, skills, dropped, multi: multi && goals.length > 1,
+    // A new item you can't put on with the gear you wear now (only with the rest of the set): what it needs, what you have with the
+    // slot emptied now, and with the whole set on. The page tells you to equip the other new items first.
+    const modsEnd = (goals[0].r || {}).mods;
+    if (checkReq && mods0 && modsEnd) for (const o of out) if (o.changed && o.item && !missed0.has(o.item)) {
+      const sh = attrShort(GD, o.item, attrsWithout(GD, ch, mods0, sourceKey(o.item)));
+      if (sh) o.needs = Object.assign(sh, { withSet: attrsWithout(GD, ch, modsEnd, sourceKey(o.item))[sh.attr] });
+    }
+    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, gearLevel, reqChecked: checkReq, attrs: { before: attr0 || null, after: (goals[0].r || {}).attr || null }, idolN, idolCells, idolLayout, skills, dropped, multi: multi && goals.length > 1,
       scored, defWeight: defW, maxRes: wantRes, resTarget, def: scored ? { before: def0, after: cfg.defence(items) } : null };
   }
 
-  const api = { optimize };
+  const api = { optimize, itemNeeds, attrShort, attrsWithout, wearShort };
   root.BOGearOpt = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -10225,7 +10281,11 @@ window.BOCharacter = function (ctx) {
   // it had in build 79 (`at`): once the API folds a lift in, the value moves and this one stops.
   // [lift, EffectivenessLate in build 79]. Piercing Shot = power_shot, Gravereap = grave_reap.
   const ATK_ADD_LIFT_79 = {
-    glacial_shards: [1.72, 5.6949], thunderfall: [1.40, 4.421], viper_fang: [1.40, 4.48], blade_vortex: [1.32, 4.9333],
+    // viper_fang [1.40, 4.48] taken out for Patch 80 ("Viper Fang: about 29% less damage at high gem levels. Gem levels 1 to 8
+    // unchanged", developer's notes 17 Nov 2026). Tooltip, game build 80, 17 Nov 2026 (Samtest, Viper Fang gem 20 playing at 57,
+    // 648% more from levels): "Attack damage 8,458% of base" = 18.853 level factor x 4.486, the data's own 4.48 at gem 20 with no
+    // lift (with it: 6.272, x1.40). 1 / 1.40 = 29% less.
+    glacial_shards: [1.72, 5.6949], thunderfall: [1.40, 4.421], blade_vortex: [1.32, 4.9333],
     wheeling_axe: [1.29, 6.9875], lightning_arrow: [1.28, 9.6003], power_shot: [1.27, 4.7737], grave_reap: [1.25, 4.9522], shuriken_fan: [1.20, 10.5878],
     split_shot: [1.19, 13.4436], fuse_arrow: [1.18, 9.4218], summon_ballista: [1.18, 4], flurry: [1.17, 2.0792], crescent_slash: [1.17, 8.6801],
     arrow_rain: [1.13, 10.2721], caustic_arrow: [1.07, 9.8213],
@@ -10265,6 +10325,9 @@ window.BOCharacter = function (ctx) {
   // Cold stores 25% (was 40%), Kindle feeds 25% (was 40%). The API's data is still build 79 (switches hold the old numbers), so until the
   // API serves build 80 these new numbers are used; from build 80 on the switches decide (default = the new number). Not checked in game.
   const p80 = (GD, key, nw) => +GD.apiBuild >= 80 ? ruleNum(GD, key, nw) : nw;
+  // Patch 80 Sleepy's Continental Strap: the burst uses up the poisons still coming (evidence at the player burst below). The
+  // game is on 80 while the API still serves 79, so on now, like p80.
+  const burstUsesUp = GD => true;
   const ruleNum = (GD, key, def) => { const v = (GD.rules || {})[key]; const n = typeof v === 'object' && v ? +v.value : +v; return v != null && isFinite(n) ? n : def; };
   // An on/off switch from the game's rules (true/false or "True"/"False"), or the given default when the data has none.
   const bSwitch = (GD, key, def) => { const v = (GD.rules || {})[key]; const x = v && typeof v === 'object' ? v.value : v; return x == null ? !!def : String(x).toLowerCase() === 'true'; };
@@ -10327,7 +10390,19 @@ window.BOCharacter = function (ctx) {
   // Shortest use time per class and skill (seconds), measured in the game: the clip's speed cap
   // (scaling.json ActionRateMax 4). Split Shot: every release in the 2 Nov log ends at 0.35 s and the
   // skill panel says "2.86 uses a second (speed cap)".
-  const CLIP_FLOOR = { ranger: { split_shot: 0.35 } };
+  // Viper Fang: the skill panel, game build 80, 17 Nov 2026 (Samtest): "Attacks per second 6.13 (speed cap)" = a swing of 0.163 s at
+  // the cap ("At its fastest: extra attack speed adds damage instead"). Its 3 stabs come after that (STRIKE_RELEASE below).
+  const CLIP_FLOOR = { ranger: { split_shot: 0.35 }, samurai: { viper_fang: 0.163 } };
+  // A skill that strikes in a sequence (skills.json Strikes { Count, Interval }): the first strike lands at the swing's release
+  // point, the others every Interval seconds (not sped up by attack speed), then the rest of the swing plays at half length.
+  // Game log, build 80, 17 Nov 2026 (Samtest, Viper Fang, Count 3, Interval 0.09): every use logs "Attack start (release at
+  // 0.09 s, end at 0.14 s)", "release at 0.64 to 0.67" of the swing, and a full use ends at 0.29 s (113 uses) or 0.30 s (82):
+  // 0.65 x 0.14 + 2 x 0.09 + 0.35 x 0.14 / 2 = 0.296 s. Skill panel the same day: swing 0.163 s at the cap, "Uses per second
+  // 3.23" (0.310 s); this rule gives 0.315 s (3.18 a second, 1.6% under). Before, the sim counted one swing per use (6.33 uses a
+  // second, twice the game). Ladder check (tools/api-check.js --offline, 17 Nov 2026): Viper Fang heroes sim/measured 1.91 -> 0.96
+  // (RL 200), 3.03 -> 2.14, 0.41 -> 0.33. Proven on Viper Fang only, so only the skills in STRIKE_SEQ_PROVEN use it; Flurry,
+  // Thunderfall, Soul Rend and Twin Cuts carry the same data fields but no hero or log has checked them yet.
+  const STRIKE_RELEASE = 0.65, STRIKE_TAIL = 0.5, STRIKE_SEQ_PROVEN = new Set(['viper_fang']);
   // Dragonling nodes the game applies differently from their text. Hail of Talons (2 Nov, Split Shot panel):
   // the hit ranges match only without its 8% less.
   const DRAGON_QUIRKS = {
@@ -11865,6 +11940,13 @@ window.BOCharacter = function (ctx) {
       res.notes[res.notes.length - 1] = res.notes[res.notes.length - 1].replace('so more attack speed adds nothing to this skill.', 'and the speed past the cap becomes damage: x' + overK.toFixed(3) + ' (the square root of the overshoot; game log, 12 Nov 2026).');
       usesPerSec = 1 / floor; useTime = floor; res.speedCapped = true;
     }
+    // Strike sequences (see STRIKE_RELEASE): a use is the swing up to its release, the strikes after the first, then half the rest.
+    const strikeSeq = isAttack && STRIKE_SEQ_PROVEN.has(lc(skillId)) && !mirage && !(sk.Channel && sk.Channel.Tick) && sk.Strikes && typeof sk.Strikes === 'object' && sk.Strikes.Count > 1 && sk.Strikes.Interval > 0 ? sk.Strikes : null;
+    if (strikeSeq) {
+      const swing = useTime, gaps = (strikeSeq.Count - 1) * strikeSeq.Interval;
+      useTime = swing * STRIKE_RELEASE + gaps + swing * (1 - STRIKE_RELEASE) * STRIKE_TAIL; usesPerSec = 1 / useTime;
+      res.notes.push(sk.Name + ': a use is the swing to its release (' + (swing * STRIKE_RELEASE).toFixed(3) + ' s), ' + (strikeSeq.Count - 1) + ' more strikes ' + strikeSeq.Interval + ' s apart (not sped up by attack speed), then the end of the swing: ' + useTime.toFixed(3) + ' s, ' + usesPerSec.toFixed(2) + ' uses a second (game log and skill panel, Viper Fang, 17 Nov 2026).');
+    }
     const animUses = animOn ? usesPerSec : null;
     let cooldown = 0;
     if (sk.Cooldown > 0) {
@@ -12916,13 +12998,21 @@ window.BOCharacter = function (ctx) {
         // switches.json r76.UNIQUES bOn = True, Every = 12 (game data b76+). Model (not log-checked yet): poisons are laid at
         // `rate`, the stacks on the enemy are evenly spread in age, so on average each has half its duration left; a
         // burst adds v% of that remaining damage and does not remove the stacks.
+        // Patch 80 (developer's notes 17 Nov 2026): "the burst now uses up the poisons still coming instead of copying them.
+        // Wearers deal up to 50% less." So a burst only brings poison damage forward: nothing on top on a lasting target. Game log,
+        // build 80, 17 Nov 2026 (Samtest, Sleepy's 28%, Viper Fang): Uniques76 queued 3.57B in bursts in 10 s of the alpha_werewolf
+        // fight (20 bursts, "12 stacks hold 460369408 still coming, 28% = 128903432 queued"), while the whole fight dealt 439M a
+        // second (Clock92) and Viper Fang's poison 41.9% of it (DmgSrc91): copied bursts could not fit; taken from the stacks they do.
+        // The stacks stay on the enemy (a burst at poison 12 with 12 stacks, the next at poison 24 with 22). burstDps keeps the
+        // amount moved forward, for the note only.
         const burstPct = sumMod('PoisonBurst76', 'Flat');
         let burstDps = 0;
         if (burstPct > 0) {
           const every = Math.max(1, ruleNum(GD, 'r76.UNIQUES.Every', 12));
           burstDps = (rolls / every) * (burstPct / 100) * stacks * stackAvg * dur / 2 * m;
-          poisonDps += burstDps;
-          res.notes.push('Poison burst: every ' + every + 'th poison bursts for ' + Math.round(burstPct) + '% of the poison still to come (~' + (rolls / every).toFixed(2) + ' bursts/s) = +' + Math.round(burstDps).toLocaleString('en-US') + ' DPS. Model from the item text, not checked against the game yet.');
+          if (!burstUsesUp(GD)) poisonDps += burstDps;
+          if (burstUsesUp(GD)) res.notes.push('Poison burst (patch 80): every ' + every + 'th poison bursts for ' + Math.round(burstPct) + '% of the poison still to come (~' + (rolls / every).toFixed(2) + ' bursts/s), about ' + Math.round(burstDps).toLocaleString('en-US') + ' a second brought forward. It uses up those poisons, so it adds no damage on a lasting target (it helps kill before poisons run out).');
+          else res.notes.push('Poison burst: every ' + every + 'th poison bursts for ' + Math.round(burstPct) + '% of the poison still to come (~' + (rolls / every).toFixed(2) + ' bursts/s) = +' + Math.round(burstDps).toLocaleString('en-US') + ' DPS. Model from the item text, not checked against the game yet.');
         }
         const panelStacks = Math.min(rate * tipDur, A.PoisonMaxStacks);
         ail.poison = { chance: pChance, eligible, duration: dur, tipDuration: tipDur, virulence: !!virulence, perStack, stacks, stacksRaw, cap, panelStacks, inc: pInc, more: pMore, dps: poisonDps, burstDps, burstPct, perHitTotal: perStack * dur };
@@ -13881,11 +13971,12 @@ window.BOCharacter = function (ctx) {
         const every = Math.max(1, ruleNum(GD, 'r76.UNIQUES.Every', 12));
         const burstAll = burstPct > 0 ? R / every * burstPct / 100 * plain * remain * taken : 0;
         const burstDps = burstAll * row.lay / R;
-        res.poisonDps = poisonDps + burstDps;
+        // Patch 80: the burst uses up the poisons still coming (see burstUsesUp): brought forward, not added.
+        res.poisonDps = poisonDps + (burstUsesUp(GD) ? 0 : burstDps);
         res.totalDps += res.poisonDps;
         res.ailments.poison = { chance: pChance, eligible: elig, duration: dur, tipDuration: dur, virulence: false, perStack: row.stack, stacks: myStacks, stacksRaw: row.lay * dur, cap, panelStacks: myStacks, inc: 0, more: 1, dps: res.poisonDps, burstDps, burstPct, perHitTotal: row.stack * dur, army: { rate: R, stacks, plain: plain * taken, hold: plain * remain, burst: burstAll, kinds: rows.length } };
         res.notes.push('Minion poison: ' + Math.round(pChance) + '% of blows poison (' + row.lay.toFixed(1) + ' a second), each stack ' + Math.round(row.stack).toLocaleString('en-US') + ' a second for ' + dur + ' s. ' + (rows.length > 1 ? 'Your whole army lays ' + R.toFixed(0) + ' a second on one enemy' : 'That is ' + R.toFixed(0) + ' a second on one enemy') + (R * dur > cap ? ', more than its ' + cap + ' stacks can hold: the strongest stay, ' + myStacks.toFixed(1) + ' of them from ' + sk.Name : ', ' + myStacks.toFixed(1) + ' stacks from ' + sk.Name) + ' = ' + Math.round(poisonDps).toLocaleString('en-US') + ' DPS. Not in the game\'s panel. Fitted to one Training Post test (game log, 14 Nov 2026).');
-        if (burstPct > 0) res.notes.push('Poison burst: every ' + every + 'th poison the army lays (' + (R / every).toFixed(1) + ' bursts a second) hits for ' + Math.round(burstPct) + '% of the ' + Math.round(plain * remain).toLocaleString('en-US') + ' the stacks still hold = ' + Math.round(burstAll).toLocaleString('en-US') + ' DPS for the whole army, ' + Math.round(burstDps).toLocaleString('en-US') + ' of it counted here (' + sk.Name + '\'s share of the poisons laid). The Training Post log gave about the same (14 Nov 2026).');
+        if (burstPct > 0) res.notes.push('Poison burst: every ' + every + 'th poison the army lays (' + (R / every).toFixed(1) + ' bursts a second) hits for ' + Math.round(burstPct) + '% of the ' + Math.round(plain * remain).toLocaleString('en-US') + ' the stacks still hold = ' + Math.round(burstAll).toLocaleString('en-US') + ' DPS for the whole army, ' + Math.round(burstDps).toLocaleString('en-US') + (burstUsesUp(GD) ? ' of it brought forward for ' + sk.Name + '\'s share of the poisons laid. Patch 80: the burst uses up those poisons, so it adds no damage on a lasting target.' : ' of it counted here (' + sk.Name + '\'s share of the poisons laid). The Training Post log gave about the same (14 Nov 2026).'));
       }
     }
     if (ruthK > 1) res.notes.push('Ruthless: every third blow deals ' + Math.round(ruthPct * 3) + '% more physical damage, averaged into the DPS (x' + ruthK.toFixed(3) + '); the hit above leaves it out, as the game\'s panel does.');
@@ -18257,12 +18348,15 @@ window.BOStartApp = function () {
     '<span class="gs-prio-row"><span>DPS</span><input type="range" id="gsPrio" min="0" max="100" step="10" value="' + GS.set.prio + '" aria-label="Prioritize DPS or defence"' + (off ? ' disabled' : '') + '><span>Defence</span></span></label>';
   // Item Compare's verdict (owner, 12 Nov 2026): the two items weighed as the slider says, score = (DPS new / DPS yours)^(1 - w)
   // x (EHP new / EHP yours)^w, the same score the Gear Set Sim searches with. dr: the DPS ratio (weighted over Also count).
+  const ATTR_NAME = { Str: 'Strength', Dex: 'Dexterity', Int: 'Intelligence' };
   function cmpVerdict(ia, ib, rows, cb) {
     if (!ib || !rows) return null;
     const r0 = rows[0], w = GS.set.prio / 100;
     const A = gsDefence(cmpWith(st.ch, ia)), B = gsDefence(cmpWith(st.ch, ib)), er = A.ehp > 0 ? B.ehp / A.ehp : 1;
     const dr = cb ? 1 + cb.gain : r0.a > 0 && r0.b != null ? r0.b / r0.a : null;
     const v = { A, B, w, dr, er, win: '', by: 0, score: null, broke: r0.b == null && r0.a != null ? r0.why || 'the skill does not work with it' : '' };
+    // Attribute requirements (player report, 17 Nov 2026): with the new item on, does the character meet its Str / Dex / Int?
+    v.req = window.BOGearOpt && JSON.stringify(ia) !== JSON.stringify(ib) ? BOGearOpt.wearShort(GD, st.ch, S.collectMods(GD, cmpWith(st.ch, ib), {}).mods, Object.assign({}, ib, { slot: cmpSlot() })) : null;
     if (v.broke) { v.win = 'a'; return v; }
     if (dr == null && w < 1) return v;
     v.score = w >= 1 ? er : w <= 0 ? dr : dr > 0 ? Math.pow(dr, 1 - w) * Math.pow(er, w) : 0;
@@ -18283,7 +18377,8 @@ window.BOStartApp = function () {
     // The other end of the slider disagrees: say so, it is the usual reason to move it.
     if (v.score != null && v.dr != null && (v.dr - 1) * (v.er - 1) < 0 && Math.abs(v.dr - 1) >= 0.0005 && Math.abs(v.er - 1) >= 0.0005)
       say += ' ' + (v.dr > 1 ? 'It deals more but is less tough' : 'It is tougher but deals less') + ': the slider decides which matters.';
-    return '<div class="cmp-reco' + (v.win === 'b' ? ' yes' : v.win === 'a' ? ' no' : '') + '"><p>' + say + '</p>' +
+    if (v.req) say = '<b>You can\'t wear the new item yet:</b> it needs ' + v.req.need + ' ' + ATTR_NAME[v.req.attr] + ' and you have ' + v.req.have + ' without it. The numbers below are what it would do once you can. ' + say;
+    return '<div class="cmp-reco' + (v.req ? ' no' : v.win === 'b' ? ' yes' : v.win === 'a' ? ' no' : '') + '"><p>' + say + '</p>' +
       '<div class="headline small">' + stat('Life + energy shield', num(v.A.life + v.A.es) + ' → ' + num(v.B.life + v.B.es), '', '', 'life ' + num(v.A.life) + ' → ' + num(v.B.life) + ', energy shield ' + num(v.A.es) + ' → ' + num(v.B.es)) +
       stat('Defence (EHP est.)', num(v.A.ehp) + ' → ' + num(v.B.ehp), '<div class="delta ' + (v.er >= 1 ? 'up' : 'down') + '">' + pct(v.er - 1) + '</div>', '', 'counts ' + gsLayerNames().join(', ')) +
       stat('Resistances', resLine(v.B), '<div class="delta">was ' + resLine(v.A) + '</div>', '', 'Fire / Cold / Lightning / Poison, not capped') + '</div>' +
@@ -18388,10 +18483,13 @@ window.BOStartApp = function () {
       r.slots.map(s => {
         const tip = s.item ? '<details class="gs-lines"><summary>Lines</summary><div class="cmp-tip pl-tip">' + g.tip(s.item, s.item.slot) + '</div></details>' : '';
         const si = r.slots.indexOf(s);
-        return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(s.label || gsSlotName(s.slot)) + '</td><td' + (s.was ? ' class="gs-hov" data-gs-tip="was:' + si + '"' : '') + '>' + gsItemLabel(s.was) + '</td><td' + (s.item ? ' class="gs-hov" data-gs-tip="item:' + si + '"' : '') + '>' + (s.changed ? '' : '<span class="meta">kept: </span>') + gsItemLabel(s.item) + tip + '</td><td>' +
+        // Needs more than the gear worn now gives: wearable only with the rest of the set on, so say what to equip first.
+        const sh = s.needs;
+        const req = sh ? '<div class="hint bad gs-req">Needs ' + sh.need + ' ' + ATTR_NAME[sh.attr] + ': you have ' + sh.have + ' now, ' + sh.withSet + ' with the rest of this set on. Equip the other new items first.</div>' : '';
+        return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(s.label || gsSlotName(s.slot)) + '</td><td' + (s.was ? ' class="gs-hov" data-gs-tip="was:' + si + '"' : '') + '>' + gsItemLabel(s.was) + '</td><td' + (s.item ? ' class="gs-hov" data-gs-tip="item:' + si + '"' : '') + '>' + (s.changed ? '' : '<span class="meta">kept: </span>') + gsItemLabel(s.item) + tip + req + '</td><td>' +
           (s.changed ? '<span class="' + (s.gain >= 0 ? 'up' : 'down') + '">' + pct(s.gain) + '</span>' : '<span class="meta">–</span>') + '</td><td>' + (s.item ? num(s.worth * 100, 1) + '%' : '–') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
-    h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the prefixes and suffixes that add the most' + (r.scored ? '' : ' DPS') + ' and the best runes in their sockets' + (r.vowMax < 1 ? '; uniques carry no Vows' : r.vowMax < 6 ? '; uniques carry at most ' + r.vowMax + ' Vow' + (r.vowMax === 1 ? '' : 's') : '') + (gsFull(r) ? '; a rare with every line at its top tier counts as a Flawless Rare in the sim' : '') + '. ' + (r.scored ? gsDefNote() + ' Attribute requirements,' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); attribute requirements,') + ' rune and item prices are ignored. ' + (r.idolN ? 'Idols are chosen too, each with up to ' + r.idolN + ' line' + (r.idolN === 1 ? '' : 's') + ', their lines rolled like the rares\' lines; the tree and the supports stay as they are.' : 'Idols, the tree and the supports stay as they are.') + '</p>';
+    h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the prefixes and suffixes that add the most' + (r.scored ? '' : ' DPS') + ' and the best runes in their sockets' + (r.vowMax < 1 ? '; uniques carry no Vows' : r.vowMax < 6 ? '; uniques carry at most ' + r.vowMax + ' Vow' + (r.vowMax === 1 ? '' : 's') : '') + (gsFull(r) ? '; a rare with every line at its top tier counts as a Flawless Rare in the sim' : '') + '. ' + (r.scored ? gsDefNote() + ' Rune' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); rune') + ' and item prices are ignored. ' + (r.reqChecked ? 'Every item fits your Strength, Dexterity and Intelligence with the whole set on. ' : 'Attribute requirements are ignored, as set. ') + (r.idolN ? 'Idols are chosen too, each with up to ' + r.idolN + ' line' + (r.idolN === 1 ? '' : 's') + ', their lines rolled like the rares\' lines; the tree and the supports stay as they are.' : 'Idols, the tree and the supports stay as they are.') + '</p>';
     return h + '</div>';
   }
   // Result headline when the search weighed defence: DPS, the EHP estimate and the resistances, before and after.
@@ -18417,6 +18515,7 @@ window.BOStartApp = function () {
       '<p class="hint">Finds the best gear for the selected skill' + (optExtra().length ? ' and the ' + optExtra().length + ' ticked under Also count (weighted)' : '') + ': every unique (with Vows), every Oathword, and rare items with the best prefixes and suffixes. Your passive tree, skills and supports stay as they are' + (S_.idolAffixes ? '; so do your red idols' : ', and so do your idols unless you pick idol lines below') + '.</p>' + gsTierHtml(GS.running) +
       '<div class="gs-controls"><label class="field inline" title="Item level of the rares: 84 and up gives the top tier of every line"><span>Item level</span><input type="number" min="1" max="100" id="gsIlvl" value="' + S_.ilvl + '"' + (GS.running ? ' disabled' : '') + '></label>' +
       chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
+      chk('ignoreAttr', 'Ignore attribute requirements', 'Off: every item must fit your Strength, Dexterity and Intelligence with the gear found') +
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
       chk('vows', 'Vows on uniques', 'A red item takes up to 6 lines from rares at the cube; the best ones are added') +
       chk('noCore', 'No Core Touched items', 'The search skips Core Touched bases, and a Core Touched item you wear now is not kept either') +
@@ -18499,7 +18598,7 @@ window.BOStartApp = function () {
       r.rows.map((x, i) => '<tr class="' + (x.gain > 0.0005 ? 'gs-changed' : '') + '"><td>' + (i + 1) + '</td><td class="gs-hov" data-sbs-tip="' + i + '">' + gsItemLabel(x.item) +
         '<details class="gs-lines"><summary>Lines</summary><div class="cmp-tip pl-tip">' + planner.gear.tip(x.item, x.item.slot) + '</div></details>' + (x.dropsOff ? '<div class="hint">Two-handed: your off hand comes off.</div>' : '') + '</td><td>' + kind[x.kind] + '</td><td>' + num(x.dps) + '</td><td><span class="' + (x.gain >= 0 ? 'up' : 'down') + '">' + pct(x.gain) + '</span></td>' +
         '<td class="sbs-acts"><button class="btn small" type="button" data-sbs-equip="' + i + '">Equip</button> <button class="btn small ghost" type="button" data-sbs-cmp="' + i + '">Compare</button></td></tr>').join('') + '</tbody></table></div>';
-    h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the lines that add the most and the best runes; ' + (r.vowMax < 1 ? 'uniques get no Vows' : 'the best few uniques get Vows' + (r.vowMax < 6 ? ' (at most ' + r.vowMax + ')' : '')) + '. The rest of your gear, the tree and the supports stay as they are. Compare opens the item in Item Compare, where you can set its lines to what dropped.' + (r.scored ? ' ' + gsDefNote() : '') + '</p>';
+    h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the lines that add the most and the best runes; ' + (r.vowMax < 1 ? 'uniques get no Vows' : 'the best few uniques get Vows' + (r.vowMax < 6 ? ' (at most ' + r.vowMax + ')' : '')) + '. The rest of your gear, the tree and the supports stay as they are' + (r.reqChecked ? ', and every item listed fits your Strength, Dexterity and Intelligence with it on' : '; attribute requirements are ignored, as set') + '. Compare opens the item in Item Compare, where you can set its lines to what dropped.' + (r.scored ? ' ' + gsDefNote() : '') + '</p>';
     return h + '</div>';
   }
   function sbsHtml() {
@@ -18515,6 +18614,7 @@ window.BOStartApp = function () {
       cmpSlotButtons(true) +
       '<div class="gs-controls"><label class="field inline" title="Item level of the rares: 84 and up gives the top tier of every line"><span>Item level</span><input type="number" min="1" max="100" id="gsIlvl" value="' + S_.ilvl + '"' + (off ? ' disabled' : '') + '></label>' +
       chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
+      chk('ignoreAttr', 'Ignore attribute requirements', 'Off: every item must fit your Strength, Dexterity and Intelligence with the gear found') +
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
       chk('vows', 'Vows on uniques', 'A red item takes up to 6 lines from rares at the cube; the best ones are added') +
       chk('noCore', 'No Core Touched items', 'Skip Core Touched bases') +

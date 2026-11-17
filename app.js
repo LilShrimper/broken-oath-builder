@@ -17873,13 +17873,14 @@ window.BOStartApp = function () {
   // ---------- Gear Set Sim (the second sub-tab of Item Compare) ----------
   // Searches every unique, Oathword and rare (best prefixes and damage suffixes) for the best gear for the selected
   // skill, with the tree, skills, supports and idols as they are (gearopt.js, run in slices so the page stays usable).
-  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxVows: '', maxRiven: 0, noCore: false, rareSockets: 3, idolAffixes: '', layers: { es: true, armour: true, evasion: true, block: true } }, store.get('gearSim', {})) };
+  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxVows: '', maxRiven: 0, noCore: false, rareSockets: 3, idolAffixes: '', layers: { life: true, es: true, armour: true, evasion: true, block: true } }, store.get('gearSim', {})) };
   delete GS.set.maxLines; // a box that was on the page for one version (v255)
-  GS.set.layers = Object.assign({ es: true, armour: true, evasion: true, block: true }, GS.set.layers || {});
+  GS.set.layers = Object.assign({ life: true, es: true, armour: true, evasion: true, block: true }, GS.set.layers || {});
   // Defence for the DPS / Defence slider and "Reach max resistances" (owner, 12 Nov 2026): an estimate, not a defensive sim.
   // EHP = (life + energy shield) / share of a hit taken, against an assumed enemy (ours, not the game's): a hit of ArmourBigHitRef
-  // (1,000) or more, half physical and half elemental, half of the hits attacks. The owner ticks which defences count (Energy
-  // Shield, Armour, Evasion, Block; life and resistances always do), so the searches go for that kind. The game's own rules:
+  // (1,000) or more, half physical and half elemental, half of the hits attacks. The owner ticks which defences count (Life,
+  // Energy Shield, Armour, Evasion, Block; resistances always do), so the searches go for that kind. Life unticked (player request
+  // 16 Nov 2026: an energy shield build on Glass Cannon got evasion nodes picked for their life lines): the pool is ES only. The game's own rules:
   //   Resistance: average of Fire, Cold, Lightning and Poison, each capped at Hero.ResistCap (as the Ladder tab's EHP).
   //   Armour: cuts a physical hit by armour / (armour + ArmourFactor75 x the hit), at most ArmourMaxReduction %, a hit over
   //     ArmourBigHitRef counting as that much (scaling.json Hero; the game's hold-Alt panel, owner's screenshot 8 Nov 2026, see
@@ -17913,16 +17914,16 @@ window.BOStartApp = function () {
     const taken = (0.5 * (1 - (L.armour ? armDR : 0)) + 0.5 * (1 - avg / 100)) * (1 - 0.5 * (L.evasion ? evade : 0)) * (1 - (L.block ? block * blockCut : 0));
     // Mana before life (patch 79): a share s of what gets past the shield comes off mana, so life lasts min(life / (1 - s), life + mana).
     const s = (d.manaFirst || 0) / 100, lifePool = s > 0 ? Math.min(s < 1 ? d.life / (1 - s) : Infinity, d.life + (d.mana || 0)) : d.life;
-    return { life: d.life, es: d.es, res, armour: d.armour, armDR, evasion: d.evasion, evade, block, manaFirst: d.manaFirst || 0, ehp: (lifePool + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
+    return { life: d.life, es: d.es, res, armour: d.armour, armDR, evasion: d.evasion, evade, block, manaFirst: d.manaFirst || 0, ehp: Math.max(1, (L.life ? lifePool : 0) + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
   }
-  // Which defences the estimate counts (one setting everywhere, with the slider). Life and resistances always count.
-  const GS_LAYERS = [['es', 'Energy Shield', 'EnergyShield'], ['armour', 'Armour', 'Armour'], ['evasion', 'Evasion', 'Evasion'], ['block', 'Block', 'Block']];
-  const gsLayersInner = off => '<span class="meta" title="Tick the defences your build uses: the estimate counts only these (life and resistances always), so the searches go for that kind. Armour + Evasion, Evasion + Energy Shield and so on: tick both">Defences that count</span>' +
+  // Which defences the estimate counts (one setting everywhere, with the slider). Resistances always count.
+  const GS_LAYERS = [['life', 'Life', 'Life'], ['es', 'Energy Shield', 'EnergyShield'], ['armour', 'Armour', 'Armour'], ['evasion', 'Evasion', 'Evasion'], ['block', 'Block', 'Block']];
+  const gsLayersInner = off => '<span class="meta" title="Tick the defences your build uses: the estimate counts only these (resistances always), so the searches go for that kind. Armour + Evasion, Evasion + Energy Shield and so on: tick both">Defences that count</span>' +
     GS_LAYERS.map(([k, n]) => '<label class="check-row"><input type="checkbox" data-gs-layer="' + k + '"' + (GS.set.layers[k] ? ' checked' : '') + (off ? ' disabled' : '') + '><span>' + n + '</span></label>').join('') +
     '<label class="check-row gs-pen" title="The Rupture resistance penalty: 10% for each Gate you broke (Gates 20 to 60), 50% at most. Taken off each resistance before the cap"><span>Res. penalty</span><select data-gs-pen' + (off ? ' disabled' : '') + '>' + [0, 10, 20, 30, 40, 50].map(v => '<option value="' + v + '"' + ((+GS.set.resPenalty || 0) === v ? ' selected' : '') + '>' + (v ? '-' + v + '%' : 'none') + '</option>').join('') + '</select></label>';
   const gsLayersHtml = off => '<span class="gs-layers">' + gsLayersInner(off) + '</span>';
-  const gsLayerNames = () => ['life', 'resistances'].concat(GS_LAYERS.filter(([k]) => GS.set.layers[k]).map(x => x[1].toLowerCase()));
-  const gsDefStats = () => ['Life', 'Resist'].concat(GS_LAYERS.filter(([k]) => GS.set.layers[k]).map(x => x[2])).concat(GS.set.layers.armour || GS.set.layers.evasion || GS.set.layers.es ? ['Defences'] : []);
+  const gsLayerNames = () => { const n = GS_LAYERS.filter(([k]) => GS.set.layers[k]).map(x => x[1].toLowerCase()); return n[0] === 'life' ? ['life', 'resistances'].concat(n.slice(1)) : ['resistances'].concat(n); };
+  const gsDefStats = () => ['Resist'].concat(GS_LAYERS.filter(([k]) => GS.set.layers[k]).map(x => x[2])).concat(GS.set.layers.armour || GS.set.layers.evasion || GS.set.layers.es ? ['Defences'] : []);
   const gsDefNote = () => 'Defence is an estimate against a boss hit of ' + num((GD.scaling.Hero || {}).ArmourBigHitRef || 1000) + ' or more: half physical, half elemental, half of the hits attacks. Counted: ' + gsLayerNames().join(', ') + ' (resistances capped at ' + gsResCap() + '%). Glancing blows are not' + ((+GS.set.resPenalty || 0) ? '; resistances count with a ' + GS.set.resPenalty + '% penalty.' : ', and no resistance penalty (set one under the defences).');
   // Armour, evasion and block before → after, for the ticked ones (A, B: gsDefence results).
   function gsLayerLine(A, B) {

@@ -1171,6 +1171,7 @@ body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page) 
 .pl-tip-plain { max-width: min(320px, calc(100vw - 16px)); }
 .pl-tip-plain .pl-tip-desc { margin-top: 0; }
 .pl-tip-plain b + .pl-tip-desc { margin-top: 3px; padding-top: 4px; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.word-runes { color: var(--muted); font-weight: 400; font-size: .92em; }
 .pl-tip-sub { display: block; color: var(--faint); font-size: 11px; margin-bottom: 4px; }
 .pl-tip ul { margin: 5px 0 0; padding: 5px 0 0 16px; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
 .pl-tip-imp, .pl-tip-runes { color: var(--muted); }

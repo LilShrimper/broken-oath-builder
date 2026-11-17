@@ -3067,10 +3067,15 @@ window.BOPlanner = function (ctx) {
     return out;
   }
   const baseLine = x => x.text.replace('{0}', x.v).replace('{1}', x.v2);
+  // The runes an Oathword item is made of, in socket order, to show next to its name: " (Tyr + Reid + Dagaz + Perthro)".
+  const wordRunes = it => {
+    const n = ((it && it.runes) || []).map(r => GD.runes[lc(r)]).filter(Boolean).map(r => r.Name);
+    return n.length ? ' <span class="word-runes notranslate">(' + esc(n.join(' + ')) + ')</span>' : '';
+  };
   function itemTip(it, slot) {
     const base = GD.bases[lc(it.base)], u = it.rarity === 'Unique' && GD.uniques[lc(it.unique)], word = oathwordForItem(it, slot);
     const li = (t, cls) => '<li' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(t) + '</li>';
-    let h = '<b>' + esc(u ? u.Name : word ? word.Name : it.rarity + ' ' + ((base && base.Name) || it.base)) + '</b>';
+    let h = '<b>' + esc(u ? u.Name : word ? word.Name : it.rarity + ' ' + ((base && base.Name) || it.base)) + (word ? wordRunes(it) : '') + '</b>';
     h += '<span class="pl-tip-sub">' + esc(SLOT_NAME[slot] + (u || word ? ' · ' + ((base && base.Name) || it.base) : '') + ' · item level ' + (it.level || 1)) + '</span>';
     const bs = baseStats(it, slot);
     // The game's wording: "Base Grade: 48, 98% of the base".
@@ -3681,7 +3686,7 @@ window.BOPlanner = function (ctx) {
     const rs = rows(ch), r = rs.find(x => x.skill === skill); if (!r) return '';
     return skillRow(ch, r, true, '', rs, onBar(ch));
   }
-  return { skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, supTip, oathwordForItem, slotName: SLOT_NAME, rows, render, fromCode, toCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
+  return { skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, supTip, oathwordForItem, wordRunes, slotName: SLOT_NAME, rows, render, fromCode, toCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
 };
 
 ;
@@ -10139,7 +10144,9 @@ window.BOCharacter = function (ctx) {
   // 0.56.8: attacks keep their full per-level bonus (6% more) past +5; before it only x1.01.
   // Data build 73: BonusLevelAttackMore dropped to 1.03 (scaling.json), but the developer's formulas.md (archive v1/static/b73,
   // section 8, read 13 Nov 2026) keeps levels past +5 at BonusFadeAttack = 1.06: "BonusLevelAttackMore ^ min(Bonus, BonusFadeFrom)
-  // x BonusFadeAttack ^ max(0, Bonus - BonusFadeFrom)". Not yet seen in a tooltip.
+  // x BonusFadeAttack ^ max(0, Bonus - BonusFadeFrom)". Tooltip-proven 17 Nov 2026 (game build 79, Samtest Viper Fang 20
+  // playing at 57, +37 from gear): "Each level: 3% more for the first 5, then 6% more", "648% more damage in total" =
+  // 1.03^5 x 1.06^32 - 1 = 648.1%.
   const attackFade = (GD, G) => is073(GD) ? 1.06 : is0568(GD) ? (G.BonusLevelAttackMore > 1 ? G.BonusLevelAttackMore : 1.06) : BONUS_FADE_ATTACK;
   const bonusSplit = bonus => [Math.min(bonus, BONUS_FULL_LEVELS), Math.max(0, bonus - BONUS_FULL_LEVELS)];
   // Patch 0.56.0 (developer's patch notes, Discord 6 Nov 2026 21:28 UTC). Its rules below switch on with game data
@@ -18307,7 +18314,7 @@ window.BOStartApp = function () {
       const u = GD.uniques[lc(it.unique)], v = it.affixes.filter(a => !a.id.startsWith('unique:')).length;
       return '<b class="gs-unique">' + esc(u ? u.Name : it.name) + '</b> <span class="meta">' + esc(bn) + (it.forged ? ' · forged' : '') + (v ? ' · ' + v + ' Vow' + (v > 1 ? 's' : '') : '') + '</span>';
     }
-    if (word) return '<b>' + esc(word.Name) + '</b> <span class="meta">Oathword · ' + esc(bn) + '</span>';
+    if (word) return '<b>' + esc(word.Name) + '</b>' + planner.wordRunes(it) + ' <span class="meta">Oathword · ' + esc(bn) + '</span>';
     const n = it.affixes.length;
     return '<b>' + esc(it.rarity + ' ' + bn) + '</b> <span class="meta">' + (n ? n + ' line' + (n > 1 ? 's' : '') : 'no lines') + (it.runes.length ? ' · ' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') : '') + '</span>';
   }

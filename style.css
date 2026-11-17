@@ -1960,6 +1960,8 @@ body.io-open { overflow: hidden; }
 .is-tiers { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .is-tiers th { text-align: left; color: var(--faint); font-weight: 600; padding: 3px 6px; border-bottom: 1px solid var(--line); }
 .is-tiers td { padding: 3px 6px; border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
+.is-tiers .is-wfrac { color: var(--faint); font-size: 11px; }
+.is-tiers th[title], .is-tiers th[data-title] { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
 .is-tiers tr.on td { background: color-mix(in srgb, var(--dashboard-gold) 16%, transparent); color: var(--text); }
 .is-split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .is-split b { font-size: 12px; color: var(--muted); font-weight: 600; }

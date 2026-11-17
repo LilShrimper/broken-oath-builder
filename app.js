@@ -363,7 +363,7 @@ window.PAGE_LANGS = {
     }
 
     const affixes = {};
-    for (const a of J('Items/affixes.json').affixes) affixes[a.Id.toLowerCase()] = Object.assign(pick(a, ['Id', 'Type', 'Group', 'Mod', 'BaseTags', 'ExcludeTags']), { Tiers: (a.Tiers || []).map(t => pick(t, ['ILvl', 'Min', 'Max', 'Min2', 'Max2', 'Name'])) });
+    for (const a of J('Items/affixes.json').affixes) affixes[a.Id.toLowerCase()] = Object.assign(pick(a, ['Id', 'Type', 'Group', 'Mod', 'BaseTags', 'ExcludeTags', 'Weight']), { Tiers: (a.Tiers || []).map(t => pick(t, ['ILvl', 'Min', 'Max', 'Min2', 'Max2', 'Name', 'Weight'])) }); // Weight (affix and tier): Item Search's roll chance only
     // Riven mods (affixes_riven95.json, 54 lines at item level 84) and Mythic lines (mythic_lines.json, 12): the same
     // shape as an affix, read into the same table with a Kind. Public API game data, build 70 (12 Nov 2026): every Riven
     // mod is "riven95_" + a normal affix's id with the same Type, Group and Mod and one tier above that affix's best
@@ -371,7 +371,7 @@ window.PAGE_LANGS = {
     // (ts1-sc-trade Mage) wears them on ordinary rare bases of the twin's kind (riven95_int_flat on a belt,
     // riven95_cold_res on gloves), so a Riven mod is offered wherever its twin rolls: an inference from those two facts.
     // Mythic lines keep their own tag (Mythic85, no base has it): read so a build that carries one counts it, not offered.
-    const AFFIX_KEYS = ['Id', 'Type', 'Group', 'Mod', 'BaseTags', 'ExcludeTags'], TIER_KEYS = ['ILvl', 'Min', 'Max', 'Min2', 'Max2', 'Name'];
+    const AFFIX_KEYS = ['Id', 'Type', 'Group', 'Mod', 'BaseTags', 'ExcludeTags', 'Weight'], TIER_KEYS = ['ILvl', 'Min', 'Max', 'Min2', 'Max2', 'Name', 'Weight'];
     const extraAffixes = (rel, list, kind) => {
       let rows = []; try { rows = (J(rel) || {})[list] || []; } catch (e) { /* older game files: none */ }
       for (const a of rows) {
@@ -6145,6 +6145,28 @@ window.BOItemSearch = function (ctx) {
   const baseTags = b => [b.Class, b.Slot, ...(b.Tags || [])].filter(Boolean);
   // Which bases an affix rolls on (affixes.json BaseTags / ExcludeTags against the base's tags, as the planner does).
   const affixBases = (GD, a) => Object.values(GD.bases).filter(b => { const t = baseTags(b); return (a.BaseTags || []).some(x => t.includes(x)) && !(a.ExcludeTags || []).some(x => t.includes(x)); });
+  // Roll chance from the API's weights (affixes.json Weight, per line and per tier): the line's weight over the weights of
+  // every line of the same kind (Prefix / Suffix) that can roll on the same base. Riven mods and Mythic lines (Kind) and
+  // weight-0 lines get none. Left out: lean lines (LeanTag), item level (all tiers taken as reachable) and one-per-Group.
+  // How the game draws is not checked in-game; the page says so in the column's hover.
+  let poolCache = null;
+  function poolTotal(GD, type, b) {
+    if (!poolCache || poolCache.GD !== GD) poolCache = { GD, m: {} };
+    const k = type + '|' + b.Id;
+    if (poolCache.m[k] == null) {
+      const t = baseTags(b);
+      poolCache.m[k] = Object.values(GD.affixes).filter(x => !x.Kind && x.Type === type && x.Weight > 0 && (x.BaseTags || []).some(y => t.includes(y)) && !(x.ExcludeTags || []).some(y => t.includes(y))).reduce((s, x) => s + x.Weight, 0);
+    }
+    return poolCache.m[k];
+  }
+  function rollChance(GD, a) {
+    if (a.Kind || !(a.Weight > 0)) return null;
+    const tot = [...new Set(affixBases(GD, a).map(b => poolTotal(GD, a.Type, b)).filter(Boolean))].sort((x, y) => x - y);
+    return tot.length ? { w: a.Weight, lo: tot[0], hi: tot[tot.length - 1] } : null;
+  }
+  const pct = v => { const p = v * 100; return (p >= 10 ? p.toFixed(0) : p >= 1 ? p.toFixed(1) : p.toFixed(2)) + '%'; };
+  const pctRange = (a, b) => pct(a) === pct(b) ? pct(a) : pct(a).slice(0, -1) + '–' + pct(b);
+  const num = n => n.toLocaleString('en-US');
   // Which bases an Oathword can be cut into (runewords.json Bases: a class, slot or tag).
   const wordBases = (GD, w) => { const ok = new Set((w.Bases || []).map(lc)); return Object.values(GD.bases).filter(b => baseTags(b).some(t => ok.has(lc(t)))); };
   const BASE_WORDS = { TwoHand: 'Two-handed weapons', OneHandSword: 'One-handed swords', OneHandAxe: 'One-handed axes', OneHandMace: 'One-handed maces', Weapon: 'Any weapon', Chest: 'Chests', Helm: 'Helms', Shield: 'Shields', Staff: 'Staves', Wand: 'Wands', Bow: 'Bows', Dagger: 'Daggers', Claw: 'Claws', Fist: 'Fist weapons', Scythe: 'Scythes' };
@@ -6474,14 +6496,29 @@ window.BOItemSearch = function (ctx) {
     const text = t ? rangeText(GD, a.Mod, t.Min, t.Max, t.Min2, t.Max2) : e.name;
     const ilvls = a.Tiers.map(x => x.ILvl || 1), lo = Math.min(...ilvls), hi = Math.max(...ilvls);
     const tags = (a.Mod.Tags || []).map(x => '<span class="is-tag ' + (TAG_CLS[lc(x)] || '') + '">' + esc(x) + '</span>').join('');
+    // Weight column: single tier = line weight / total weight of the kind on the base; several tiers = that times the
+    // tier's share of the line's tier weights. Several bases with different totals give a range.
+    const rc = rollChance(GD, a), kind = lc(a.Type), many = a.Tiers.length > 1;
+    const tw = a.Tiers.reduce((s, x) => s + (x.Weight || 0), 0);
+    const den = rc ? (rc.lo === rc.hi ? num(rc.lo) : num(rc.lo) + '–' + num(rc.hi)) : '';
+    const wHead = rc ? '<th title="Chance this line is picked when the item rolls a ' + kind + ': its weight / the total ' + kind + ' weight of every ' + kind + ' that can roll on that base' +
+      (many ? ', times the tier\'s weight / all its tiers\' weight' : '') + '. Counts every tier as reachable; a lower item level leaves out higher tiers and lines, which raises the rest. Weights from the public API; the draw itself is not checked in-game.">Weight</th>' : '';
+    const wCell = x => {
+      if (!rc) return '';
+      if (!many) return '<td>' + pctRange(rc.w / rc.hi, rc.w / rc.lo) + ' <small class="is-wfrac">(' + num(rc.w) + '/' + den + ')</small></td>';
+      if (!tw || !x.Weight) return '<td></td>';
+      const s = x.Weight / tw;
+      return '<td>' + pctRange(rc.w / rc.hi * s, rc.w / rc.lo * s) + ' <small class="is-wfrac">(' + num(x.Weight) + '/' + num(tw) + ')</small></td>';
+    };
+    const wLine = rc && many ? '<p class="is-into">Line weight: ' + pctRange(rc.w / rc.hi, rc.w / rc.lo) + ' (' + num(rc.w) + '/' + den + ' ' + kind + ' weight)</p>' : '';
     return '<details class="is-mrow ' + lc(a.Type) + '"><summary>' +
       '<span class="is-aff ' + lc(a.Type) + '">' + esc(a.Type) + '</span>' +
       '<span class="is-mtext"><span class="is-mline">' + esc(text) + '</span>' + addedBadge(e, true) + tags + '<small class="is-mslots">' + esc(e.slots.join(', ')) + '</small></span>' +
       '<span class="is-nums"><span class="n tiers" title="' + (t ? 'Tier ' + (on + 1) + ' of ' + a.Tiers.length : a.Tiers.length + ' tiers') + '">' + (t ? 'T' + (on + 1) : a.Tiers.length) + '</span>' +
       '<span class="n ilvl" title="Item level ' + (t ? 'tier ' + (on + 1) + ' needs' : 'the lowest and highest tiers need') + '">' + (t ? t.ILvl || 1 : lo === hi ? lo : lo + '–' + hi) + '</span></span>' +
-      '</summary><div class="is-mbody"><p class="is-into">Rolls on: ' + esc(e.slots.join(', ') || 'nothing') + (e.types.length ? ' (' + esc(e.types.join(', ')) + ')' : '') + '</p>' +
-      '<table class="is-tiers"><thead><tr><th>Tier</th><th>Name</th><th>Item level</th><th>Roll</th></tr></thead><tbody>' +
-      a.Tiers.map((x, i) => '<tr' + (i === on ? ' class="on"' : '') + '><td>T' + (i + 1) + '</td><td>' + esc(x.Name || '') + '</td><td>' + (x.ILvl || 1) + '</td><td>' + rng(x.Min, x.Max) + (x.Min2 != null ? ' / ' + rng(x.Min2, x.Max2) : '') + '</td></tr>').join('') + '</tbody></table>' + histBox(e) + '</div></details>';
+      '</summary><div class="is-mbody"><p class="is-into">Rolls on: ' + esc(e.slots.join(', ') || 'nothing') + (e.types.length ? ' (' + esc(e.types.join(', ')) + ')' : '') + '</p>' + wLine +
+      '<table class="is-tiers"><thead><tr><th>Tier</th><th>Name</th><th>Item level</th><th title="The values this tier can give: the game picks a number in this range when the line rolls. Two ranges (a / b) are the low and high end of added damage.">Range</th>' + wHead + '</tr></thead><tbody>' +
+      a.Tiers.map((x, i) => '<tr' + (i === on ? ' class="on"' : '') + '><td>T' + (i + 1) + '</td><td>' + esc(x.Name || '') + '</td><td>' + (x.ILvl || 1) + '</td><td>' + rng(x.Min, x.Max) + (x.Min2 != null ? ' / ' + rng(x.Min2, x.Max2) : '') + '</td>' + wCell(x) + '</tr>').join('') + '</tbody></table>' + histBox(e) + '</div></details>';
   }
 
   // ---------- page ----------

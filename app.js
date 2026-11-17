@@ -6574,7 +6574,7 @@ window.BOItemSearch = function (ctx) {
       // inside these raised ranges (17 Nov 2026: Ossuary Stride x1.20-1.36 over its normal max). Lines that stay x1 are left out.
       const fg = Array.isArray(u.Forged) ? (u.Mods || []).map((m, i) => [m, +u.Forged[i] || 1]).filter(([m, f]) => f > 1 && m.Max != null) : [];
       if (fg.length) body += '<details class="is-forged"><summary>Forged copy: ' + fg.length + ' line' + (fg.length > 1 ? 's' : '') + ' roll higher</summary><ul class="is-lines unique">' +
-        fg.map(([m, f]) => { const i = u.Mods.indexOf(m), sm = S.uniqueLineShown(u.Id, i, m) || m; return li(uniqueLine(GD, Object.assign({}, sm, { Min: Math.round(sm.Min * f), Max: Math.round(sm.Max * f), Min2: sm.Min2 != null ? Math.round(sm.Min2 * f) : sm.Min2, Max2: sm.Max2 != null ? Math.round(sm.Max2 * f) : sm.Max2 })) + ' <small class="meta">×' + f + '</small>'); }).join('') + '</ul></details>';
+        fg.map(([m, f]) => { const i = u.Mods.indexOf(m), sm = S.uniqueLineShown(u.Id, i, m) || m; return '<li>' + esc(uniqueLine(GD, Object.assign({}, sm, { Min: Math.round(sm.Min * f), Max: Math.round(sm.Max * f), Min2: sm.Min2 != null ? Math.round(sm.Min2 * f) : sm.Min2, Max2: sm.Max2 != null ? Math.round(sm.Max2 * f) : sm.Max2 }))) + ' <small class="meta">×' + f + '</small></li>'; }).join('') + '</ul></details>';
       // Where it drops (grail.js dropText: Guardian chase / signature, the Core, or any item level).
       const og = ctx.owned && ctx.owned();
       const from = og && og.dropText ? og.dropText(u) : [];

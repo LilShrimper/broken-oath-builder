@@ -6359,7 +6359,7 @@ window.BOItemSearch = function (ctx) {
 
   // Skill and support gems (owner, 14 Nov 2026): their Slot / Type / Tier filters read as Class / Tag / Colour (supports:
   // Works with / Excludes / Colour), they have no level, and the icon is the game's skill tile (GEM_ICONS through
-  // ctx.skillDot) or, for supports and tiles the sheet lacks, a gem in its colour.
+  // ctx.skillDot), for supports the game's gem art (GD.itemIcons.sup, 17 Nov 2026), else a gem in its colour.
   const GEM_CATS = { skill: 1, support: 1 };
   const GEM_COLOR = { Str: 'Red', Dex: 'Green', Int: 'Purple' }, SKILL_COLOR = { Str: 'Red', Dex: 'Green', Int: 'Blue' };
   const COLOR_VAR = { Red: 'var(--gem-str)', Green: 'var(--gem-dex)', Purple: 'var(--gem-int)', Blue: 'var(--gem-blue)' };
@@ -6639,7 +6639,7 @@ window.BOItemSearch = function (ctx) {
         (e.slots.length ? '<p class="is-into is-chips"><span>' + (e.slots.length > 1 ? 'Home classes:' : 'Home class:') + '</span>' + e.slots.map(c => '<span class="is-tag">' + esc(c) + '</span>').join('') + '</p>' : '');
     } else if (e.cat === 'support') {
       const sd = e.sd, chip = t => '<span class="is-tag">' + esc(t) + '</span>';
-      ico = gemIcon(e.color);
+      ico = art('sup', sd.Id, 'supgem', (e.color || '') + ' support gem') || gemIcon(e.color);
       sub = (e.color || 'Support') + (sd.ManaMultiplier && sd.ManaMultiplier !== 1 ? ' · mana ×' + fmt(sd.ManaMultiplier) : '');
       body = (sd.Description ? '<p class="is-desc">' + esc(sd.Description) + '</p>' : '') +
         ((sd.RequiresAnyTag || []).length ? '<p class="is-into is-chips"><span>Supports:</span>' + sd.RequiresAnyTag.map(chip).join('') + '</p>' : '<p class="is-into">Supports any skill</p>') +
@@ -7171,7 +7171,7 @@ window.BOItemSearch = function (ctx) {
     const { $, esc } = ctx, GD = () => ctx.gd() || {};
     const S = {
       leagues: null, season: null, hc: false, ssf: false, league: null,
-      cls: 'All', skill: '', item: '', sort: 'rank',
+      cls: 'All', skill: '', gem: '', item: '', sort: 'rank',
       ladder: null, meta: null, metaOpen: true, version: null,
       rosters: {}, rosterBusy: '', // rosters[league][hero id] = { life, es, ehp, uniques: [] }
       hero: null, heroData: null, err: '', loading: false,
@@ -7182,7 +7182,12 @@ window.BOItemSearch = function (ctx) {
     async function get(path) {
       const m = mem.get(path);
       if (m && Date.now() - m.at < 5 * 60000) return m.data;
-      const r = await fetch(ctx.api + path);
+      // A time limit, so a slow answer shows an error instead of "Loading…" for good (17 Nov 2026). Roster files are
+      // built from up to 26 API files on the worker, so they get longer.
+      const ms = /^roster\//.test(path) ? 45000 : 20000;
+      let r;
+      try { r = await fetch(ctx.api + path, { signal: AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined }); }
+      catch (e) { throw new Error(e && (e.name === 'TimeoutError' || e.name === 'AbortError') ? 'The ladder service took too long to answer. Change a filter or reload to try again.' : 'Could not reach the ladder service. Check your connection and reload.'); }
       if (r.status === 404) { mem.set(path, { at: Date.now(), data: null }); return null; }
       if (!r.ok) throw new Error((await r.text().catch(() => '')) || 'The ladder service answered ' + r.status + '.');
       const data = await r.json();
@@ -7263,6 +7268,17 @@ window.BOItemSearch = function (ctx) {
       if (it.base && !isHidden(it.base)) out.push(name('bases', it.base));
       return out;
     };
+    // Every skill and support socketed in a build (undiscovered ones left out), for the "Gem used" filter (player request,
+    // Discord 17 Nov 2026: find totem, trap or warcry builds, not only by main skill). Builds list about 20 socketed skills
+    // but use far fewer, so only skills on the hotbar or with damage dealt count (all of them when the build has neither).
+    // The build panel greys out the other (parked) skills the same way, so it shows what the filter counts.
+    const usedSkills = b => { const sd = b.skill_damage || {}; return new Set([...(b.hotbar || []), ...Object.keys(sd).filter(k => sd[k] > 0)]); };
+    const isUsed = (b, used, id) => !used.size || used.has(id);
+    const gemsOf = b => {
+      const used = usedSkills(b);
+      const socks = (b.skills || []).filter(s => s.skill && isUsed(b, used, s.skill));
+      return [...new Set(socks.flatMap(s => [s.skill, ...(s.supports || [])]).filter(x => x && !isHidden(x)))];
+    };
     async function loadRoster() {
       if (!S.league || !S.ladder) return;
       const league = S.league;
@@ -7277,8 +7293,8 @@ window.BOItemSearch = function (ctx) {
       const failed = new Set(files.filter(([, f]) => !f).map(([c]) => c));
       for (const [, f] of files) for (const h of (f && f.heroes) || []) {
         if (!h || !h.build || !h.hero) continue;
-        const items = (h.build.items || []).flatMap(itemNames);
-        if (emptyBuild(h.build)) { roster(league)[h.hero] = { life: null, es: null, ehp: null, sim: null, empty: true, items, find: '' }; continue; }
+        const items = (h.build.items || []).flatMap(itemNames), gems = gemsOf(h.build);
+        if (emptyBuild(h.build)) { roster(league)[h.hero] = { life: null, es: null, ehp: null, sim: null, empty: true, items, gems, find: '' }; continue; }
         try {
           const ch = charFromApi(h), d = ctx.defence(ch);
           // Sim the skill the hero has dealt the most damage with (build.skill_damage), owner 11 Nov 2026: the ladder's
@@ -7294,8 +7310,8 @@ window.BOItemSearch = function (ctx) {
             try { sim = ctx.simDps ? ctx.simDps(ch, h.rupture_level || 0) : null; } catch (e) { sim = null; }
             if (sim > 0) { simSkill = id; break; }
           }
-          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), sim, simSkill, items, find: items.join('\n').toLowerCase() };
-        } catch (e) { roster(league)[h.hero] = { life: null, es: null, ehp: null, sim: null, items, find: items.join('\n').toLowerCase() }; }
+          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), sim, simSkill, items, gems, find: items.join('\n').toLowerCase() };
+        } catch (e) { roster(league)[h.hero] = { life: null, es: null, ehp: null, sim: null, items, gems, find: items.join('\n').toLowerCase() }; }
         if (++n % 15 === 0) { S.rosterBusy = 'Running the sim on the builds… ' + n; paint(); await new Promise(r => setTimeout(r, 0)); }
       }
       // Only classes read without errors count as done; the others are tried again next time.
@@ -7305,7 +7321,8 @@ window.BOItemSearch = function (ctx) {
     }
     async function refresh(fn) {
       S.loading = true; S.err = ''; paint();
-      try { await fn(); if (needRoster()) await loadRoster(); } catch (e) { S.err = e.message || String(e); S.rosterBusy = ''; }
+      // After a failed first load, any filter click tries the season list and ladder again (both cached in `mem` once read).
+      try { if (!S.leagues) { await loadLeagues(); await loadLadder(); } else if (S.league && !S.ladder) await loadLadder(); await fn(); if (needRoster()) await loadRoster(); } catch (e) { S.err = e.message || String(e); S.rosterBusy = ''; }
       S.loading = false; paint();
     }
 
@@ -7348,6 +7365,7 @@ window.BOItemSearch = function (ctx) {
       // Item search: every word must be in one of the hero's worn item names (unique or base).
       const words = S.item.trim().toLowerCase().split(/\s+/).filter(Boolean);
       if (words.length) rows = rows.filter(r => { const x = roster()[r.hero]; return x && words.every(w => x.find.includes(w)); });
+      if (S.gem) rows = rows.filter(r => { const x = roster()[r.hero]; return x && (x.gems || []).includes(S.gem); });
       if (S.sort !== 'rank') rows = rows.slice().sort((a, b) => {
         const x = metric(a), y = metric(b);
         if (x == null && y == null) return (a.rank || 0) - (b.rank || 0);
@@ -7387,7 +7405,13 @@ window.BOItemSearch = function (ctx) {
       // Suggestions for the item search: the meta's uniques, then every item name worn by the builds read so far.
       const names = new Set(((S.meta && S.meta.uniques) || []).map(u => u.id).filter(u => u && !isHidden(u)).map(uniqueName));
       for (const x of Object.values(roster())) for (const nm of x.items) names.add(nm);
-      const filtered = S.cls !== 'All' || S.skill || S.item.trim() || S.sort !== 'rank';
+      const filtered = S.cls !== 'All' || S.skill || S.gem || S.item.trim() || S.sort !== 'rank';
+      // "Gem used": the skills and supports in the builds read so far (this class, or all), supports first.
+      const used = new Set(S.gem ? [S.gem] : []);
+      for (const r of rows) if (S.cls === 'All' || r.class === S.cls) for (const g of (roster()[r.hero] || {}).gems || []) used.add(g);
+      const isSup = g => !!(GD().supports || {})[g] && !(GD().skills || {})[g];
+      const gemOpts = list => list.sort((a, b) => (isSup(a) ? supportName(a) : skillName(a)).localeCompare(isSup(b) ? supportName(b) : skillName(b))).map(g => '<option value="' + esc(g) + '"' + (g === S.gem ? ' selected' : '') + '>' + esc(isSup(g) ? supportName(g) : skillName(g)) + '</option>').join('');
+      const supList = [...used].filter(isSup), skList = [...used].filter(g => !isSup(g));
       const counts = {}; for (const r of rows) counts[r.class] = (counts[r.class] || 0) + 1;
       return '<div class="lad-controls">' +
         '<label class="field"><span>Season</span><select id="ladSeason">' + ss.map(sOpt).join('') + '</select></label>' +
@@ -7396,7 +7420,8 @@ window.BOItemSearch = function (ctx) {
         '<details class="card lad-meta" id="ladMeta"' + (S.metaOpen ? ' open' : '') + '><summary><b>Meta</b><span class="meta">Most played classes, skills and uniques in this league</span></summary>' + metaBody() + '</details>' +
         '<div class="lad-classes" role="tablist" aria-label="Class">' + ['All', ...CLASSES].map(c => '<button type="button" role="tab" class="lad-class' + (S.cls === c ? ' on' : '') + '" aria-selected="' + (S.cls === c) + '" data-cls="' + c + '">' + clsIco(c) + c + (c !== 'All' && counts[c] ? ' <small>' + counts[c] + '</small>' : '') + '</button>').join('') + '</div>' +
         '<div class="lad-filters">' +
-        '<label class="field"><span>Skill</span><select id="ladSkill"><option value="">All skills</option>' + skills.map(s => '<option value="' + esc(s) + '"' + (s === S.skill ? ' selected' : '') + '>' + esc(skillName(s)) + '</option>').join('') + '</select></label>' +
+        '<label class="field"><span>Main skill</span><select id="ladSkill"><option value="">All skills</option>' + skills.map(s => '<option value="' + esc(s) + '"' + (s === S.skill ? ' selected' : '') + '>' + esc(skillName(s)) + '</option>').join('') + '</select></label>' +
+        '<label class="field"><span>Gem used</span><select id="ladGem"><option value="">Any gem</option>' + (supList.length ? '<optgroup label="Supports">' + gemOpts(supList) + '</optgroup>' : '') + (skList.length ? '<optgroup label="Skills">' + gemOpts(skList) + '</optgroup>' : '') + '</select></label>' +
         '<label class="field lad-item-search"><span>Item worn</span><input id="ladItem" type="search" list="ladItemList" autocomplete="off" placeholder="Unique or base, e.g. Squire\'s Promise" value="' + esc(S.item) + '"><datalist id="ladItemList">' + [...names].sort((a, b) => a.localeCompare(b)).map(nm => '<option value="' + esc(nm) + '"></option>').join('') + '</datalist></label>' +
         '<label class="field"><span>Sort by</span><select id="ladSort">' + SORTS.map(s => '<option value="' + s[0] + '"' + (s[0] === S.sort ? ' selected' : '') + '>' + s[1] + '</option>').join('') + '</select></label>' +
         '<button type="button" class="btn ghost lad-reset" id="ladReset"' + (filtered ? '' : ' disabled') + '>Reset filters</button>' +
@@ -7407,16 +7432,9 @@ window.BOItemSearch = function (ctx) {
     function bar(share, max) { return '<span class="lad-bar"><i style="width:' + Math.max(2, Math.min(100, (share / (max || 100)) * 100)).toFixed(1) + '%"></i></span>'; }
     function metaExtra(M, li, cnt, box) {
       let h = '';
-      const bands = Object.entries(M.rupture_level_bands || {}).map(([k, n]) => [+k, +n || 0]).filter(([k]) => isFinite(k)).sort((a, b) => a[0] - b[0]);
-      if (bands.length) {
-        const maxB = Math.max(...bands.map(b => b[1]), 1);
-        h += box('Rupture Level spread', 'Active heroes by their best Rupture Level, in steps of 25.', '<ul>' + bands.map(([k, n]) => '<li><div class="lad-meta-row"><span class="lad-meta-name">' + k + '–' + (k + 24) + '</span>' + bar(n, maxB) + '<span class="lad-meta-num">' + n + '</span></div></li>').join('') + '</ul>');
-      }
       const sample = (M.sample && M.sample.heroes) || 0;
       const keys = (M.keystones || []).filter(k => !isHidden(k.id)).slice(0, 8);
       if (keys.length) h += box('Most taken keystones', 'In the published builds' + (sample ? ' (' + sample + ' heroes)' : '') + '.', '<ul>' + keys.map(k => { const n = (GD().nodes || {})[nodeId(k.id)]; return li('data-k="' + esc(k.id) + '"', esc(n ? n.Name : k.id), '', k.share, 100, cnt(k)); }).join('') + '</ul>');
-      const asc = (M.ascendancies || []).slice(0, 8);
-      if (asc.length) h += box('Ascendancies', 'Class and Dragonling Aspect of the published builds.', '<ul>' + asc.map(a => { const [c, e] = String(a.id).split('/'); return li('data-f-cls="' + esc(c) + '"', clsIco(c) + esc(c), esc(e || ''), a.share, 100, cnt(a)); }).join('') + '</ul>');
       return h;
     }
     function metaBody() {
@@ -7436,8 +7454,8 @@ window.BOItemSearch = function (ctx) {
         box('Most played skills', 'Main skill of each active hero. Click one to filter the ladder.', '<ul>' + topSkills.map(s => li('data-f-skill="' + esc(s.skill) + '" data-f-scls="' + esc(s.class || '') + '"', esc(skillName(s.skill)), esc(s.class || ''), s.share, 100, cnt(s))).join('') + '</ul>') +
         box('Most used uniques', 'Worn by the published builds (top 50 of each class).' + (hiddenU ? ' ' + hiddenU + ' undiscovered.' : ''), uniques.length ? '<ul>' + uniques.map(u => li('data-f-unique="' + esc(u.id) + '"', esc(uniqueName(u.id)), '', u.share, 100, cnt(u))).join('') + '</ul>' : '<p class="meta">None yet.</p>') +
         box('Deepest Rupture by top 5 skills', 'The five most played main skills, by the deepest Rupture Level reached (median in brackets).', '<ul>' + deep.map(s => li('data-f-skill="' + esc(s.skill) + '" data-f-scls="' + esc(s.class || '') + '"', esc(skillName(s.skill)), esc(s.class || ''), s.best_rupture_level || 0, maxD, (s.best_rupture_level || 0) + ' <small class="meta">(' + (s.median_rupture_level || 0) + ')</small>')).join('') + '</ul>') +
-        // The meta file's other parts (API meta/<league>.json, read 17 Nov 2026): rupture_level_bands (25 levels wide, every active hero),
-        // and keystones / ascendancies (the published builds, described in "sample"). Display only.
+        // The meta file's other parts (API meta/<league>.json, read 17 Nov 2026): keystones (the published builds, described in "sample"). Display only.
+        // rupture_level_bands and ascendancies were shown too and taken off (owner, 17 Nov 2026: they added nothing).
         metaExtra(M, li, cnt, box) +
         '</div>' + (M.generated_at ? '<p class="hint">Meta updated ' + esc(ago(M.generated_at)) + ' (hourly).</p>' : '');
     }
@@ -7445,7 +7463,7 @@ window.BOItemSearch = function (ctx) {
       if (!S.league) return '<div class="card"><p class="hint">This season has no ' + (S.hc ? 'Hardcore' : 'Softcore') + ' ' + (S.ssf ? SOLO : 'Trade') + ' league.</p></div>';
       if (!S.ladder) return '<div class="card"><p class="hint">' + (S.loading ? 'Loading the ladder…' : 'No ladder for this league.') + '</p></div>';
       const rows = rowsShown();
-      if (!rows.length) return '<div class="card"><p class="hint">' + ((S.ladder.heroes || []).length ? (S.item.trim() && S.rosterBusy ? 'Reading builds…' : 'No heroes match these filters.') : 'Nobody in this league has completed a Rupture yet.') + '</p></div>';
+      if (!rows.length) return '<div class="card"><p class="hint">' + ((S.ladder.heroes || []).length ? ((S.item.trim() || S.gem) && S.rosterBusy ? 'Reading builds…' : 'No heroes match these filters.') : 'Nobody in this league has completed a Rupture yet.') + '</p></div>';
       const hc = S.hc;
       const extra = S.sort === 'ehp' ? 'EHP' : S.sort === 'lifees' ? 'Life + ES' : '';
       const body = rows.map(r => {
@@ -7484,10 +7502,12 @@ window.BOItemSearch = function (ctx) {
       if (!h) return '<div class="card lad-hero"><p class="hint">Loading the build…</p></div>';
       if (h.gone) return '<div class="card lad-hero"><p class="hint">This build is no longer published (the hero left the top 50, or its player hid it).</p></div>';
       const b = h.build || {}, m = h.measured || {}, main = mainSkillOf(h);
-      const skills = (b.skills || []).filter(s => s.skill).map(s => {
-        const lv = (b.gem_levels || {})[s.skill];
+      // Skills in use first (hotbar or damage dealt), then the socketed ones the hero does not use, greyed out.
+      const used = usedSkills(b), on = s => isUsed(b, used, s.skill) || s.skill === main;
+      const skills = (b.skills || []).filter(s => s.skill).map((s, i) => [s, i]).sort((x, y) => on(y[0]) - on(x[0]) || x[1] - y[1]).map(([s]) => {
+        const lv = (b.gem_levels || {})[s.skill], off = !on(s);
         const sup = (s.supports || []).filter(Boolean).map(x => '<span class="chip lad-sup">' + (isHidden(x) || !ctx.gemDot ? '' : ctx.gemDot(x)) + esc(supportName(x)) + ((b.gem_levels || {})[x] ? ' <small class="meta">' + b.gem_levels[x] + '</small>' : '') + '</span>');
-        return '<li' + (s.skill === main ? ' class="main"' : '') + '><b>' + (ctx.skillDot && !isHidden(s.skill) ? ctx.skillDot(s.skill) : '') + esc(skillName(s.skill)) + '</b>' + (lv ? ' <small class="meta">gem ' + lv + '</small>' : '') + (s.skill === main ? ' <span class="lad-tag">main</span>' : '') +
+        return '<li' + (s.skill === main ? ' class="main"' : off ? ' class="off"' : '') + '><b>' + (ctx.skillDot && !isHidden(s.skill) ? ctx.skillDot(s.skill) : '') + esc(skillName(s.skill)) + '</b>' + (lv ? ' <small class="meta">gem ' + lv + '</small>' : '') + (s.skill === main ? ' <span class="lad-tag">main</span>' : '') + (off ? ' <small class="meta lad-off">not on hotbar</small>' : '') +
           (sup.length ? '<div class="lad-sups">' + sup.join('') + '</div>' : '') + (s.conduit_link ? '<br><small class="meta">Conduit: ' + esc(skillName(s.conduit_link)) + '</small>' : '') + '</li>';
       }).join('');
       const nodes = (b.passive_nodes || []);
@@ -7537,11 +7557,12 @@ window.BOItemSearch = function (ctx) {
     function bind() {
       if (bound) return; bound = true;
       const el = $('#ladderPane');
-      const leagueChanged = () => { pickLeague(); S.skill = ''; S.item = ''; S.hero = null; S.heroData = null; refresh(loadLadder); };
+      const leagueChanged = () => { pickLeague(); S.skill = ''; S.gem = ''; S.item = ''; S.hero = null; S.heroData = null; refresh(loadLadder); };
       el.addEventListener('change', e => {
         const id = e.target.id;
         if (id === 'ladSeason') { S.season = e.target.value; leagueChanged(); }
         else if (id === 'ladSkill') { S.skill = e.target.value; paint(); }
+        else if (id === 'ladGem') { S.gem = e.target.value; refresh(async () => {}); }
         else if (id === 'ladSort') { S.sort = e.target.value; try { localStorage.setItem('bods:ladderSort', S.sort); } catch (err) { /* storage off */ } refresh(async () => {}); }
       });
       // Item search: filter as you type (the builds are read once, the first time it is used).
@@ -7560,7 +7581,7 @@ window.BOItemSearch = function (ctx) {
         const sw = e.target.closest('#ladHc, #ladSsf');
         if (sw) { if (sw.id === 'ladHc') S.hc = !S.hc; else S.ssf = !S.ssf; leagueChanged(); return; }
         if (e.target.closest('#ladReset')) {
-          S.cls = 'All'; S.skill = ''; S.item = ''; S.sort = 'rank';
+          S.cls = 'All'; S.skill = ''; S.gem = ''; S.item = ''; S.sort = 'rank';
           try { localStorage.setItem('bods:ladderSort', 'rank'); } catch (err) { /* storage off */ }
           refresh(async () => {}); return;
         }

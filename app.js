@@ -10100,6 +10100,10 @@ window.BOCharacter = function (ctx) {
   // Read this way so a patch that moves one of these numbers reaches the sim with the game data (12 Nov 2026): the Spark numbers,
   // the Totem, Ballista and Spark caps, the extra Totem and Trap shares, the Totem echo and the Vow skill-level share. Each default
   // is the value the sim used before, proven where its own comment says so.
+  // Patch 80 (developer's notes, pasted by the owner 17 Nov 2026): Deep Wound 6% per bleed up to 6 (was 15% / 8), shock from each hit 0.5 (was 1),
+  // Cold stores 25% (was 40%), Kindle feeds 25% (was 40%). The API's data is still build 79 (switches hold the old numbers), so until the
+  // API serves build 80 these new numbers are used; from build 80 on the switches decide (default = the new number). Not checked in game.
+  const p80 = (GD, key, nw) => +GD.apiBuild >= 80 ? ruleNum(GD, key, nw) : nw;
   const ruleNum = (GD, key, def) => { const v = (GD.rules || {})[key]; const n = typeof v === 'object' && v ? +v.value : +v; return v != null && isFinite(n) ? n : def; };
   // An on/off switch from the game's rules (true/false or "True"/"False"), or the given default when the data has none.
   const bSwitch = (GD, key, def) => { const v = (GD.rules || {})[key]; const x = v && typeof v === 'object' ? v.value : v; return x == null ? !!def : String(x).toLowerCase() === 'true'; };
@@ -11234,7 +11238,13 @@ window.BOCharacter = function (ctx) {
       const from = ruleNum(GD, 'r103.MAIN-SKILL.fLinkFrom103', 9);
       const w = clamp((L - from) / Math.max(1, 20 - from), 0, 1);
       const open = Math.min(6, (G.SocketsAtLevel || [1, 2, 5, 12, 15, 20]).filter(l => L >= l).length);
-      const links = res.supports.filter(s => s.ok && !s.granted && !(o.off && o.off.has(s.key))).length;
+      // Granted supports DO count as links. Ballista tooltips 17 Nov 2026 (Rangtest, gem 20, Killing Field's Tether + a granted Hunter's Mark
+      // Support, nothing else granted): Rend + Affliction + Focused Volley reads "Linked 5 of 6: deals 86%", Rend + Affliction alone "Linked 4 of 6:
+      // deals 71%" (the sim read 3 and 2 before). Tether is kept off a totem by its own ExcludeTags, yet the game grants it ("TrustFix91"
+      // style log line "GrantWhy70: summon_ballista already has tether from Killing Field", tooltip "Scales with ... tether"), so it counts too.
+      let links = res.supports.filter(s => s.ok && (s.granted || !(o.off && o.off.has(s.key)))).length;
+      if (!res.supports.some(s => lc(s.id) === 'tether') && mods.some(m => m.stat === 'GrantSupport' && (m.tags || []).some(t => lc(t) === 'tether') && (m.tags || []).every(t => lc(t) === 'tether' || ctx.tags.has(lc(t))))) links++;
+      links = Math.min(open, links);
       const empty = Math.max(0, open - links);
       const f = 1 - w * empty / 7;
       res.links = { links, open, empty, ramp: w, factor: f };
@@ -12163,7 +12173,9 @@ window.BOCharacter = function (ctx) {
     } else if (projectiles && focusShare > 0 && focusShare < 1 && (!shape || shape === 'arrow_totem') && sk.Delivery !== 'Rain') {
       // 17 Nov 2026: the support text in the API's game data now reads "It works on arrows you shoot yourself and on the bolts of your
       // Ballista or Arrow Totem (not a trap or rain)" (the older text said "not a trap, totem or rain"); 6 published ladder builds link
-      // it straight into the Ballista (tests: sim before this change dropped it). From the gem text only; no tooltip or log of a Ballista with it yet.
+      // it straight into the Ballista (the sim before this change dropped it). PROVEN by the game log 16 Nov 2026 (Rangtest, Ballista + Focused Volley,
+      // Training Post): "TotemFocus101: summon_ballista ballista fires 5 bolts on one line (8 deg), each its own hit list, share 60% (bolt 2 0.60, bolt 5 0.13)"
+      // (4 projectiles + 1 = 5 bolts, each 60% of the one before), and "TotemExtraShare summon_ballista 4 standing, share 0.50 -> each shot x0.625".
       // Focused Volley (support text, game data, Steam build 26595060, read 11 Nov 2026; from the data file / gem text, not yet checked against a tooltip or log): "all its arrows fly on one line at your target, each with its own hit, so one
       // enemy can take every arrow. Each arrow after the first deals 60% of the one before it (2 arrows: 100% + 60%; 4 arrows: 100% + 60% + 36% + 22%)
       // ... Arrows you shoot yourself only (not a trap, totem or rain)". Its 15% less and +1 arrow are plain lines.
@@ -12630,7 +12642,7 @@ window.BOCharacter = function (ctx) {
         // over: the average of min(cap, size + rate x t) over the shock's duration. ASSUMPTION: it grows by 1 point, not 1% of itself.
         let staticAvg = 0;
         if (is079(GD) && (rarity === 'rare' || isBoss)) {
-          const per = ruleNum(GD, 'r103.AILMENTS.StaticPerHit103', 1), r = hitsPerSec * perHitFactor * hitFactor * per;
+          const per = p80(GD, 'r103.AILMENTS.StaticPerHit103', 0.5), r = hitsPerSec * perHitFactor * hitFactor * per;
           const T = A.ShockSeconds * (1 + ailDur / 100);
           if (r > 0 && T > 0 && size < cap) {
             const tc = (cap - size) / r; // seconds to reach the cap
@@ -12681,10 +12693,10 @@ window.BOCharacter = function (ctx) {
       } else res.notes.push('Chill (patch 79): ' + ((chillF - 1) * 100).toFixed(1) + '% more damage taken from your chill, less than your shock, so the shock counts (only the strongest counts).');
       if (rarity === 'rare' || isBoss) {
         let fd = 0; for (const m of pickMods(mods, 'FreezeDuration', 'Inc')) if (applies(ctx, m)) { fd += m.v; use(m, 'Crack'); }
-        const crack = byType.Cold * ruleNum(GD, 'r103.AILMENTS.CrackPct103', 40) / 100 * Math.max(0, 1 + (dotMulti + fd) / 100);
+        const crack = byType.Cold * p80(GD, 'r103.AILMENTS.CrackPct103', 25) / 100 * Math.max(0, 1 + (dotMulti + fd) / 100);
         byType.Cold += crack; hitDpsVs += crack; res.hitDps = hitDpsVs;
         ail.crack = { dps: crack, freezeInc: fd };
-        res.notes.push('Crack (patch 79): the ' + (isBoss ? 'Guardian' : 'rare') + ' stores 40% of the cold it takes (x' + Math.max(0, 1 + (dotMulti + fd) / 100).toFixed(2) + ' from your damage over time multiplier and freeze duration) and it breaks as a cold hit every 3 s: +' + Math.round(crack).toLocaleString('en-US') + ' DPS. From the patch notes; not checked in game.');
+        res.notes.push('Crack (patch 79): the ' + (isBoss ? 'Guardian' : 'rare') + ' stores ' + p80(GD, 'r103.AILMENTS.CrackPct103', 25) + '% of the cold it takes (x' + Math.max(0, 1 + (dotMulti + fd) / 100).toFixed(2) + ' from your damage over time multiplier and freeze duration) and it breaks as a cold hit every 3 s: +' + Math.round(crack).toLocaleString('en-US') + ' DPS. From the patch notes; not checked in game.');
       }
     }
     let poisonDps = 0, igniteDps = 0, bleedDps = 0;
@@ -12758,9 +12770,9 @@ window.BOCharacter = function (ctx) {
         // 119547.9/s + kindle 46174.6/s)": each ignite laid on a burning enemy adds 40% of ITS OWN burn for its own duration, on top
         // of the strongest ignite, up to 20 at once. So the fire = the ignite burning + 40% x the average ignite x the ignites laid in
         // one ignite life beyond the one burning (Poisson count, capped at 20). Spread on death (fed 3 times) is for packs.
-        const kindle = is079(GD) ? feedsOnTop(mu, ruleNum(GD, 'r103.AILMENTS.KindleMax103', 20)) * ruleNum(GD, 'r103.AILMENTS.KindlePct103', 40) / 100 : 0;
+        const kindle = is079(GD) ? feedsOnTop(mu, ruleNum(GD, 'r103.AILMENTS.KindleMax103', 20)) * p80(GD, 'r103.AILMENTS.KindlePct103', 25) / 100 : 0;
         igniteDps = dps1 * (burning + kindle) * dotTakenFor('Fire');
-        if (kindle > 0) res.notes.push('Kindle (patch 79): ignites on a burning enemy feed the fire 40% of their own burn, ' + (kindle / 0.4).toFixed(1) + ' feedings on average = x' + ((burning + kindle) / Math.max(burning, 1e-9)).toFixed(2) + ' ignite (the game log shows the same rule).');
+        if (kindle > 0) res.notes.push('Kindle (patch 79): ignites on a burning enemy feed the fire ' + p80(GD, 'r103.AILMENTS.KindlePct103', 25) + '% of their own burn, ' + (kindle / (p80(GD, 'r103.AILMENTS.KindlePct103', 25) / 100)).toFixed(1) + ' feedings on average = x' + ((burning + kindle) / Math.max(burning, 1e-9)).toFixed(2) + ' ignite (the game log shows the same rule).');
         // The game's skill panel counts the Ignite by plain arithmetic: ignites a second x duration burning at once (at most the
         // slots), not the chance that one is burning. Owner's Pyre of Faith tooltip, 12 Nov 2026 (2 ticks a second, 6% a hit,
         // 4.31 s): "Ignite 2,421 a second ... Includes 1,333 ignite a second on one enemy: about 0.5 burning at your hit rate";
@@ -12856,7 +12868,7 @@ window.BOCharacter = function (ctx) {
           res.notes.push('Bleeds stack (+' + Math.round(bStacks) + '): ' + onAt.toFixed(2) + ' of ' + capB + ' on the enemy on average, each 65% weaker: ' + Math.round(stackDps) + '/s against ' + Math.round(dpsKept * uptime) + '/s for the strongest bleed alone.');
           dpsKept = stackDps / Math.max(uptime, 1e-9); // so dpsKept x uptime below equals the stacked bleed
         }
-        const wound = is079(GD) ? feedsOnTop(rollsPerSec * dur, ruleNum(GD, 'r103.AILMENTS.WoundMax103', 8)) * ruleNum(GD, 'r103.AILMENTS.WoundPct103', 15) / 100 * dps1 : 0;
+        const wound = is079(GD) ? feedsOnTop(rollsPerSec * dur, p80(GD, 'r103.AILMENTS.WoundMax103', 6)) * p80(GD, 'r103.AILMENTS.WoundPct103', 6) / 100 * dps1 : 0;
         // Woeweaver raises the bleed: the bleed is laid from the hit after Woeweaver's more, before defences. PROVEN, game logs
         // 16 Nov 2026, Warrior Rending Slam + Woeweaver on the Training Post: bleed base / the same hit's raw damage ("AscRaw89:
         // Aftershock from X (before defences)") = 0.873-0.917 (avg 0.887, the slam's phys share 0.89) with no Woe, against
@@ -12874,7 +12886,7 @@ window.BOCharacter = function (ctx) {
         //   Deepened Woe), the same as on the hit; the log's gap is bigger (crits and Fortify stacks differ per test).
         bleedDps = (dpsKept * uptime + wound) * dotTakenFor('Physical') * woeWeaveK;
         if (woeWeaveK > 1) res.notes.push('Bleeding: Woeweaver raises the bleed too, x' + woeWeaveK.toFixed(2) + ': the bleed is laid from the bigger hit (game log, 16 Nov 2026).');
-        if (wound > 0) res.notes.push('Deep Wound (patch 79): bleeds on a bleeding enemy deepen it by 15% of their own bleed, +' + Math.round(wound).toLocaleString('en-US') + '/s on top of the strongest (the game log shows the same rule). Tear (Slams and crits cash 50% of the bleed left) only makes it land sooner.');
+        if (wound > 0) res.notes.push('Deep Wound (patch 79): bleeds on a bleeding enemy deepen it by ' + p80(GD, 'r103.AILMENTS.WoundPct103', 6) + '% of their own bleed, +' + Math.round(wound).toLocaleString('en-US') + '/s on top of the strongest (the game log shows the same rule). Tear (Slams and crits cash 50% of the bleed left) only makes it land sooner.');
         ail.bleed = { chance: bleedChance, dps1, dpsKept, keptX: dpsKept / dps1, rollsPerLife: rollsPerSec * dur, uptime, duration: dur, dps: bleedDps, more: bMore, inc: bInc };
         res.notes.push('Bleeding: ' + Math.round(bleedChance) + '% chance, ' + (rollsPerSec * dur).toFixed(1) + ' bleeds rolled in one ' + dur + ' s bleed life; the strongest holds: ' + Math.round(dpsKept) + '/s (x' + (dpsKept / dps1).toFixed(2) + ' a bleed from the average hit), up ' + Math.round(uptime * 100) + '% of the time. Counted on a standing enemy: bleeds deal 50% more while it moves.');
       }

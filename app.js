@@ -110,6 +110,12 @@ window.PAGE_LANGS = {
     // "A · B", "A (B)", "A: B": the parts one by one; at least one must have Chinese.
     const parts = (sep, list, join) => { const out = list.map(x => sub(x)); return out.some((x, i) => x != null && x !== list[i]) ? out.map((x, i) => x != null ? x : list[i]).join(join) : null; };
     if (t.includes(' · ')) { r = parts(' · ', t.split(' · '), ' · '); if (r != null) return r; }
+    // "Chain, Added Fire, Brutality": a list of names (the support search results), only when every one is known.
+    // Player report, 17 Nov 2026: the Chinese page showed these lists in English.
+    if (t.includes(', ')) {
+      const list = t.split(', '), out = list.map(x => sub(x));
+      if (list.length <= 12 && list.every(x => x.length <= 60) && out.every(x => x != null)) return out.join(', ');
+    }
     let q = /^(.*\S) \(([^()]+)\)$/.exec(t);
     if (q) { const a = sub(q[1]), b = sub(q[2]); if (a != null || b != null) return (a != null ? a : q[1]) + (CJK ? '（' : ' (') + (b != null ? b : q[2]) + (CJK ? '）' : ')'); }
     q = /^([^:]{1,40}): (.+)$/.exec(t);
@@ -1594,7 +1600,23 @@ window.PAGE_LANGS = {
 //   cfg.maxRes: miss = resistance points still short of the target, added up; the score is divided by 1 + 4 x miss / target,
 //     so a line that closes the gap beats any damage line, and resistance past the target is worth nothing (no overcapping).
 //     Slots are re-filled every pass, so resistance moves to the slots where it costs the least damage.
-// Not counted: armour, evasion, block, attribute requirements, what the items cost or how rare they are.
+// Gear levels (owner's request, 16 Nov 2026: Midgame, Endgame and BiS on every gear finder; app.js GEAR_TIERS holds the presets).
+// These set how good and how rare the items tried are. None set: every line and unique at its best, as before.
+//   cfg.lineRoll 0..1: where in its tier's range a rare line or Vow rolls (1 = top roll).
+//   cfg.topLines: the most lines of one rare (or one red item's Vows) on the best tier its item level allows; the others take the
+//     tier under it. Not set: all on the best tier. The game boosts a rare with 4+ best-tier lines (Great x1.1, all of them Flawless
+//     x1.3; sim.js collectMods), so 3 keeps a rare plain. "One tier under the best" is where the Forge's Anneal and the Oathsteel /
+//     Gloomsilver Add crafts stop (faq.js Forge: switches bCraftT3_95, GloomTopRL97).
+//   cfg.rareLines: the most lines on a rare (3 prefixes and 3 suffixes at most either way). Not set: 6.
+//   cfg.runeTier: the highest rune tier (runes.json Tier 1-6) used in sockets and in Oathwords. Not set: every rune.
+//   cfg.uniquePool: 'all' (as before, cfg.limited decides on the Limited ones), 'regular' (uniques that drop, DropWeight over 0 or a
+//     Guardian's Signature, but not the game Collection's chase reds: Primal, Deep-forged, Guardian chase, Core and red Dwarven Runes;
+//     grail.js), 'common' (regular ones with DropWeight 10 or more). Both also leave out uniques above the item level; cfg.limited
+//     still adds the Limited ones. cfg.uniqueRoll 0..1: where unique lines roll.
+//     cfg.forged: uniques as forged copies (uniques.json Forged, one factor per line) at that roll.
+//   cfg.quality, cfg.grade: weapon quality (Hone 10%, 20%, Skyforged Hone past it) and Base Grade (1-100) of the items tried.
+//   These presets are our own reading of what a stage of the game looks like, not a game rule.
+// Not counted: attribute requirements, what the items cost.
 // Same item rules as planner.js (affixesFor, oathwordBases, rollUnique, topTier); keep them in step.
 (function (root) {
   'use strict';
@@ -1662,6 +1684,25 @@ window.PAGE_LANGS = {
     // already on items the search keeps count against it; the slot being filled sees every other slot's lines (the slots are
     // re-filled in turn, so the cap holds for the set), though a slot filled earlier keeps its Riven lines once the cap is used up.
     const rivenMax = lim(cfg.maxRiven, 999);
+    // Gear level (see the top of the file).
+    const frac = (v, d) => v == null || v === '' || !isFinite(+v) ? d : Math.max(0, Math.min(1, +v));
+    const lineRoll = frac(cfg.lineRoll, 1), uRoll = frac(cfg.uniqueRoll, 1), forged = !!cfg.forged;
+    const topMax = lim(cfg.topLines, 99), lineMax = lim(cfg.rareLines, LIMIT * 2), runeTierMax = lim(cfg.runeTier, 99);
+    const uPool = ['regular', 'common'].includes(cfg.uniquePool) ? cfg.uniquePool : 'all';
+    const newQuality = Math.max(0, Math.min(30, Math.round(+cfg.quality) || 0)), newGrade = Math.max(0, Math.min(100, Math.round(+cfg.grade) || 0));
+    const COMMON_DROP = 10; // DropWeight from which a unique counts as a common drop (the rarer ones are 1, 4 and 6)
+    const runeTier = id => (GD.runes[lc(id)] || {}).Tier || 1;
+    const chaseRed = u => !!(u.Primal || u.DwarvenSockets || u.Chase || u.Core || u.Limited || (GD.bases[lc(u.BaseId)] || {}).Slot === 'DwarvenRune');
+    const uniqueOk = u => uPool === 'all' ? useLimited || !u.Limited
+      : (useLimited && u.Limited) || !chaseRed(u) && (u.DropWeight > 0 || u.Signature) && !((u.Level || 0) > ilvl) && (uPool !== 'common' || u.DropWeight >= COMMON_DROP);
+    // A value at `roll` of the way from lo to hi; whole numbers stay whole.
+    const rollAt = (lo, hi, roll) => {
+      if (hi == null) return 0; if (lo == null) lo = hi;
+      const x = lo + (hi - lo) * roll;
+      return Number.isInteger(lo) && Number.isInteger(hi) ? Math.round(x) : Math.round(x * 100) / 100;
+    };
+    const gearLevel = { lineRoll, topLines: topMax, rareLines: lineMax, runeTier: runeTierMax, uniquePool: uPool, uniqueRoll: uRoll, forged, quality: newQuality, grade: newGrade };
+    const TOP = new WeakSet(); // rare lines / Vows on the best tier for the item level (cfg.topLines counts them)
     const isRiven = id => (GD.affixes[lc(id)] || {}).Kind === 'Riven';
     const rivenOn = list => (list || []).filter(a => !a.id.startsWith('unique:') && isRiven(a.id)).length;
     let collect = null; // Sim by Slot: every candidate tried (see cfg.onlySlot below)
@@ -1746,8 +1787,12 @@ window.PAGE_LANGS = {
     const rareSockets = base => ilvl >= SOCKET_FROM_ILVL ? Math.min(rareCap, runeSlots(base)) : 0;
     const rollUnique = (it, roll) => {
       const u = GD.uniques[lc(it.unique)], pt = (lo, hi) => lo == null ? 0 : Math.round((lo + (hi - lo) * roll) * 100) / 100;
+      // A forged copy: each line's range times its factor (as Item Search shows it: whole numbers rounded).
+      const fk = i => forged && Array.isArray(u.Forged) ? +u.Forged[i] || 1 : 1;
+      const fx = (x, f) => f === 1 || !x ? x : Number.isInteger(x) ? Math.round(x * f) : Math.round(x * f * 100) / 100;
       it.roll = roll;
-      it.affixes = u.Mods.map((m, i) => m.Mod ? { id: 'unique:' + i, tier: 0, v: pt(m.Min, m.Max), v2: pt(m.Min2, m.Max2) } : null).filter(Boolean);
+      it.affixes = u.Mods.map((m, i) => m.Mod ? { id: 'unique:' + i, tier: 0, v: fx(pt(m.Min, m.Max), fk(i)), v2: fx(pt(m.Min2, m.Max2), fk(i)) } : null).filter(Boolean);
+      if (u.Mods.some((m, i) => m.Mod && m.Max != null && fk(i) > 1)) it.forged = 1;
     };
     const oathBases = (slot, word) => {
       const allowed = new Set((word.Bases || []).map(lc));
@@ -1763,20 +1808,28 @@ window.PAGE_LANGS = {
     // Affixes on a rare (3 + 3) or Vows on a red item (6): the pick that adds the most DPS, again and again.
     // L: the line limits of a rare ({ type: per prefix / suffix, total }); an idol takes its own (magic 1 + 1, rare 3 + 3, at most N).
     function* fillAffixes(items, slot, it, vow, L) {
-      L = L || { type: LIMIT, total: LIMIT * 2 };
-      const base = baseOf(it), pool = [];
+      L = L || { type: LIMIT, total: lineMax };
+      const base = baseOf(it), pool = [], cap = vow ? vowMax : L.total;
+      // Each line on the best tier for the item level and (when cfg.topLines leaves room for others) on the tier under it.
+      const entry = (af, ti, top) => {
+        const t = af.Tiers[ti], a = { id: af.Id, tier: ti, v: rollAt(t.Min, t.Max, lineRoll), v2: t.Max2 != null ? rollAt(t.Min2, t.Max2, lineRoll) : 0 };
+        if (top) TOP.add(a);
+        return { af, g: af.Group, type: af.Type, top, a };
+      };
       for (const af of affixesFor(base)) {
         const ti = tierFor(af); if (ti < 0) continue;
-        const t = af.Tiers[ti];
-        pool.push({ af, g: af.Group, type: af.Type, a: { id: af.Id, tier: ti, v: t.Max, v2: t.Max2 != null ? t.Max2 : 0 } });
+        if (topMax > 0) pool.push(entry(af, ti, true));
+        if (topMax < cap && af.Tiers[ti + 1]) pool.push(entry(af, ti + 1, false));
       }
       const cur = { ...it, affixes: it.affixes.slice() };
       let v = V(put(items, slot, cur));
       const used = () => new Set(cur.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
       const count = t => cur.affixes.filter(a => (GD.affixes[lc(a.id)] || {}).Type === t).length;
+      const tops = list => list.filter(a => TOP.has(a)).length;
       const outsideRiven = put(items, slot, null).reduce((n, i) => n + rivenOn(i.affixes), 0); // Riven lines on every other item
       const rivenOk = (c, list) => !isRiven(c.a.id) || outsideRiven + rivenOn(list) < rivenMax;
-      const room = c => (vow ? cur.affixes.filter(a => !a.id.startsWith('unique:')).length < vowMax : count(c.type) < L.type && cur.affixes.length < L.total) && rivenOk(c, cur.affixes);
+      const topOk = (c, list) => !c.top || tops(list) < topMax;
+      const room = c => (vow ? cur.affixes.filter(a => !a.id.startsWith('unique:')).length < vowMax : count(c.type) < L.type && cur.affixes.length < L.total) && rivenOk(c, cur.affixes) && topOk(c, cur.affixes);
       const gains = new Map();
       let listed = null;
       for (let step = 0; step < (vow ? vowMax : L.total) && !late(); step++) {
@@ -1801,7 +1854,7 @@ window.PAGE_LANGS = {
         const rest = cur.affixes.filter((_, j) => j !== i), u = new Set(rest.map(x => (GD.affixes[lc(x.id)] || {}).Group));
         let bestA = null;
         for (const c of listed) {
-          if (u.has(c.g) || c.a.id === a.id || !rivenOk(c, rest)) continue;
+          if (u.has(c.g) || c.a === a || !rivenOk(c, rest) || !topOk(c, rest)) continue;
           if (!vow && c.type !== (GD.affixes[lc(a.id)] || {}).Type) continue;
           const x = V(put(items, slot, { ...cur, affixes: rest.concat([c.a]) }));
           if (x > v * (1 + MIN_GAIN)) { v = x; bestA = c; }
@@ -1812,7 +1865,7 @@ window.PAGE_LANGS = {
       return { item: cur, v };
     }
     // Runes in a rare's sockets (rune stats differ for weapons and armour; sim.js counts the right ones).
-    const runeList = Object.values(GD.runes).filter(r => r.Kind === 'rune' && lvOk(r.Level));
+    const runeList = Object.values(GD.runes).filter(r => r.Kind === 'rune' && lvOk(r.Level) && (r.Tier || 1) <= runeTierMax);
     function* fillRunes(items, slot, it, v) {
       const n = rareSockets(baseOf(it));
       let cur = { ...it, runes: [] };
@@ -1845,20 +1898,20 @@ window.PAGE_LANGS = {
         if (slot === 'MainHand' && !offOk(baseOf(it), baseOf(at(its, 'OffHand')))) its = put(its, 'OffHand', null);
         return its;
       };
-      const mk = (b, over) => ({ slot: realSlot(slot), base: b.Id, rarity: 'Rare', unique: 'None', name: '', level: ilvl, quality: 0, affixes: [], runes: [], ...over });
+      const mk = (b, over) => ({ slot: realSlot(slot), base: b.Id, rarity: 'Rare', unique: 'None', name: '', level: ilvl, quality: newQuality, ...(newGrade ? { grade: newGrade } : {}), affixes: [], runes: [], ...over });
       const bases = baseList(slot).filter(okBase);
 
       // Uniques
       const uniq = Object.values(GD.uniques).filter(u => {
         const b = GD.bases[lc(u.BaseId)];
-        return b && fitsSlot(b, slot) && okBase(b) && lvOk(u.Level || b.Level) && !taken.has(lc(u.Id)) && (useLimited || !u.Limited) && !ctBan(b);
+        return b && fitsSlot(b, slot) && okBase(b) && lvOk(u.Level || b.Level) && !taken.has(lc(u.Id)) && uniqueOk(u) && !ctBan(b);
       });
       curPhase = phaseName(slot) + ': uniques';
       const scored = [];
       for (const u of uniq) {
         if (late()) break;
         const it = mk(GD.bases[lc(u.BaseId)], { rarity: 'Unique', unique: u.Id, name: u.Name });
-        rollUnique(it, 1);
+        rollUnique(it, uRoll);
         const v = V(trial(it)); scored.push({ it, v });
         offer(it, v, 'unique');
         if (due()) yield prog();
@@ -1873,7 +1926,7 @@ window.PAGE_LANGS = {
       }
       // Oathwords (a plain item with the runes in order)
       curPhase = phaseName(slot) + ': Oathwords';
-      for (const w of (GD.runewords || []).filter(wordOk)) {
+      for (const w of (GD.runewords || []).filter(w => wordOk(w) && w.Runes.every(r => runeTier(r) <= runeTierMax))) {
         if (late()) break;
         for (const b of distinct(oathBases(slot, w).filter(okBase))) {
           const it = mk(b, { rarity: 'Normal', runes: w.Runes.slice() });
@@ -2000,7 +2053,7 @@ window.PAGE_LANGS = {
       }).slice(0, Math.max(1, +cfg.slotRows || 40));
       const trialOf = it => { let its = put(items, slot, it); if (slot === 'MainHand' && !offOk(baseOf(it), baseOf(at(its, 'OffHand')))) its = put(its, 'OffHand', null); return its; };
       for (const row of rows) { row.gain = row.v / base0 - 1; row.dps = dpsOf(goals[0], trialOf(row.item)); row.dropsOff = slot === 'MainHand' && !!at(items, 'OffHand') && !at(trialOf(row.item), 'OffHand'); }
-      return { onlySlot: slot, rows, worn, base: base0, dps0: goals[0].base, empty: V(put(items, slot, null)), calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, scored, defWeight: defW, multi: multi && goals.length > 1, skills: goals.map(g => g.id), dropped, topKept: r.kept };
+      return { onlySlot: slot, rows, worn, base: base0, dps0: goals[0].base, empty: V(put(items, slot, null)), calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, gearLevel, scored, defWeight: defW, multi: multi && goals.length > 1, skills: goals.map(g => g.id), dropped, topKept: r.kept };
     }
     const SLOTS = SINGLE.concat(items.filter(i => i.slot === 'DwarvenRune').length > 1 ? ['DwarvenRune2'] : []);
     const total = 1 + SLOTS.length + (idolN ? 1 : 0);
@@ -2080,7 +2133,7 @@ window.PAGE_LANGS = {
       }
     }
     const skills = goals.map(gl => { const v = dpsOf(gl, items); return { id: gl.id, w: gl.w, base: gl.base, value: v, gain: gl.base > 0 ? v / gl.base - 1 : 0 }; });
-    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, idolN, idolCells, idolLayout, skills, dropped, multi: multi && goals.length > 1,
+    return { base: base0, value, gain: value / base0 - 1, items, slots: out, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, gearLevel, idolN, idolCells, idolLayout, skills, dropped, multi: multi && goals.length > 1,
       scored, defWeight: defW, maxRes: wantRes, resTarget, def: scored ? { before: def0, after: cfg.defence(items) } : null };
   }
 
@@ -18099,8 +18152,39 @@ window.BOStartApp = function () {
   // ---------- Gear Set Sim (the second sub-tab of Item Compare) ----------
   // Searches every unique, Oathword and rare (best prefixes and damage suffixes) for the best gear for the selected
   // skill, with the tree, skills, supports and idols as they are (gearopt.js, run in slices so the page stays usable).
-  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxVows: '', maxRiven: 0, noCore: false, rareSockets: 3, idolAffixes: '', layers: { life: true, es: true, armour: true, evasion: true, block: true } }, store.get('gearSim', {})) };
-  delete GS.set.maxLines; // a box that was on the page for one version (v255)
+  // Gear levels (owner's request, 16 Nov 2026): Midgame, Endgame and BiS presets for the Gear Set Sim and Sim by Slot, scaling how
+  // good the items are (tiers, rolls, quality, grade) and how rare (which uniques, runes, Vows, Riven mods). Each sets the boxes
+  // on the page plus fields only it sets (gearopt.js, top of the file, says what each does). Our own reading of the game's stages,
+  // not a game rule: the tier under the best is where the Forge's Anneal and Add crafts stop, Hone takes quality to 10% then 20%,
+  // the Skyforged Hone past that (faq.js Forge); "common" uniques are DropWeight 10+, the chase ones the game Collection's (grail.js).
+  // Custom: the boxes as set by hand, every line and unique at its best roll (the search before gear levels).
+  const GEAR_TIER_FIELDS = { lineRoll: 1, topLines: '', rareLines: '', runeTier: '', uniquePool: 'all', uniqueRoll: 1, forged: false, quality: 0, grade: 0 };
+  const GEAR_TIERS = {
+    mid: { name: 'Midgame', set: { ilvl: 70, limited: false, vows: false, maxVows: 0, runes: true, rareSockets: 2, maxRiven: 0, lineRoll: 0.5, topLines: 1, rareLines: 4, runeTier: 3, uniquePool: 'common', uniqueRoll: 0.5, forged: false, quality: 10, grade: 50 },
+      text: 'Gear you can expect to find while working through the Rupture. Rares are item level 70 with up to 4 lines, at most one on its best tier and the rest one tier lower, rolled mid-range. Uniques that drop often (no chase uniques), rolled mid-range, no Vows. Runes up to tier 3, 2 sockets, weapon quality 10%, Base Grade 50, no Riven mods.' },
+    end: { name: 'Endgame', set: { ilvl: 84, limited: false, vows: true, maxVows: 3, runes: true, rareSockets: 3, maxRiven: 0, lineRoll: 0.75, topLines: 3, rareLines: 6, runeTier: 5, uniquePool: 'regular', uniqueRoll: 0.75, forged: false, quality: 20, grade: 80 },
+      text: 'A well-geared character. Rares are item level 84 with 6 lines, up to 3 on their best tier and the rest one tier lower (so no Great or Flawless Rares), rolled at 75% of their range. Every unique that drops except the chase ones (Primal, Deep-forged, Guardian chase, Core, red Dwarven Runes), rolled at 75%, up to 3 Vows. Runes up to tier 5, 3 sockets, weapon quality 20%, Base Grade 80, no Riven mods.' },
+    bis: { name: 'BiS', set: { ilvl: 84, limited: true, vows: true, maxVows: '', runes: true, rareSockets: 4, maxRiven: '', lineRoll: 1, topLines: '', rareLines: 6, runeTier: '', uniquePool: 'all', uniqueRoll: 1, forged: true, quality: 30, grade: 100 },
+      text: 'The most the gear can give. Every rare line on its best tier at its top roll (Flawless Rares), Riven mods with no limit, every unique including the chase ones as a forged copy at its best roll, up to 6 Vows. Every rune, 4 sockets on two-handers, weapon quality 30%, Base Grade 100.' },
+    custom: { name: 'Custom', set: GEAR_TIER_FIELDS, text: 'Set the boxes below yourself. Every line and unique rolls at its best, with no weapon quality.' },
+  };
+  const gsStored = store.get('gearSim', null);
+  const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxVows: '', maxRiven: 0, noCore: false, rareSockets: 3, idolAffixes: '', layers: { life: true, es: true, armour: true, evasion: true, block: true } }, GEAR_TIER_FIELDS, gsStored || {}) };
+  delete GS.set.maxLines; // a box that was on the page for one version (v255); the gear levels use rareLines
+  // Settings saved before gear levels came in stay as they were (Custom); a first visit starts on Endgame.
+  function setGearTier(k) {
+    const T = GEAR_TIERS[k] || GEAR_TIERS.custom;
+    Object.assign(GS.set, k === 'custom' ? GEAR_TIER_FIELDS : T.set, { tier: GEAR_TIERS[k] ? k : 'custom', tierEdited: false });
+  }
+  if (!GEAR_TIERS[GS.set.tier]) setGearTier(gsStored ? 'custom' : 'end');
+  // A box a gear level sets, changed by hand: the level stays, with a note.
+  const gsTierTouch = f => { if (GS.set.tier !== 'custom' && f in GEAR_TIERS[GS.set.tier].set) GS.set.tierEdited = true; };
+  const gsTierHtml = off => {
+    const k = GS.set.tier, T = GEAR_TIERS[k];
+    return '<div class="gs-tier"><span class="meta">Gear level</span><div class="cmp-modes gs-tiers" role="radiogroup" aria-label="Gear level">' +
+      Object.keys(GEAR_TIERS).map(t => '<button type="button" class="cmp-mode' + (t === k ? ' on' : '') + '" role="radio" aria-checked="' + (t === k) + '" data-gs-tier="' + t + '"' + (off ? ' disabled' : '') + '><span>' + GEAR_TIERS[t].name + '</span></button>').join('') +
+      '</div><p class="hint">' + T.text + (GS.set.tierEdited ? ' <b>You changed some of these boxes below</b>; pick ' + T.name + ' again to reset them.' : '') + '</p></div>';
+  };
   GS.set.layers = Object.assign({ life: true, es: true, armour: true, evasion: true, block: true }, GS.set.layers || {});
   // Defence for the DPS / Defence slider and "Reach max resistances" (owner, 12 Nov 2026): an estimate, not a defensive sim.
   // EHP = (life + energy shield) / share of a hit taken, against an assumed enemy (ours, not the game's): a hit of ArmourBigHitRef
@@ -18221,7 +18305,7 @@ window.BOStartApp = function () {
     const b = GD.bases[lc(it.base)], bn = b ? b.Name : it.base, word = planner.oathwordForItem(it, it.slot);
     if (it.rarity === 'Unique') {
       const u = GD.uniques[lc(it.unique)], v = it.affixes.filter(a => !a.id.startsWith('unique:')).length;
-      return '<b class="gs-unique">' + esc(u ? u.Name : it.name) + '</b> <span class="meta">' + esc(bn) + (v ? ' · ' + v + ' Vow' + (v > 1 ? 's' : '') : '') + '</span>';
+      return '<b class="gs-unique">' + esc(u ? u.Name : it.name) + '</b> <span class="meta">' + esc(bn) + (it.forged ? ' · forged' : '') + (v ? ' · ' + v + ' Vow' + (v > 1 ? 's' : '') : '') + '</span>';
     }
     if (word) return '<b>' + esc(word.Name) + '</b> <span class="meta">Oathword · ' + esc(bn) + '</span>';
     const n = it.affixes.length;
@@ -18251,7 +18335,7 @@ window.BOStartApp = function () {
       catch (err) { GS.running = false; GS.msg = 'The search failed: ' + err.message; return renderCompare(); }
       if (!r.done) { gsProgress(); soon(step); return; }
       GS.running = false;
-      if (r.value.error) GS.msg = r.value.error; else GS.res = Object.assign(r.value, { key, skill: st.skill });
+      if (r.value.error) GS.msg = r.value.error; else GS.res = Object.assign(r.value, { key, skill: st.skill, tier: GS.set.tier, tierEdited: GS.set.tierEdited });
       renderCompare();
     };
     soon(step);
@@ -18265,10 +18349,21 @@ window.BOStartApp = function () {
     GS.msg = 'Equipped the best set (' + n + ' slot' + (n === 1 ? '' : 's') + ' changed) on ' + ch.name + ' in this page; the Build and Damage tabs use it too.' + (ch.plan ? '' : ' Your save is never changed: Reset to save on the Build tab undoes it.');
     if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {});
   }
+  // The gear level a result was found with, in words (r.gearLevel from gearopt.js).
+  const gsFull = r => { const g = r.gearLevel || {}; return !(g.lineRoll < 1) && !(g.uniqueRoll < 1) && !(g.topLines < g.rareLines); };
+  function gsLevelNote(r) {
+    const g = r.gearLevel || {}, T = GEAR_TIERS[r.tier], pc = x => Math.round(x * 100) + '%';
+    let t = T && r.tier !== 'custom' ? '<b>' + T.name + '</b>' + (r.tierEdited ? ' (some boxes changed by hand)' : '') + ': ' : '';
+    if (gsFull(r)) t += 'every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best' + (g.forged ? ' as a forged copy' : '') + ', so this is the most the gear can give, not a drop you will see soon.';
+    else t += 'rare lines are item level ' + r.ilvl + ', ' + (g.topLines > 0 ? 'at most ' + g.topLines + ' on their best tier and the rest one tier lower' : 'one tier under their best') + ', rolled at ' + pc(g.lineRoll) + ' of their range' + (g.rareLines < 6 ? ', up to ' + g.rareLines + ' lines' : '') + '; uniques are rolled at ' + pc(g.uniqueRoll) + (g.uniquePool === 'common' ? ', only the ones that drop often' : g.uniquePool === 'regular' ? ', no chase uniques' : '') + '.';
+    if (g.runeTier < 6) t += ' Runes up to tier ' + g.runeTier + '.';
+    if (g.quality || g.grade) t += ' Items found here have ' + [g.quality ? 'weapon quality ' + g.quality + '%' : '', g.grade ? 'Base Grade ' + g.grade : ''].filter(Boolean).join(' and ') + '.';
+    return t;
+  }
   function gsResultHtml(r) {
     const skillName = (GD.skills[lc(r.skill)] || {}).Name || r.skill, g = planner.gear;
     const names = r.multi ? r.skills.map(x => (GD.skills[lc(x.id)] || {}).Name || x.id) : [skillName];
-    let h = '<div class="card cmp-result"><h2>Best gear <span class="hint">' + esc(names.join(' + ')) + ', vs the configured enemy</span></h2>';
+    let h = '<div class="card cmp-result"><h2>Best gear <span class="hint">' + (GEAR_TIERS[r.tier] && r.tier !== 'custom' ? GEAR_TIERS[r.tier].name + ' · ' : '') + esc(names.join(' + ')) + ', vs the configured enemy</span></h2>';
     if (r.scored) h += gsScoredHtml(r, names);
     else if (r.multi) {
       const sa = r.skills.reduce((a, x) => a + x.base, 0), sb = r.skills.reduce((a, x) => a + x.value, 0), label = esc(names.join(' + '));
@@ -18289,7 +18384,7 @@ window.BOStartApp = function () {
         return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(s.label || gsSlotName(s.slot)) + '</td><td' + (s.was ? ' class="gs-hov" data-gs-tip="was:' + si + '"' : '') + '>' + gsItemLabel(s.was) + '</td><td' + (s.item ? ' class="gs-hov" data-gs-tip="item:' + si + '"' : '') + '>' + (s.changed ? '' : '<span class="meta">kept: </span>') + gsItemLabel(s.item) + tip + '</td><td>' +
           (s.changed ? '<span class="' + (s.gain >= 0 ? 'up' : 'down') + '">' + pct(s.gain) + '</span>' : '<span class="meta">–</span>') + '</td><td>' + (s.item ? num(s.worth * 100, 1) + '%' : '–') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
-    h += '<p class="hint">Every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best, so this is the most the gear can give, not a drop you will see soon. Rares carry the prefixes and suffixes that add the most' + (r.scored ? '' : ' DPS') + ' and the best runes in their sockets' + (r.vowMax < 6 ? '; uniques carry at most ' + r.vowMax + ' Vow' + (r.vowMax === 1 ? '' : 's') + ', as set' : '') + '; a rare with every line at its top tier counts as a Flawless Rare in the sim. ' + (r.scored ? gsDefNote() + ' Attribute requirements,' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); attribute requirements,') + ' rune and item prices and drop chances are ignored. ' + (r.idolN ? 'Idols are chosen too, each with up to ' + r.idolN + ' line' + (r.idolN === 1 ? '' : 's') + ', every line at its top tier for item level ' + r.ilvl + '; the tree and the supports stay as they are.' : 'Idols, the tree and the supports stay as they are.') + '</p>';
+    h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the prefixes and suffixes that add the most' + (r.scored ? '' : ' DPS') + ' and the best runes in their sockets' + (r.vowMax < 1 ? '; uniques carry no Vows' : r.vowMax < 6 ? '; uniques carry at most ' + r.vowMax + ' Vow' + (r.vowMax === 1 ? '' : 's') : '') + (gsFull(r) ? '; a rare with every line at its top tier counts as a Flawless Rare in the sim' : '') + '. ' + (r.scored ? gsDefNote() + ' Attribute requirements,' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); attribute requirements,') + ' rune and item prices are ignored. ' + (r.idolN ? 'Idols are chosen too, each with up to ' + r.idolN + ' line' + (r.idolN === 1 ? '' : 's') + ', their lines rolled like the rares\' lines; the tree and the supports stay as they are.' : 'Idols, the tree and the supports stay as they are.') + '</p>';
     return h + '</div>';
   }
   // Result headline when the search weighed defence: DPS, the EHP estimate and the resistances, before and after.
@@ -18312,7 +18407,7 @@ window.BOStartApp = function () {
     if (GS.res && GS.res.key !== key) GS.res = null;
     const chk = (f, label, tip) => '<label class="check-row" title="' + esc(tip) + '"><input type="checkbox" data-gs-set="' + f + '"' + (S_[f] ? ' checked' : '') + (GS.running ? ' disabled' : '') + '><span>' + label + '</span></label>';
     let h = '<div class="card gs-card"><div class="cmp-pick-head"><h2>Gear Set Sim</h2><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + (GS.running ? ' disabled' : '') + '>' + cmpSkillOptions() + '</select></label>' + (GS.running ? '' : cmpMultiHtml() + enemyBtn()) + '</span></div>' +
-      '<p class="hint">Finds the best gear for the selected skill' + (optExtra().length ? ' and the ' + optExtra().length + ' ticked under Also count (weighted)' : '') + ': every unique (with Vows), every Oathword, and rare items with the best prefixes and suffixes. Your passive tree, skills and supports stay as they are' + (S_.idolAffixes ? '; so do your red idols' : ', and so do your idols unless you pick idol lines below') + '.</p>' +
+      '<p class="hint">Finds the best gear for the selected skill' + (optExtra().length ? ' and the ' + optExtra().length + ' ticked under Also count (weighted)' : '') + ': every unique (with Vows), every Oathword, and rare items with the best prefixes and suffixes. Your passive tree, skills and supports stay as they are' + (S_.idolAffixes ? '; so do your red idols' : ', and so do your idols unless you pick idol lines below') + '.</p>' + gsTierHtml(GS.running) +
       '<div class="gs-controls"><label class="field inline" title="Item level of the rares: 84 and up gives the top tier of every line"><span>Item level</span><input type="number" min="1" max="100" id="gsIlvl" value="' + S_.ilvl + '"' + (GS.running ? ' disabled' : '') + '></label>' +
       chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
@@ -18362,7 +18457,7 @@ window.BOStartApp = function () {
       catch (err) { SBS.running = false; SBS.msg = 'The search failed: ' + err.message; return renderCompare(); }
       if (!r.done) { gsProgress(SBS); soon(step); return; }
       SBS.running = false;
-      if (r.value.error) SBS.msg = r.value.error; else SBS.res = Object.assign(r.value, { key, skill: st.skill });
+      if (r.value.error) SBS.msg = r.value.error; else SBS.res = Object.assign(r.value, { key, skill: st.skill, tier: GS.set.tier, tierEdited: GS.set.tierEdited });
       renderCompare();
     };
     soon(step);
@@ -18387,7 +18482,7 @@ window.BOStartApp = function () {
   function sbsResultHtml(r) {
     const skillName = (GD.skills[lc(r.skill)] || {}).Name || r.skill, slotName = gsSlotName(r.onlySlot), score = r.scored || r.multi;
     const kind = { unique: 'Unique', oathword: 'Oathword', rare: 'Rare' };
-    let h = '<div class="card cmp-result"><h2>' + esc(slotName) + ' items <span class="hint">' + esc(skillName) + ', vs the configured enemy</span></h2>';
+    let h = '<div class="card cmp-result"><h2>' + esc(slotName) + ' items <span class="hint">' + (GEAR_TIERS[r.tier] && r.tier !== 'custom' ? GEAR_TIERS[r.tier].name + ' · ' : '') + esc(skillName) + ', vs the configured enemy</span></h2>';
     if (!r.rows.length) return h + '<p class="hint">Nothing fits this slot' + (r.onlySlot === 'OffHand' ? ' with your weapon (a two-hander leaves no off hand; a bow takes only a quiver)' : '') + '.</p></div>';
     const top = r.rows[0];
     h += '<div class="headline small">' + stat('Your ' + slotName.toLowerCase(), num(r.dps0), '', '', esc(skillName) + ', total DPS' + (r.worn ? ' with the item you wear' : ' with the slot empty')) +
@@ -18397,7 +18492,7 @@ window.BOStartApp = function () {
       r.rows.map((x, i) => '<tr class="' + (x.gain > 0.0005 ? 'gs-changed' : '') + '"><td>' + (i + 1) + '</td><td class="gs-hov" data-sbs-tip="' + i + '">' + gsItemLabel(x.item) +
         '<details class="gs-lines"><summary>Lines</summary><div class="cmp-tip pl-tip">' + planner.gear.tip(x.item, x.item.slot) + '</div></details>' + (x.dropsOff ? '<div class="hint">Two-handed: your off hand comes off.</div>' : '') + '</td><td>' + kind[x.kind] + '</td><td>' + num(x.dps) + '</td><td><span class="' + (x.gain >= 0 ? 'up' : 'down') + '">' + pct(x.gain) + '</span></td>' +
         '<td class="sbs-acts"><button class="btn small" type="button" data-sbs-equip="' + i + '">Equip</button> <button class="btn small ghost" type="button" data-sbs-cmp="' + i + '">Compare</button></td></tr>').join('') + '</tbody></table></div>';
-    h += '<p class="hint">Every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best. Rares carry the lines that add the most and the best runes; the best few uniques get Vows' + (r.vowMax < 6 ? ' (at most ' + r.vowMax + ')' : '') + '. The rest of your gear, the tree and the supports stay as they are. Compare opens the item in Item Compare, where you can set its lines to what dropped.' + (r.scored ? ' ' + gsDefNote() : '') + '</p>';
+    h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the lines that add the most and the best runes; ' + (r.vowMax < 1 ? 'uniques get no Vows' : 'the best few uniques get Vows' + (r.vowMax < 6 ? ' (at most ' + r.vowMax + ')' : '')) + '. The rest of your gear, the tree and the supports stay as they are. Compare opens the item in Item Compare, where you can set its lines to what dropped.' + (r.scored ? ' ' + gsDefNote() : '') + '</p>';
     return h + '</div>';
   }
   function sbsHtml() {
@@ -18409,7 +18504,7 @@ window.BOStartApp = function () {
     const off = SBS.running;
     const chk = (f, label, tip) => '<label class="check-row" title="' + esc(tip) + '"><input type="checkbox" data-gs-set="' + f + '"' + (S_[f] ? ' checked' : '') + (off ? ' disabled' : '') + '><span>' + label + '</span></label>';
     let h = '<div class="card gs-card"><div class="cmp-pick-head"><h2>Sim by Slot</h2><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + (off ? ' disabled' : '') + '>' + cmpSkillOptions() + '</select></label>' + (off ? '' : cmpMultiHtml() + enemyBtn()) + '</span></div>' +
-      '<p class="hint">Pick a slot: every unique, Oathword and rare that fits it is simmed with the rest of your gear as it is, best first. The settings are the same as the Gear Set Sim\'s.</p>' +
+      '<p class="hint">Pick a slot: every unique, Oathword and rare that fits it is simmed with the rest of your gear as it is, best first. The settings are the same as the Gear Set Sim\'s.</p>' + gsTierHtml(off) +
       cmpSlotButtons(true) +
       '<div class="gs-controls"><label class="field inline" title="Item level of the rares: 84 and up gives the top tier of every line"><span>Item level</span><input type="number" min="1" max="100" id="gsIlvl" value="' + S_.ilvl + '"' + (off ? ' disabled' : '') + '></label>' +
       chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
@@ -18503,14 +18598,14 @@ window.BOStartApp = function () {
       if (t.id === 'cmpSkill') return selectSkill(t.value);
       if (t.dataset.gsLayer) { setGsLayer(t.dataset.gsLayer, t.checked); GS.msg = ''; return renderCompare(); }
       if (t.dataset.gsPen != null) { setGsPenalty(t.value); GS.msg = ''; return renderCompare(); }
-      if (t.dataset.gsSet) { GS.set[t.dataset.gsSet] = t.checked; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.dataset.gsSet) { GS.set[t.dataset.gsSet] = t.checked; gsTierTouch(t.dataset.gsSet); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsPrio') { GS.set.prio = Math.max(0, Math.min(100, Math.round(+t.value / 10) * 10 || 0)); store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) clearOpt(); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsResTarget') { const v = Math.max(1, Math.min(200, Math.round(+t.value) || 0)); GS.set.resTarget = v === gsResCap() ? 0 : v; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
-      if (t.id === 'gsRareSock') { GS.set.rareSockets = Math.max(0, Math.min(4, Math.round(+t.value) || 0)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsRareSock') { GS.set.rareSockets = Math.max(0, Math.min(4, Math.round(+t.value) || 0)); gsTierTouch('rareSockets'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsIdol') { GS.set.idolAffixes = t.value === '' ? '' : Math.max(1, Math.min(6, Math.round(+t.value) || 1)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
-      if (t.id === 'gsMaxRiven') { const v = String(t.value).trim(); GS.set.maxRiven = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(99, Math.round(+v))); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
-      if (t.id === 'gsMaxVows') { const v = String(t.value).trim(); GS.set.maxVows = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(6, Math.round(+v))); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
-      if (t.id === 'gsIlvl') { GS.set.ilvl = Math.max(1, Math.min(100, Math.round(+t.value) || 84)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsMaxRiven') { const v = String(t.value).trim(); GS.set.maxRiven = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(99, Math.round(+v))); gsTierTouch('maxRiven'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsMaxVows') { const v = String(t.value).trim(); GS.set.maxVows = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(6, Math.round(+v))); gsTierTouch('maxVows'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsIlvl') { GS.set.ilvl = Math.max(1, Math.min(100, Math.round(+t.value) || 84)); gsTierTouch('ilvl'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'cmpFile') { if (t.files[0]) cmpReadImage(t.files[0]); return; }
       const s = side(t); if (!s || !t.dataset.f) return;
       CMP.msg = '';
@@ -18520,6 +18615,8 @@ window.BOStartApp = function () {
     el.addEventListener('click', e => {
       const mb = e.target.closest('[data-cmpmode]');
       if (mb) { if (mb.dataset.cmpmode !== CMP.mode) { CMP.mode = mb.dataset.cmpmode; store.set('cmpMode', CMP.mode); renderCompare(); } return; }
+      const tb = e.target.closest('[data-gs-tier]');
+      if (tb) { if (!GS.running && !SBS.running && !tb.disabled) { setGearTier(tb.dataset.gsTier); store.set('gearSim', GS.set); GS.msg = ''; SBS.msg = ''; renderCompare(); } return; }
       const gb = e.target.closest('[data-gs]');
       if (gb) { const a = gb.dataset.gs; if (a === 'run') gsRun(); else if (a === 'cancel') gsCancel(); else if (a === 'equip') gsEquip(); return; }
       const sbb = e.target.closest('[data-sbs],[data-sbs-equip],[data-sbs-cmp]');

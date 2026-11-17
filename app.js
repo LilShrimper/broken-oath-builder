@@ -8406,7 +8406,7 @@ window.BOFaq = function (ctx) {
       '<b>On a Guardian only the strongest "takes more damage" counts</b>: the plain ones from Woes, Sentences, Marks and the War Banner compete, and only the biggest is used (since Patch 73; game log 13 and 14 Nov 2026).',
       '<b>Typed lines are not in that choice</b> and still multiply on top, also on a Guardian: "more Physical damage" (Woe of Sundering), "more damage from Bleed, Poison and Ignite" (Sentence of Rot) and the like. Example: Woe of Sundering, Sentence of Rot and Hunter\'s Marks all count together (game log, 16 Nov 2026). The venom golem\'s blessing and daze also multiply on top.',
       'Woe of Sundering also makes your <b>bleeds</b> bigger: the bleed is laid from the hit it raised (the bleed ticks are not raised a second time). Suggested by the game log (16 Nov 2026), not proven yet; the sim counts it.',
-      'A curse with both kinds (Woe of Withering: more damage and more Poison damage) is counted split: its plain part competes, its typed part multiplies. Not checked in the game yet.',
+      'A curse with both kinds (Woe of Withering: more damage and more Poison damage) works differently on a Guardian: it joins the choice at its biggest line (the Poison one), and that counts for all your damage, not only poison. Its two lines do not add. With Death Sentence on, Withering adds nothing there (game logs, 17 Nov 2026).',
     ]));
     if (D.EffectPct) h += card('Dread', list([
       'While you channel a Woe it builds <b>Dread</b>: each point is +' + D.EffectPct + '% curse effect, up to ' + D.Cap + ' (' + D.BossCap + ' on Guardians).',
@@ -10400,11 +10400,24 @@ window.BOCharacter = function (ctx) {
   // 17:05, where it reads "Mark/Banner 1.4% / 2.8%" and the fight's "curse_x 1.05"), while "RotTaken100: ailment tick
   // x1.446-1.515 (Sentence of Rot)" kept firing with Woe and Marks on. Post windows (10 s from a fresh Post, AilmentStats
   // bleed dot): Rot only 20.2M / 4 slams, Woe only 19.7M / 4, both 25.8M / 3. Maim is left inside the choice: not tested.
+  // A curse WITH a general line is different: its typed line joins the choice, and its own lines do not add there (the
+  // curse counts at its biggest line for this damage). PROVEN 17 Nov 2026 (game logs, Rangtest, Training Post, Woe of
+  // Withering 10% + 20% Poison with Deepened Woe at dread 10 = 8.125% + 16.25% on a Guardian, Caustic Arrow poison ticks):
+  // Withering alone 13:19 "GuardianTaken59 ... Woe/Sentence best 16.2%", every tick "poison taken x1.16", first tick
+  // 38,842.9 x 1.1625 = 45,155 (logged 45,155), not 1.244 (lines added) or 1.257 (Poison on top). With Death Sentence at
+  // 32.5% (13:17): every tick x1.33, first 32,980 x 1.325 = 43,699 (logged 43,699), not 1.54 (Poison on top).
+  // And that biggest line counts for EVERY damage type, not only its own. 13:23 (Withering alone, no poison used): Lightning
+  // Arrow hits log "Woe/Sentence best 16.2%", and Flame Dash's fire ground (Post fire resistance 25%) went from dealt/raw
+  // 85/113, 82/110, 92/122 (x0.75) before the Woe to 104/124, 68/80, 111/131 (about x0.845 = 0.75 x 1.125-1.13) right after
+  // it at dread 0-1: Withering's Poison line then (20 x 0.5 x 1.25 = 12.5%, 12.9% at dread 1), not its general line (6.25%,
+  // would be x0.80). Woe of Withering is the only curse with both kinds (curses.json, build 79).
   const curseTakenK = (rows, d, dot, one, extras) => {
     const typedOf = r => (d ? r.elem[d] || 0 : 0) + (dot ? r.dot || 0 : 0);
     if (!one) return rows.reduce((p, r) => p * (1 + (r.taken + typedOf(r)) / 100), 1) * (extras || []).reduce((p, x) => p * (1 + (x || 0) / 100), 1);
-    const best = Math.max(0, ...rows.map(r => r.taken || 0), ...(extras || []).map(x => x || 0));
-    return (1 + best / 100) * rows.reduce((p, r) => p * (1 + typedOf(r) / 100), 1);
+    const general = rows.filter(r => (r.taken || 0) > 0), typedOnly = rows.filter(r => !((r.taken || 0) > 0));
+    const top = r => Math.max(r.taken, r.dot || 0, ...Object.values(r.elem || {}));
+    const best = Math.max(0, ...general.map(top), ...(extras || []).map(x => x || 0));
+    return (1 + best / 100) * typedOnly.reduce((p, r) => p * (1 + typedOf(r) / 100), 1);
   };
   // Knee: m <= 8 stays; above it 8 x 1.41^log2(m/8). Not applied to minion sheets (minionSheet is separate).
   // A number from the game's own rules (GD.rules: the public API's game-data/rules.json and the archive's switches.json,
@@ -12861,7 +12874,10 @@ window.BOCharacter = function (ctx) {
     };
     if (strongestTaken) {
       const n = activeCurses.filter(r => r.taken > 0).length + (o.extraTakenPct > 0) + (markPct > 0) + (maimPct > 0);
-      const typed = activeCurses.filter(r => r.dot > 0 || Object.values(r.elem).some(v => v > 0)).map(r => r.name);
+      // Only curses with no general line keep their typed lines outside the choice (Withering's Poison line competes: log 17 Nov).
+      const typed = activeCurses.filter(r => !(r.taken > 0) && (r.dot > 0 || Object.values(r.elem).some(v => v > 0))).map(r => r.name);
+      const mixed = activeCurses.filter(r => r.taken > 0 && (r.dot > 0 || Object.values(r.elem).some(v => v > 0))).map(r => r.name);
+      if (mixed.length) res.notes.push('Guardian: ' + mixed.join(', ') + ' counts at its biggest line in that choice, for all your damage (its lines do not add there; game logs 17 Nov).');
       if (n > 1) res.notes.push('Guardian: only your strongest "takes more damage" effect counts (patch 73), so of your ' + n + ' sources only the biggest is counted here.' + (golemTaken > 1 ? ' The venom golem is not one of them: it multiplies on top (game log 13 Nov).' : ''));
       if (typed.length && (n > 0 || typed.length > 1)) res.notes.push('Guardian: typed lines (' + typed.join(', ') + ': more Physical / elemental damage, more damage from Bleed, Poison and Ignite) are not part of that choice and multiply on top (game logs 16 Nov).');
     }

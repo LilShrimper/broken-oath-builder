@@ -10276,6 +10276,10 @@ window.BOCharacter = function (ctx) {
     // 0.56.5 utility lines (statText, build 26543267): Fortified defence, war cries, banners, reservation, spreads on kill.
     'FortifyMax', 'FortifyEffect', 'CryFury', 'CryLinger', 'BannerStartValour', 'BannerKeepValour', 'VowReserveLess',
     'AuraDrainLess', 'PoisonSpreadOnKill', 'HeraldKillRadius',
+    // 17 Nov 2026: Chain Detonation's wider trap reach; Whirling Host's bigger ring cap (the sim's ring has no cap; its +1 blade is OrbitCount)
+    'TrapChainRadius', 'OrbitMax',
+    // 17 Nov 2026: War Banner effect (bannerEffectInc, curse blocks)
+    'BannerEffect',
     'DexLife']); // Wind Dancer: "+{v} to maximum Life for every 10 Dexterity" (statText)
   // Stats this model uses.
   const HANDLED = new Set(['MinionOneKind', 'RepeatOwnDamage', 'StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
@@ -10288,6 +10292,9 @@ window.BOCharacter = function (ctx) {
     'LeechingMore', 'ChilledLightningMore', 'FocusVolley', 'FocusShare', 'OrbCount', 'OrbRate',
     // 13 Nov 2026: Sleepy's Continental Strap (switches.json r76.UNIQUES Every)
     'PoisonBurst76',
+    // 17 Nov 2026: Kindling support (stacks worked out at the end of calcSkill); Repeat on channelled skills (ChannelRepeats, with the
+    // repeats); Chain Detonation's 8% a link (trap block); Rallying Standard's Valour cap (bannerValourMax)
+    'KindlingOnKill', 'ChannelRepeats', 'TrapChainLink', 'ValourMax',
     // 16 Nov 2026: Patch 79 supports (their texts; see calcSkill / collectMods / minionSheet)
     'WoeWeave103', 'WoeWeaveLess103', 'BleedTear103', 'HeraldFocus103', 'MinionQuarry103', 'MinionQuarryLess103',
     // 17 Nov 2026: lines from the API field audit (see calcSkill, collectMods, golemBlessing)
@@ -10382,6 +10389,59 @@ window.BOCharacter = function (ctx) {
   // Patch 79 (developer's patch notes, Discord 16 Nov 2026 11:56 AM local, full text from its message.txt). Switches on with the
   // API's game data build 79 (16 Nov 2026 20:13 UTC); its rule numbers sit in switches.json r103.* (AILMENTS, MAIN-SKILL, META-BALANCE).
   const is079 = GD => apiBuildAtLeast(GD, 79, '2026-11-16T17');
+  // Kindling support numbers, from its text (supports.json, build 81; see the end of calcSkill).
+  const KINDLE_DMG = 0.5, KINDLE_SPEED = 0.2, KINDLE_MAX = 50, KINDLE_SECONDS = 5, KINDLE_LIFE_PCT = 4, KINDLE_RL_CAP = 150;
+  // Extra Valour a banner holds from the supports in its skill gem's sockets (ValourMax; Rallying Standard +10: "holds up to 10 more
+  // (20 to 30)", its own text, supports.json build 81; added 17 Nov 2026, not checked in game). The banner is a curse entry
+  // (curses.json war_banner_near, Kind Banner, Valour = its Dread) with no Skill field, so the gem is found by its Banner tag.
+  // Its other lines (BannerStartValour 5, BannerKeepValour 100) change how fast Valour builds after a move; the sim takes the
+  // Valour you set, so they change nothing here.
+  // Also the hero's own ValourMax lines when the skill's mods are given (passive tree War Banner / Road of the Banner / Standard of the
+  // Oath nodes, Oath of Valour "+3 to maximum Valour", a unique's rolled line; stat text "+{v} to maximum Valour on your War Banner").
+  const bannerValourMax = (GD, ch, c, mods) => {
+    if (!c || c.Kind !== 'Banner') return 0;
+    let v = 0, own = 0;
+    for (const m of mods || []) if (m.stat === 'ValourMax' && m.mode === 'Flat') own += m.v;
+    for (const s of ch.sockets || []) {
+      const sk = GD.skills[lc(s.skill)]; if (!sk || !(sk.Tags || []).includes('Banner')) continue;
+      for (const sid of s.supports || []) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'ValourMax' && m.Mode === 'Flat') v = Math.max(v, m.Value);
+    }
+    return v + own;
+  };
+  // "{v}% increased War Banner effect" (BannerEffect Inc: passive tree War Banner / Road of the Banner nodes, Oath of the Raised Banner
+  // "Your Banners are 10% stronger"). Added 17 Nov 2026 from the stat text; counted with the banner's other increases (the curse effect
+  // lines, as before). Not checked in game; before, these lines did nothing.
+  const bannerEffectInc = (c, mods) => {
+    if (!c || c.Kind !== 'Banner') return 0;
+    let v = 0; for (const m of mods || []) if (m.stat === 'BannerEffect' && m.mode === 'Inc') v += m.v;
+    return v;
+  };
+  // A Guardian's Rupture Level: o.ruptureLevel, else the enemy level (a Deep monster level counts as the lowest Rupture with that level).
+  const guardianRL = (GD, o, lvl) => {
+    const D = GD.deep || {}, max = D.MapMaxLevel || 80, mls = D.LadderMonsterLevels || [];
+    const deepLvl = mls.length ? mls[mls.length - 1] : 84;
+    return +o.ruptureLevel > 0 ? +o.ruptureLevel : lvl > max ? max + Math.max(1, mls.indexOf(Math.min(lvl, deepLvl)) + 1) : lvl;
+  };
+  // A Guardian's life at Rupture Level rl, without Empowered or other pack bonus life. Evidence: see the shock block in calcSkill.
+  const guardianLifeAt = (GD, rl) => {
+    const D = GD.deep || {};
+    // RL 66 added 14 Nov 2026: log "Guardian: model at RL 66 - target 45 s x median boss DPS 499513 = life 22437324"
+    // (ashen_wyrm, life 24,681,056 = model x 1.32 / 1.2); the straight line from 62 to 130 gave 18.0M there.
+    const pts = [[62, 15.24e6], [66, 22437324], [130, 257153696], [150, 1755677184 / 1.4]];
+    // Patch 79 notes: "Guardians at Rupture Level 41 to 79 have 1.3x life and at 81 to 129 have 1.85x life ... The Lord levels
+    // (80 and 130) and the Gates are untouched." The fights above were all before 79, so the factor goes on top of them.
+    // Gates are RL 10 to 70 (every 10th), Lords 80 and 130: those keep their life.
+    const fixed = (rl % 10 === 0 && rl <= 80) || rl === 130;
+    const p79 = !is079(GD) || fixed ? 1 : rl >= 41 && rl <= 79 ? 1.3 : rl >= 81 && rl <= 129 ? 1.85 : 1;
+    const raw = (() => {
+      if (rl <= 62) return pts[0][1] * Math.pow(1.1315, rl - 62);
+      if (rl >= 150) return pts[pts.length - 1][1] * Math.pow(D.LadderLifePerLevel || 1.03, rl - 150);
+      const last = pts.length - 1; let k = 0; while (k < last - 1 && rl > pts[k + 1][0]) k++;
+      const [r0, l0] = pts[k], [r1, l1] = pts[k + 1];
+      return l0 * Math.pow(l1 / l0, (rl - r0) / (r1 - r0));
+    })();
+    return raw * p79;
+  };
   // Patch 81 (developer's patch notes, Discord 17 Nov 2026 15:34 UTC). Switches on with the API's game data build 81.
   const is081 = GD => apiBuildAtLeast(GD, 81, '2026-11-17T15');
   // Bina's Spotter's Helm, Patch 81 notes: "a crit volley every 2 seconds (was 3), and each Ballista or totem shot in a row at the same
@@ -11337,6 +11397,14 @@ window.BOCharacter = function (ctx) {
       if (!ok || (o.off && o.off.has(key))) continue;
       const k = engShare || 1;
       for (const m of sd.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: (m.Value || 0) * k, v2: (m.Value2 || 0) * k, local: false, src: 'Support · ' + sd.Name + (engShare ? ' (minions, x' + engShare + ')' : ''), key });
+      // Bloodbound's SelfLowLifeMore ("another 10% more while you are below half your life", its text): the sim has no low-life state for
+      // the hero, so it is left out (it shows under "not counted") and said once here.
+      if ((sd.Mods || []).some(m => m.Stat === 'SelfLowLifeMore')) res.notes.push(sd.Name + ': its extra ' + (sd.Mods.find(m => m.Stat === 'SelfLowLifeMore').Value) + '% more while you are below half your life is not counted (the sim takes you above half life).');
+      // Kindling (KindlingOnKill): its stacks come from kills, worked out at the end of calcSkill and passed back in as o._kindle.
+      if (lc(id) === 'kindling_support' && o._kindle > 0) {
+        mods.push({ stat: 'Damage', mode: 'Inc', tags: ['Spell'], v: KINDLE_DMG * o._kindle, v2: 0, local: false, src: 'Support · Kindling (' + o._kindle.toFixed(1) + ' stacks)', key });
+        mods.push({ stat: 'CastSpeed', mode: 'Inc', tags: [], v: KINDLE_SPEED * o._kindle, v2: 0, local: false, src: 'Support · Kindling (' + o._kindle.toFixed(1) + ' stacks)', key });
+      }
       if (engShare && !MINION_ENGINE_COUNTED.has(lc(id))) res.notes.push(sd.Name + ': works through ' + sk.Name + '\'s minions at ' + Math.round(engShare * 100) + '% strength (the developer\'s rule file), but what it does there is not counted yet (the sim has no minion ailments, Marks or charges).');
     }
     // Spellblade keystone: "Spell Damage modifiers also apply to Attacks": the Spell damage lines (Skyfall's 20%
@@ -12200,6 +12268,22 @@ window.BOCharacter = function (ctx) {
         countFactor = (1 + (traps - 1) * (1 - extraLess / 100)) / traps;
         res.notes.push('Trap: each trap past the first deals ' + extraLess + '% less (x' + countFactor.toFixed(3) + ' on average over ' + traps + ' traps, patch 0.56).');
       }
+      // Chain Detonation (TrapChainLink 8): "A Trap that goes off sets off your other Traps nearby, one after another ... each Trap further
+      // down the chain deals 8% more damage" (its own text, supports.json build 81; Trap Support itself already sets off the others).
+      // Added 17 Nov 2026 from the text only. ASSUMPTIONS: all traps stand by the Guardian and go off as one chain each round (as the
+      // trap count above already assumes); "8% more" builds on the trap before (as Chain's "each jump hits 8% harder than the last");
+      // the first trap in the chain is the full share, the later ones the extra-trap share (Trap Support: each past the first adds 20%).
+      // Not yet checked in game; TrapChainRadius only widens the reach, nothing on one Guardian.
+      let link = 0; for (const m of pickMods(mods, 'TrapChainLink', 'Flat')) if (applies(ctx, m)) { link += m.v; use(m); }
+      if (link > 0 && traps > 1) {
+        const t68 = is0568(GD) ? /each Trap past the first adds (\d+)%/i.exec(d) : null;
+        const extra = is0565(GD) ? (t68 ? +t68[1] / 100 : ruleNum(GD, 'r86.ARROWFIX.fTrapExtraShare86', 0.2)) : 1 - extraLess / 100;
+        let w = 0, wm = 0;
+        for (let k = 0; k < traps; k++) { const s = k === 0 ? 1 : extra; w += s; wm += s * Math.pow(1 + link / 100, k); }
+        const chainMore = wm / w;
+        countFactor *= chainMore;
+        res.notes.push('Chain Detonation: your ' + traps + ' traps go off one after another, each ' + link + '% more than the one before (x' + chainMore.toFixed(3) + ', weighted by each trap\'s share; assumes all stand by the enemy). From the support\'s text, not yet checked in game.');
+      }
     }
     // Deliveries that hit on their own clock (read from the skill text; cast speed only places them).
     let hitFactor = 1; const desc = sk.Description || '';
@@ -12510,7 +12594,12 @@ window.BOCharacter = function (ctx) {
     // your gear or passive tree stack, but the repeats from the smaller of the two deal 50% less damage." Kept as a
     // damage share (repeatWeight) on the repeats; a tie halves the gear/tree ones.
     let repSup = 0, repGear = 0; const repByKey = {};
-    if (!noEcho && !cocNoEcho) for (const m of pickMods(mods, 'Repeats', 'Flat')) if (applies(ctx, m)) { repeats += m.v; use(m); if (String(m.key || '').startsWith('support:')) { repSup += m.v; repByKey[m.key] = (repByKey[m.key] || 0) + m.v; } else repGear += m.v; }
+    // Repeat support on a channelled skill: its Repeats line is tagged Bow; its ChannelRepeats line (untagged) is "Channelled skills
+    // strike 1 more time inside each pulse" (its own text, supports.json build 81). Counted as a repeat of each pulse, at no time cost,
+    // under the same support / gear rules. Added 17 Nov 2026: before, the 45% less applied with no extra strike (Cyclone at half DPS).
+    // From the text only, not checked in game.
+    const chanRep = ctx.tags.has('channelling') ? pickMods(mods, 'ChannelRepeats', 'Flat').filter(m => applies(ctx, m)) : [];
+    if (!noEcho && !cocNoEcho) for (const m of pickMods(mods, 'Repeats', 'Flat').concat(chanRep)) if (applies(ctx, m)) { repeats += m.v; use(m); if (String(m.key || '').startsWith('support:')) { repSup += m.v; repByKey[m.key] = (repByKey[m.key] || 0) + m.v; } else repGear += m.v; }
     let repeatWeight = is0565(GD) && repSup > 0 && repGear > 0 ? (1 + Math.max(repSup, repGear) + 0.5 * Math.min(repSup, repGear)) / (1 + repeats) : 1;
     // Patch 73 (developer's patch notes, Discord 13 Nov 2026: "Multistrike, Afterimage and Repeat never lower your damage"; the
     // three support texts in API game data build 73: "If your gear or tree already repeats the skill, this gem's less damage hits
@@ -12799,7 +12888,7 @@ window.BOCharacter = function (ctx) {
       // three Guardians): "GuardianTaken59: ... Woe/Sentence best 25.0%, 25.8%, 26.5%, 27.2%, 28.0%, 28.8%" one second
       // apart, poison ticks at (1 + 29.5 ... 31.75%) and the fight average "SheetX98: ... curse_x 1.32" (155 s fight).
       // Counted at the cap (reached after 10 s). Rares are left as before: not seen in a log.
-      const dreadCap = isBoss ? Math.max(c.Dread ? c.Dread.BossCap || c.Dread.Cap || 0 : 0, tough) : c.Dread ? c.Dread.Cap : 0;
+      const dreadCap = (isBoss ? Math.max(c.Dread ? c.Dread.BossCap || c.Dread.Cap || 0 : 0, tough) : c.Dread ? c.Dread.Cap : 0) + (c.Dread ? bannerValourMax(GD, ch, c, mods) : 0);
       const dreadPct = c.Dread && dread ? Math.min(dread, dreadCap) * c.Dread.EffectPct : 0;
       // Deepened Woe (CurseMore) in the Woe gem's own sockets: "Every line of the linked Woe is 25% stronger: the damage it
       // makes enemies take, the resistance it lowers, the damage they deal less and its slow" (in-game support tooltip,
@@ -12808,10 +12897,10 @@ window.BOCharacter = function (ctx) {
       const woeSups = c.Skill && lc(c.Skill) === lc(skillId) && o.supportsOverride ? o.supportsOverride : ((ch.sockets || []).find(s => c.Skill && lc(s.skill) === lc(c.Skill)) || {}).supports || [];
       let curseMore = 0;
       for (const sid of woeSups) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'CurseMore' && m.Mode === 'Flat') curseMore += m.Value;
-      const eff = (1 + curseEffInc / 100) * (1 + dreadPct / 100) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
+      const eff = (1 + (curseEffInc + bannerEffectInc(c, mods)) / 100) * (1 + dreadPct / 100) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
       // dot: "takes X% more damage from Bleed, Poison and Ignite" (Sentence of Rot, curses.json DotTakenPct 45, patch 77 notes: strongest-only on
       // Guardians like the others). Read from 17 Nov 2026; before that the field was never copied and the Sentence did nothing here.
-      const row = { id, name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, more: curseMore, dot: (c.DotTakenPct || 0) * eff };
+      const row = { id, name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, dot: (c.DotTakenPct || 0) * eff };
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
       // Woes of Cinders / Rime / the Tempest lower a resistance instead (curses.json ResistDown), grown by
       // Dread and halved on a Guardian like the rest of the Woe.
@@ -13011,27 +13100,8 @@ window.BOCharacter = function (ctx) {
         // Past RL 150 no fight yet: x LadderLifePerLevel (1.03, scaling.json Rift) a level. The sim's old curve gave
         // 3.08M at RL 150. o.ruptureLevel picks the Deep level; without it a Deep monster level counts as the lowest
         // Rupture with that level. Only the shock size reads this, and it sits at the 5% floor on a Deep Guardian.
-        const guardianLife = () => {
-          const D = GD.deep || {}, max = D.MapMaxLevel || 80, mls = D.LadderMonsterLevels || [];
-          const deepLvl = mls.length ? mls[mls.length - 1] : 84;
-          const rl = +o.ruptureLevel > 0 ? +o.ruptureLevel : lvl > max ? max + Math.max(1, mls.indexOf(Math.min(lvl, deepLvl)) + 1) : lvl;
-          // RL 66 added 14 Nov 2026: log "Guardian: model at RL 66 - target 45 s x median boss DPS 499513 = life 22437324"
-          // (ashen_wyrm, life 24,681,056 = model x 1.32 / 1.2); the straight line from 62 to 130 gave 18.0M there.
-          const pts = [[62, 15.24e6], [66, 22437324], [130, 257153696], [150, 1755677184 / 1.4]];
-          // Patch 79 notes: "Guardians at Rupture Level 41 to 79 have 1.3x life and at 81 to 129 have 1.85x life ... The Lord levels
-          // (80 and 130) and the Gates are untouched." The fights above were all before 79, so the factor goes on top of them.
-          // Gates are RL 10 to 70 (every 10th), Lords 80 and 130: those keep their life.
-          const fixed = (rl % 10 === 0 && rl <= 80) || rl === 130;
-          const p79 = !is079(GD) || fixed ? 1 : rl >= 41 && rl <= 79 ? 1.3 : rl >= 81 && rl <= 129 ? 1.85 : 1;
-          const raw = (() => {
-            if (rl <= 62) return pts[0][1] * Math.pow(1.1315, rl - 62);
-            if (rl >= 150) return pts[pts.length - 1][1] * Math.pow(D.LadderLifePerLevel || 1.03, rl - 150);
-            const last = pts.length - 1; let k = 0; while (k < last - 1 && rl > pts[k + 1][0]) k++;
-            const [r0, l0] = pts[k], [r1, l1] = pts[k + 1];
-            return l0 * Math.pow(l1 / l0, (rl - r0) / (r1 - r0));
-          })();
-          return raw * p79;
-        };
+        // The estimate itself is guardianLifeAt (top of the file); Kindling reads it too.
+        const guardianLife = () => guardianLifeAt(GD, guardianRL(GD, o, lvl));
         const life = o.enemyLife || (isBoss ? guardianLife() : 30 * ML.Base * Math.exp(ML.K * Math.pow(lvl, ML.P)) * (rar.Life || 1));
         const lightHit = hit.Lightning.avg * critFactor * mitig.Lightning.k * mitig.Lightning.taken;
         const effK = Math.max(0, 1 + sumMod('ShockEffect', 'Inc') / 100) * sumMod('ShockEffect', 'More');
@@ -13708,6 +13778,36 @@ window.BOCharacter = function (ctx) {
         res.notes.push('Fortified is counted in the vs-enemy DPS only (full stacks in a fight); the hit, its breakdown and the panel DPS are the character sheet\'s, out of combat (no stacks).');
       }
     }
+    // Kindling support (added 17 Nov 2026). From its own text only (supports.json, API game data build 81), not yet checked against a
+    // tooltip or the log: "Each kill with the linked spell grants 1 stack of Kindling: 0.5% increased spell damage and 0.2% increased
+    // cast speed for each stack, up to 50 stacks. Each stack lasts 5 seconds ... On a Guardian, every 4% of its life (counted at Rupture
+    // Level 150 at most, without pack bonus life) the spell takes counts as a kill." So on a Guardian: kills a second = the spell's DPS /
+    // (4% of guardianLifeAt(min(RL, 150))), stacks = min(50, kills a second x 5 s). The stacks raise the DPS, which raises the stacks:
+    // solved by repeating the sheet until the stacks settle. Assumptions: the spell's ailment damage counts as life it takes; stacks
+    // build evenly (no ramp-up at the fight's start). Other enemies: kill speed depends on the packs, so nothing is counted there.
+    // The hit, its breakdown and the panel DPS stay the character sheet's (no stacks out of combat).
+    const kindle = o._kindle === undefined && !o.armyProbe && res.supports.find(s => s.ok && !s.hostOnly && lc(s.id) === 'kindling_support' && !(o.off && o.off.has(s.key)));
+    if (kindle && isFinite(res.totalDps) && res.totalDps > 0) {
+      if ((o.enemyRarity || 'rare') !== 'boss') res.notes.push('Kindling: stacks come from kills; counted against Guardians only (its text: every 4% of a Guardian\'s life counts as a kill). Not counted against this enemy.');
+      else {
+        const rl = Math.min(KINDLE_RL_CAP, guardianRL(GD, o, o.enemyLevel || ch.level));
+        const per = KINDLE_LIFE_PCT / 100 * guardianLifeAt(GD, rl);
+        const stacksFor = dps => Math.min(KINDLE_MAX, dps / per * KINDLE_SECONDS);
+        let stacks = stacksFor(res.totalDps), r = null;
+        for (let i = 0; i < 8; i++) {
+          r = calcSkill(GD, ch, skillId, Object.assign({}, o, { _kindle: stacks }));
+          const next = stacksFor(r.totalDps);
+          if (Math.abs(next - stacks) < 0.05) { stacks = next; break; }
+          stacks = next;
+        }
+        if (r && isFinite(r.totalDps)) {
+          for (const k of ['hit', 'hitAvg', 'hitAvgCrit', 'scaleInfo', 'convertedParts', 'baseParts', 'sheetHitDps', 'panelDps', 'fortified']) if (res[k] !== undefined) r[k] = res[k];
+          r.kindling = { stacks, rl, lifePerKill: per, dpsWithout: res.totalDps };
+          r.notes.push('Kindling: ' + stacks.toFixed(1) + ' of ' + KINDLE_MAX + ' stacks on this Guardian (every ' + Math.round(per).toLocaleString('en-US') + ' damage, 4% of its life at Rupture ' + rl + ', counts as a kill; each stack lasts ' + KINDLE_SECONDS + ' s): +' + (KINDLE_DMG * stacks).toFixed(1) + '% increased spell damage and +' + (KINDLE_SPEED * stacks).toFixed(1) + '% increased cast speed in the fight. From the support\'s text, not yet checked in game.');
+          return r;
+        }
+      }
+    }
     return res;
   }
 
@@ -14028,13 +14128,13 @@ window.BOCharacter = function (ctx) {
       // three Guardians): "GuardianTaken59: ... Woe/Sentence best 25.0%, 25.8%, 26.5%, 27.2%, 28.0%, 28.8%" one second
       // apart, poison ticks at (1 + 29.5 ... 31.75%) and the fight average "SheetX98: ... curse_x 1.32" (155 s fight).
       // Counted at the cap (reached after 10 s). Rares are left as before: not seen in a log.
-      const dreadCap = isBoss ? Math.max(c.Dread ? c.Dread.BossCap || c.Dread.Cap || 0 : 0, tough) : c.Dread ? c.Dread.Cap : 0;
+      const dreadCap = (isBoss ? Math.max(c.Dread ? c.Dread.BossCap || c.Dread.Cap || 0 : 0, tough) : c.Dread ? c.Dread.Cap : 0) + (c.Dread ? bannerValourMax(GD, ch, c, mods) : 0);
       const dreadPct = c.Dread && dread ? Math.min(dread, dreadCap) * c.Dread.EffectPct : 0;
       const woeSups = c.Skill && lc(c.Skill) === lc(sk.Id) && o.supportsOverride ? o.supportsOverride : ((ch.sockets || []).find(s => c.Skill && lc(s.skill) === lc(c.Skill)) || {}).supports || [];
       let curseMore = 0;
       for (const sid of woeSups) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'CurseMore' && m.Mode === 'Flat') curseMore += m.Value;
-      const eff = (1 + curseInc / 100) * (1 + dreadPct / 100) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
-      const row = { id, name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, more: curseMore, resDown: {} };
+      const eff = (1 + (curseInc + bannerEffectInc(c, mods)) / 100) * (1 + dreadPct / 100) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
+      const row = { id, name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, resDown: {} };
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
       curseRows.push(row);
     }
@@ -14577,7 +14677,10 @@ window.BOCharacter = function (ctx) {
     'funeral_pyre', 'volatile_dead',
     // Patch 79 supports that act only on other enemies (their own texts): Arc Conduit "adds nothing against a lone Guardian", Wildfire
     // leaps to enemies that are not burning. Their chance lines (+20% Shock, +15% Ignite) still count when socketed.
-    'arc_conduit', 'wildfire']);
+    'arc_conduit', 'wildfire',
+    // 17 Nov 2026, their own texts: Melee Splash hits enemies around the one struck; Ruinous Herald raises the Herald's kill effect only
+    // ("The extra damage share on your hits is unchanged"); Spreading Pyre leaps between corpses.
+    'melee_splash', 'ruinous_herald', 'spreading_pyre']);
   // Supports that only help mana: searched when the search must keep mana sustained.
   const MANA_ONLY = new Set(['siphon', 'tithe']);
   // On a summon gem only these lines change the minions' damage (minionSheet); other supports add nothing there.
@@ -14874,7 +14977,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
+  const api = { bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
     // The share at which a support works on minion skills despite "Minion" in its ExcludeTags (0 = it does not), for tooltips.
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -15689,7 +15792,7 @@ window.BOStartApp = function () {
       const effect = row ? (parts.length ? 'now: ' + parts.join(', ') : 'does not change your damage')
         : (c.Text || '').replace('{0}', c.TakenPct || 0).replace('{1}', Object.values(c.ElementTakenPct || {})[0] || '').replace('{3}', Object.values(c.ResistDown || {})[0] || '').replace(/[;,]? ?[^;]*\{[24]\}[^;]*/g, '').trim() || 'does not change your damage';
       return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + '<span class="meta">' + esc(effect) + (cs.on && !onBar && c.Skill ? ' · <span class="off-bar">not on your skill bar, counted anyway</span>' : '') + (cs.on && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · not counted: an enemy holds ' + (c.Kind === 'Woe' ? 'two Woes' : 'one ' + c.Kind) + ' at a time' : '') + '</span></span></label>' +
-        (c.Dread && c.Dread.Cap && cs.on ? '<input class="mini" type="number" min="0" max="' + c.Dread.Cap + '" value="' + (cs.dread || 0) + '" title="Dread on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + c.Dread.Cap + ', bosses ' + c.Dread.BossCap + ')" data-dread="' + esc(c.Id) + '">' : '') + '</li>';
+        (c.Dread && c.Dread.Cap && cs.on ? '<input class="mini" type="number" min="0" max="' + (row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c)) + '" value="' + (cs.dread || 0) + '" title="' + (c.Kind === 'Banner' ? 'Valour' : 'Dread') + ' on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + (row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c)) + (c.Kind === 'Banner' ? '' : ', bosses ' + c.Dread.BossCap) + ')" data-dread="' + esc(c.Id) + '">' : '') + '</li>';
     }).join('');
   }
 

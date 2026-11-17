@@ -10310,12 +10310,27 @@ window.BOCharacter = function (ctx) {
   // the Data folder (it comes from the game's packed config): after a patch, re-read that log line.
   // Rounding is a fit on that one item: 3 x 0.25 = 0.75 shows and counts as 1, 2.5 x 0.25 = 0.625 shows as 0.6, so a
   // scaled number keeps the decimals of the number it came from. Not checked on a roll between the ends.
+  // Table refreshed 16 Nov 2026 (build 79 log, 21.24): "MetaSys85: UniqueLineScale ON, 102 line(s) on 51 unique(s)" (was 37 on 16).
+  // Tooltip the same day, Mouth of the Mire: +1 Poison levels (data 2), Penetration [10-13] (data 20-25), Poison DoT [20-30] (data 40-60), life untouched = lines 0-2 x0.5.
+  // Entries the log lists as x1 are left out. Changed since 12 Nov: wyrmblade 0.8 -> 1.5, gravecleaver 0/4 and tidebreaker_maul now x1.
   const UNIQUE_LINE_SCALE = {
-    wyrmblade_of_the_black_oath: { 0: 0.8, 4: 0.8 }, kingbreaker: { 0: 1.5, 1: 1.5, 3: 1.5 }, gravesong: { 0: 1.5, 1: 1.5, 2: 1.5, 4: 1.5 },
-    gravecleaver: { 0: 1.5, 1: 2, 2: 2, 4: 1.5 }, tidebreaker_maul: { 0: 1.5, 1: 2, 2: 2, 4: 1.5 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 },
-    rimecrown_staff: { 0: 1.5, 1: 2.5 }, cinderwick: { 2: 1.5, 3: 1.5 }, dawnforge_maul: { 0: 1.25, 1: 1.25, 2: 1.25, 4: 1.25 },
-    glass_soul: { 0: 0.5, 1: 0.5 }, the_unyielding_vow: { 0: 0.25 }, the_patient_bastion: { 0: 0.25 }, the_heartwood_girdle: { 0: 0.25 },
-    crown_of_the_quiet_ward: { 0: 0.25 }, windwrit_treads: { 0: 0.25 }, the_oathkeepers_stand: { 0: 0.25 } };
+    wyrmblade_of_the_black_oath: { 0: 1.5, 4: 1.5 }, kingbreaker: { 0: 1.5, 1: 1.5, 3: 1.5 }, gravesong: { 0: 1.5, 1: 1.5, 2: 1.5, 4: 1.5 },
+    gravecleaver: { 1: 1.5, 2: 2 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff: { 0: 1.5, 1: 2.5, 3: 2 },
+    cinderwick: { 0: 1.5, 1: 2, 2: 3, 3: 1.5, 5: 3 }, dawnforge_maul: { 0: 1.25, 1: 1.25, 2: 1.25, 4: 1.25 }, glass_soul: { 0: 0.5, 1: 0.5 },
+    the_unyielding_vow: { 0: 0.25 }, the_patient_bastion: { 0: 0.25 }, the_heartwood_girdle: { 0: 0.25 },
+    crown_of_the_quiet_ward: { 0: 0.25 }, windwrit_treads: { 0: 0.25 }, the_oathkeepers_stand: { 0: 0.25 },
+    mouth_of_the_mire: { 0: 0.5, 1: 0.5, 2: 0.5 }, drune_grave_rot: { 1: 0.5 }, cinderwick_primal: { 0: 1.5, 1: 2, 2: 2.25, 7: 3 },
+    heart_of_the_white_silence: { 0: 2 }, starcallers_staff: { 1: 2, 3: 1.5, 5: 1.5 }, wintercall_orb: { 0: 2, 1: 2 },
+    orrery_of_the_long_night: { 0: 1.5, 2: 0.4 }, dawnwardens_verdict: { 0: 1.5, 1: 2.5, 2: 3 }, halo_of_the_restless_saint: { 2: 2, 3: 0.4 },
+    lightsworn_reliquary: { 0: 2, 2: 2 }, hollowhorn: { 2: 2, 4: 1.3 }, crown_of_the_bone_king: { 0: 2, 2: 2 },
+    charnel_bell: { 0: 2, 2: 0.4 }, wand_of_the_ash_march: { 0: 2, 3: 1.5 }, skyrend: { 2: 2, 3: 3 },
+    weeping_talons: { 3: 2 }, twinscar: { 3: 2 }, thornwake: { 3: 2 },
+    ravenmaw: { 2: 2 }, jarlsbane: { 2: 2, 3: 3 }, hoarfall: { 2: 3 },
+    cinderknuckle: { 2: 3 }, the_fissure_edge: { 2: 2, 3: 2 }, the_bellwarden: { 3: 1.5 },
+    the_oathsplit_fang: { 2: 2, 3: 2 }, the_last_harvest: { 3: 2, 4: 3 }, gravetithe: { 2: 2, 3: 2.5 },
+    nightglass: { 2: 2 }, the_last_petal: { 1: 2 }, rimewrit: { 0: 4, 2: 2, 6: 1.5 },
+    the_slow_verdict: { 0: 1.75 }, templars_troth: { 0: 2, 1: 2 }, the_gate_that_answers: { 0: 1.5 },
+    overclock_coil: { 1: 1.5 }, hexbinders_censer: { 1: 2 } };
   // How much the game multiplies line i of a unique by (1 = as written).
   function uniqueLineScale(uid, i) { const u = UNIQUE_LINE_SCALE[lc(uid)]; return (u && u[i]) || 1; }
   // A stored number of that line (a roll or a range end) as the game counts and shows it.

@@ -6353,7 +6353,7 @@ window.BOItemSearch = function (ctx) {
     const day = dayText(e.added), title = ' title="Added in ' + buildName(e.added) + (day ? ' (' + day + ')' : '') + '"';
     if (tag) return e.added === NEWEST ? '<span class="is-tag new"' + title + '>New</span>' : '';
     if (e.added === NEWEST) return '<span class="is-badge new"' + title + '>New this patch</span>';
-    return F.sort === 'new' ? '<span class="is-badge muted"' + title + '>Added ' + esc(day || buildName(e.added)) + '</span>' : '';
+    return F.newFirst ? '<span class="is-badge muted"' + title + '>Added ' + esc(day || buildName(e.added)) + '</span>' : '';
   }
   function entries() {
     const GD = ctx.gd();
@@ -6437,9 +6437,12 @@ window.BOItemSearch = function (ctx) {
   const CATS = [['unique', 'Uniques'], ['oathword', 'Oathwords'], ['base', 'Item bases'], ['mod', 'Item mods'], ['rune', 'Runes & jewels'], ['skill', 'Skill gems'], ['support', 'Support gems'], ['all', 'All']];
   const CAT_NAME = { unique: 'Unique', oathword: 'Oathword', base: 'Item base', mod: 'Item mod', rune: 'Rune', skill: 'Skill gem', support: 'Support gem' };
   // affix: Prefix / Suffix (Item mods only). sortBy: the sort picked in each category; sort is the current one.
-  const BLANK = { cat: 'unique', q: '', slot: '', type: '', tier: '', affix: '', min: '', max: '', sort: 'level', sortBy: {}, secrets: false, craft: false }; // craft: Oathwords you can make or hold
+  const BLANK = { cat: 'unique', q: '', slot: '', type: '', tier: '', affix: '', min: '', max: '', sort: 'level', sortBy: {}, secrets: false, craft: false, newFirst: false }; // craft: Oathwords you can make or hold; newFirst: the "New first" toggle beside Sort (all categories)
   let F = Object.assign({}, BLANK, { sortBy: {} }), shown = PAGE;
   try { const s = JSON.parse(localStorage.getItem('bods:itemsearch') || 'null'); if (s && typeof s === 'object') for (const k of Object.keys(BLANK)) if (s[k] != null && typeof s[k] === typeof BLANK[k]) F[k] = s[k]; } catch (e) { /* storage off */ }
+  // "New this patch first" was a sort until 17 Nov 2026; now it is the purple "New first" toggle left of All, on top of whatever sort is picked.
+  if (F.sort === 'new') { F.newFirst = true; F.sort = ''; }
+  for (const c of Object.keys(F.sortBy || {})) if (F.sortBy[c] === 'new') { F.newFirst = true; delete F.sortBy[c]; }
   // Runes & jewels open on the upgrade path, the rest on level; a sort picked in a category stays with it.
   const sortFor = cat => F.sortBy[cat] || (cat === 'rune' ? 'path' : cat === 'skill' || cat === 'support' ? 'name' : 'level');
   F.sort = sortFor(F.cat);
@@ -6470,9 +6473,11 @@ window.BOItemSearch = function (ctx) {
   }
   function sorted(list) {
     const path = e => (e.jewel ? 1000 : 0) + (e.r && e.r.Index != null ? e.r.Index : e.level);
-    const by = { path: (a, b) => path(a) - path(b), affix: (a, b) => (a.affixType === 'Suffix') - (b.affixType === 'Suffix') || levelOf(a) - levelOf(b), level: (a, b) => levelOf(a) - levelOf(b), new: (a, b) => b.added - a.added || levelOf(a) - levelOf(b), leveldesc: (a, b) => levelOf(b) - levelOf(a), name: () => 0,
+    const by = { path: (a, b) => path(a) - path(b), affix: (a, b) => (a.affixType === 'Suffix') - (b.affixType === 'Suffix') || levelOf(a) - levelOf(b), level: (a, b) => levelOf(a) - levelOf(b), leveldesc: (a, b) => levelOf(b) - levelOf(a), name: () => 0,
       cat: (a, b) => CATS.findIndex(c => c[0] === a.cat) - CATS.findIndex(c => c[0] === b.cat) || levelOf(a) - levelOf(b) }[F.sort] || (() => 0);
-    return list.slice().sort((a, b) => by(a, b) || a.name.localeCompare(b.name));
+    // New first: this patch's entries on top, each group in the picked sort.
+    const lead = F.newFirst && NEWEST ? (a, b) => (b.added === NEWEST) - (a.added === NEWEST) : () => 0;
+    return list.slice().sort((a, b) => lead(a, b) || by(a, b) || a.name.localeCompare(b.name));
   }
 
   // ---------- cards ----------
@@ -6680,9 +6685,11 @@ window.BOItemSearch = function (ctx) {
     if (!tierOk || (F.tier && !tiers.includes(F.tier))) F.tier = '';
     const mods = F.cat === 'mod';
     if (!mods) F.affix = '';
-    const sorts = (F.cat === 'rune' ? [['path', 'Upgrade path']] : []).concat(GEM_CATS[F.cat] ? [['name', 'Name, A to Z']] : [['level', 'Level, low to high'], ['leveldesc', 'Level, high to low'], ['name', 'Name, A to Z']], NEWEST ? [['new', 'New this patch first']] : [], mods ? [['affix', 'Prefixes, then suffixes']] : F.cat === 'all' ? [['cat', 'Category']] : []);
+    const sorts = (F.cat === 'rune' ? [['path', 'Upgrade path']] : []).concat(GEM_CATS[F.cat] ? [['name', 'Name, A to Z']] : [['level', 'Level, low to high'], ['leveldesc', 'Level, high to low'], ['name', 'Name, A to Z']], mods ? [['affix', 'Prefixes, then suffixes']] : F.cat === 'all' ? [['cat', 'Category']] : []);
     if (!sorts.some(s => s[0] === F.sort)) F.sort = sorts[0][0];
-    return '<div class="is-cats" role="group" aria-label="Category">' + CATS.map(([k, t]) => '<button type="button" class="is-cat' + (F.cat === k ? ' active' : '') + '" data-cat="' + k + '" aria-pressed="' + (F.cat === k) + '">' + esc(t) + ' <small>' + (k === 'all' ? all.length : counts[k] || 0) + '</small></button>').join('') + '</div>' +
+    // New first: on top of any category and sort, this patch's entries first. Purple so it stands apart from the category chips.
+    const newBtn = '<button type="button" id="isNew" class="is-cat is-newfirst' + (F.newFirst ? ' active' : '') + '" aria-pressed="' + !!F.newFirst + '" title="Items new this patch on top; the sort orders the rest">New first</button>';
+    return '<div class="is-cats" role="group" aria-label="Category">' + CATS.map(([k, t]) => (k === 'all' && NEWEST ? newBtn : '') + '<button type="button" class="is-cat' + (F.cat === k ? ' active' : '') + '" data-cat="' + k + '" aria-pressed="' + (F.cat === k) + '">' + esc(t) + ' <small>' + (k === 'all' ? all.length : counts[k] || 0) + '</small></button>').join('') + '</div>' +
       '<div class="is-filters' + (mods ? ' with-affix' : '') + '">' +
       field('Search', '<input type="text" id="isQ" enterkeyhint="search" placeholder="Name or mod text, e.g. critical, life, &quot;fire damage&quot;" value="' + esc(F.q) + '" autocomplete="off">', 'grow') +
       field(L[0], '<select id="isSlot">' + opt('', L[1], !F.slot) + slots.map(s => opt(s, s, F.slot === s)).join('') + '</select>') +
@@ -6700,7 +6707,7 @@ window.BOItemSearch = function (ctx) {
   function results() {
     const list = sorted(pick());
     const head = '<p class="is-count">' + list.length + ' result' + (list.length === 1 ? '' : 's') + (F.cat === 'mod' && F.tier ? ' · item level shown for ' + F.tier : '') +
-      (F.sort === 'new' && NEWEST ? ' · ' + list.filter(e => e.added === NEWEST).length + ' new this patch (' + buildName(NEWEST) + (dayText(NEWEST) ? ', ' + dayText(NEWEST) : '') + ')' : '') + '</p>';
+      (F.newFirst && NEWEST ? ' · ' + list.filter(e => e.added === NEWEST).length + ' new this patch (' + buildName(NEWEST) + (dayText(NEWEST) ? ', ' + dayText(NEWEST) : '') + ')' : '') + '</p>';
     if (!list.length) return head + '<div class="card"><p class="hint">Nothing matches. Clear a filter or try other words.</p></div>';
     const n = F.cat === 'mod' ? shown * 3 : shown, page = list.slice(0, n);
     let body;
@@ -6733,7 +6740,8 @@ window.BOItemSearch = function (ctx) {
       const c = e.target.closest('[data-cat]');
       if (c) { F.cat = c.dataset.cat; F.tier = ''; F.type = ''; F.affix = ''; F.sort = sortFor(F.cat); shown = PAGE; return refresh(); }
       if (e.target.closest('#isMore')) { shown += PAGE * 2; $('#isResults').innerHTML = results(); return; }
-      if (e.target.closest('#isReset')) { F = Object.assign({}, BLANK, { sort: F.sort, sortBy: F.sortBy, secrets: F.secrets }); shown = PAGE; refresh(); }
+      if (e.target.closest('#isNew')) { F.newFirst = !F.newFirst; shown = PAGE; return refresh(); }
+      if (e.target.closest('#isReset')) { F = Object.assign({}, BLANK, { sort: F.sort, sortBy: F.sortBy, secrets: F.secrets, newFirst: F.newFirst }); shown = PAGE; refresh(); }
     });
     el.addEventListener('input', e => {
       const t = e.target;

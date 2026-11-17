@@ -10299,6 +10299,18 @@ window.BOCharacter = function (ctx) {
   // Patch 79 (developer's patch notes, Discord 16 Nov 2026 11:56 AM local, full text from its message.txt). Switches on with the
   // API's game data build 79 (16 Nov 2026 20:13 UTC); its rule numbers sit in switches.json r103.* (AILMENTS, MAIN-SKILL, META-BALANCE).
   const is079 = GD => apiBuildAtLeast(GD, 79, '2026-11-16T17');
+  // Patch 81 (developer's patch notes, Discord 17 Nov 2026 15:34 UTC). Switches on with the API's game data build 81.
+  const is081 = GD => apiBuildAtLeast(GD, 81, '2026-11-17T15');
+  // Bina's Spotter's Helm, Patch 81 notes: "a crit volley every 2 seconds (was 3), and each Ballista or totem shot in a row at the same
+  // enemy deals 2% more, up to 50%". The volley gap is read from the item's own text when it names one ("at most once every N seconds"),
+  // else 2 s from build 81 and 3 s before. Not checked against a tooltip or the log yet.
+  const SPOTTER_RAMP_PER = 2, SPOTTER_RAMP_MAX = 50;
+  const spotterGap = (GD, mods) => {
+    for (const m of pickMods(mods, 'BallistaVolley76', 'Flat')) { const t = /once every (d+(?:.d+)?) seconds?/i.exec(m.text || m.Text || ''); if (t) return +t[1]; }
+    const u = (GD.uniques || {}).community_binas_spotters_helm, line = u && (u.Mods || []).find(x => x.Mod && x.Mod.Stat === 'BallistaVolley76');
+    const t = line && /once every (d+(?:.d+)?) seconds?/i.exec(line.Text || '');
+    return t && !(is081(GD) && +t[1] === 3) ? +t[1] : (is081(GD) ? 2 : 3);
+  };
   // Patch 79 notes: "To keep each skill whole I raised the late damage of the 16 attack skills that leaned on [gem-scaled added damage
   // growing with bonus levels]". These lifts are NOT in the API's build 79 skills.json (16 Nov 2026: Glacial Shards, Viper Fang, Blade
   // Vortex, Lightning Arrow ... unchanged from build 76, while the other 78/79 lifts in the same notes are in: Arc x1.4, Shield Throw
@@ -10572,16 +10584,16 @@ window.BOCharacter = function (ctx) {
   // Rounding is a fit on that one item: 3 x 0.25 = 0.75 shows and counts as 1, 2.5 x 0.25 = 0.625 shows as 0.6, so a
   // scaled number keeps the decimals of the number it came from. Not checked on a roll between the ends.
   // UNIQUE_LINE_SCALE:BEGIN (tools/unique-scale.js rewrites everything down to the END marker from the game log; watch.js runs it)
-  // Table from the game log (2026.11.16-21.24.54): "MetaSys85: UniqueLineScale ON, 102 line(s) on 51 unique(s)".
+  // Table from the game log (2026.11.17-10.40.09): "MetaSys85: UniqueLineScale ON, 121 line(s) on 57 unique(s)".
   // Evidence for the scale itself: the Mouth of the Mire tooltip of 16 Nov 2026 (+1 levels vs data 2, [10-13] vs 20-25, [20-30] vs 40-60) = x0.5.
-  // Entries the log lists as x1 are left out.
+  // Entries the log lists as x1 are left out. New uniques at this refresh: the_thousand_sparks, kingbreaker_primal, gravesong_primal, gravecleaver_primal, stormfang_primal, rimecrown_staff_primal.
   const UNIQUE_LINE_SCALE = {
     wyrmblade_of_the_black_oath: { 0: 1.5, 4: 1.5 }, kingbreaker: { 0: 1.5, 1: 1.5, 3: 1.5 }, gravesong: { 0: 1.5, 1: 1.5, 2: 1.5, 4: 1.5 },
     gravecleaver: { 1: 1.5, 2: 2 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff: { 0: 1.5, 1: 2.5, 3: 2 },
     cinderwick: { 0: 1.5, 1: 2, 2: 3, 3: 1.5, 5: 3 }, dawnforge_maul: { 0: 1.25, 1: 1.25, 2: 1.25, 4: 1.25 }, glass_soul: { 0: 0.5, 1: 0.5 },
     the_unyielding_vow: { 0: 0.25 }, the_patient_bastion: { 0: 0.25 }, the_heartwood_girdle: { 0: 0.25 },
     crown_of_the_quiet_ward: { 0: 0.25 }, windwrit_treads: { 0: 0.25 }, the_oathkeepers_stand: { 0: 0.25 },
-    mouth_of_the_mire: { 0: 0.5, 1: 0.5, 2: 0.5 }, drune_grave_rot: { 1: 0.5 }, cinderwick_primal: { 0: 1.5, 1: 2, 2: 2.25, 7: 3 },
+    mouth_of_the_mire: { 0: 0.5, 1: 0.5, 2: 0.5 }, drune_grave_rot: { 1: 0.5 }, cinderwick_primal: { 0: 1.5, 1: 2, 2: 3, 3: 1.5, 7: 3 },
     heart_of_the_white_silence: { 0: 2 }, starcallers_staff: { 1: 2, 3: 1.5, 5: 1.5 }, wintercall_orb: { 0: 2, 1: 2 },
     orrery_of_the_long_night: { 0: 1.5, 2: 0.4 }, dawnwardens_verdict: { 0: 1.5, 1: 2.5, 2: 3 }, halo_of_the_restless_saint: { 2: 2, 3: 0.4 },
     lightsworn_reliquary: { 0: 2, 2: 2 }, hollowhorn: { 2: 2, 4: 1.3 }, crown_of_the_bone_king: { 0: 2, 2: 2 },
@@ -10592,7 +10604,9 @@ window.BOCharacter = function (ctx) {
     the_oathsplit_fang: { 2: 2, 3: 2 }, the_last_harvest: { 3: 2, 4: 3 }, gravetithe: { 2: 2, 3: 2.5 },
     nightglass: { 2: 2 }, the_last_petal: { 1: 2 }, rimewrit: { 0: 4, 2: 2, 6: 1.5 },
     the_slow_verdict: { 0: 1.75 }, templars_troth: { 0: 2, 1: 2 }, the_gate_that_answers: { 0: 1.5 },
-    overclock_coil: { 1: 1.5 }, hexbinders_censer: { 1: 2 } };
+    overclock_coil: { 1: 1.5 }, hexbinders_censer: { 1: 2 }, the_thousand_sparks: { 0: 0.667, 2: 0.5 },
+    kingbreaker_primal: { 0: 1.5, 1: 1.5, 3: 1.5 }, gravesong_primal: { 0: 1.5, 1: 1.5, 2: 1.5, 4: 1.5 }, gravecleaver_primal: { 1: 1.5, 2: 2 },
+    stormfang_primal: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff_primal: { 0: 1.5, 1: 2.5, 3: 2 } };
   // UNIQUE_LINE_SCALE:END
   // How much the game multiplies line i of a unique by (1 = as written).
   function uniqueLineScale(uid, i) { const u = UNIQUE_LINE_SCALE[lc(uid)]; return (u && u[i]) || 1; }
@@ -12261,12 +12275,14 @@ window.BOCharacter = function (ctx) {
       usesPerSec = count / every; useTime = 1 / usesPerSec;
       // Bina's Spotter's Helm (BallistaVolley76, text "When you land a Critical Strike, each of your Ballistas fires an extra volley at that
       // enemy (each Ballista at most once every 3 seconds)"): crits from the Ballistas' own volleys (crit chance x volleys a second), at most
-      // one extra volley per Ballista every 3 s. Your other skills' crits would also count: not added. From the item text; not checked.
+      // one extra volley per Ballista every gap s (3 s, 2 s from Patch 81: spotterGap above). Your other skills' crits would also count: not
+      // added. From the item text and the notes; not checked.
       if (tt.Kind === 'Ballista' && pickMods(mods, 'BallistaVolley76', 'Flat').length) {
         pickMods(mods, 'BallistaVolley76', 'Flat').forEach(m => use(m, 'extra volleys on crit'));
-        const extra = Math.min(count / 3, usesPerSec * critChance / 100 * count);
+        const gap = spotterGap(GD, mods);
+        const extra = Math.min(count / gap, usesPerSec * critChance / 100 * count);
         usesPerSec += extra; useTime = 1 / usesPerSec;
-        res.notes.push("Bina's Spotter's Helm: crits make each Ballista fire an extra volley (at most one every 3 s each): +" + extra.toFixed(2) + ' volleys a second.');
+        res.notes.push("Bina's Spotter's Helm: crits make each Ballista fire an extra volley (at most one every " + gap + ' s each): +' + extra.toFixed(2) + ' volleys a second.');
       }
       res.totem = { count, every };
       // Patch 0.56.0: Ancestral Host and Siege Pact cost "Each Totem or Ballista past the first deals 20% less damage"
@@ -12588,6 +12604,13 @@ window.BOCharacter = function (ctx) {
         hitsPerUse += (afterimages + extra) * blow; perHitFactor = (full + (afterimages * pct + extra * pct / 2) * full / (1 + repeats)) / hitsPerUse;
         res.notes.push('Afterimages: ' + afterimages + (extra ? ' + ' + extra + ' past the cap at half damage (patch 0.56.4)' : n > afterimages ? ' (capped from ' + n + ')' : '') + ', each repeats the blow for ' + Math.round(pct * 100) + '% of its damage.');
       }
+    }
+    // Bina's Spotter's Helm ramp (Patch 81, see spotterGap): Ballista and totem shots in a row at the same enemy deal 2% more each, up to
+    // 50%. Counted at the full 50% on a lasting Rare or Guardian (reached after 25 shots; o.spotterRamp = false turns it off), none on packs.
+    // Unknown: whether the count is per totem or shared, and whether it multiplies apart from other "more" lines (taken as apart).
+    if (is081(GD) && o.spotterRamp !== false && (res.totem || totemShape) && pickMods(mods, 'BallistaVolley76', 'Flat').length && ['rare', 'boss'].includes(o.enemyRarity || 'rare')) {
+      hitFactor *= 1 + SPOTTER_RAMP_MAX / 100; res.spotterRamp = SPOTTER_RAMP_MAX;
+      res.notes.push("Bina's Spotter's Helm: shots in a row at the same enemy deal " + SPOTTER_RAMP_PER + '% more each, counted at the full ' + SPOTTER_RAMP_MAX + '% (after ' + Math.round(SPOTTER_RAMP_MAX / SPOTTER_RAMP_PER) + ' shots) on a Rare or Guardian. Packs do not get it.');
     }
     // Traps or totems past the first dealing less (patch 0.56, set with the rate above).
     perHitFactor *= countFactor * shapeWeight;

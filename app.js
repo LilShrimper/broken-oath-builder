@@ -588,7 +588,9 @@ window.PAGE_LANGS = {
     // Keys are "section.key" (r87.SPARKS.PerBody). A game folder has neither file: the sim then uses its own defaults.
     const gameRules = {};
     const ruleVal = v => v === 'True' ? true : v === 'False' ? false : v !== '' && v != null && isFinite(+v) ? +v : v;
-    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE)$/;
+    // AILMENTS, MAIN-SKILL, BUGS-D, BUGSB and UNIQUES added 17 Nov 2026: sim.js reads keys there (patch 79/80 ailments, link
+    // ramp, minion element lines, unique pulse step) but they were filtered out, so the sim ran on its defaults (equal to b81).
+    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES)$/;
     try { for (const s of (J('Gameplay/switches.json') || {}).switches || []) if (RULE_SECTIONS.test(s.section)) gameRules[s.section + '.' + s.key] = ruleVal(s.value); } catch (e) { /* not served */ }
     try { for (const [k, v] of Object.entries((J('Gameplay/rules.json') || {}).values || {})) gameRules[k] = ruleVal(v && v.value); } catch (e) { /* older game data */ }
     let trapPrice = {};
@@ -7248,6 +7250,9 @@ window.BOItemSearch = function (ctx) {
       if (S.hero !== path) return; // another hero was picked meanwhile
       S.heroData = h || { gone: true };
     }
+    // A build file the API publishes with no gear, skills or passives (seen 17 Nov 2026: Warrior 778f2e94 in ts1-sc-trade,
+    // has_build true but every build list empty, the API's own file too). Not simmed: a bare character gives a meaningless number.
+    const emptyBuild = b => !b || (!(b.items || []).length && !(b.skills || []).length && !(b.passive_nodes || []).length);
     // Life / ES / EHP and the uniques worn need the builds themselves: the worker's roster files (25 builds a file).
     const needRoster = () => true; // Sim DPS, Life / ES / EHP and item search all read the published builds
     const rosterLoaded = new Set(); // "<league>/<Class>": read without errors
@@ -7273,6 +7278,7 @@ window.BOItemSearch = function (ctx) {
       for (const [, f] of files) for (const h of (f && f.heroes) || []) {
         if (!h || !h.build || !h.hero) continue;
         const items = (h.build.items || []).flatMap(itemNames);
+        if (emptyBuild(h.build)) { roster(league)[h.hero] = { life: null, es: null, ehp: null, sim: null, empty: true, items, find: '' }; continue; }
         try {
           const ch = charFromApi(h), d = ctx.defence(ch);
           // Sim the skill the hero has dealt the most damage with (build.skill_damage), owner 11 Nov 2026: the ladder's
@@ -7309,6 +7315,7 @@ window.BOItemSearch = function (ctx) {
       const x = roster()[r.hero];
       if (!r.has_build) return '<span class="meta" title="Builds are published for the top 50 of each class">–</span>';
       if (!x) return '<span class="meta" title="Build not read yet (build files refresh hourly)">' + (S.rosterBusy ? '…' : '–') + '</span>';
+      if (x.empty) return '<span class="meta" title="The game published this build without gear, skills or passives">–</span>';
       if (!(x.sim > 0)) return '<span class="meta" title="The sim does not cover this skill or build yet">–</span>';
       return '<span title="' + esc(skillName(x.simSkill)) + ' (the skill this hero has dealt the most damage with), sim estimate">' + short(x.sim) + '</span>' +
         (x.simSkill && x.simSkill !== r.main_skill ? '<br><small class="meta">' + esc(skillName(x.simSkill)) + '</small>' : '');
@@ -7506,12 +7513,13 @@ window.BOItemSearch = function (ctx) {
         '<small class="meta">Class rank ' + (h.class_rank || '?') + (h.dead ? ' · dead' : '') + (h.updated_at ? ' · build updated ' + esc(ago(h.updated_at)) : '') + '</small></div>' +
         '<div class="lad-actions"><button type="button" class="btn" id="ladOpen">Open in Build Planner</button><button type="button" class="btn ghost" id="ladLink">Copy link</button><button type="button" class="btn ghost" id="ladClose" aria-label="Close hero">Close</button></div></div>' +
         measuredAll +
+        (emptyBuild(b) ? '<p class="hint">The game published this build without gear, skills or passives, so there is nothing to show or sim. It may fill in at the next hourly build refresh.</p></div>' :
         '<h3>Skills</h3><ul class="lad-skills">' + (skills || '<li class="meta">None listed</li>') + '</ul>' +
         '<h3>Passives</h3><p>' + nodes.length + ' points' + (b.bonus_passive_points ? ' (' + b.bonus_passive_points + ' bonus)' : '') + (hiddenNodes ? ', ' + hiddenNodes + ' undiscovered' : '') + '.' +
         (keys.length ? '<br><b>Keystones:</b> ' + esc(keys.join(', ')) : '') + (notables.length ? '<br><b>Notables:</b> ' + esc(notables.join(', ')) : '') + '</p>' +
         (asc.aspect && asc.aspect !== 'None' ? '<h3>Dragonling</h3><p>' + esc(asc.aspect) + ' aspect, ' + (asc.nodes || []).length + ' nodes.</p>' : '') +
         '<h3>Gear</h3><div class="lad-items">' + (items.map(it => itemCard(it, h.class)).join('') || '<p class="meta">No gear.</p>') + '</div>' +
-        '<p class="hint">Open in Build Planner to see the passive tree and run the damage sim on this build. Undiscovered items, nodes and supports stay hidden until the community finds them.</p></div>';
+        '<p class="hint">Open in Build Planner to see the passive tree and run the damage sim on this build. Undiscovered items, nodes and supports stay hidden until the community finds them.</p></div>');
     }
     function paint() {
       const el = $('#ladderPane'); if (!el) return;
@@ -10426,8 +10434,9 @@ window.BOCharacter = function (ctx) {
   // the Totem, Ballista and Spark caps, the extra Totem and Trap shares, the Totem echo and the Vow skill-level share. Each default
   // is the value the sim used before, proven where its own comment says so.
   // Patch 80 (developer's notes, pasted by the owner 17 Nov 2026): Deep Wound 6% per bleed up to 6 (was 15% / 8), shock from each hit 0.5 (was 1),
-  // Cold stores 25% (was 40%), Kindle feeds 25% (was 40%). The API's data is still build 79 (switches hold the old numbers), so until the
-  // API serves build 80 these new numbers are used; from build 80 on the switches decide (default = the new number). Not checked in game.
+  // Cold stores 25% (was 40%), Kindle feeds 25% (was 40%). Before data build 80 these new numbers are used; from 80 on the switches
+  // decide (default = the new number). API data build 81 (17 Nov 2026) switches.json r103.AILMENTS confirms them: KindlePct103 25,
+  // KindleMax103 20, WoundPct103 6, WoundMax103 6, CrackPct103 25, StaticPerHit103 0.5. Not checked in game.
   const p80 = (GD, key, nw) => +GD.apiBuild >= 80 ? ruleNum(GD, key, nw) : nw;
   // Patch 80 Sleepy's Continental Strap: the burst uses up the poisons still coming (evidence at the player burst below). The
   // game is on 80 while the API still serves 79, so on now, like p80.
@@ -12394,7 +12403,7 @@ window.BOCharacter = function (ctx) {
     }
     if (host) {
       const hostSup = supportList.map(s => s.replace('@granted', '')).filter(s => lc(s) !== 'channel_conduit');
-      const hr = calcSkill(GD, ch, host.skill, { _col: col, off: o.off, supportsOverride: hostSup, conduit: false, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyHallowedGround: o.enemyHallowedGround, flashfire: o.flashfire });
+      const hr = calcSkill(GD, ch, host.skill, { _col: col, off: o.off, supportsOverride: hostSup, conduit: false, barShock: false, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyHallowedGround: o.enemyHallowedGround, flashfire: o.flashfire });
       const interval = conduitInterval(GD, col.mods);
       if (hr.speed && hr.speed.usesPerSec > 0) {
         const tick = 1 / hr.speed.usesPerSec, ticks = Math.max(1, Math.ceil(interval / tick - 1e-9));
@@ -12416,7 +12425,7 @@ window.BOCharacter = function (ctx) {
           : coc.skill ? 'Cast on Crit: ' + coc.name + ' has no hit of its own to crit with, so no triggered casts are counted.'
           : 'Cast on Crit in this spell\'s own sockets is cast by your attacks\' crits, and there is no attack on your bar. If it is linked to another skill in game (build codes do not carry links), pick that skill in the Cast on Crit box.');
       } else {
-        const hr = calcSkill(GD, ch, coc.skill, { _col: col, off: o.off, coc: false, conduit: false, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyRes: o.enemyRes, curses: o.curses, enemyHallowedGround: o.enemyHallowedGround, flashfire: o.flashfire });
+        const hr = calcSkill(GD, ch, coc.skill, { _col: col, off: o.off, coc: false, conduit: false, barShock: false, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyRes: o.enemyRes, curses: o.curses, enemyHallowedGround: o.enemyHallowedGround, flashfire: o.flashfire });
         if (hr.speed && hr.hits && hr.crit) {
           const cs = GD.supports.cast_on_crit || {};
           const cdLine = mods.find(m => m.stat === 'TrigCooldown') || (cs.Mods || []).map(m => ({ v: m.Stat === 'TrigCooldown' ? m.Value : 0 })).find(m => m.v > 0);
@@ -13046,6 +13055,50 @@ window.BOCharacter = function (ctx) {
         res.notes.push('Shock: ' + Math.round(chance) + '% chance a hit, each shock ' + size.toFixed(1) + '% more damage taken (' + (raw < A.ShockMin ? "the game's " + A.ShockMin + '% floor: your lightning hit is small next to its ~' + Math.round(life).toLocaleString('en-US') + ' life' : 'from your lightning hit vs its ~' + Math.round(life).toLocaleString('en-US') + ' life') + (effK !== 1 ? ', shock effect x' + effK.toFixed(2) : '') + '), ' + avg.toFixed(2) + ' of ' + stacks + ' on it on average = +' + pct.toFixed(1) + '%.' + (isBoss ? (stackLines > 1 ? ' On a Guardian only one shock counts (game log 13 Nov), so your extra shock stacks do nothing here.' : '') + (o.enemyLife ? '' : ' Guardian life is an estimate from the Rupture level; type the real one in the life box for an exact shock.') : ' Not checked against the game yet.'));
       }
     }
+    // ----- shock from the other skills on the bar -----
+    // A shock is the enemy's state: one laid by another skill raises this skill's damage too. PROVEN 17 Nov 2026 (game log,
+    // Rangtest, Training Post = a Guardian; tests/shock-from-bar.md, tools/shock-check.js): Lightning Arrow shocked the Post,
+    // then Flame Dash's burning ground (fire only, never shocks) dealt x1.174 with the shock at 12.1% (x1.121) and x1.136 at
+    // 8.9% (x1.089), the same ~x1.045 (about 3 Hunter's Marks) left over both times: the shock counts in full, on top of the
+    // Marks. "Marks only" would have needed 10-12 and 8-10 Marks from 8 and 5 lightning hits: ruled out.
+    // Each lightning skill on the bar (and a spell linked to one: Cast on Crit, Conduit) is worked out on its own sheet, its
+    // shock counted as one shock of its size (+ Static Build) up 1 - e^(-rate x duration) of the time, kept up as the sheet
+    // says (a hand-cast helper is taken as used enough to keep it up). Combined with this skill's own shock as the expected
+    // strongest (on a Guardian only one shock counts, 13 Nov log). ASSUMPTIONS: off Guardians the shocks of two skills are
+    // not added either (not checked; Living Storm stacks are only this skill's own); minions' and totems' summons' shocks
+    // and Static Build growth from the other skill's hits are left out. o.barShock === false or off 'barshock:<id>' turns it off.
+    res.barShock = [];
+    if (A.bEnabled && A.ShockCoef && o.barShock !== false && !o._barProbe) {
+      const ids = new Map();
+      for (const id of ch.hotbar || []) if (id) ids.set(lc(id), id);
+      for (const s of ch.sockets || []) if (s.conduit && ids.has(lc(s.skill)) && !ids.has(lc(s.conduit))) ids.set(lc(s.conduit), s.conduit);
+      ids.delete(lc(skillId));
+      const ho = Object.assign({}, o, { _barProbe: true, _panelPass: true, _risen: true, _col: col });
+      for (const k of ['supportsOverride', 'gemLevel', 'projOnTarget', 'totemCount', 'hitsPerSecOverride', 'castsPerSecOverride', 'conduit', 'coc', 'cocSource']) delete ho[k];
+      for (const [lid, id] of ids) {
+        const k = GD.skills[lid];
+        if (!k || isSummon(k) || !((k.Tags || []).includes('Attack') || k.SpellMin > 0)) continue;
+        const r = calcSkill(GD, ch, id, ho);
+        const s = r && !r.error && !r.unsupported && r.ailments && r.ailments.shock;
+        if (!s || !(s.rate > 0)) continue;
+        const key = 'barshock:' + lid;
+        res.barShock.push({ id, key, name: k.Name || id, size: Math.min(s.cap, s.size + (s.staticBuild || 0)), uptime: 1 - Math.exp(-s.rate * s.duration), coc: !!r.coc, on: !(o.off && o.off.has(key)) });
+      }
+      const helpers = res.barShock.filter(b => b.on && b.size > 0);
+      if (helpers.length) {
+        const own = ail.shock, ownPct = own ? own.pct : 0;
+        const list = (own ? [{ size: Math.min(own.cap, own.size + (own.staticBuild || 0)), uptime: 1 - Math.exp(-own.rate * own.duration) }] : []).concat(helpers).sort((a, b) => b.size - a.size);
+        let pct = 0, miss = 1;
+        for (const x of list) { pct += x.size * x.uptime * miss; miss *= 1 - x.uptime; }
+        ail.barShockPct = Math.max(0, pct - ownPct);
+        if (pct > ownPct) {
+          const k = (1 + pct / 100) / shockF;
+          for (const d of Object.keys(byType)) byType[d] *= k;
+          hitDpsVs *= k; res.hitDps = hitDpsVs; shockF = 1 + pct / 100;
+          res.notes.push('Shock from your other skills: ' + helpers.map(b => b.name + ' ' + b.size.toFixed(1) + '% up ' + Math.round(b.uptime * 100) + '% of the time').join(', ') + ' -> the enemy takes ' + pct.toFixed(1) + '% more' + (own ? ' (your own shock alone: ' + ownPct.toFixed(1) + '%)' : '') + ', the strongest shock counting (game log 17 Nov 2026). Helpers are taken as kept up; untick them under Vows, Heralds & charges.');
+        }
+      }
+    }
     // ----- Patch 79: chill raises damage taken, Crack -----
     // Notes: "chill now raises damage taken by 0.5% per 1% chill (the strongest of chill, shock or brittle counts)"; switch r103.AILMENTS
     // ChillTakenPer103 0.5; log "AilParity103: ON - ... chill taken x0.50 of chill". Chill size is not in the data: the game logs
@@ -13608,7 +13661,7 @@ window.BOCharacter = function (ctx) {
     // "25% less" (Ember Bolt tooltip 1 Nov: 67-108, 293 DPS = the sim without the trigger, exactly). The real
     // rate and damage (triggered casts, 25% less) stay in the "vs enemy" numbers.
     if (res.coc && !o._panelPass) {
-      const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { coc: false, _col: col, _panelPass: true }));
+      const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { coc: false, _col: col, _panelPass: true, barShock: false }));
       if (p && isFinite(p.panelDps)) { res.cocPanel = { triggered: res.panelDps }; res.panelDps = p.panelDps; }
     }
     // Kills that rise as minions (Marrow Lance, Grave Reap): worked out as a minion sheet from the skill's base damage.
@@ -14123,7 +14176,7 @@ window.BOCharacter = function (ctx) {
         continue;
       }
       seen.add(k);
-      const r = calcSkill(GD, ch, id, Object.assign({}, o, { armyProbe: true }));
+      const r = calcSkill(GD, ch, id, Object.assign({}, o, { armyProbe: true, barShock: false }));
       const n = r.minion ? r.minion.alive : (k.Minion.GolemAuras ? 1 : (k.Minion.Cap || k.Minion.Count || 1));
       parts.push({ name: k.Name, n, poison: r.minion ? r.minion.poisonRow : null }); // its poisons, for the army's shared stacks
     }
@@ -15579,6 +15632,11 @@ window.BOStartApp = function () {
     $('#vowList').innerHTML = vows.length ? vows.map(s => '<li><label><input type="checkbox" data-src="' + esc(s.key) + '"' + (st.off.has(s.key) ? '' : ' checked') + '><span class="name">' + esc(s.label) + '</span></label>' +
       (s.vowbreak ? '<label title="Vowbreak: the Herald\'s extra damage x2.5 for 4 s"><input type="checkbox" data-vowbreak="' + esc(s.vowId) + '"' + (st.vowbreak.has(s.vowId) ? ' checked' : '') + '><span class="meta">Vowbreak</span></label>' : '') + '</li>').join('')
       : '<li class="hint">No Vows or Heralds on your hotbar, and ' + (st.potionsOn ? 'no potions set in the Brewery.' : 'potions are off (Configure Enemy).') + '</li>';
+    // Shock laid by the other lightning skills on the bar (sim: res.barShock). Unticked = that skill's shock is left out.
+    const bsh = r.barShock || [];
+    $('#barShockBox').hidden = !bsh.length;
+    $('#barShockList').innerHTML = bsh.map(b => '<li><label><input type="checkbox" data-src="' + esc(b.key) + '"' + (b.on ? ' checked' : '') + '><span class="name">' + skillDot(b.id) + esc(b.name) + '</span></label>' +
+      '<span class="meta">' + num(b.size, 1) + '% shock, up ' + Math.round(b.uptime * 100) + '% of the time' + (b.coc ? ' (Cast on Crit)' : '') + '</span></li>').join('');
     // Heralds not on the bar: tick one to see the skill with it, at the gem level you set.
     $('#heraldTryList').innerHTML = Object.values(GD.blessings).filter(b => /herald/i.test(b.Id) && b.Kind === 'Vow' && b.Skill && !ch.hotbar.includes(b.Skill)).map(b => {
       const lv = st.tryHeralds[b.Id] || 0;

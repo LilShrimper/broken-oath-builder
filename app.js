@@ -310,7 +310,7 @@ window.PAGE_LANGS = {
     // (OathMasteries95 "om_warrior_fury_c4", "om_necromancer_legion_c2", ...: om_ + the seat id without om103_), and the sim dropped
     // every Oath sworn at a seat the old file did not list (17 Nov 2026: 7 of Shrimpskelemage's 16). So with seats in the tree the
     // masteries are rebuilt from them: one per seat, at the seat, its Oaths from the mastery of the same id, else of the same name
-    // (same class first). Open rule: the seat node itself is taken ("Reach it, then choose"). An Oath a save swore at a seat that is not
+    // (same class first). Open rule (before the 17 Nov patch, superseded below): the seat node itself is taken ("Reach it, then choose"). An Oath a save swore at a seat that is not
     // taken does NOT count, even with the notable it hangs from taken: owner's curse tooltips 17 Nov 2026 (Shrimpskelemage, Sentence of Rot 87.8% = 45 x 1.951, Woe of
     // Withering x1.951 x 1.25) show 95% increased curse effect, the character's lines minus Oath of the Dread Word's 5%, sworn in the save at
     // om_necromancer_blight, whose notable (grave_sermon_n0) is taken but whose seat node is not.
@@ -325,7 +325,11 @@ window.PAGE_LANGS = {
         const cls = (s.Region || '').toLowerCase();
         const base = old[id] || Object.values(old).find(m => m.Name === s.Name && (m.Class || '').toLowerCase() === cls) || Object.values(old).find(m => m.Name === s.Name);
         if (!base) continue;
-        masteries[id] = { Id: id, Name: s.Name, X: s.X, Y: s.Y, Notables: [s.Id], Class: base.Class || '', Oaths: base.Oaths.slice(), Seat: s.Id };
+        // Patch notes, 17 Nov 2026 (after build 79, before the API has 80): "a seat in the passive tree costs no point now and opens with the notable
+        // beside it. Your sworn Oaths work again, about 5% more damage for most builds. A bought seat gives its point back." So the seat opens
+        // when the seat OR a node linked to it (either direction) is taken; the seat costs no point (freePoints, app.js counts skip om103_).
+        const nb = new Set(s.Links || []); for (const y of Object.values(tree.nodes)) if ((y.Links || []).includes(s.Id)) nb.add(y.Id);
+        masteries[id] = { Id: id, Name: s.Name, X: s.X, Y: s.Y, Notables: [s.Id, ...nb], Class: base.Class || '', Oaths: base.Oaths.slice(), Seat: s.Id };
       }
     }
     // Oaths the game offers that the API's oath_masteries.json lacks, read from the in-game Oath panel. Owner's tooltip, 16 Nov 2026
@@ -12151,12 +12155,15 @@ window.BOCharacter = function (ctx) {
     } else if (projectiles && shape === 'skyfall') {
       projOnTarget = 1; projWeight = 1;
       res.notes.push('Skyfall: each enemy is struck once per use; extra projectiles only add targets.');
-    } else if (projectiles && sk.Totem && sk.Totem.Kind === 'Ballista' && !orbitOn) {
+    } else if (projectiles && sk.Totem && sk.Totem.Kind === 'Ballista' && !orbitOn && !(focusShare > 0 && focusShare < 1)) {
       // Extra Ballista bolts spread like a fan: one strikes a given enemy. Ballista tooltip 1 Nov (Multiple
       // Projectiles, "Projectiles 3"): 139 DPS = one 57-120 bolt x crit every 0.7 s, so only one bolt counts.
       projOnTarget = clamp(o.projOnTarget || 1, 1, projectiles); projWeight = projOnTarget;
       if (projectiles > 1) res.notes.push('Ballista: ' + projectiles + ' bolts a shot spread out; one strikes this enemy, as the game\'s tooltip counts it (the others hit other enemies).');
-    } else if (projectiles && focusShare > 0 && focusShare < 1 && !shape && !sk.Totem && sk.Delivery !== 'Rain') {
+    } else if (projectiles && focusShare > 0 && focusShare < 1 && (!shape || shape === 'arrow_totem') && sk.Delivery !== 'Rain') {
+      // 17 Nov 2026: the support text in the API's game data now reads "It works on arrows you shoot yourself and on the bolts of your
+      // Ballista or Arrow Totem (not a trap or rain)" (the older text said "not a trap, totem or rain"); 6 published ladder builds link
+      // it straight into the Ballista (tests: sim before this change dropped it). From the gem text only; no tooltip or log of a Ballista with it yet.
       // Focused Volley (support text, game data, Steam build 26595060, read 11 Nov 2026; from the data file / gem text, not yet checked against a tooltip or log): "all its arrows fly on one line at your target, each with its own hit, so one
       // enemy can take every arrow. Each arrow after the first deals 60% of the one before it (2 arrows: 100% + 60%; 4 arrows: 100% + 60% + 36% + 22%)
       // ... Arrows you shoot yourself only (not a trap, totem or rain)". Its 15% less and +1 arrow are plain lines.
@@ -14153,7 +14160,7 @@ window.BOCharacter = function (ctx) {
       if (sk.Delivery === 'Brand') return 'a Spark cannot become a totem';
       if (!TOTEM_SPELL_KINDS.some(t => (sk.Tags || []).includes(t) || sk.Delivery === t)) return 'only Projectile, Chain, Nova and Skyfall spells can become a totem';
     }
-    if (id === 'focused_volley' && (sk.Delivery === 'Totem' || sk.Delivery === 'Rain')) return 'it only works on arrows you shoot yourself';
+    if (id === 'focused_volley' && sk.Delivery === 'Rain') return 'it does not work on rain'; // Ballista and Arrow Totem bolts are allowed since the 17 Nov 2026 gem text
     return '';
   }
   // Why a support cannot go into a skill although its tags fit ('' when it can): for the page's "cannot go into" messages.
@@ -14353,7 +14360,7 @@ window.BOCharacter = function (ctx) {
   function freePoints(GD, ch) {
     if (ch.bonusPoints == null) return null;
     const per = (GD.scaling.Hero || {}).PassivePointsPerLevel || 1;
-    return Math.max(0, Math.round((ch.level - 1) * per + ch.bonusPoints - (ch.passives || []).filter(id => !/^start_/.test(id)).length));
+    return Math.max(0, Math.round((ch.level - 1) * per + ch.bonusPoints - (ch.passives || []).filter(id => !/^(start_|om103_)/.test(id)).length));
   }
   // Display helper for the Skill Scaling tab (no change to the model): the level multiplier the sheet uses for a gem
   // at own level + bonus gear levels. attack: levelFactor (effectiveness not included); spell: spellGrowth.
@@ -16992,7 +16999,7 @@ window.BOStartApp = function () {
     if (cur.passives.length === live.length && cur.passives.every((x, i) => x === live[i])) return;
     cur.passives = live.slice(); keepTabs();
   }
-  const tabPoints = list => list.map(realId).filter(id => GD.nodes[id] && GD.nodes[id].Kind !== 'Start').length;
+  const tabPoints = list => list.map(realId).filter(id => GD.nodes[id] && GD.nodes[id].Kind !== 'Start' && !/^om103_/.test(id)).length;
   // Show tab i's tree. Only nodes still linked to the class start are kept (a tab from before a class change).
   function loadTreeTab(i) {
     const t = TT; t.active = i; keepTabs();
@@ -17301,9 +17308,10 @@ window.BOStartApp = function () {
       const c = $('#treeSvg').querySelector('circle.tn[data-id="' + id + '"]'); if (!c) return '';
       return '<circle class="tkeep' + (have.has(id) ? '' : ' want') + '" cx="' + c.getAttribute('cx') + '" cy="' + c.getAttribute('cy') + '" r="' + ((+c.getAttribute('r') || 20) * 1.45) + '"/>';
     }).join('');
-    const saved = (st.chOrig.passives || []).length;
+    const saved = (st.chOrig.passives || []).filter(x => !/^om103_/.test(x)).length;
     const free = S.freePoints(GD, st.chOrig || st.ch);
-    $('#treePoints').textContent = have.size + ' points taken' + (have.size !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level + (free ? ' · ' + free + ' free' : '') + (sw.size ? ' · ' + sw.size + ' Oath' + (sw.size > 1 ? 's' : '') + ' sworn' : '');
+    const nHave = [...have].filter(x => !/^om103_/.test(x)).length; // Oath seats cost no point (patch notes 17 Nov 2026)
+    $('#treePoints').textContent = nHave + ' points taken' + (nHave !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level + (free ? ' · ' + free + ' free' : '') + (sw.size ? ' · ' + sw.size + ' Oath' + (sw.size > 1 ? 's' : '') + ' sworn' : '');
     const pp = $('#planPoints'), who = (st.chOrig || st.ch).id + '|' + (st.chOrig || st.ch).level;
     if (pp.dataset.for !== who) {
       pp.dataset.for = who; pp.value = free > 0 ? free : 5;
@@ -17349,7 +17357,7 @@ window.BOStartApp = function () {
   // Why this Oath cannot be sworn here right now ('' = it can).
   function oathBlocked(m, oid, have, sw) {
     // Build 79 seats (gamedata.js): the seat node, or the notable it hangs from, opens it.
-    if (!masteryOpen(m, have)) return m.Seat ? 'Take this Oath seat first (reach it from the notable next to it)' : 'Take one of this mastery\'s notables first';
+    if (!masteryOpen(m, have)) return m.Seat ? 'Take the notable next to this Oath seat first (the seat itself costs no point)' : 'Take one of this mastery\'s notables first';
     if (OATH_ONCE) for (const [mid, o] of sw) if (mid !== m.Id && o.Id === oid) return 'Already sworn at another ' + GD.masteries[mid].Name + ' socket';
     return '';
   }
@@ -17698,7 +17706,7 @@ window.BOStartApp = function () {
         // Inscribed Quartz: 7 Gates + 12 Guardian milestones = 19 bonus points (log and saves, 6 Nov 2026: 13; six more at
         // RL 64-84 seen 14 Nov 2026, an online save at 19 bonus points; see QUARTZ_RL in creator.js). None more up to RL 129.
         const QUARTZ = 19, cap = Math.round((100 - 1) * per + QUARTZ);
-        const used = pl.list.filter(x => GD.nodes[x] && GD.nodes[x].Kind !== 'Start').length;
+        const used = pl.list.filter(x => GD.nodes[x] && GD.nodes[x].Kind !== 'Start' && !/^om103_/.test(x)).length;
         if (used > cap && pl.list.length > have.size) {
           $('#treeStatus').textContent = 'No points left: level 100 plus ' + QUARTZ + ' quartz points is ' + cap + ' passive points' + (pl.cost > 1 ? ' and this path needs ' + pl.cost : '') + '. Take a point back first.';
           return;

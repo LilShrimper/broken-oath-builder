@@ -2622,6 +2622,19 @@ window.BOPlanner = function (ctx) {
   };
   const basesFor = (slot, ch) => Object.values(GD.bases).filter(b => fitsSlot(b, slot) && handFit(slot, ch)(b)).sort((a, b) => (a.Level || 0) - (b.Level || 0) || byName(a, b));
   const uniquesFor = (slot, ch) => Object.values(GD.uniques).filter(u => { const b = GD.bases[lc(u.BaseId)]; return b && fitsSlot(b, slot) && handFit(slot, ch)(b); }).sort(byName);
+  // The bases a unique can sit on: its own, plus the Core Touched bases of the same kind it can move to with the cube's
+  // "Vowbinding: the Mark" (game snapshot Items/cube_recipes.json red_vow_mark: "a red + a Marked base of the same kind + a
+  // Tier V+ rune" -> "the same red on the Marked base: every red value kept, the Mark becomes its implicit"). The Mark is the
+  // Core Touched base's own implicit line(s), which the sim already reads from the base. "Same kind" is our reading: weapons and
+  // off hands by type (Two-Handed Mace, Bow ...; their Class lumps two-handers together), other gear by class (any Helm, any
+  // Ring), not yet checked in game.
+  const kindOf = b => b.TypeName || b.Class || b.Slot;
+  const markBases = (u, slot, ch) => {
+    const own = u && GD.bases[lc(u.BaseId)]; if (!own) return [];
+    const ct = Object.values(GD.bases).filter(b => b !== own && (b.Tags || []).includes('CoreTouched') && b.Slot === own.Slot && kindOf(b) === kindOf(own) && fitsSlot(b, slot) && handFit(slot, ch)(b))
+      .sort((a, b) => (a.Level || 0) - (b.Level || 0) || byName(a, b));
+    return [own].concat(ct);
+  };
   const oathwordBases = (slot, word, ch) => {
     const allowed = new Set((word && word.Bases || []).map(lc));
     // The base must take the word's tag and have room for all its runes (Kindling and Sunder skip the weapons with fewer sockets).
@@ -3046,7 +3059,11 @@ window.BOPlanner = function (ctx) {
     if (bsl.length) h += '<div class="meta pl-base-stats">' + esc(bsl.map(baseLine).join(' · ')) + '</div>';
     if (it.rarity === 'Unique') {
       const u = GD.uniques[lc(it.unique)];
-      if (u) h += '<div class="pl-row"><span class="meta">Base: ' + esc((base || {}).Name || it.base) + '</span></div>';
+      const mb = u ? markBases(u, slot) : [];
+      if (mb.length > 1) h += '<div class="pl-row"><label class="field inline grow"><span>Base <span class="meta">its own, or a Core Touched one (Vowbinding: the Mark)</span></span><select data-f="ubase"' + dis + '>' +
+        (mb.some(b => lc(b.Id) === lc(it.base)) ? '' : opt(it.base, ((base || {}).Name || it.base), true)) +
+        mb.map(b => opt(b.Id, b.Name + (b.Level ? ' (level ' + b.Level + ')' : ''), lc(it.base) === lc(b.Id))).join('') + '</select></label></div>';
+      else if (u) h += '<div class="pl-row"><span class="meta">Base: ' + esc((base || {}).Name || it.base) + '</span></div>';
       // Each line that rolls in a range gets a box per number (its range beside it); fixed lines are text only.
       if (u) h += it.affixes.map((a, ai) => {
         if (!a.id.startsWith('unique:')) return '';
@@ -3123,7 +3140,9 @@ window.BOPlanner = function (ctx) {
       const w = S.weaponStats(GD, item, base, mods);
       let avg = 0;
       for (const d of S.DT) { const [lo, hi] = w.dmg[d]; if (hi > 0) { out.push({ key: 'base|dmg|' + d, text: d + ' Damage: {0}-{1}', v: Math.round(lo), v2: Math.round(hi) }); avg += (lo + hi) / 2; } }
-      out.push({ key: 'base|aps', text: 'Attacks per second: {0}', v: r2(w.aps) }, { key: 'base|crit', text: 'Critical Strike Chance: {0}%', v: r2(w.crit) }, { key: 'base|dps', text: 'Weapon DPS: {0}', v: Math.round(avg * w.aps) });
+      out.push({ key: 'base|aps', text: 'Attacks per second: {0}', v: r2(w.aps) }, { key: 'base|crit', text: 'Critical Strike Chance: {0}%', v: r2(w.crit) },
+        // Average hit beside the DPS (players' request, 17 Nov 2026): skills like Ballista don't use the weapon's attack speed.
+        { key: 'base|avg', text: 'Average hit: {0}', v: Math.round(avg) }, { key: 'base|dps', text: 'Weapon DPS: {0}', v: Math.round(avg * w.aps) });
     }
     const sum = (f) => mods.filter(f).reduce((a, m) => a + m.v, 0);
     // Base Grade scales the base defence before the item's flat lines, as in the sim's defenceTotal (sim.js gradeMult).
@@ -3496,6 +3515,12 @@ window.BOPlanner = function (ctx) {
       }
       return done();
     }
+    // A unique moved onto a Core Touched base (markBases): its red lines and Vows stay, as the cube keeps them.
+    if (f === 'ubase') {
+      const u = it && GD.uniques[lc(it.unique)];
+      if (u && markBases(u, slot, ch).some(b => lc(b.Id) === lc(v))) it.base = GD.bases[lc(v)].Id;
+      return done();
+    }
     if (f === 'base') {
       if (!v) { ch.items = ch.items.filter(i => i !== it); k.openItems.delete(String(key)); return done(); }
       const u = it && GD.uniques[lc(it.unique)];
@@ -3736,7 +3761,7 @@ window.BOPlanner = function (ctx) {
     return p;
   }
   // The item editor for the Item Compare tab (app.js): its own state from gear.newKit(true), edits on its own holder.
-  const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, affixesFor, vowPool, vowMisfit, fixHands, handOk,
+  const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, baseLine, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, markBases, affixesFor, vowPool, vowMisfit, fixHands, handOk,
     // for the Character tab's item overlay (character.js)
     oathwordsFor, oathwordBases, rollUnique, topTier, runeSlots, runeList, modLine, LIMIT, VOW_MAX };
   // Take a skill, its supports and its bar slot out of a character (Build tab ×, Character tab ×).
@@ -6489,6 +6514,7 @@ window.BOItemSearch = function (ctx) {
     if (b.AttacksPerSecond) out.push(['Attacks per second', fmt(b.AttacksPerSecond)]);
     if (b.Crit != null) out.push(['Critical strike chance', fmt(b.Crit) + '%']);
     // Same rounding as the planner's item tooltip ("Weapon DPS"): average hit x attacks per second.
+    if (b.DamageMin != null) out.push(['Average hit', String(Math.round((b.DamageMin + b.DamageMax) / 2))]);
     if (b.DamageMin != null && b.AttacksPerSecond) out.push(['DPS', String(Math.round((b.DamageMin + b.DamageMax) / 2 * b.AttacksPerSecond))]);
     if (b.Armour) out.push(['Armour', b.Armour]);
     if (b.Evasion) out.push(['Evasion', b.Evasion]);
@@ -8725,7 +8751,7 @@ window.BOFaq = function (ctx) {
     h += card('Moving a red to a better base', list([
       '<b>Base Ascension</b>: any gear, a Tier III or better rune and 2 Cut-or-finer jewels move it to the next base of its kind. Mods, item level, sockets and runes stay; repeat to climb.',
       '<b>The Mark</b> (a red, a Core Touched base of the same kind and a Tier V or better rune) moves it onto that base and keeps its Vows; the Mark becomes an implicit.',
-      'The Build Planner\'s item editor lets you pick any base of the kind, so you can plan the result first.',
+      'The item editor lets you plan the result first: any base of the kind for a rare, and for a red its own base or a Core Touched one of its kind.',
     ]));
     h += card('Other red recipes', list([
       '<b>Red Ascent</b>: 3 reds of one tier (I to III) give one of the next tier.',
@@ -9815,11 +9841,22 @@ window.BOCharacter = function (ctx) {
   }
   function baseLines(b) {
     const out = [];
-    if (b.DamageMin) { out.push('Damage ' + b.DamageMin + '-' + b.DamageMax); if (b.AttacksPerSecond) out.push('Base attack rate ' + b.AttacksPerSecond); if (b.Crit) out.push('Base crit ' + b.Crit + '%'); }
+    if (b.DamageMin) {
+      const avg = (b.DamageMin + b.DamageMax) / 2;
+      out.push('Damage ' + b.DamageMin + '-' + b.DamageMax); if (b.AttacksPerSecond) out.push('Base attack rate ' + b.AttacksPerSecond); if (b.Crit) out.push('Base crit ' + b.Crit + '%');
+      out.push('Average hit ' + Math.round(avg) + (b.AttacksPerSecond ? ' · DPS ' + Math.round(avg * b.AttacksPerSecond) : ''));
+    }
     for (const [k, n] of [['Armour', 'Armour'], ['Evasion', 'Evasion'], ['EnergyShield', 'Energy Shield']]) if (b[k]) out.push(n + ' ' + b[k]);
     if (b.Block) out.push('Block ' + b.Block + '%');
     for (const m of (b.Implicits || []).concat(b.FamilyLine ? [b.FamilyLine] : [])) { const t = safe(() => G.modLine(m)); if (t) out.push(t); }
     return out;
+  }
+  // A unique weapon's average hit and DPS with mid rolls (as picking it gives), from planner.js baseStats.
+  function uniqueDps(u, b) {
+    if (!b || !b.DamageMin) return [];
+    const it = { slot: M.slot, base: u.BaseId, rarity: 'Unique', unique: u.Id, name: u.Name, level: (ctx.current() || {}).level || 1, affixes: [], runes: [] };
+    const ws = safe(() => { G.rollUnique(it, 0.5); return G.baseStats(it, M.slot); }) || [], g = k => (ws.find(x => x.key === k) || {}).v;
+    return g('base|avg') != null ? ['Average hit ' + g('base|avg') + ' · DPS ' + g('base|dps') + ' (mid rolls)'] : [];
   }
   function uniqueLines(u) {
     const range = (lo, hi) => lo == null ? '0' : lo === hi ? String(lo) : lo + '-' + hi;
@@ -9852,7 +9889,7 @@ window.BOCharacter = function (ctx) {
       return '<div class="io-saved">' + card('saved', s.id, n.name, n.cls, n.base + (n.cls === 'unique' ? '' : ' · ' + s.item.rarity) + ' · item level ' + (s.item.level || 1), itemLines(s.item), itemArt(s.item)) +
         '<button class="io-rm" type="button" data-io="delsaved" data-id="' + esc(s.id) + '" title="Delete this saved item" aria-label="Delete the saved ' + esc(n.name) + '">×</button></div>';
     }).join('');
-    else if (M.kind === 'unique') cards = L.uniques.map(u => { const b = gd.bases[lc(u.BaseId)]; return card('unique', u.Id, u.Name, 'unique', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), uniqueLines(u), uniqArt(u)); }).join('');
+    else if (M.kind === 'unique') cards = L.uniques.map(u => { const b = gd.bases[lc(u.BaseId)]; return card('unique', u.Id, u.Name, 'unique', baseTypeName(b) + (b.Level ? ' · level ' + b.Level : ''), uniqueDps(u, b).concat(uniqueLines(u)), uniqArt(u)); }).join('');
     else if (M.word) {
       const w = G.oathwordsFor(M.slot, ctx.current()).find(x => lc(x.Id) === lc(M.word));
       h += '<div class="io-wordbar"><button type="button" class="btn small ghost" data-io="wordback">‹ All Oathwords</button><b>' + esc(w ? w.Name : '') + '</b><span class="meta">Pick a base item type</span></div>';
@@ -9926,8 +9963,24 @@ window.BOCharacter = function (ctx) {
     if (M.msg) h += '<p class="hint pl-status" role="status">' + esc(M.msg) + '</p>';
     if (!isU) h += '<div class="io-row"><label class="field inline"><span>Rarity</span><select data-f="rarity">' + RAR.map(r => '<option' + (it.rarity === r ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></label>' +
       '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label></div>';
-    else h += '<div class="io-row"><label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label></div>';
-    const imp = base ? baseLines(base) : [];
+    else {
+      // A unique can move onto a Core Touched base of its kind (planner.js markBases: the cube's "Vowbinding: the Mark").
+      const mb = u ? G.markBases(u, M.slot, ch) : [], opt = (id, t, on) => '<option value="' + esc(id) + '"' + (on ? ' selected' : '') + '>' + esc(t) + '</option>';
+      h += '<div class="io-row"><label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label>' +
+        (mb.length > 1 ? '<label class="field inline"><span>Base <span class="meta">its own, or Core Touched (Vowbinding: the Mark)</span></span><select data-f="ubase">' +
+          (mb.some(b => lc(b.Id) === lc(it.base)) ? '' : opt(it.base, base ? base.Name : it.base, true)) +
+          mb.map(b => opt(b.Id, b.Name + (b.Level ? ' (level ' + b.Level + ')' : ''), lc(b.Id) === lc(it.base))).join('') + '</select></label>' : '') + '</div>';
+    }
+    // A weapon's own numbers with its local lines (planner.js baseStats), Weapon DPS and Average hit on top (players' request,
+    // 17 Nov 2026: Ballista-type skills use the hit, not the weapon's attack speed).
+    const ws = base && base.DamageMin ? safe(() => G.baseStats(it, M.slot)) || [] : [];
+    if (ws.length) {
+      const pick = k => ws.find(x => x.key === k), big = (x, label) => x ? '<div><span>' + label + '</span><b>' + x.v + '</b></div>' : '';
+      h += section('Weapon', '<div class="sw-stats io-wstats">' + big(pick('base|dps'), 'Weapon DPS') + big(pick('base|avg'), 'Average hit') + '</div>' +
+        ws.filter(x => x.key !== 'base|dps' && x.key !== 'base|avg').map(x => '<div class="io-imp">' + esc(G.baseLine(x)) + '</div>').join('') +
+        '<p class="hint">This weapon on its own: its damage with its local lines, before your passives, gems and other gear. DPS = average hit x attacks per second.</p>');
+    }
+    const imp = base ? (ws.length ? (base.Implicits || []).concat(base.FamilyLine ? [base.FamilyLine] : []).map(m => safe(() => G.modLine(m))).filter(Boolean) : baseLines(base)) : [];
     h += section('Implicits', imp.length ? imp.map(l => '<div class="io-imp">' + esc(l) + '</div>').join('') : '<div class="io-imp meta">None</div>');
     const isIdol = M.slot === 'Idol';
     if (isU) {
@@ -10043,6 +10096,7 @@ window.BOCharacter = function (ctx) {
     switch (f) {
       case 'rarity': it.rarity = v; if (v === 'Normal') it.affixes = []; break;
       case 'ilvl': it.level = Math.max(1, Math.min(100, +v || 1)); break;
+      case 'ubase': { const u = gd.uniques[lc(it.unique)], b = u && G.markBases(u, M.slot, ch).find(x => lc(x.Id) === lc(v)); if (!b) return renderItem(); it.base = b.Id; break; }
       case 'addaffix': { const af = gd.affixes[lc(v)]; if (!af) return renderItem(); const ti = G.topTier(af, it.level || ch.level), tt = af.Tiers[ti]; it.affixes.push(Object.assign({ id: af.Id, tier: ti, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }, t.dataset.x === 'oath' ? { oath: true } : t.dataset.x === 'scar' ? { scar: true } : {})); break; }
       case 'tier': { const a = it.affixes[ai], af = a && gd.affixes[lc(a.id)], tt = af && af.Tiers[+v]; if (!tt) return; Object.assign(a, { tier: +v, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); break; }
       case 'v': if (!it.affixes[ai]) return; it.affixes[ai].v = +v || 0; delete it.roll; break;

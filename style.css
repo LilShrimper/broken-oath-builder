@@ -600,6 +600,7 @@ tr.cmp-counted td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .pl-item-modes { display: flex; flex-direction: column; gap: 2px; align-self: center; }
 .pl-item-modes .check-row { align-self: flex-start; margin: 0; white-space: nowrap; }
 .pl-status { color: var(--accent); }
+.pl-row > .pl-exec { flex: 1 1 100%; }
 .pl-count { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; align-self: center; }
 .pl-count > .check-row span { white-space: nowrap; }
 .pl-count .field.inline { flex-direction: row; align-items: center; gap: 6px; margin: 0; }
@@ -1066,6 +1067,7 @@ body.support-page .support-search .opt { border-top: 0; margin-top: 0; padding-t
   body.support-page .support-search { order: 0; }
 }
 body.dashboard-view .layout { grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 20px; }
+body.dashboard-view #controls { display: none; } /* its settings are in the Configure Enemy dialog */
 body.dashboard-view .results-wrap, body.dashboard-view #results { display: contents; }
 body.dashboard-view .dashboard-summary { order: 1; grid-column: 1; }
 body.dashboard-view .controls {
@@ -1102,11 +1104,9 @@ body.dashboard-view .configure-heading { display: flex; }
   body.dashboard-view .results-heading { grid-row: 1; }
   body.dashboard-view .pinbar { grid-row: 2; }
   body.dashboard-view .headline { grid-row: 3; }
-  body.dashboard-view .overview-grid { grid-column: 1; grid-row: 4; }
-  body.dashboard-view .overview-grid:not(.has-comparison) { grid-template-columns: minmax(0, 1fr); }
-  body.dashboard-view .overview-grid.has-comparison { grid-template-columns: minmax(0, 1fr); }
-  body.dashboard-view .overview-grid.has-comparison .comparison-card { grid-column: auto; }
-  body.dashboard-view .controls { grid-column: 2; grid-row: 4; order: 0; }
+  /* All Counted Skills and Damage Composition side by side (owner, 16 Nov 2026); the comparison card, when there is one, spans both */
+  body.dashboard-view .overview-grid { grid-column: 1 / -1; grid-row: 4; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  body.dashboard-view .overview-grid > .comparison-card, body.dashboard-view .overview-grid > :only-child { grid-column: 1 / -1; }
   body.dashboard-view .build-overview-grid { grid-row: 5; }
   body.dashboard-view .top-optimizer-card { grid-row: 6; }
   body.dashboard-view .support-results { grid-row: 7; }
@@ -2266,6 +2266,8 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 .enemy-dialog-content > .hint { margin: 0 0 12px; }
 .enemy-dialog .card { background: none; border: 0; box-shadow: none; padding: 0; }
 .enemy-dialog .card > h2 { display: none; }
+.enemy-dialog .card + .card { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
+.enemy-dialog .card + .card > h2 { display: flex; }
 .enemy-dialog .card h3 { font-size: 13px; margin: 12px 0 4px; }
 .enemy-dialog .card p.hint { margin: 4px 0 8px; }
 .enemy-dialog #curseList { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0 8px; }

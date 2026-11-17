@@ -2837,6 +2837,7 @@ window.BOPlanner = function (ctx) {
       const sups = r.sock ? r.sock.supports : [], slots = S.socketsFor(GD, ch, r.skill, lvl);
       const link = sups.some(x => ['cast_on_crit', 'channel_conduit'].includes(lc(x)));
       h += '<div class="pl-skill" data-skill="' + esc(r.skill) + '"><div class="pl-row">' +
+        (ctx.execState && ctx.execState(r.skill) !== null ? '<label class="check-row pl-exec" title="Executioner: 35% more damage below half life. Default: if a skill on the bar has Executioner socketed, only that skill counts it; if none has, every on-bar skill except the main one does (it fights from full life, a side skill finishes better). On the main skill it counts as a fight average; on any other skill as a finisher, the full bonus on every hit. Sim Supports only picks Executioner for a skill while this is on."><input type="checkbox" data-f="execsim"' + (ctx.execState(r.skill) ? ' checked' : '') + '><span>Sim executioner in this slot</span></label>' : '') +
         ctx.skillDot(r.skill) + '<select data-f="skill"' + dis + '>' + skillOpts(r.skill) + '</select>' +
         '<label class="field inline"><span>Gem level</span><input type="number" min="1" max="40" data-f="glevel" value="' + lvl + '"' + dis + '></label>' +
         '<label class="check-row"><input type="checkbox" data-f="bar"' + (bar.includes(r.skill) ? ' checked' : '') + dis + '><span>On bar</span></label>' +
@@ -3249,6 +3250,10 @@ window.BOPlanner = function (ctx) {
   function onChange(e) {
     const t = e.target, f = t.dataset.f;
     if (!ctx.current() || !f) return;
+    if (f === 'execsim') {
+      const sk = (t.closest('[data-skill]') || {}).dataset.skill; if (!sk || !ctx.setExecOn) return;
+      ctx.setExecOn(sk, t.checked); return render();
+    }
     if (f === 'count' || f === 'countw') {
       const sk = (t.closest('[data-skill]') || {}).dataset.skill; if (!sk || !ctx.setOptWeight) return;
       if (f === 'count') ctx.setOptWeight(sk, t.checked ? 1 : 0);
@@ -8489,7 +8494,7 @@ window.BOFaq = function (ctx) {
     ]));
     h += card('Leaves your computer only when you choose', list([
       '<b>Share links</b>: the short link stores the build code (name, class, level, gear, tree, skills) so the link can open it. The long link carries the code itself and stores nothing.',
-      '<b>Reports</b> (Report a problem, Send a check report): your text, the check report\'s numbers if there is one, a share link only if you tick it, and fight log lines only if you load your game log and tick "Attach log lines" (you see the exact lines first: fight lines only, no date or time of day, no name, no Steam ID, no file paths). No account. Check reports leave out your character name, Steam ID and file paths. Reports are kept 180 days.',
+      '<b>Reports</b> (Report a problem, Send a check report): your text, the check report\'s numbers if there is one, a Discord username only if you type one (optional, so a reply can reach you), a share link only if you tick it, and fight log lines only if you load your game log and tick "Attach log lines" (you see the exact lines first: fight lines only, no date or time of day, no name, no Steam ID, no file paths). No account. Check reports leave out your character name, Steam ID and file paths. Reports are kept 180 days.',
       'No IP addresses or cookies are stored with share links or reports. To stop spam, the report limit keeps a scrambled IP and date for one hour.',
       'The <b>Buy me a coffee</b> button is loaded from buymeacoffee.com.',
     ]));
@@ -10239,7 +10244,7 @@ window.BOCharacter = function (ctx) {
       } else if (g.r && g.r !== 'Normal') bare.push(g.s + (g.n ? ' (' + g.n + ')' : ''));
       return it;
     });
-    if (bare.length) warnings.push(bare.length + ' rare/magic item' + (bare.length > 1 ? 's' : '') + ' count as bare bases (the code has no rolled stats): ' + bare.join(', ') + '.');
+    if (bare.length) warnings.push(bare.length + ' rare/magic item' + (bare.length > 1 ? 's' : '') + (bare.length > 1 ? ' show' : ' shows') + ' no stat lines (the code has no rolled stats): ' + bare.join(', ') + '.');
     if (items.some(i => i.unique !== 'None')) warnings.push('Unique items use the middle of each roll.');
     if (unknown.length) warnings.push('Unknown unique' + (unknown.length > 1 ? 's' : '') + ': ' + unknown.join(', ') + '.');
     const skills = j.s || [];
@@ -10310,9 +10315,10 @@ window.BOCharacter = function (ctx) {
   // the Data folder (it comes from the game's packed config): after a patch, re-read that log line.
   // Rounding is a fit on that one item: 3 x 0.25 = 0.75 shows and counts as 1, 2.5 x 0.25 = 0.625 shows as 0.6, so a
   // scaled number keeps the decimals of the number it came from. Not checked on a roll between the ends.
-  // Table refreshed 16 Nov 2026 (build 79 log, 21.24): "MetaSys85: UniqueLineScale ON, 102 line(s) on 51 unique(s)" (was 37 on 16).
-  // Tooltip the same day, Mouth of the Mire: +1 Poison levels (data 2), Penetration [10-13] (data 20-25), Poison DoT [20-30] (data 40-60), life untouched = lines 0-2 x0.5.
-  // Entries the log lists as x1 are left out. Changed since 12 Nov: wyrmblade 0.8 -> 1.5, gravecleaver 0/4 and tidebreaker_maul now x1.
+  // UNIQUE_LINE_SCALE:BEGIN (tools/unique-scale.js rewrites everything down to the END marker from the game log; watch.js runs it)
+  // Table from the game log (2026.11.16-21.24.54): "MetaSys85: UniqueLineScale ON, 102 line(s) on 51 unique(s)".
+  // Evidence for the scale itself: the Mouth of the Mire tooltip of 16 Nov 2026 (+1 levels vs data 2, [10-13] vs 20-25, [20-30] vs 40-60) = x0.5.
+  // Entries the log lists as x1 are left out.
   const UNIQUE_LINE_SCALE = {
     wyrmblade_of_the_black_oath: { 0: 1.5, 4: 1.5 }, kingbreaker: { 0: 1.5, 1: 1.5, 3: 1.5 }, gravesong: { 0: 1.5, 1: 1.5, 2: 1.5, 4: 1.5 },
     gravecleaver: { 1: 1.5, 2: 2 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff: { 0: 1.5, 1: 2.5, 3: 2 },
@@ -10331,6 +10337,7 @@ window.BOCharacter = function (ctx) {
     nightglass: { 2: 2 }, the_last_petal: { 1: 2 }, rimewrit: { 0: 4, 2: 2, 6: 1.5 },
     the_slow_verdict: { 0: 1.75 }, templars_troth: { 0: 2, 1: 2 }, the_gate_that_answers: { 0: 1.5 },
     overclock_coil: { 1: 1.5 }, hexbinders_censer: { 1: 2 } };
+  // UNIQUE_LINE_SCALE:END
   // How much the game multiplies line i of a unique by (1 = as written).
   function uniqueLineScale(uid, i) { const u = UNIQUE_LINE_SCALE[lc(uid)]; return (u && u[i]) || 1; }
   // A stored number of that line (a roll or a range end) as the game counts and shows it.
@@ -13056,11 +13063,17 @@ window.BOCharacter = function (ctx) {
     // full life); Stormfrost only when this skill's own hit carries Cold to chill the enemy.
     let leechMore = 0; for (const m of pickMods(mods, 'LeechingMore', 'Flat')) if (applies(ctx, m)) { leechMore += m.v; use(m); }
     if (leechMore) {
-      const lf = 1 + leechMore / 100;
+      // Leech only works below full life (no over-leech), so it is not on all the time. o.leechUptime = share of the fight spent leeching
+      // (page setting "Time spent leeching", blank = 100%, the old always-on count). The average bonus is 1 + more x uptime. The uptime
+      // is the player's own figure: the sim has no model of damage taken, and nothing in the log or tooltips measures it.
+      // Default 40% (owner, 16 Nov 2026: "35-50% of the time"; his own estimate of play, no log measures it: the log has no hero life over time).
+      const leechUp = o.leechUptime != null ? Math.max(0, Math.min(1, o.leechUptime)) : LEECH_UPTIME;
+      const lf = 1 + leechMore * leechUp / 100;
+      res.leech = { more: leechMore, uptime: leechUp, factor: lf };
       for (const d of Object.keys(byType)) byType[d] *= lf;
       hitDpsVs *= lf; res.hitDps = hitDpsVs; poisonDps *= lf; igniteDps *= lf; bleedDps *= lf;
       res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
-      res.notes.push('Life Leech: ' + leechMore + '% more damage while you are leeching (below full life), counted as on.');
+      res.notes.push('Life Leech: ' + leechMore + '% more damage while you are leeching (below full life), counted for ' + Math.round(leechUp * 100) + '% of the fight' + (o.leechUptime != null ? ' (your setting)' : ' (the default: you only leech while below full life; change "Time spent leeching" in the enemy settings to sim higher or lower)') + ': x' + lf.toFixed(3) + '.');
     }
     let chillMore = 0; for (const m of pickMods(mods, 'ChilledLightningMore', 'Flat')) if (applies(ctx, m)) { chillMore += m.v; use(m); }
     // 0.56.9 (patch notes 11/12 Nov 2026): chill and freeze need a hit that is at least 25% cold, unless the hero has 30% or more increased
@@ -13088,20 +13101,32 @@ window.BOCharacter = function (ctx) {
     let lowMore = 0, cull = 0;
     for (const m of pickMods(mods, 'LowLifeMore', 'Flat')) if (applies(ctx, m)) { lowMore += m.v; use(m); }
     for (const m of pickMods(mods, 'CullingStrike', 'Flat')) if (applies(ctx, m)) { cull = Math.max(cull, m.v); use(m); }
+    let execOn = true, execFinisher = false;
+    if (o.execSim && (lowMore || cull)) {
+      const ex = o.execSim[String(skillId).toLowerCase()] !== undefined ? o.execSim[String(skillId).toLowerCase()] : execDefaultOn(ch, skillId, o.mainSkill);
+      execOn = !!ex; execFinisher = o.mainSkill != null && String(o.mainSkill).toLowerCase() !== String(skillId).toLowerCase();
+    }
     if (lowMore || cull) {
       // Threshold from the text: "35% more damage against enemies below half their life" (build 26595060). The old pattern never matched and fell back to 35%.
       const tm = /below (half|(\d+)%)(?: of)? their life/i.exec((GD.supports.executioner || {}).Description || '');
       const T = (tm ? (tm[2] ? +tm[2] : 50) : 35) / 100, C = Math.min(cull / 100, T);
-      const execF = 1 / ((1 - T) + (T - C) / (1 + lowMore / 100));
-      for (const d of Object.keys(byType)) byType[d] *= execF;
-      hitDpsVs *= execF; res.hitDps = hitDpsVs; poisonDps *= execF; igniteDps *= execF; bleedDps *= execF;
-      res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
-      res.executioner = { more: lowMore, below: T * 100, cull: C * 100, factor: execF };
-      // The game's skill panel counts the same fight average on the hits, not on the bleed. Copy stats, 13 Nov 2026, build 73
+      // A finisher (a skill other than the main one, used on enemies already below the threshold, e.g. a side skill that mops up) gets the whole bonus on
+      // every hit: x(1 + more). The default fight average is for a skill that fights the enemy from full life. Not checked in game; from the text.
+      const execF = execFinisher ? 1 + lowMore / 100 : 1 / ((1 - T) + (T - C) / (1 + lowMore / 100));
+      // The game's panel always shows the fight average on the hits, whether or not we count it in the DPS. Copy stats, 13 Nov 2026, build 73
       // (Spin_win, Rending Slam gem 14): with Executioner hit DPS 25,794.3 = avg 20,006.3 x crit 1.0469 / cycle 1.01971 x 1.2558
       // (= 1 / (0.5 + 0.4 / 1.35)); without it 20,727 = 20,172.3 x 1.0469 / 1.01889 exactly; the bleed part did not move.
-      res.panelDps += panelHitDps * (execF - 1); res.sheetHitDps *= execF;
-      res.notes.push('Executioner: ' + lowMore + '% more damage below ' + Math.round(T * 100) + '% life and kills below ' + Math.round(C * 100) + '%: one enemy dies ' + Math.round((1 - 1 / execF) * 100) + '% sooner, counted as x' + execF.toFixed(2) + ' over the fight.');
+      const execPanelF = 1 / ((1 - T) + (T - C) / (1 + lowMore / 100));
+      res.panelDps += panelHitDps * (execPanelF - 1); res.sheetHitDps *= execPanelF;
+      res.executioner = { more: lowMore, below: T * 100, cull: C * 100, factor: execF, finisher: execFinisher, on: execOn };
+      if (execOn) {
+        for (const d of Object.keys(byType)) byType[d] *= execF;
+        hitDpsVs *= execF; res.hitDps = hitDpsVs; poisonDps *= execF; igniteDps *= execF; bleedDps *= execF;
+        res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
+        res.notes.push(execFinisher
+          ? 'Executioner as a finisher: this skill is used on enemies below ' + Math.round(T * 100) + '% life, so all its hits deal ' + lowMore + '% more (x' + execF.toFixed(2) + '). The kills below ' + Math.round(C * 100) + '% are not counted as extra damage.'
+          : 'Executioner: ' + lowMore + '% more damage below ' + Math.round(T * 100) + '% life and kills below ' + Math.round(C * 100) + '%: one enemy dies ' + Math.round((1 - 1 / execF) * 100) + '% sooner, counted as x' + execF.toFixed(2) + ' over the fight.');
+      } else res.notes.push('Executioner is not counted in this skill damage (tick "Sim executioner in this slot" on the skill to count it). It would be x' + execF.toFixed(2) + (execFinisher ? ' as a finisher.' : ' over the fight.'));
     }
     // Bone Sovereign ("You deal no damage yourself.") and Ancestral Host ("You deal no damage with skills you use yourself
     // (totems, minions and conduits still do).") - their Price text in passive_tree.json, flag Keystone/NoHeroDamage.
@@ -14209,6 +14234,20 @@ window.BOCharacter = function (ctx) {
     for (const so of ch.sockets) for (const id of so.supports) s.add(lc(id));
     return s;
   }
+  const LEECH_UPTIME = 0.4;
+  // Executioner per skill slot (owner, 16 Nov 2026). Every skill on the bar has a "Sim executioner in this slot" box. The page passes
+  // o.execSim = { skillId: true/false } for the boxes the player ticked or cleared. Default: if some skill on the bar has Executioner
+  // socketed, it is on only for that skill; if none has it, it is on for every on-bar skill except the main one (so Sim Supports may pick it
+  // for a side skill, never for the main spell). Calls without o.execSim (tools, calibration) count it as before. The main skill counts it as
+  // the fight average (it fights from full life); any other skill as a finisher (used on enemies already below the threshold: the whole
+  // bonus on every hit). Off: a skill's Executioner adds no damage, so the support search will not pick it for that skill.
+  function execDefaultOn(ch, skillId, mainSkill) {
+    const lc = x => String(x || '').toLowerCase();
+    const has = id => ((ch.sockets || []).find(s => lc(s.skill) === lc(id)) || { supports: [] }).supports.some(x => lc(x) === 'executioner');
+    const bar = (ch.hotbar || []).filter(id => id && id !== 'move');
+    if (bar.some(has)) return has(skillId);
+    return !(mainSkill != null && lc(mainSkill) === lc(skillId));
+  }
   function socketsFor(GD, ch, skillId, gemLevel) {
     let lv = gemLevel || ch.gemLevels[skillId] || 1;
     // Sockets open at the level the skill plays at, gear and passives included (owner's screenshot, 9 Nov 2026: Summon Skeletons
@@ -14396,7 +14435,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, arrangeShapes, NO_SINGLE_TARGET,
+  const api = { hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
     // The share at which a support works on minion skills despite "Minion" in its ExcludeTags (0 = it does not), for tooltips.
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -14789,7 +14828,7 @@ window.BOStartApp = function () {
 
   const st = {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0 },
-    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: false, enemyLife: null, graveCall: false, flashfire: false, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
+    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: false, enemyLife: null, graveCall: false, flashfire: false, leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
     penFloor: false, potionsOn: store.get('potionsOn', true) !== false, opt: null, optJob: null, last: null,
     keepSup: new Set(), blockSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
   };
@@ -14946,6 +14985,7 @@ window.BOStartApp = function () {
     // An older page kept the Damage tab's list apart ('combo:'): moved in once, at weight 1.
     st.ban = new Set(store.get('ban:' + ch.id, []) || []);
     st.keep = new Set(store.get('keep:' + ch.id, []) || []);
+    st.execOn = store.get('exec:' + ch.id, null) || {};
     st.optW = store.get('optw:' + ch.id, null);
     if (!st.optW) { st.optW = {}; for (const id of store.get('combo:' + ch.id, []) || []) st.optW[id] = 1; store.set('optw:' + ch.id, st.optW); }
     st.combo = [];
@@ -14997,7 +15037,7 @@ window.BOStartApp = function () {
     for (const d of DT) if (st.res[d] !== '' && st.res[d] != null && isFinite(+st.res[d])) res[d] = +st.res[d];
     return Object.assign({
       off: st.off, vowbreak: st.vowbreak, tryHeralds: st.tryHeralds, charges: st.charges, supportsOverride: st.supports, gemLevel: st.gemLevel || undefined,
-      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: st.enemyHallowedGround, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire,
+      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: st.enemyHallowedGround, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire, leechUptime: st.leechUptime !== null && st.leechUptime !== '' && !isNaN(+st.leechUptime) ? +st.leechUptime / 100 : undefined, mainSkill: st.skill, execSim: st.execOn || {},
       projOnTarget: +st.projOnTarget || undefined, totemCount: st.totemCount > 0 ? +st.totemCount : undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, castsPerSecOverride: st.cps > 0 ? +st.cps : undefined, penFloor: st.penFloor,
       conduit: st.conduit == null ? undefined : st.conduit,
       coc: st.coc === false ? false : undefined, cocSource: typeof st.coc === 'string' ? st.coc : undefined,
@@ -15039,6 +15079,18 @@ window.BOStartApp = function () {
     $('#optMultiSum').textContent = optMultiSum();
     box.classList.toggle('on', !!optExtra().length);
     $('#optMultiList').innerHTML = optMultiRows('Main damage skill');
+  }
+  // "Sim executioner in this slot": the player's tick per skill (st.execOn); no entry = the sim's default (S.execDefaultOn).
+  function setExecOn(id, on) {
+    const m = Object.assign({}, st.execOn || {}); m[String(id).toLowerCase()] = !!on;
+    st.execOn = m; if (st.ch) store.set('exec:' + st.ch.id, m);
+    render();
+  }
+  function execState(ch, skill) {
+    const lc = x => String(x || '').toLowerCase();
+    if (!ch || !(ch.hotbar || []).some(h => h && h !== 'move' && lc(h) === lc(skill))) return null; // only skills on the bar
+    const v = (st.execOn || {})[lc(skill)];
+    return v !== undefined ? v : S.execDefaultOn(ch, skill, st.skill);
   }
   function setOptWeight(id, w) {
     const all = Object.assign({}, st.optW || {});
@@ -15423,7 +15475,7 @@ window.BOStartApp = function () {
     let html = '<div class="dashboard-summary">';
     if (st.ch.fromPlanner) html += '<div class="warn" style="margin-bottom:12px"><b>Loaded from an ItemDatabase planner link</b>, with its rolled items.' +
       (st.ch.codeWarnings.length ? '<ul>' + st.ch.codeWarnings.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '') + '</div>';
-    else if (st.ch.fromCode) html += '<div class="warn" style="margin-bottom:12px"><b>Loaded from a build code.</b> Gear numbers may run low: codes don\'t carry rolled item stats, and they don\'t record a Channel Conduit link (pick the linked spell in the skill list).' +
+    else if (st.ch.fromCode) html += '<div class="warn" style="margin-bottom:12px"><b>Loaded from a build code.</b> Codes don\'t carry rolled item stats, so rare and magic items load as bare bases without their lines and gear numbers run low (uniques use the middle of each roll). Codes also don\'t record a Channel Conduit link (pick the linked spell in the skill list). To keep rolled stats, load the character from its save file, or use an ItemDatabase planner link or a share link.' +
       (st.ch.codeWarnings.length ? '<ul>' + st.ch.codeWarnings.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul>' : '') + '</div>';
     const w = S.statWeights(GD, st.ch, st.skill, opts(), r);
     html += resultsHeading(r) +
@@ -16161,7 +16213,7 @@ window.BOStartApp = function () {
       const text = check ? (note ? 'Note: ' + note + '\n\n' : '') + lastCheckReport : note;
       const ex = $('#reportLog').checked ? logExcerpt() : null; // the same lines the player saw in the preview
       const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 10000);
-      let r; try { r = await fetch(SHARE_API + '/r', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ kind: check ? 'check' : 'problem', text, build, page, log: ex ? ex.text : '' }), signal: ctl.signal }); }
+      let r; try { r = await fetch(SHARE_API + '/r', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ kind: check ? 'check' : 'problem', text, build, page, log: ex ? ex.text : '', contact: $('#reportContact').value.trim().slice(0, 40) }), signal: ctl.signal }); }
       finally { clearTimeout(t); }
       if (!r.ok) throw new Error(await r.text() || 'The report service answered ' + r.status + '.');
       $('#reportText').value = '';
@@ -16179,7 +16231,7 @@ window.BOStartApp = function () {
   const supName = id => (GD.supports[String(id).toLowerCase()] || { Name: id }).Name;
   function optSig() {
     const o = opts();
-    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.enemyLife, o.graveCall, o.flashfire, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
+    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.enemyLife, o.graveCall, o.flashfire, o.leechUptime, o.execSim, o.mainSkill, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
       off: [...st.off].filter(k => !k.startsWith('support:')).sort(), vb: [...st.vowbreak].sort(), th: o.tryHeralds, ch: o.charges, po: o.potions });
   }
   function runSearch() {
@@ -16381,6 +16433,7 @@ window.BOStartApp = function () {
   $('#guardianWeak').addEventListener('change', e => { st.gWeak = e.target.value; st.gWho = ''; render(); });
   $('#extraTaken').addEventListener('input', e => { st.extraTaken = e.target.value; render(); });
   $('#enemyLife').addEventListener('input', e => { st.enemyLife = e.target.value === '' ? null : +e.target.value; render(); });
+  $('#leechUptime').addEventListener('input', e => { st.leechUptime = e.target.value === '' ? null : e.target.value; render(); });
   $('#flashfire').addEventListener('change', e => { st.flashfire = e.target.checked; render(); });
   $('#graveCall').addEventListener('change', e => { st.graveCall = e.target.checked; render(); });
   $('#enemyHallowedGround').addEventListener('change', e => { st.enemyHallowedGround = e.target.checked; render(); });
@@ -16421,10 +16474,15 @@ window.BOStartApp = function () {
   enemyDialog.addEventListener('change', controlsChange);
   function openEnemyDialog() {
     if (!st.ch || enemyDialog.open) return;
-    const card = document.querySelector('#configEnemy > .card'); if (card) $('#enemyDialogBody').appendChild(card);
+    // On the Damage tab the Configure Your Build panel is gone (owner, 16 Nov 2026): this dialog is the only place for its settings, so the
+    // Skill card and the Vows, Heralds & charges card ride along with the Enemy card. Supports live on the Support Gem Simulator page.
+    for (const [panel, only] of [['configEnemy', false], ['configSkill', true], ['configCharacter', true]]) {
+      if (only && !document.body.classList.contains('dashboard-view')) continue;
+      const card = document.querySelector('#' + panel + ' > .card'); if (card) { card.dataset.fromPanel = panel; $('#enemyDialogBody').appendChild(card); }
+    }
     enemyDialog.showModal();
   }
-  enemyDialog.addEventListener('close', () => { const card = $('#enemyDialogBody').firstElementChild; if (card) $('#configEnemy').appendChild(card); });
+  enemyDialog.addEventListener('close', () => { for (const card of Array.from($('#enemyDialogBody').children)) { const p = card.dataset.fromPanel && document.getElementById(card.dataset.fromPanel); if (p) p.appendChild(card); } });
   enemyDialog.addEventListener('click', e => { if (e.target === enemyDialog) enemyDialog.close(); }); // a click on the backdrop
   $('#enemyDialogClose').addEventListener('click', () => enemyDialog.close());
   document.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-enemy-cfg]')) openEnemyDialog(); });
@@ -18725,7 +18783,7 @@ window.BOStartApp = function () {
     current: () => st.ch, workingCopy: () => st.ch,
     // "Include in simulations" on the Skills view = the Also count weights (st.optW).
     countable: id => (st.pickable || []).some(s => s.id === id), simSkill: () => st.skill,
-    optWeights: () => st.optW || {}, setOptWeight: (id, w) => setOptWeight(id, w),
+    optWeights: () => st.optW || {}, setOptWeight: (id, w) => setOptWeight(id, w), execState: sk => execState(st.ch, sk), setExecOn: (id, on) => setExecOn(id, on),
     extras: id => scaling ? scaling.extras(id) : [], // extra scaling lines (life share), for the hover tooltips
     levels: id => scaling ? scaling.levels(id) : { unit: '', rows: [] }, // skill hit by gem level, for the hover tooltips
     sheet: id => { try { return st.ch ? S.calcSkill(GD, st.ch, id, opts()) : null; } catch (e) { return null; } }, // the Skills view's gem tooltips
@@ -18871,7 +18929,7 @@ window.BOStartApp = function () {
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, num, pct, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
     supportSearch: supportSearchFor, supMarks: marksFor, simSkill: () => st.skill, // the main skill: the plan's own, or the one the Damage tab sims
     // The skill cards' "Include in Sim" = the Also count weights (st.optW), as on the Build tab's Skills view.
-    countable: id => (st.pickable || []).some(s => s.id === id), optWeights: () => st.optW || {}, setOptWeight: (id, w) => { setOptWeight(id, w); if (planner && !$('#buildPane').hidden) planner.render(); },
+    countable: id => (st.pickable || []).some(s => s.id === id), optWeights: () => st.optW || {}, setOptWeight: (id, w) => { setOptWeight(id, w); if (planner && !$('#buildPane').hidden) planner.render(); }, execState: sk => execState(st.ch, sk), setExecOn: (id, on) => { setExecOn(id, on); if (planner && !$('#buildPane').hidden) planner.render(); },
     // The skill window: one skill's sheet against the Damage tab's enemy, the patch history, and a way to its tab.
     skillSheet: id => { if (!st.ch) return null; const o = comboOpts(); o.gemLevel = st.ch.gemLevels[id] || undefined; return S.calcSkill(GD, st.ch, id, o); },
     patches: () => patches, showTab: t => showTab(t),

@@ -46,7 +46,7 @@
 <meta property="og:url" content="https://builder.lilshrimper.dev/ko/faq/"><meta property="og:image" content="https://builder.lilshrimper.dev/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
-<link rel="stylesheet" href="../../style.css?v=339">
+<link rel="stylesheet" href="../../style.css?v=340">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -390,6 +390,7 @@
         <label class="field"><span>Projectiles hitting it</span><input type="number" id="projOnTarget" min="1" max="20" placeholder="auto"></label>
         <label class="field" title="Spell totems max 10, Ballistas max 6"><span>Totems out</span><input type="number" id="totemCount" min="1" max="10" step="1" placeholder="auto"></label>
         <label class="field"><span>Hits per second</span><input type="number" id="hpsOverride" min="0" step="0.1" placeholder="auto"></label>
+        <label class="field" id="rowLeech" title="Only matters for skills with the Life Leech support: 15% more damage only while you leech, and leech needs you below full life. Default: 40% of the fight (the sim cannot see your life). Raise it to sim higher, 100 = always on."><span>Time spent leeching (%)</span><input type="number" id="leechUptime" min="0" max="100" step="5" placeholder="40"></label>
         <p class="hint enemy-life-note">Enemy life sets the size of Shock: lower life means a bigger Shock. Blank = the sim's estimate.</p>
       </div>
       <div class="enemy-toggles">
@@ -526,7 +527,7 @@
       <h2 id="enemyDialogTitle">Configure Enemy</h2>
       <button class="btn ghost" id="enemyDialogClose" type="button">Close</button>
     </div>
-    <p class="hint">The same enemy on every page: Damage Analysis, Passive tree, Skills, Character, Item Simulator and Support Gem Simulator.</p>
+    <p class="hint">The same enemy on every page: Damage Analysis, Passive tree, Skills, Character, Item Simulator and Support Gem Simulator. On the Damage tab the skill, Vows and Heralds settings are here too.</p>
     <div id="enemyDialogBody"></div>
   </div>
 </dialog>
@@ -572,6 +573,7 @@
     <h2 id="reportTitle">Report a problem</h2>
     <p id="reportIntro">Wrong numbers, something broken, a missing item or skill: describe it here. No account needed. Only what you write is sent, plus the attachments ticked below (the build, and log lines if you loaded your game log).</p>
     <label class="field"><span id="reportTextLabel">What happened?</span><textarea id="reportText" rows="6" maxlength="4000"></textarea></label>
+    <label class="field"><span>Discord username (optional)</span><input type="text" id="reportContact" maxlength="40" autocomplete="off" spellcheck="false" placeholder="Only if you want a reply when it is fixed"></label>
     <label class="check"><input type="checkbox" id="reportBuild"><span>Attach the build on screen <span class="meta">Sent as a share link: gear, skills, tree and the character name.</span></span></label>
     <div id="reportLogWrap" hidden>
       <label class="check"><input type="checkbox" id="reportLog"><span>Attach log lines <span class="meta" id="reportLogCount"></span> <span class="meta">Fight lines only (hits, casts, ailments, marks). No date or time of day, no character name, no Steam ID or file paths. Look at exactly what is sent below.</span></span></label>
@@ -610,7 +612,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":339,"at":"2026-11-17T02:44:10.973Z"};
+window.SITE_VERSION = {"v":340,"at":"2026-11-17T03:17:59.188Z"};
 window.SITE_LANG = 'ko';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -619,6 +621,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=0e564f25","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../app.js?v=339"></script>
+<script src="../../app.js?v=340"></script>
 </body>
 </html>

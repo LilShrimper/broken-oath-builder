@@ -7860,7 +7860,7 @@ window.BOFaq = function (ctx) {
   const { $, esc } = ctx;
   const GROUPS = [
     ['Game mechanics', [['ailments', 'Ailments'], ['multipliers', 'Damage Multipliers'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
-      ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep'], ['tundra', 'Tundra Desert'], ['items', 'Item Quality, Riven & Mythic'], ['drops', 'Drop Chances'], ['leagues', 'Custom Leagues']]],
+      ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep'], ['tundra', 'Tundra Desert'], ['items', 'Item Quality, Riven & Mythic'], ['attrs', 'Attributes'], ['forge', 'Forge & Crafting'], ['cube', 'Cube, Vows & Runes'], ['drops', 'Drop Chances'], ['leagues', 'Custom Leagues']]],
     ['About this site', [['sim', 'Sim vs the Game Panel'], ['data', 'Game Data & Patches'], ['privacy', 'Privacy']]],
   ];
   const ALL = GROUPS.flatMap(g => g[1]);
@@ -8508,6 +8508,102 @@ window.BOFaq = function (ctx) {
     return h;
   }
 
+
+  // ---------- Attributes ----------
+  // Display only, from scaling.json Hero (GD.scaling.Hero). Curse effect: Intelligence gives the curse slow only (curse tooltips, 17 Nov 2026).
+  function attrs(GD) {
+    const H = (GD.scaling || {}).Hero;
+    let h = intro('Attributes', 'What Strength, Dexterity and Intelligence give, per point and per 10 points.');
+    if (!H || H.LifePerStr == null) return needData(h);
+    const pip = H.AttrPipAt || [], j = a => a.filter(Boolean).join(', ');
+    h += card('Per point and per 10 points', table(['Attribute', 'Each point', 'Every 10 points'], [
+      ['<b>Strength</b>', H.LifePerStr + ' life', j([H.StrArmourPctPer10 && H.StrArmourPctPer10 + '% increased armour', H.StrMeleePhysPer10 && H.StrMeleePhysPer10 + '% increased melee Physical damage', H.StrMeleeAreaPer10 && H.StrMeleeAreaPer10 + '% melee area'])],
+      ['<b>Dexterity</b>', H.EvasionPerDex79 + ' evasion', j([H.DexEvasionPctPer10 && H.DexEvasionPctPer10 + '% increased evasion', H.DexAttackSpeedPer10 && H.DexAttackSpeedPer10 + '% attack speed', H.DexProjSpeedPer10 && H.DexProjSpeedPer10 + '% projectile speed'])],
+      ['<b>Intelligence</b>', H.EsPerInt79 + ' energy shield, ' + H.ManaPerInt + ' mana', j([H.IntEsPctPer10 && H.IntEsPctPer10 + '% increased energy shield', H.IntSpellDamagePer10 && H.IntSpellDamagePer10 + '% increased spell damage', H.IntMinionDamagePer10 && H.IntMinionDamagePer10 + '% increased minion damage', H.IntAilmentDurPer10 && H.IntAilmentDurPer10 + '% ailment duration', H.IntCurseEffectPer10 && H.IntCurseEffectPer10 + '% curse slow'])],
+    ]) + hint('The game\'s own numbers (scaling.json). Intelligence does not make a curse hit harder, only slow more (see <b>Curses &amp; Marks</b>).'));
+    if (pip.length) h += card('Attribute milestones', list([
+      'At <b>' + pip.join(', ') + '</b> of an attribute it gives an extra bonus: block' + (H.BulwarkBlock ? ' (' + H.BulwarkBlock.join(', ') + '%)' : '') + ', roll charges' + (H.SwiftnessRollCharges ? ' (' + H.SwiftnessRollCharges.join(', ') + ')' : '') + ' and mana back on kills' + (H.ClarityRefundPct ? ' (' + H.ClarityRefundPct.join(', ') + '% of a cast)' : '') + '. The game\'s own tooltip says which attribute gives which.',
+    ]));
+    return h;
+  }
+
+  // ---------- Forge & Crafting ----------
+  // Display only. Forge recipes are the frozen snapshot (data/game-snapshot/Gameplay/forge.json, Steam build 26617933): the API does not serve
+  // them. Lightless Anneal reaching Tier 1 from Rupture 160: the owner, 17 Nov 2026, and switches.json r96.ITEMS GloomTopRL97 = 160 (build 79).
+  // Gloomsilver drop: forge.json Drops.Gloom (from Rupture 150). Tier III Add crafts one tier under the best: switches.json bCraftT3_95 = True.
+  function forge() {
+    let h = intro('Forge & Crafting', 'Edda\'s Forge: what each material pays for, when a craft can reach the best tier, and what Gloomsilver and Core Embers are for.');
+    h += '<div class="card faq-card">' + hint('The Forge file is not in the public API. The materials, recipes, costs, drop sources and Forge levels on this page are from the game files of 12 Nov 2026 and may have changed since. Two things are current (the API\'s game switches, build 79): Lightless Anneal reaching Tier 1 from Rupture 160, and Oathsteel and Gloomsilver Add crafts rolling one tier under the best.') + '</div>';
+    h += card('Materials, by tier', table(['Material', 'Tier', 'Where it comes from', 'What it pays'], [
+      ['<b>Ember</b>', 'I', 'Any kill, more from rares and Guardians', 'Basic crafts and the Echo crafts (Add, Temper up, Reroll value)'],
+      ['<b>Glyph Shard</b>', 'II', 'Rares and Guardians', 'Tier II crafts: Unmake, Chisel, Recast, Reforge'],
+      ['<b>Oathsteel</b>', 'III', 'Guardians and Gates, from monster level 30', 'Tier III crafts: Anneal, Oathsteel Temper, Deep Quench, Oathsteel Hone'],
+      ['<b>Core Ember</b>', 'IV', 'A Core Rupture\'s Lord', 'The Skyforge (Skyforged Temper, Anneal and Hone), and the Cube\'s Oathsworn recipe'],
+      ['<b>Land materials</b>', 'I-II', 'Monsters in Myrh Forest, the Desolated Plains, the Harmoniyan Lands, the Massadian Fire Lands and the Kabarian Swamp', 'The recipes from a Forge Tablet found in that land'],
+      ['<b>Gloomsilver</b>', 'III', 'Rupture Guardians from Rupture 150 (more the higher you go) and every Catacomb Depth Cache', 'Lightless Anneal and the four Gloomsilver crafts below'],
+      ['<b>Oathcinder</b>', '–', 'Rare drop from Rupture 30', 'Unswear (a rare, a red or a finished Oathword)'],
+    ], 'faq-wrap'));
+    h += card('Anneal: one mod, one tier better', list([
+      '<b>Anneal</b> (Oathsteel; Edda teaches it at Forge level 2) takes one chosen mod a tier up, but never to the best tier: that stays for drops.',
+      '<b>Skyforged Anneal</b> (a Core Ember) can take it to the best tier. <b>Skyforged Temper</b> does the same for a crafted mod.',
+      '<b>Lightless Anneal</b> (<b>2 Gloomsilver</b>, known from the start) does what Anneal does and stops one tier short of the best as well, until <b>Rupture 160</b>: from there it reaches <b>Tier 1</b> (the game\'s switch <i>GloomTopRL97</i> is 160).',
+      'Gloomsilver starts dropping at Rupture 150, so for Rupture 150 to 159 it only buys the second best tier.',
+    ]));
+    h += card('What else Gloomsilver buys', table(['Craft', 'Gloomsilver', 'What it adds'], [
+      ['<b>Gloomsight</b>', '6', '+1 to level of all skill gems (amulet, helm, tome, wand, staff or melee weapon), a prefix'],
+      ['<b>Black Below Rot</b>', '4', 'Damage over time multiplier (weapon, amulet, quiver or tome), a prefix'],
+      ['<b>Abyssal Ward</b>', '3', 'Physical damage taken as elemental (chest, shield or helm), a suffix'],
+      ['<b>Lampwick</b>', '3', 'Cooldown recovery (amulet or weapon), a suffix'],
+    ]) + hint('Oathsteel and Gloomsilver Add crafts roll one tier under the best tier the item level allows (the game\'s switch <i>bCraftT3_95</i>). The best tier stays a drop, or a Skyforge result.'));
+    h += card('What opens when', list([
+      '<b>Known from the start:</b> Hearthblood (life), Unmake, Chisel, Whetstone (reroll one mod\'s value), the three Echo crafts, Socket, Hone, Ember Whetstone and Rivet (quality), Lightless Anneal and the Gloomsilver crafts.',
+      '<b>Forge level 2:</b> Wellspring (mana), Kindle (a plain item becomes magic), Recast (swap one mod for another of the same kind), Anneal.',
+      '<b>Forge level 3:</b> Reforge, Crown of Steel (magic to rare), Deep Quench (every mod rolls a new tier).',
+      '<b>Forge level 4:</b> Prefix Ward and Suffix Ward (keep one side, reroll the other), and Unswear.',
+      '<b>Forge Tablets:</b> the land recipes (resistances, added damage, minion and spell lines) come from a tablet found in that land; the Oathsteel ones (Oathward, Deathblow, Widening Glyph, Fletcher\'s Oath, Vowkeeper\'s Blessing, Oathsteel Temper) from a Guardian.',
+      '<b>Quality:</b> Hone and Oathsteel Hone raise quality 1% at a time, to 10% and then to 20%. Past 20% only the Skyforged Hone works: 3 Core Embers, and three times more for each further point.',
+    ]));
+    return h;
+  }
+
+  // ---------- Cube, Vows & Runes ----------
+  // Display only. Recipes: cube_recipes.json (the API's, build 79): Rules.Vows83 (shares in GD.vowShares, rune costs, OathEmbers 3), recipes
+  // rare_oathsworn, item_ascend, red_*. Half rune value: tooltips 9 Nov 2026 (sim.js, "Runes give half value").
+  function cube(GD) {
+    const sh = GD.vowShares || [], runes = [1, 2, 4, 6, 8, 10, 13, 17, 22, 28, 36];
+    let h = intro('Cube, Vows & Runes', 'What the Oathstone Cube can do with reds, rares and runes, and why runes give less on most items.');
+    h += card('Putting a Vow on a red', list([
+      'A <b>Vow</b> moves the best mod of a rare of the same slot onto a unique (a red). The rare is used up.',
+      'The first Vow needs a Tier V or better rune. The later ones cost red runes: ' + runes.slice(1).join(', ') + ' for the 2nd to the ' + runes.length + 'th.',
+      'A red holds up to <b>' + (sh.length || runes.length) + '</b> Vows. Each counts for less than the one before' + (sh.length ? ': ' + sh.map(pct).join('%, ') + '%' : '') + ' (from the game\'s data). A reduced Vow rounds to a whole number.',
+      'A Vow of the same kind replaces the one already there. A Vow can be any mod a rare of that slot can roll: a quiver red can take +2 to all gem levels from a rare tome, because quivers share the off-hand slot with tomes.',
+      'On idols, the idol can be Awakened first, and a Dwarven Rune accepts Vows in sockets that are allocated.',
+    ]));
+    h += card('A 7th line on a rare', list([
+      '<b>Oathsworn</b>: a rare, a Tier V or better rune and 3 Core Embers. The rare keeps its lines and gets a 7th, at the best tier its item level allows.',
+      'Doing it again rerolls only that line. Vows never copy an Oathsworn line.',
+      'Unswear at the Forge can add a Scarred line on top. A rare can hold both (see <b>Forge &amp; Crafting</b>).',
+    ]));
+    h += card('Moving a red to a better base', list([
+      '<b>Base Ascension</b>: any gear, a Tier III or better rune and 2 Cut-or-finer jewels move it to the next base of its kind. Mods, item level, sockets and runes stay; repeat to climb.',
+      '<b>The Mark</b> (a red, a Core Touched base of the same kind and a Tier V or better rune) moves it onto that base and keeps its Vows; the Mark becomes an implicit.',
+      'The Build Planner\'s item editor lets you pick any base of the kind, so you can plan the result first.',
+    ]));
+    h += card('Other red recipes', list([
+      '<b>Red Ascent</b>: 3 reds of one tier (I to III) give one of the next tier.',
+      '<b>Red Turning</b>: 2 reds of one tier and a rune give one random red of that tier.',
+      '<b>Red Descent</b>: a red of Tier II to IV and a rune give a lower one.',
+      '<b>Red Unmaking</b>: a red alone breaks into two jewels, finer at higher tiers.',
+      '<b>Red Reawakening</b> and <b>Red Retempering</b> reroll a red\'s lines (2 jewels; a Tier IV+ rune and a Faceted or Radiant jewel).',
+    ]));
+    h += card('Runes in items', list([
+      '<b>Runes give half value</b> in magic, rare and red items. Only white (normal) items keep the full value, and only white items can hold an Oathword.',
+      'A runeword needs exactly its socket count. Runesmith\'s Base sets how many sockets a white item gets (up to 4 on a two-hander).',
+      'The base\'s own Level is the wear requirement; an Oathword\'s Level is not.',
+    ]));
+    return h;
+  }
+
   // ---------- Drop chances ----------
   // Display only, from GD.loot (gamedata.js, 17 Nov 2026): scaling.json Loot and Rift, runes.json Rules, blessings.json Herald, affixes.json
   // lean lines. The game's numbers as its files hold them; Patch 79's "reds drop half as often" may or may not be in them yet.
@@ -8546,7 +8642,7 @@ window.BOFaq = function (ctx) {
     return h;
   }
 
-  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, tundra, items, drops, leagues, sim, data, privacy };
+  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, tundra, items, attrs, forge, cube, drops, leagues, sim, data, privacy };
   function show() {
     const nav = $('#faqNav'), GD = ctx.gd() || {};
     nav.innerHTML = GROUPS.map(g => '<div class="faq-group"><span class="faq-group-label">' + g[0] + '</span><div class="sc-chips">' +

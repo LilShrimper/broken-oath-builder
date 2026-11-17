@@ -1277,7 +1277,17 @@ body.compare-page #controls { display: none; }
 /* Gear Set Sim */
 .gs-card .hint { margin: 0 0 10px; }
 /* Gear level: Midgame / Endgame / BiS / Custom (the same segmented look as .cmp-modes). */
-.gs-tier { margin: 2px 0 12px; padding: 10px 0 0; border-top: 1px solid var(--line); }
+/* Gear level on the left, its boxes beside it (one column on narrow screens). */
+.gs-top { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 12px 28px; align-items: start; margin: 2px 0 12px; padding: 10px 0 0; border-top: 1px solid var(--line); }
+@media (max-width: 900px) { .gs-top { grid-template-columns: minmax(0, 1fr); } }
+.gs-opts .gs-controls { margin-bottom: 10px; }
+.gs-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 18px; }
+.gs-checks .check-row { margin: 0; }
+.gs-opts .gs-attn-note { margin: 0 0 10px; }
+.gs-card .cmp-pick-head { align-items: start; }
+.gs-head-text { flex: 1 1 320px; min-width: 0; }
+.gs-card .gs-head-text .hint { margin: 6px 0 0; max-width: 90ch; }
+.gs-tier { margin: 0; }
 .gs-tier > .meta { display: block; margin-bottom: 6px; color: var(--muted); font-size: 12.5px; font-weight: 600; }
 .gs-tier .cmp-modes { margin: 0 0 8px; }
 .gs-tiers .cmp-mode { min-width: 104px; min-height: 36px; padding: 6px 14px; }
@@ -1851,6 +1861,7 @@ body.io-open { overflow: hidden; }
 .io-imp { padding: 5px 4px; color: var(--text); }
 .io-aff { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 5px 4px; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
 .io-afftext { flex: 1 1 220px; min-width: 0; }
+.io-afftext .bad { color: var(--bad); }
 .io-aff select { max-width: 210px; }
 .io-aff .mini { width: 74px; }
 .io-rm { width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--muted); cursor: pointer; line-height: 1; }

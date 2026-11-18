@@ -2673,21 +2673,57 @@ window.BOPlanner = function (ctx) {
   // The lines a red item can take as Vows: those a rare of its own base rolls (a red idol: any idol's lines, all idols share
   // the slot). Ids in lower case.
   const idolAffixes = () => Object.values(GD.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length);
-  const vowPool = (slot, base) => new Set((slot === 'Idol' ? idolAffixes() : affixesFor(base)).map(a => lc(a.Id)));
-  // A Vow a rare of this base cannot roll (an old item, or one carried over before 17 Nov 2026): marked, not removed.
-  const vowMisfit = (pool, a, slot, base) => pool.has(lc(a.id)) || !GD.affixes[lc(a.id)] ? '' : ' <span class="bad">(' + esc(slot === 'Idol' ? 'not an idol line' : 'a rare ' + ((base && base.Name) || 'item of this base') + ' can\'t roll this') + ')</span>';
+  // Any rare of the red's slot can give the Vow, not only one of its own base: the cube's "Vowbinding: a Vow" reads "a red + a rare
+  // of the same slot" (game snapshot cube_recipes.json red_vow_take). Owner, 18 Nov 2026: "go with the cube info" (a player asked
+  // for shield and tome lines on a quiver; until then the page took only the red's own base, owner's note of 17 Nov).
+  // Slot = the base's own Slot (OffHand: shields, tomes, quivers; MainHand: every weapon; Ring ...).
+  const vowAffixes = (slot, base) => {
+    if (slot === 'Idol') return idolAffixes();
+    if (!base) return [];
+    const seen = new Set();
+    return Object.values(GD.bases).filter(b => b.Slot === base.Slot).flatMap(b => affixesFor(b)).filter(a => !seen.has(a.Id) && seen.add(a.Id));
+  };
+  const vowPool = (slot, base) => new Set(vowAffixes(slot, base).map(a => lc(a.Id)));
+  // A Vow no rare of this slot can roll (an old item): marked, not removed.
+  const vowMisfit = (pool, a, slot, base) => pool.has(lc(a.id)) || !GD.affixes[lc(a.id)] ? '' : ' <span class="bad">(' + esc(slot === 'Idol' ? 'not an idol line' : 'no rare ' + (SLOT_NAME[slot] || slot).toLowerCase() + ' rolls this') + ')</span>';
   function runeSlots(base) {
     if (!base) return 0;
     const R = GD.runeSockets || {}, tags = base.Tags || [];
     const keys = Object.keys(R).filter(k => tags.includes(k) || base.Slot === k);
     return keys.length ? Math.max(...keys.map(k => R[k])) : 0;
   }
+  // Base Grade box (player request, 18 Nov 2026: "select Truesworn bases"). White, blue and yellow drops roll Base Grade 1-100,
+  // 85% to 125% of the base number, Truesworn at 90+ (switches.json bGrade95); the sim scales the base by S.gradeMult. Only for
+  // bases with a number it scales (armour, evasion, energy shield, weapon damage). 0 = not set (the base as listed).
+  // The Truesworn box (owner, 18 Nov 2026): ticked sets the grade to 90 (the lowest Truesworn) and the grade box then runs 90-100;
+  // unticked caps it at 89. Quality box beside it: 0-30% (stones to 20%, Cogs past it, quality_stones.json Cap / Cog); on a
+  // weapon it counts as local increased physical, on armour as increased own defences (sim.js armourQuality).
+  const TRUESWORN = 90, QUALITY_MAX = 30;
+  // A red (unique) rolls no Base Grade (only white, blue and yellow drops do), so it gets the Quality box only (qualityOnly).
+  const gradeField = (it, base, dis, qualityOnly) => {
+    if (!it || !base || !(base.Armour || base.Evasion || base.EnergyShield || base.DamageMin)) return '';
+    const g = it.grade || 0, ts = g >= TRUESWORN;
+    return (qualityOnly ? '' : '<label class="field inline" title="Base Grade 1-100 scales the base number from 85% to 125%; 90 or more is Truesworn. 0 = not set (the base as listed)"><span>Base Grade</span><input type="number" min="' + (ts ? TRUESWORN : 0) + '" max="' + (ts ? 100 : TRUESWORN - 1) + '" data-f="grade" value="' + g + '"' + (dis || '') + '></label>') +
+      '<label class="field inline" title="Quality: up to 20% from stones and the Forge, up to 30% with Cogs. A weapon\'s counts as increased physical damage of that weapon, armour\'s as increased defences of that piece"><span>Quality</span><input type="number" min="0" max="' + QUALITY_MAX + '" data-f="quality" value="' + (it.quality || 0) + '"' + (dis || '') + '></label>' +
+      (qualityOnly ? '' : '<label class="check-row pl-truesworn" title="Truesworn: Base Grade 90 or more"><input type="checkbox" data-f="truesworn"' + (ts ? ' checked' : '') + (dis || '') + '><span>Truesworn</span></label>');
+  };
+  // Shared by both item editors: the grade, Truesworn and quality fields. Returns true when f was one of them.
+  function gradeChange(it, f, t) {
+    const v = t.value;
+    if (f === 'truesworn') { it.grade = t.checked ? Math.max(TRUESWORN, it.grade || 0) : Math.min(TRUESWORN - 1, it.grade || 0); return true; }
+    if (f === 'grade') { const ts = (it.grade || 0) >= TRUESWORN, n = Math.round(+v) || 0; it.grade = ts ? Math.max(TRUESWORN, Math.min(100, n)) : Math.max(0, Math.min(TRUESWORN - 1, n)); return true; }
+    if (f === 'quality') { it.quality = Math.max(0, Math.min(QUALITY_MAX, Math.round(+v) || 0)); return true; }
+    return false;
+  }
   const modLine = (m, v, v2) => S.modText(GD, { stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: v != null ? v : m.Value || 0, v2: v2 != null ? v2 : m.Value2 || 0 });
 
   // ---------- plans ----------
   const newId = () => 'plan:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  // A new plan starts with every bonus point the patch gives (player request, 18 Nov 2026): the 19 Inscribed Quartz, 7 Gates +
+  // 12 Rupture milestones, the same number the Skill tree tab's point cap uses (QUARTZ in app.js clickNode).
+  const MAX_BONUS = 19;
   function blankPlan(classId, level) {
-    return { id: newId(), name: classId + ' plan', classId, level, league: '', lastZone: '', items: [], passives: [], bonusPoints: 0, gems: [], gemLevels: {}, sockets: [], hotbar: [],
+    return { id: newId(), name: classId + ' plan', classId, level, league: '', lastZone: '', items: [], passives: [], bonusPoints: MAX_BONUS, gems: [], gemLevels: {}, sockets: [], hotbar: [],
       weaponId: '', dragonNodes: [], dragonAspect: '', mainSkill: '', supportGems: [], plan: true, savedAt: new Date().toISOString() };
   }
   function planFrom(ch) {
@@ -2787,9 +2823,9 @@ window.BOPlanner = function (ctx) {
       const aspects = Object.keys(GD.dragon.aspects || {});
       h += '<div class="pl-row">' +
         '<label class="field inline grow"><span>Name</span><input type="text" data-f="name" value="' + esc(ch.name) + '"></label>' +
-        '<label class="field inline" title="Changing class clears the passive tree: each class starts in its own spot"><span>Class</span><select data-f="cls">' + classOpts + '</select></label>' +
+        '<label class="field inline" title="Changing class keeps the passive tree and links it to the new class\'s start; the Dragonling starts over"><span>Class</span><select data-f="cls">' + classOpts + '</select></label>' +
         '<label class="field inline"><span>Level</span><input type="number" min="1" max="100" data-f="level" value="' + ch.level + '"></label>' +
-        '<label class="field inline" title="Passive points from quests and the like, on top of one a level"><span>Bonus points</span><input type="number" min="0" max="60" data-f="bonus" value="' + (ch.bonusPoints || 0) + '"></label>' +
+        '<label class="field inline" title="Passive points on top of one a level: the Inscribed Quartz from Gates and Rupture milestones (' + MAX_BONUS + ' at most this patch)"><span>Bonus points</span><input type="number" min="0" max="60" data-f="bonus" value="' + (ch.bonusPoints || 0) + '"></label>' +
         '</div><div class="pl-row">' +
         '<button class="btn small" type="button" data-act="code">Copy plan code</button>' +
         '<button class="btn small ghost" type="button" data-act="dup">Duplicate</button>' +
@@ -3122,6 +3158,7 @@ window.BOPlanner = function (ctx) {
     }
     if (it && !isU) h += '<label class="field inline"><span>Rarity</span><select data-f="rarity"' + dis + '>' + RARITIES.filter(r => r !== 'Unique').map(r => opt(r, r, it.rarity === r)).join('') + '</select></label>';
     if (it) h += '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"' + dis + '></label>';
+    if (it) h += gradeField(it, GD.bases[lc(it.base)], dis, isU);
     h += '</div>';
     if (!it) return h + '</div></details>';
     const chosenWord = words.find(w => lc(w.Id) === lc(selectedWord));
@@ -3168,7 +3205,7 @@ window.BOPlanner = function (ctx) {
       if (vix.length) h += '<div class="vow-list" data-mv="act">' + vix.map((ai, n) => affixRow(it, it.affixes[ai], ai, edit, dis, vowTag(vi++, it.affixes[ai]), vowMisfit(pool, it.affixes[ai], slot, base),
         reorder ? vowMove('act', ai, n ? vix[n - 1] : null, n < vix.length - 1 ? vix[n + 1] : null) : '')).join('') + '</div>';
       if (u && edit && nVows < VOW_MAX) {
-        const all = isIdol ? Object.values(GD.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length) : affixesFor(base);
+        const all = vowAffixes(slot, base);
         const used = new Set(it.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
         const grp = t => all.filter(a => a.Type === t && !used.has(a.Group)).sort((x, y) => x.Id.localeCompare(y.Id)).map(a => opt(a.Id, modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2) + (a.Kind ? ' · ' + a.Kind : '') + ' (' + a.Id + ')')).join('');
         h += '<label class="field"><span>Add a Vow <span class="meta">an affix from a rare, bound to this unique at the cube</span></span><select data-f="addaffix"><option value="">Pick an affix…</option>' +
@@ -3222,13 +3259,15 @@ window.BOPlanner = function (ctx) {
         // Average hit beside the DPS (players' request, 17 Nov 2026): skills like Ballista don't use the weapon's attack speed.
         { key: 'base|avg', text: 'Average hit: {0}', v: Math.round(avg) }, { key: 'base|dps', text: 'Weapon DPS: {0}', v: Math.round(avg * w.aps) });
     }
+    if (it.quality > 0) out.push({ key: 'base|quality', text: 'Quality: +{0}%', v: it.quality });
     const sum = (f) => mods.filter(f).reduce((a, m) => a + m.v, 0);
     // Base Grade scales the base defence before the item's flat lines, as in the sim's defenceTotal (sim.js gradeMult).
     // Owner's tooltip 14 Nov 2026: Saint's Mail, grade 48 (98%), base 135 + 196 flat, +81% = 595 Armour, ES 41 = 73.
     const gm = S.gradeMult ? S.gradeMult(it.grade) : 1;
     for (const [s, name] of [['Armour', 'Armour'], ['Evasion', 'Evasion Rating'], ['EnergyShield', 'Energy Shield']]) {
       const flat = sum(m => m.stat === s && m.mode === 'Flat'), inc = sum(m => m.mode === 'Inc' && (m.stat === s || m.stat === 'Defences'));
-      if (base[s] || flat) out.push({ key: 'base|' + s, text: name + ': {0}', v: Math.round(((base[s] || 0) * gm + flat) * (1 + inc / 100)) });
+      const q = S.armourQuality ? S.armourQuality(it, base) : 0; // armour quality: % increased of its own defences (sim.js armourQuality)
+      if (base[s] || flat) out.push({ key: 'base|' + s, text: name + ': {0}', v: Math.round(((base[s] || 0) * gm + flat) * (1 + (inc + q) / 100)) });
     }    if (base.Block) out.push({ key: 'base|block', text: 'Chance to Block: {0}%', v: base.Block });
     return out;
   }
@@ -3491,14 +3530,18 @@ window.BOPlanner = function (ctx) {
     switch (f) {
       case 'name': ch.name = v.trim() || ch.name; return done({ name: true });
       case 'cls': {
-        // Each class starts the tree in its own spot (and has its own Dragonling nodes), so those start over.
+        // Each class starts the tree in its own spot (and has its own Dragonling nodes). The tree is one shared board, so the
+        // nodes taken stay and get linked to the new start (ctx.retree, player request 18 Nov 2026); the Dragonling starts over.
         // Skills and gear stay.
         if (!v || v === ch.classId) return;
         const pts = (ch.passives || []).filter(id => !/^start_/.test(id)).length;
-        if ((pts || ch.dragonNodes.length) && !window.confirm('Change ' + ch.name + ' from ' + ch.classId + ' to ' + v + '? Each class starts the passive tree in its own spot, so its ' + pts + ' passive point' + (pts === 1 ? '' : 's') + (ch.dragonNodes.length ? ' and Dragonling nodes' : '') + ' will be cleared. Skills and gear stay.')) return render();
+        const rt = pts && ctx.retree ? ctx.retree(ch.passives, v) : { list: [], added: 0, lost: pts };
+        if ((pts || ch.dragonNodes.length) && !window.confirm('Change ' + ch.name + ' from ' + ch.classId + ' to ' + v + '?' +
+          (pts ? ' The ' + pts + ' passive point' + (pts === 1 ? '' : 's') + ' stay and get linked to the ' + v + ' start' + (rt.added ? ', which takes ' + rt.added + ' more point' + (rt.added === 1 ? '' : 's') : '') + '.' : '') +
+          (ch.dragonNodes.length ? ' The Dragonling nodes are cleared (each class has its own).' : '') + ' Skills and gear stay.')) return render();
         if (ch.name === ch.classId + ' plan') ch.name = v + ' plan';
-        status = 'Class changed to ' + v + (pts ? ': the passive tree was cleared, spend points again on the Skill tree tab.' : '.');
-        Object.assign(ch, { classId: v, passives: [], dragonNodes: [] });
+        status = 'Class changed to ' + v + (pts ? ': the tree was kept and linked to the new start' + (rt.added ? ' (' + rt.added + ' more point' + (rt.added === 1 ? '' : 's') + ')' : '') + (rt.lost ? ', ' + rt.lost + ' node' + (rt.lost === 1 ? '' : 's') + ' could not be reached and were left out' : '') + '. Check it on the Skill tree tab.' : '.');
+        Object.assign(ch, { classId: v, passives: rt.list, dragonNodes: [] });
         return done({ cls: true, tree: true });
       }
       case 'level': ch.level = Math.max(1, Math.min(100, +v || 1)); return done({ tree: true });
@@ -3612,8 +3655,8 @@ window.BOPlanner = function (ctx) {
       const u = GD.uniques[lc(v)]; if (!u) return render();
       let item = it;
       if (!item) { item = { slot, base: u.BaseId, rarity: 'Unique', unique: u.Id, name: u.Name, level: ch.level, affixes: [], runes: [] }; ch.items.push(item); k.openItems.add(slot); }
-      // Another unique: its Vows came from the old item, so keep only those the new base can roll (owner, 17 Nov 2026: a shield
-      // unique's Vows stayed on a quiver picked in its place, and a quiver takes no off-hand Vows in game).
+      // Another unique: its Vows came from the old item, so keep only those a rare of its slot can roll (vowAffixes). The 17 Nov
+      // rule (only the red's own base) gave way to the cube text "a rare of the same slot" on 18 Nov 2026 (owner).
       if (lc(item.unique) !== lc(u.Id)) { const pool = vowPool(slot, GD.bases[lc(u.BaseId)]); item.affixes = (item.affixes || []).filter(a => !a.id.startsWith('unique:') && pool.has(lc(a.id))); }
       Object.assign(item,{ rarity: 'Unique', unique: u.Id, base: u.BaseId, name: u.Name, runes: [] });
       rollUnique(item, item.roll == null ? 0.5 : item.roll);
@@ -3627,6 +3670,7 @@ window.BOPlanner = function (ctx) {
         else { if (it.rarity === 'Unique') { it.affixes = []; it.unique = 'None'; it.name = ''; } it.rarity = v; if (v === 'Normal') it.affixes = []; }
         return done();
       case 'ilvl': it.level = Math.max(1, Math.min(100, +v || 1)); return done();
+      case 'grade': case 'truesworn': case 'quality': gradeChange(it, f, t); return done();
       case 'addaffix': {
         const af = GD.affixes[lc(v)]; if (!af) return render();
         const ti = topTier(af, it.level || ch.level), tt = af.Tiers[ti];
@@ -3821,7 +3865,9 @@ window.BOPlanner = function (ctx) {
     p.gemLevels = Object.fromEntries(Object.entries(p.gemLevels).filter(([k]) => used.has(k)));
     const row = it => [it.slot, it.base, it.rarity, it.unique && it.unique !== 'None' ? it.unique : 0, it.level || 0,
       (it.affixes || []).map(a => { const fl = (a.crafted ? 1 : 0) + (a.oath ? 2 : 0) + (a.scar ? 4 : 0); return [a.id, a.tier || 0, r4(a.v), r4(a.v2)].concat(fl ? [fl] : []).join(','); }).join(';'), (it.runes || []).join(','), it.name || '', it.roll == null ? null : r4(it.roll)]
-      .concat(it.slot === 'Idol' && Number.isInteger(it.gx) && Number.isInteger(it.gy) ? [it.gx + ',' + it.gy] : []); // an idol's cell in the Fossil (character.js)
+      .concat(it.slot === 'Idol' && Number.isInteger(it.gx) && Number.isInteger(it.gy) ? [it.gx + ',' + it.gy] : []) // an idol's cell in the Fossil (character.js)
+      .concat(it.grade > 0 ? ['g' + it.grade] : []) // Base Grade (18 Nov 2026), after the idol cell when there is one
+      .concat(it.quality > 0 ? ['q' + it.quality] : []); // quality, the same way
     p.items = p.items.map(row);
     if (Array.isArray(p.idolShelf) && p.idolShelf.length) p.idolShelf = p.idolShelf.map(row); else delete p.idolShelf; // spare idols (character.js), not worn
     return 'BOS1.' + (await toCode(p)).slice(5);
@@ -3832,7 +3878,12 @@ window.BOPlanner = function (ctx) {
         affixes: r[5] ? r[5].split(';').map(a => { const [id, tier, v, v2, fl] = a.split(','); return Object.assign({ id, tier: +tier || 0, v: +v || 0, v2: +v2 || 0, crafted: !!(+fl & 1), oath: !!(+fl & 2) }, +fl & 4 ? { scar: true } : {}); }) : [],
         runes: r[6] ? r[6].split(',') : [] };
       if (r[8] != null) it.roll = r[8];
-      if (typeof r[9] === 'string' && /^\d,\d$/.test(r[9])) { it.gx = +r[9][0]; it.gy = +r[9][2]; }
+      for (const x of r.slice(9)) {
+        if (typeof x !== 'string') continue;
+        if (/^\d,\d$/.test(x)) { it.gx = +x[0]; it.gy = +x[2]; }
+        else if (/^g\d+$/.test(x)) it.grade = +x.slice(1);
+        else if (/^q\d+$/.test(x)) it.quality = +x.slice(1);
+      }
       return it;
     };
     p.items = (p.items || []).map(unrow);
@@ -3840,7 +3891,7 @@ window.BOPlanner = function (ctx) {
     return p;
   }
   // The item editor for the Item Compare tab (app.js): its own state from gear.newKit(true), edits on its own holder.
-  const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, baseLine, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, markBases, affixesFor, vowPool, vowMisfit, vowMove, moveAffix, fixHands, handOk,
+  const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, baseLine, gradeField, gradeChange, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, markBases, affixesFor, vowAffixes, vowPool, vowMisfit, vowMove, moveAffix, fixHands, handOk,
     // for the Character tab's item overlay (character.js)
     oathwordsFor, oathwordBases, rollUnique, topTier, runeSlots, runeList, modLine, LIMIT, VOW_MAX };
   // Take a skill, its supports and its bar slot out of a character (Build tab ×, Character tab ×).
@@ -4087,7 +4138,14 @@ window.BOCreator = function (ctx) {
       if (!idolAt) throw new Error('The idols do not fit the 5x5 idol grid.');
       const sockets = (parts.tree ? ch.passives || [] : arr(rec, 'PassiveNodeIds')).filter(n => /^r60_socket_\d+$/.test(n)).map(n => +n.split('_').pop());
       const runes = gear.filter(i => i.slot === 'DwarvenRune');
-      if (runes.length > sockets.length) throw new Error(runes.length + ' dwarven runes but only ' + sockets.length + ' rune sockets on the tree.');
+      // A Deep-Forged red (Band, Torc: uniques.json DwarvenSockets 1) holds a Dwarven Rune of its own (player report, 18 Nov 2026:
+      // the creator refused 3 runes on a tree with 1 socket + Band + Torc). Ladder proof: API build fdd4583e (Necromancer, trade,
+      // 16 Nov) has 1 tree socket, a Deep-Forged Band and 2 runes worn. Where the game stores that rune is not seen in a save yet:
+      // it goes at a socket number the tree does not hold (Rangtest's save, 18 Nov 2026, keeps a worn rune at GridX 2 with no
+      // r60_socket_2 taken, so the game loads a rune whose number has no node). Unchecked in game.
+      const extra = gear.reduce((n, i) => n + ((i.rarity === 'Unique' && (GD.uniques[lc(i.unique)] || {}).DwarvenSockets) || 0), 0);
+      if (runes.length > sockets.length + extra) throw new Error(runes.length + ' dwarven runes but only ' + sockets.length + ' rune socket' + (sockets.length === 1 ? '' : 's') + ' on the tree' + (extra ? ' and ' + extra + ' on Deep-Forged items' : '') + '.');
+      for (let n = 0; sockets.length < runes.length && n < 64; n++) if (!sockets.includes(n)) sockets.push(n);
       const kept = items().filter(isBag);
       const fresh = gear.map(it => {
         if (it.slot === 'Idol') { const [x, y] = idolAt[idols.indexOf(it)]; return newItem(it, { slot: 'Idol', x, y }); }
@@ -10169,9 +10227,10 @@ window.BOCharacter = function (ctx) {
       '<button class="io-rm" type="button" data-io="rmaffix" data-ai="' + ai + '" title="Remove">×</button></div>';
   }
   // type: 'Prefix' or 'Suffix', or '' for both (an extra line: flag 'oath' or 'scar'). Riven mods say so: they read like their twin with bigger numbers.
-  function addSelect(it, base, type, label, isIdol, flag) {
+  function addSelect(it, base, type, label, isIdol, flag, vow) {
     const gd = GD(), used = new Set(it.affixes.map(a => (gd.affixes[lc(a.id)] || {}).Group));
-    const all = isIdol ? Object.values(gd.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length) : G.affixesFor(base);
+    // A Vow (vow = true) comes from any rare of the slot (planner.js vowAffixes); other lines from this base.
+    const all = vow ? G.vowAffixes(M.slot, base) : isIdol ? Object.values(gd.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length) : G.affixesFor(base);
     const opts = T => all.filter(a => a.Type === T && !used.has(a.Group)).map(a => ({ id: a.Id, t: safe(() => G.modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2)) + (a.Kind ? ' (' + a.Kind + ')' : '') })).sort((x, y) => x.t.localeCompare(y.t))
       .map(o => '<option value="' + esc(o.id) + '">' + esc(o.t) + '</option>').join('');
     return '<select class="io-add" data-f="addaffix"' + (flag ? ' data-x="' + flag + '"' : '') + ' aria-label="' + esc(label) + '"><option value="">&lt;' + esc(label) + '&gt;</option>' +
@@ -10187,11 +10246,11 @@ window.BOCharacter = function (ctx) {
         (M.shelf ? '<button class="btn small ghost" type="button" data-io="wearidol" title="Puts this idol in the first free room of the Fossil, where it counts">Put in Fossil</button>' : '<button class="btn small ghost" type="button" data-io="spareidol" title="Takes this idol out of the Fossil to the spare idols (not counted)">Move to spares</button>') : '') + '<button class="btn small ghost" type="button" data-io="change">⟳ Change item</button><button class="btn small ghost" type="button" data-io="unequip">✕ ' + (M.slot === 'Idol' ? 'Remove' : 'Unequip') + '</button></div></div>';
     if (M.msg) h += '<p class="hint pl-status" role="status">' + esc(M.msg) + '</p>';
     if (!isU) h += '<div class="io-row"><label class="field inline"><span>Rarity</span><select data-f="rarity">' + RAR.map(r => '<option' + (it.rarity === r ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></label>' +
-      '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label></div>';
+      '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label>' + G.gradeField(it, base) + '</div>';
     else {
       // A unique can move onto a Core Touched base of its kind (planner.js markBases: the cube's "Vowbinding: the Mark").
       const mb = u ? G.markBases(u, M.slot, ch) : [], opt = (id, t, on) => '<option value="' + esc(id) + '"' + (on ? ' selected' : '') + '>' + esc(t) + '</option>';
-      h += '<div class="io-row"><label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label>' +
+      h += '<div class="io-row"><label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label>' + G.gradeField(it, base, '', true) +
         (mb.length > 1 ? '<label class="field inline"><span>Base <span class="meta">its own, or Core Touched (Vowbinding: the Mark)</span></span><select data-f="ubase">' +
           (mb.some(b => lc(b.Id) === lc(it.base)) ? '' : opt(it.base, base ? base.Name : it.base, true)) +
           mb.map(b => opt(b.Id, b.Name + (b.Level ? ' (level ' + b.Level + ')' : ''), lc(b.Id) === lc(it.base))).join('') + '</select></label>' : '') + '</div>';
@@ -10231,7 +10290,7 @@ window.BOCharacter = function (ctx) {
       const vix = it.affixes.map((a, ai) => a.id.startsWith('unique:') ? -1 : ai).filter(ai => ai >= 0);
       if (vix.length) vows += '<div class="vow-list" data-mv="io">' + vix.map((ai, n) => affixRow(it, it.affixes[ai], ai, 'Vow ' + (++vi), '', G.vowMisfit(pool, it.affixes[ai], M.slot, base),
         vix.length > 1 ? G.vowMove('io', ai, n ? vix[n - 1] : null, n < vix.length - 1 ? vix[n + 1] : null) : '')).join('') + '</div>';
-      if (u && nV < G.VOW_MAX) vows += addSelect(it, base, 'Prefix', 'Add Vow (prefix)', isIdol) + addSelect(it, base, 'Suffix', 'Add Vow (suffix)', isIdol);
+      if (u && nV < G.VOW_MAX) vows += addSelect(it, base, 'Prefix', 'Add Vow (prefix)', isIdol, '', true) + addSelect(it, base, 'Suffix', 'Add Vow (suffix)', isIdol, '', true);
       h += section('Vows <small>' + nV + ' / ' + G.VOW_MAX + '</small>', vows || '<div class="io-imp meta">None</div>');
     } else {
       const lim = G.LIMIT[it.rarity] || 0, type = a => (gd.affixes[lc(a.id)] || {}).Type;
@@ -10325,6 +10384,7 @@ window.BOCharacter = function (ctx) {
     switch (f) {
       case 'rarity': it.rarity = v; if (v === 'Normal') it.affixes = []; break;
       case 'ilvl': it.level = Math.max(1, Math.min(100, +v || 1)); break;
+      case 'grade': case 'truesworn': case 'quality': G.gradeChange(it, f, t); break;
       case 'ubase': { const u = gd.uniques[lc(it.unique)], b = u && G.markBases(u, M.slot, ch).find(x => lc(x.Id) === lc(v)); if (!b) return renderItem(); it.base = b.Id; break; }
       case 'addaffix': { const af = gd.affixes[lc(v)]; if (!af) return renderItem(); const ti = G.topTier(af, it.level || ch.level), tt = af.Tiers[ti]; it.affixes.push(Object.assign({ id: af.Id, tier: ti, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }, t.dataset.x === 'oath' ? { oath: true } : t.dataset.x === 'scar' ? { scar: true } : {})); break; }
       case 'tier': { const a = it.affixes[ai], af = a && gd.affixes[lc(a.id)], tt = af && af.Tiers[+v]; if (!tt) return; Object.assign(a, { tier: +v, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); break; }
@@ -14724,6 +14784,14 @@ window.BOCharacter = function (ctx) {
   // 28 = 91%, 47 = 98%, 62 = 105%, 86 = 117%, 96 = 123%). Tooltips, 11 Nov 2026: grade 9 = 86%
   // (86.1), 45 = 97% (97.1), 80 = 114% (113.6); Rangtest's Evasion hover, 12 Nov 2026: four grade-77 pieces add up to
   // 4,258 = 112.0% of their bases (112.0). Weapons: see weaponStats.
+  // Armour quality: % increased of the piece's own defences, added with its local increased lines, as weapon quality is with
+  // local physical (weaponStats, proven 5 Nov). The game's forge text (game snapshot, Hone): "Quality +1% (to 10%): more of the
+  // item's own defences or physical damage"; the Rivet: "Armour Quality ... up to 20%"; Cogs take it to 30% (quality_stones.json).
+  // PROVEN by in-game tooltips, 18 Nov 2026 (owner, Wartest, six Titan Greathelms at Base Grade 50, base 234, made with
+  // tools/offline-additems.js): white Q0/Q20/Q30 = 232 / 278 / 302 Armour; rare with 100% increased Armour Q0/Q20/Q30 =
+  // 464 / 510 / 534. The game's line: "Armour from: base 234 · Grade 99% · +120% increased (Quality 20%)". So quality adds
+  // into the piece's own increased (a separate multiplier would have given 557 / 603). Weapons are not changed here.
+  const armourQuality = (it, b) => b && !b.DamageMin ? Math.max(0, Math.min(30, +it.quality || 0)) : 0;
   const gradeMult = g => g > 0 ? 0.85 + 0.40 * Math.pow(Math.min(100, g) / 100, 1.5) : 1;
   // The level a skill gem plays at. Each gem level asks (ReqBase + ReqPerCharLevel x (CharLevelForGemLevel - ReqLevelOffset))
   // of the gem's attribute (x its Requires weights), and a gem outside the hero's class (gem_homes.json) asks OffClassReqFloor
@@ -14784,7 +14852,7 @@ window.BOCharacter = function (ctx) {
       const key = 'item:' + it.slot, loc = mods.filter(m => m.local && m.key === key);
       const lf = loc.filter(m => m.stat === stat && m.mode === 'Flat').reduce((x, m) => x + m.v, 0);
       const li = loc.filter(m => m.mode === 'Inc' && (m.stat === stat || m.stat === 'Defences')).reduce((x, m) => x + m.v, 0);
-      flat += (b[stat] * gradeMult(it.grade) + lf) * (1 + li / 100);
+      flat += (b[stat] * gradeMult(it.grade) + lf) * (1 + (li + armourQuality(it, b)) / 100);
     }
     // Every increase ADDS together (items, passives, the attribute's 4% per 10, the Dragonling's aspect), then "more" lines
     // multiply. Game log 11 Nov 2026 (Shrimpskelemage, level 47, Str 112): items 582.2 (gloves 300.04 + boots 124.18 +
@@ -15046,7 +15114,13 @@ window.BOCharacter = function (ctx) {
   // Tempest deals no hits; and 2 more", "No effect: Woe of Faltering deals no hits"; placing it on a Vow or Herald shows the toast "<skill> deals no hits".
   // So every Vow, Herald, Woe and Sentence (all Curse-tagged or Vow-tagged) deals no hits.
   const dealsNoHits = sk => !!sk && (sk.Tags || []).some(t => t === 'Curse' || t === 'Vow' || t === 'Woe' || t === 'Sentence');
-  const noHitMiss = (sp, sk) => !!sp && NO_HIT_SKILL_MISS.has(lc(sp.Id)) && dealsNoHits(sk);
+  const noHitMiss = (sp, sk) => !!sp && (NO_HIT_SKILL_MISS.has(lc(sp.Id)) && dealsNoHits(sk) || vowHitMiss(sp, sk));
+  // A plain Vow (Vow tag, not a Herald) takes only the Vow supports and Cast when Hit. Owner's in-game screenshots, 18 Nov 2026
+  // (Vow of Clarity): Added Lightning and Deathblow both read "No effect: Vow of Clarity deals no hits", and the owner: "I only see
+  // the vow, cast when hit ones. All the other added wont fit." Their tags (Spell) let every Spell support in before. Heralds keep
+  // the tag rule (their bursts hit; ladder Heralds wear Added Lightning, Zap ...), not tooltip-checked.
+  const vowHitMiss = (sp, sk) => !!sp && !!sk && (sk.Tags || []).includes('Vow') && !(sk.Tags || []).includes('Herald') &&
+    !(sp.RequiresAnyTag || []).includes('Vow') && lc(sp.Id) !== 'cast_when_hit';
   // Shape supports and the skills they cannot shape. The tags alone (RequiresAnyTag / ExcludeTags) let these in; the developer's own
   // support texts in the public API game data (game build 70, read 12 Nov 2026) rule them out. Owner, 12 Nov 2026: the support search
   // offered Spell Totem and Orbit for Winter Orb and neither can be socketed in it; the rest follow the same texts and are not
@@ -15304,7 +15378,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
+  const api = { fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
     // The share at which a support works on minion skills despite "Minion" in its ExcludeTags (0 = it does not), for tooltips.
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -15832,7 +15906,7 @@ window.BOStartApp = function () {
   function fillChars(selectId) {
     const o = c => '<option value="' + esc(c.id) + '">' + esc(charLabel(c)) + '</option>';
     const chars = CHARS.filter(c => !c.plan), plans = CHARS.filter(c => c.plan);
-    $('#charSelect').innerHTML = (plans.length ? (chars.length ? '<optgroup label="Characters">' + chars.map(o).join('') + '</optgroup>' : '') + '<optgroup label="Plans">' + plans.map(o).join('') + '</optgroup>' : chars.map(o).join('')) || '<option value="">No characters found</option>';
+    $('#charSelect').innerHTML = (plans.length ? (chars.length ? '<optgroup label="Characters">' + chars.map(o).join('') + '</optgroup>' : '') + '<optgroup label="Saved builds">' + plans.map(o).join('') + '</optgroup>' : chars.map(o).join('')) || '<option value="">No characters found</option>';
     if (selectId) $('#charSelect').value = selectId;
   }
 
@@ -17208,6 +17282,35 @@ window.BOStartApp = function () {
 
   const kv = (k, v, strong) => '<dt>' + k + '</dt><dd' + (strong ? ' class="strong"' : '') + '>' + v + '</dd>';
 
+  // ---------- Saved Builds tab ----------
+  // Every plan (saved build) in one list, apart from the loaded characters in the side picker (owner, 18 Nov 2026, after a player
+  // asked: "im often loading my save files, but i dont want them as builds"). Open, duplicate, delete; newest first.
+  let buildsFilter = '';
+  function renderSavedBuilds() {
+    const pane = $('#savedBuildsPane'); if (!pane || pane.hidden) return;
+    const all = CHARS.filter(c => c.plan).sort((x, y) => String(y.savedAt || '').localeCompare(String(x.savedAt || '')));
+    const q = buildsFilter.trim().toLowerCase();
+    const list = q ? all.filter(c => (c.name + ' ' + c.classId).toLowerCase().includes(q)) : all;
+    const cur = st.chOrig && st.chOrig.id;
+    const day = s => { const d = s && new Date(s); return d && !isNaN(d) ? d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : ''; };
+    const row = c => '<div class="sb-row' + (c.id === cur ? ' on' : '') + '" data-id="' + esc(c.id) + '">' +
+      '<div class="sb-main"><b class="notranslate">' + esc(c.name) + '</b>' + cloudMark(c) + '<span class="meta">' + esc(c.classId) + ' · level ' + c.level + (day(c.savedAt) ? ' · saved ' + esc(day(c.savedAt)) : '') + (c.id === cur ? ' · open now' : '') + '</span></div>' +
+      '<div class="sb-acts"><button class="btn small" type="button" data-sb="open">Open</button><button class="btn small ghost" type="button" data-sb="dup">Duplicate</button><button class="btn small ghost" type="button" data-sb="del">Delete</button></div></div>';
+    pane.innerHTML = '<div class="card"><h2>Saved Builds <small>' + all.length + '</small></h2>' +
+      '<p class="hint">Builds you saved: Save as new build, Start a New Plan, and codes or links you opened. They stay in this browser, and in your account when you are signed in. Loaded characters are in the Character list on the left.</p>' +
+      '<div class="pl-row sb-tools"><input type="search" class="sb-search" id="sbSearch" placeholder="Search by name or class" aria-label="Search saved builds" value="' + esc(buildsFilter) + '" autocomplete="off" spellcheck="false"><button class="btn small" type="button" data-sb="new">Start a New Plan</button></div>' +
+      (list.length ? '<div class="sb-list">' + list.map(row).join('') + '</div>' : '<p class="hint">' + (all.length ? 'No saved build matches.' : 'No saved builds yet. Use Save as new build on a character, or Start a New Plan.') + '</p>') + '</div>';
+  }
+  $('#savedBuildsPane').addEventListener('input', e => { if (e.target.id !== 'sbSearch') return; buildsFilter = e.target.value; const at = e.target.selectionStart; renderSavedBuilds(); const s = $('#sbSearch'); if (s) { s.focus(); s.setSelectionRange(at, at); } });
+  $('#savedBuildsPane').addEventListener('click', async e => {
+    const b = e.target.closest('[data-sb]'); if (!b) return;
+    if (b.dataset.sb === 'new') { if (await planner.startNewPlan()) showTab('plan'); return; }
+    const id = (b.closest('[data-id]') || {}).dataset.id, ch = CHARS.find(c => c.id === id); if (!ch) return;
+    if (b.dataset.sb === 'open') { fillChars(id); selectChar(id); showTab('character'); syncUrl('character'); }
+    else if (b.dataset.sb === 'dup') { const p = planner.planFrom(ch); if (brewery) brewery.copyBelt(ch.id, p.id); addChars([p], 'plan', p.id); saveTip('Made a copy: ' + p.name + '.'); renderSavedBuilds(); }
+    else if (b.dataset.sb === 'del') { await removeChar(id); renderSavedBuilds(); }
+  });
+
   // ---------- events ----------
   $('#charSelect').addEventListener('change', e => selectChar(e.target.value));
   // The character list opens as our own list, so each entry can carry a × (owner, 14 Nov 2026: remove characters from it).
@@ -17230,8 +17333,12 @@ window.BOStartApp = function () {
     const cur = $('#charSelect').value;
     const item = c => '<div class="pl-pick-item char-pick-item' + (c.id === cur ? ' on' : '') + '" role="option" tabindex="-1" aria-selected="' + (c.id === cur) + '" data-v="' + esc(c.id) + '"><span>' + esc(charLabel(c)) + '</span>' + cloudMark(c) +
       '<button type="button" class="x" tabindex="-1" data-rmchar="' + esc(c.id) + '" aria-label="' + esc((c.plan ? 'Delete the plan ' : 'Remove ') + c.name + (c.plan ? '' : ' from the list')) + '">×</button></div>';
-    const chars = CHARS.filter(c => !c.plan), plans = CHARS.filter(c => c.plan);
-    return (chars.length ? '<div class="pl-pick-group">Characters</div>' + chars.map(item).join('') : '') + (plans.length ? '<div class="pl-pick-group">Plans</div>' + plans.map(item).join('') : '');
+    // Loaded characters only (owner, 18 Nov 2026: "Left navigation panel should be for loaded characters"); saved builds have their
+    // own tab (renderSavedBuilds). The build open now still shows, so the list says what is on screen.
+    const chars = CHARS.filter(c => !c.plan), open = CHARS.find(c => c.plan && c.id === cur), nPlans = CHARS.filter(c => c.plan).length;
+    return (chars.length ? '<div class="pl-pick-group">Characters</div>' + chars.map(item).join('') : '<div class="pl-pick-group">No characters loaded</div>') +
+      (open ? '<div class="pl-pick-group">Saved build open now</div>' + item(open) : '') +
+      (nPlans ? '<button type="button" class="pl-pick-item char-pick-more" tabindex="-1" data-openbuilds="1">Saved Builds (' + nPlans + ') →</button>' : '');
   }
   function placeCharPick() {
     const box = charPick.box, s = $('#charSelect').getBoundingClientRect();
@@ -17261,6 +17368,7 @@ window.BOStartApp = function () {
     document.addEventListener('mousedown', charPick.out, true); document.addEventListener('keydown', charPick.key, true); window.addEventListener('scroll', charPick.out, true); window.addEventListener('resize', charPick.out);
     box.addEventListener('click', e => {
       const rm = e.target.closest('[data-rmchar]'); if (rm) { e.stopPropagation(); const items = [...box.querySelectorAll('.char-pick-item')]; return removeChar(rm.dataset.rmchar, items.indexOf(rm.closest('.char-pick-item'))); }
+      if (e.target.closest('[data-openbuilds]')) { closeCharPick(); showTab('builds'); syncUrl('builds'); return; }
       const i = e.target.closest('.char-pick-item'); if (i) pickChar(i.dataset.v);
     });
     const on = box.querySelector('.on') || box.querySelector('.char-pick-item');
@@ -17440,6 +17548,7 @@ window.BOStartApp = function () {
     const mine = CHARS.filter(c => !c.file), list = mine.filter(c => c.plan).slice(0, 200).concat(mine.filter(c => !c.plan).slice(0, 60));
     const kept = (() => { try { localStorage.setItem('bods:chars', JSON.stringify(list)); return true; } catch (e) { return false; } })();
     if (cloud) cloud.check();
+    if (!$('#savedBuildsPane').hidden) renderSavedBuilds();
     return kept;
   }
   function addChars(list, from, selectId) {
@@ -17673,7 +17782,7 @@ window.BOStartApp = function () {
     if (!st.ch || st.ch.plan) return;
     const p = keepSharedTabs(planner.planFrom(liveCopy()));
     addChars([p], 'plan', p.id); showTab('build');
-    planner.setStatus('Saved as the plan "' + p.name + '" (under Plans in the character list). Edits to it now save in this browser as you go.');
+    planner.setStatus('Saved as the plan "' + p.name + '" (in the Saved Builds tab). Edits to it now save in this browser as you go.');
   }
   // "Save as new build" (owner, 14 Nov 2026): the character or plan on screen, as a new plan under a name the user picks.
   // Works on plans too (a renamed copy); the one it came from is unchanged.
@@ -17694,7 +17803,7 @@ window.BOStartApp = function () {
     const p = keepSharedTabs(planner.planFrom(liveCopy()));
     p.name = (name || def).slice(0, 60);
     addChars([p], 'plan', p.id);
-    saveTip('Saved as the plan "' + p.name + '" (under Plans in the character list). Edits to it save in this browser as you go.');
+    saveTip('Saved as the plan "' + p.name + '" (in the Saved Builds tab). Edits to it save in this browser as you go.');
   });
   $('#shareLinkBtn').addEventListener('click', async () => {
     if (!st.ch) { alert('Load a character or start a plan first.'); return; }
@@ -17882,6 +17991,27 @@ window.BOStartApp = function () {
     const p = pathTo(base, id); if (!p) return null;
     const list = [...base, ...p];
     return { list, cost: list.length - have.size, swapped };
+  }
+  // A plan switching class (player request, 18 Nov 2026: "the same setup on Mage, vs Ranger, vs Paladin"): the tree is one
+  // shared board and only the start differs, so keep every node taken and link them to the new class's start, nearest first,
+  // by the shortest paths. Page help only, no game rule. Returns { list, added } (added = path nodes the new start needed).
+  function retree(passives, classId) {
+    const adj = treeAdj(), s0 = 'start_' + String(classId).toLowerCase();
+    const want = new Set((passives || []).map(realId).filter(id => GD.nodes[id] && GD.nodes[id].Kind !== 'Start'));
+    const have = new Set();
+    const off = id => { const n = GD.nodes[id]; return !n || (n.Kind === 'Start' && id !== s0); };
+    while ([...want].some(id => !have.has(id))) {
+      // One search from the start and everything held so far, to the nearest node still wanted.
+      const prev = {}, seen = new Set([s0, ...have]), q = [s0, ...have]; let hit = null;
+      for (let i = 0; i < q.length && !hit; i++) for (const v of adj[q[i]] || []) {
+        if (seen.has(v) || off(v) || (!want.has(v) && altarTaken(new Set([...have, ...want]), v))) continue;
+        seen.add(v); prev[v] = q[i]; q.push(v);
+        if (want.has(v) && !have.has(v)) { hit = v; break; }
+      }
+      if (!hit) break; // the rest cannot be reached (left out)
+      for (let x = hit; x !== s0 && !have.has(x); x = prev[x]) have.add(x);
+    }
+    return { list: [...have], added: [...have].filter(id => !want.has(id)).length, lost: [...want].filter(id => !have.has(id)).length };
   }
   // In-order list for build codes: the game's FOLLOW CODE takes the nodes in list order, so each one must sit
   // next to an earlier one. Follows `prefer` (your click order, the planner's picks ...); a node not linked yet
@@ -19435,10 +19565,10 @@ window.BOStartApp = function () {
   // the local DamageSim.html doesn't set it (opened from a file it can't use addresses).
   const ROUTES = { character: 'build/character', tree: 'build/tree', 'build:skills': 'build/skills', damage: 'build/damage',
     compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', patch: 'patch', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', lootfilter: 'lootfilter', faq: 'faq',
-    skillscaling: 'skills', minions: 'skills/minions', creator: 'creator', plan: 'plan', code: 'code' };
+    skillscaling: 'skills', minions: 'skills/minions', creator: 'creator', plan: 'plan', code: 'code', builds: 'savedbuilds' };
   const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', 'build:skills': 'Skills', damage: 'Damage Analysis',
     compare: 'Item Simulator', items: 'Item Search', grail: 'Grail', ladder: 'Ladder', patch: 'Recent Patch', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery", lootfilter: 'Loot Filter',
-    faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code' };
+    faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code', builds: 'Saved Builds' };
   // The Skills tab holds two views: Skill Scaling (scaling.js) and Minion Scaling (faq.js's minions section).
   let skillsView = 'scaling';
   function renderSkillsTab() {
@@ -19475,6 +19605,30 @@ window.BOStartApp = function () {
     const url = siteRoot() + (window.SITE_LANG && window.PAGE_LANGS && window.PAGE_LANGS[window.SITE_LANG] ? window.SITE_LANG + '/' : '') + route + '/';
     if (location.pathname !== url) history.pushState(null, '', url + location.search);
   }
+  // A tab's own page address (the same one syncUrl writes), or null where the page has no addresses (the local file).
+  function routeUrl(key) {
+    const route = ROUTES[key]; if (!ROUTING || !route) return null;
+    return siteRoot() + (window.SITE_LANG && window.PAGE_LANGS && window.PAGE_LANGS[window.SITE_LANG] ? window.SITE_LANG + '/' : '') + route + '/' + location.search;
+  }
+  // Middle-click or Ctrl/Cmd+click on a tab opens that tab's page in a new browser tab, like a link (player request, 18 Nov 2026:
+  // "middle click on skill scaling to open up new tab"). The page itself stays where it is. Characters and plans live in this
+  // browser's storage, so the new tab has them too.
+  document.addEventListener('mousedown', e => { if (e.button === 1 && e.target.closest('.tab[data-tab], #buildSubtabs [data-sub]')) e.preventDefault(); }); // no autoscroll circle
+  function newTabFor(b) {
+    const key = b.dataset.sub ? 'build:' + b.dataset.sub : b.dataset.tab === 'build' ? 'build:' + planner.subTab() : b.dataset.tab;
+    const url = routeUrl(key); if (!url) return false;
+    window.open(url, '_blank', 'noopener');
+    return true;
+  }
+  document.addEventListener('auxclick', e => {
+    const b = e.button === 1 && e.target.closest('.tab[data-tab], #buildSubtabs [data-sub]');
+    if (b && newTabFor(b)) e.preventDefault();
+  });
+  document.addEventListener('click', e => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const b = e.target.closest('.tab[data-tab], #buildSubtabs [data-sub]');
+    if (b && newTabFor(b)) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true); // capture: runs before the tab's own click handler, which would switch this page's tab
   window.addEventListener('popstate', () => {
     const key = routeFromPath(); if (!key) return;
     noPush = true;
@@ -19495,7 +19649,7 @@ window.BOStartApp = function () {
     document.body.classList.toggle('plan-page', tab === 'plan'); // the plan setup page: no Damage-tab controls beside it
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'lootfilter' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'builds' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'lootfilter' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character');
     document.body.classList.toggle('character-page', tab === 'character');
     document.body.classList.toggle('ladder-page', tab === 'ladder');
     document.body.classList.toggle('lootfilter-page', tab === 'lootfilter'); // nor on the Loot Filter tab // no character strip on the Ladder tab
@@ -19510,13 +19664,14 @@ window.BOStartApp = function () {
     // Character, Passive tree and Damage Analysis are sub-tabs of Build Planner: keep that main tab lit.
     document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'damage'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
     if (tab === 'tree' || tab === 'damage' || tab === 'character') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#lootFilterPane').hidden = tab !== 'lootfilter'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character';
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#savedBuildsPane').hidden = tab !== 'builds'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#lootFilterPane').hidden = tab !== 'lootfilter'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     renderBuildStats();
     if (tab === 'code') setTimeout(() => $('#codeInput').focus(), 0);
     if (tab === 'compare') renderCompare();
     if (tab === 'creator') creator.render();
+    if (tab === 'builds') renderSavedBuilds();
     if (tab === 'fossil') fossil.render();
     if (tab === 'brewery') brewery.render();
     if (tab === 'lootfilter') lootFilter.render();
@@ -19725,7 +19880,7 @@ window.BOStartApp = function () {
     GD, S, $, esc, gemDot, skillDot, confirm: confirmInPage, importCode: text => importAnyCode(text), bestSupports: bestSupportsFor, supMarks: marksFor,
     // A plan code carries the plan's tree tabs too (when it has more than one).
     withTabs: ch => planWithTabs(ch),
-    current: () => st.ch, workingCopy: () => st.ch,
+    current: () => st.ch, workingCopy: () => st.ch, retree,
     // "Include in simulations" on the Skills view = the Also count weights (st.optW).
     countable: id => (st.pickable || []).some(s => s.id === id), simSkill: () => st.skill,
     optWeights: () => st.optW || {}, setOptWeight: (id, w) => setOptWeight(id, w), execState: sk => execState(st.ch, sk), setExecOn: (id, on) => setExecOn(id, on),
@@ -19958,7 +20113,7 @@ window.BOStartApp = function () {
   cloud.start(); // back from Discord sign-in (#login=), or a sync of the account's plans
   // Landing: Build Planner > Character for anyone with a character; a first visit with none gets the welcome page (Damage view).
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
-  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
   routingReady = true; // from here on, switching tabs changes the address
   // Opened from a share link: load it as a plan, then drop it from the address so a refresh doesn't add it again.
   const bdbHash = /^#b=/.test(location.hash) && brokedCode(location.hash);

@@ -46,7 +46,7 @@
 <meta property="og:url" content="https://builder.lilshrimper.dev/ja/build/gear/"><meta property="og:image" content="https://builder.lilshrimper.dev/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=361">
+<link rel="stylesheet" href="../../../style.css?v=363">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -114,6 +114,9 @@
     <nav class="tabs main-tabs" role="tablist" aria-label="Views">
       <button class="tab" type="button" role="tab" data-tab="build" aria-selected="false" aria-label="Build Planner">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M6 17V8l6-4 6 4v9M9 17v-5h6v5"/></svg><span>Build Planner</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="builds" aria-selected="false" aria-label="Saved Builds">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span>Saved Builds</span>
       </button>
       <button class="tab" type="button" role="tab" data-tab="compare" aria-selected="false" aria-label="Item Simulator">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4"/></svg><span>Item Simulator</span>
@@ -417,6 +420,7 @@
     <section class="build-pane" id="buildPane" hidden></section>
     <section class="build-pane compare-pane" id="comparePane" hidden></section>
     <section class="build-pane compare-pane creator-pane" id="creatorPane" hidden></section>
+    <section class="build-pane compare-pane builds-pane" id="savedBuildsPane" hidden></section>
     <section class="build-pane compare-pane fossil-pane" id="fossilPane" hidden></section>
     <section class="build-pane compare-pane lootfilter-pane" id="lootFilterPane" hidden></section>
     <section class="build-pane compare-pane brewery-pane" id="breweryPane" hidden></section>
@@ -563,7 +567,7 @@
 <dialog class="confirm-dialog name-dialog" id="nameDialog" aria-labelledby="nameTitle">
   <form method="dialog">
     <h2 id="nameTitle">Save as new build</h2>
-    <p>Saves what you see now (gear, skills, tree, potions, notes) as a plan under Plans in the character list. What you started from stays as it is.</p>
+    <p>Saves what you see now (gear, skills, tree, potions, notes) as a build in the Saved Builds tab. What you started from stays as it is.</p>
     <label class="field"><span>Build name</span><input id="nameInput" type="text" maxlength="60" autocomplete="off" spellcheck="false"></label>
     <div class="confirm-actions">
       <button class="btn ghost" type="submit" value="cancel" formnovalidate>Cancel</button>
@@ -616,7 +620,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":361,"at":"2026-11-18T15:52:11.537Z"};
+window.SITE_VERSION = {"v":363,"at":"2026-11-18T16:29:59.511Z"};
 window.SITE_LANG = 'ja';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -625,6 +629,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=53dde52b","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../../app.js?v=361"></script>
+<script src="../../../app.js?v=363"></script>
 </body>
 </html>

@@ -3962,7 +3962,7 @@ window.BOCreator = function (ctx) {
       const S = W.toPlain(sm.v.props);
       if (S.Realm === 'Online' || S.League) throw new Error((S.Name || 'This character') + ' is an online character (' + (S.League || S.Realm) + '). The Save Creator only changes offline characters.');
       if (!W.same(W.serialize(save), bytes)) throw new Error('This save has something the Save Creator cannot write back exactly, so it will not change it.');
-      Object.assign(C, { file: file.name, orig: bytes, save, log: [], edit: null, editIdx: -1, runeSnap: null, fillSnaps: {}, manual: { gold: false, gems: {} }, fill: { ...DEFAULT_FILL }, copied: null, copyMode: '' }); // a build imported first stays picked
+      Object.assign(C, { file: file.name, orig: bytes, save, log: [], edit: null, editIdx: -1, runeSnap: null, fillSnaps: {}, riven: null, rivenSnap: null, manual: { gold: false, gems: {} }, fill: { ...DEFAULT_FILL }, copied: null, copyMode: '' }); // a build imported first stays picked
       C.msg = 'Loaded ' + S.Name + ' (' + S.ClassId + ' ' + (S.Level || 1) + ', offline).';
       const added = fillAll(); if (added.length) C.log.push(...added);
     } catch (e) { C.err = e.message; }
@@ -4484,6 +4484,37 @@ window.BOCreator = function (ctx) {
   }
   const ruptureNow = () => Math.max(mval('BestML', 0) || 0, mval('RivenOpen', 0) || 0);
 
+  // Riven Tiers (build 79): past Rupture Level 200 the map goes on in tiers, not levels. RiftMap RTOpen102 = highest pickable
+  // tier, RTBest102 = best cleared (Samtest 17 Nov 2026: 6 / 3 after clearing RT 3; log "RT 3 opens to 6"). Hand-set
+  // values hold in game (owner, 17 Nov 2026: open 30 / best 27, then 60 / best 57 both pickable), and the Riven points
+  // follow them (60 showed "5 of 5 free": one at RT 5, 10, 15, then one every 25). Not checked: a save that never cleared
+  // RL 200, where the game had not written these fields yet; here they are added like the other map fields.
+  const RT_AT = 200;
+  MAPT.RTOpen102 = 'IntProperty'; MAPT.RTBest102 = 'IntProperty';
+  const tierNow = () => mval('RTOpen102', 0) || 0;
+  function setTier(n) {
+    n = Math.max(1, Math.min(999, Math.round(+n) || 1));
+    if (ruptureNow() < RT_AT) setRupture(RT_AT);
+    mset('RTOpen102', Math.max(tierNow(), n)); mset('RTBest102', Math.max(mval('RTBest102', 0) || 0, n - 3));
+    return tierNow();
+  }
+  // The checkbox: on when ticked here or when the save already has tiers. Unticking puts back the tier fields as they were
+  // before the tick (the Rupture Level stays, as lower numbers never take progress away).
+  const rivenOn = () => C.riven != null ? C.riven : tierNow() > 0;
+  function setRiven(on) {
+    const m = mapProps();
+    if (on) {
+      if (!C.rivenSnap) C.rivenSnap = ['RTOpen102', 'RTBest102'].map(n => { const p = getP(m, n); return [n, p ? p.v : null]; });
+      if (ruptureNow() < RT_AT) setRupture(RT_AT);
+      // Samtest after its RL 200 clears (the game's own write, 17 Nov 2026): RivenOpen 200, DeepBest 200, not 199.
+      if ((mval('DeepBest', 0) || 0) < RT_AT) { mset('DeepBest', RT_AT); syncTitles(); }
+    } else if (C.rivenSnap) {
+      for (const [n, v] of C.rivenSnap) { if (v != null) mset(n, v); else { const i = m.findIndex(p => p.name === n); if (i >= 0) m.splice(i, 1); } }
+      C.rivenSnap = null;
+    }
+    C.riven = on;
+  }
+
   // ---------- skill bar ----------
   // Record.Hotbar: 13 skill ids ("" = empty, "move" = move only). Which entry is which button: owner's screenshot of the
   // in-game bar next to that character's save, 12 Nov 2026 (Samtest: Hotbar ["slash", "", "shuriken_fan", "shuriken_fan",
@@ -4527,11 +4558,18 @@ window.BOCreator = function (ctx) {
   }
   function mapHtml() {
     const toggle = (key, label, detail) => '<label class="cr-toggle"><input type="checkbox" data-cr-fill="' + key + '"' + (C.fill[key] ? ' checked' : '') + '><span>' + label + '<small>' + detail + '</small></span></label>';
-    let h = '<div class="card cr-map"><h2>QoL</h2><div class="cr-qol-top">';
-    h += mapProps() ? '<label class="field"><span>Rupture Level to unlock</span><input type="number" id="crRupture" min="1" max="999" value="' + ruptureNow() + '"></label>' : '<p class="hint">This character has no Rupture map yet. Play until the map opens, then load the save again.</p>';
-    h += toggle('runes', 'Runes', RUNE_FILL + ' of every rune') + '</div>';
-    if (mapProps()) h += '<p class="hint">Opens every Rupture Level up to this one: the map up to ' + MAP_TOP + ' with its Gates, and the Riven Atlas from ' + RU.riven.first + ' on. Lower numbers never take progress away.</p>';
-    h += '<div class="cr-qol-options">' +
+    let h = '<div class="card cr-map"><h2>QoL</h2>';
+    if (!mapProps()) h += '<p class="hint">This character has no Rupture map yet. Play until the map opens, then load the save again.</p>';
+    else {
+      const riven = rivenOn();
+      h += '<div class="cr-rupture"><label class="field"><span>Rupture Level to unlock</span><input type="number" id="crRupture" min="1" max="999" value="' + ruptureNow() + '"' + (riven ? ' disabled' : '') + '></label>' +
+        '<p class="hint">Opens every Rupture Level up to this one: the map up to ' + MAP_TOP + ' with its Gates, and the Riven Atlas from ' + RU.riven.first + ' on. Lower numbers never take progress away.</p>' +
+        '<label class="cr-toggle cr-riven"><input type="checkbox" id="crRiven"' + (riven ? ' checked' : '') + '><span>Riven Tier unlock<small>Sets the Rupture Level to ' + RT_AT + ', where Riven Tiers start</small></span></label>';
+      if (riven) h += '<label class="field"><span>Riven Tier to unlock</span><input type="number" id="crTier" min="1" max="999" value="' + (tierNow() || '') + '"></label>' +
+        '<p class="hint">Opens every Riven Tier up to this one. Past Rupture Level ' + RT_AT + ' the map goes on in Riven Tiers, each with stronger monsters and better rewards. Riven points come with them: one at tier 5, 10 and 15, then one every 25. Lower numbers never take progress away.</p>';
+      h += '</div>';
+    }
+    h += '<div class="cr-qol-options">' + toggle('runes', 'Runes', RUNE_FILL + ' of every rune') +
       toggle('gems', 'All gems at level ' + GEM_FILL, 'Adds missing skill gems and raises gem levels') +
       toggle('supports', SUPPORT_FILL + ' of every support gem', 'Loose copies, excluding retired supports') +
       toggle('forge', 'Crafting materials', MAT_FILL.toLocaleString('en-US') + ' of each material, ' + ECHO_FILL + ' echoes and all forge recipes') +
@@ -4652,6 +4690,8 @@ window.BOCreator = function (ctx) {
         return render();
       }
       if (t.id === 'crRupture' && mapProps()) { const n = setRupture(t.value); changed('Rupture Level ' + n + ' unlocked.'); return render(); }
+      if (t.id === 'crRiven' && mapProps()) { setRiven(t.checked); changed(t.checked ? 'Riven Tiers unlocked (Rupture Level ' + RT_AT + ').' : 'Riven Tier unlock removed.'); return render(); }
+      if (t.id === 'crTier' && mapProps()) { const n = setTier(t.value); changed('Riven Tier ' + n + ' unlocked.'); return render(); }
       if (t.id === 'crSlot') { C.newSlot = t.value; C.edit = { level: C.edit.level, items: [] }; C.kit = g.newKit(true); return render(); }
       if (t.id === 'crQuality') { const it = C.edit && C.edit.items[0]; if (it) it.quality = Math.max(0, Math.min(30, Math.round(+t.value) || 0)); return render(); }
       if (C.edit && t.closest('[data-cred]') && t.dataset.f) g.change(C.edit, t, C.kit, render, render);
@@ -4709,7 +4749,7 @@ window.BOCreator = function (ctx) {
       }
       if (act === 'download') return download();
       if (act === 'preview') return preview();
-      if (act === 'undo') { C.save = W.parse(C.orig); C.log = []; C.runeSnap = null; C.fillSnaps = {}; C.manual = { gold: false, gems: {} }; C.fill = Object.fromEntries(Object.keys(DEFAULT_FILL).map(k => [k, false])); C.copied = null; C.copyMode = ''; C.edit = null; C.editIdx = -1; C.msg = 'Back to the save as loaded.'; return render(); }
+      if (act === 'undo') { C.save = W.parse(C.orig); C.log = []; C.runeSnap = null; C.fillSnaps = {}; C.riven = null; C.rivenSnap = null; C.manual = { gold: false, gems: {} }; C.fill = Object.fromEntries(Object.keys(DEFAULT_FILL).map(k => [k, false])); C.copied = null; C.copyMode = ''; C.edit = null; C.editIdx = -1; C.msg = 'Back to the save as loaded.'; return render(); }
     });
   })();
 

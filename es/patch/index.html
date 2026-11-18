@@ -46,7 +46,7 @@
 <meta property="og:url" content="https://builder.lilshrimper.dev/es/patch/"><meta property="og:image" content="https://builder.lilshrimper.dev/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
-<link rel="stylesheet" href="../../style.css?v=367">
+<link rel="stylesheet" href="../../style.css?v=368">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -173,6 +173,7 @@
       <div class="bs-cell" title="Energy shield lines on gear and tree, added up"><span class="bs-label">Energy Shield</span><b id="bsEs">–</b></div>
       <div class="bs-cell" title="Strength, Dexterity and Intelligence"><span class="bs-label">Strength / Dex / Int</span><b id="bsAttr">–</b></div>
       <div class="bs-cell"><span class="bs-label">Resistances</span><b id="bsRes">–</b></div>
+      <div class="bs-cell" id="bsEhpCell" tabindex="0"><span class="bs-label">EHP (est.)</span><b id="bsEhp">–</b></div>
       <div class="bs-cell bs-share" id="bsShare"></div>
     </div>
     <nav class="tabs build-subtabs" id="buildSubtabs" role="tablist" aria-label="Build setup" hidden>
@@ -621,7 +622,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":367,"at":"2026-11-18T17:16:44.083Z"};
+window.SITE_VERSION = {"v":368,"at":"2026-11-18T17:29:27.291Z"};
 window.SITE_LANG = 'es';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -630,6 +631,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=4e9487f7","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../app.js?v=367"></script>
+<script src="../../app.js?v=368"></script>
 </body>
 </html>

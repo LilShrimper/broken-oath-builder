@@ -1157,7 +1157,7 @@ body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page) 
 .build-stats[hidden] { display: none; }
 @media (max-width: 520px) { .build-stats { grid-template-columns: 1fr; } }
 /* Summary strip: class + spell, boss DPS, life, energy shield, resistances, share link */
-.build-summary { display: grid; grid-template-columns: minmax(150px, 1.5fr) minmax(90px, 1fr) minmax(130px, 1fr) repeat(3, minmax(90px, 1fr)) auto; gap: 1px; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--line); overflow: hidden; }
+.build-summary { display: grid; grid-template-columns: minmax(150px, 1.5fr) minmax(90px, 1fr) minmax(130px, 1fr) repeat(4, minmax(90px, 1fr)) auto; gap: 1px; margin-top: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--line); overflow: hidden; }
 .build-summary[hidden] { display: none; }
 .bs-cell { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; padding: 8px 14px; background: var(--panel); }
 .bs-label { color: var(--muted); font: 600 10px/1.2 Inter, "Segoe UI", sans-serif; letter-spacing: .1em; text-transform: uppercase; }
@@ -1167,6 +1167,8 @@ body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page) 
 @media (max-width: 900px) { .bs-share { flex-direction: row; } .bs-share .btn { flex: 1 1 0; } }
 .bs-share .btn { white-space: nowrap; }
 @media (max-width: 900px) { .build-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .bs-wide, .bs-share { grid-column: 1 / -1; } }
+/* Middle widths: eight cells no longer fit one row beside the sidebar, so two rows of four and the buttons below */
+@media (min-width: 901px) and (max-width: 1240px) { .build-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); } .bs-wide { grid-column: span 2; } .bs-share { grid-column: 1 / -1; flex-direction: row; } .bs-share .btn { flex: 1 1 0; } }
 .view-bar .build-subtabs { width: fit-content; max-width: 100%; margin-top: 8px; }
 .view-bar .build-subtabs .tab { min-width: 140px; justify-content: center; }
 .pl-skills { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: 8px; align-items: start; }
@@ -1202,6 +1204,14 @@ body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page) 
 .pl-tip-head { display: block; margin-top: 8px; color: var(--faint); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
 .pl-tip-fit { margin: 6px 0 0; }
 .pl-tip .bad { color: var(--bad); }
+/* EHP cell: max hit per damage type */
+.pl-tip-hits { width: 100%; margin: 4px 0 6px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.pl-tip-hits th { padding: 2px 10px 3px 0; color: var(--faint); font-size: 10px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; text-align: left; white-space: nowrap; }
+.pl-tip-hits td { padding: 3px 10px 3px 0; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); white-space: nowrap; }
+.pl-tip-hits th:last-child, .pl-tip-hits td:last-child { padding-right: 0; }
+.pl-tip-hits td b { display: inline; color: var(--text); }
+.pl-tip-hits td small { color: var(--faint); font-size: 11px; }
+#bsEhpCell { cursor: help; }
 .pl-tip .pl-tier { display: inline-block; min-width: 22px; color: var(--dashboard-gold); font-weight: 650; font-variant-numeric: tabular-nums; }
 .pl-tip .pl-range { color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pl-tip .pl-open { color: var(--faint); }

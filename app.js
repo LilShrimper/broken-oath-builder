@@ -16392,8 +16392,8 @@ window.BOStartApp = function () {
   }
   // A ladder hero's life, energy shield and resistances, the same way (Ladder tab sorting). No skill sheet is run, so
   // the attributes are added up here as sim.js does (class base + per level, then flat and % lines).
-  function heroDefence(ch) {
-    const mods = S.collectMods(GD, ch, {}).mods.filter(m => !S.splitTags(m.tags).conds.length);
+  function heroDefence(ch, o) {
+    const mods = S.collectMods(GD, ch, o || {}).mods.filter(m => !S.splitTags(m.tags).conds.length);
     const cls = GD.classes[String(ch.classId || '').toLowerCase()] || {}, attr = {};
     for (const a of ['Str', 'Dex', 'Int']) {
       let flat = (cls[a] || 0) + (cls[a + 'PerLevel'] || 0) * Math.max(0, ch.level - 1), inc = 0;
@@ -16455,6 +16455,14 @@ window.BOStartApp = function () {
     $('#bsLife').textContent = life; $('#bsMana').textContent = mana; $('#bsEs').textContent = es; $('#bsRes').innerHTML = resParts ? resParts.map(x => '<span style="color:' + typeColor(x[0]) + '">' + x[1] + '</span>').join(' / ') : esc(res);
     $('#bsAttr').textContent = attr ? attr.Str + ' / ' + attr.Dex + ' / ' + attr.Int : '–';
     $('#bsRes').parentNode.title = resTip;
+    // EHP: the Gear Set Sim's estimate (gsDefence, same settings), with the max hit per damage type on hover. Read with the
+    // page's toggles and potions (opts()), as the resistances beside it are; the searches themselves count neither.
+    const ehpCell = $('#bsEhpCell');
+    if (ehpCell) {
+      let D = null; if (st.ch) { try { D = gsDefence(st.ch, opts()); } catch (e) { D = null; } }
+      $('#bsEhp').textContent = D ? num(D.ehp) : '–';
+      if (D) ehpCell.dataset.tiphtml = ehpTipHtml(D); else delete ehpCell.dataset.tiphtml;
+    }
     el.hidden = !st.ch;
   }
   function renderBuildStats() {
@@ -19172,8 +19180,8 @@ window.BOStartApp = function () {
   // miss: resistance points still short of the target, added up over the resistances asked for.
   const gsResCap = () => (GD.scaling.Hero || {}).ResistCap || 75;
   const gsResTarget = () => GS.set.resTarget > 0 ? GS.set.resTarget : gsResCap();
-  function gsDefence(items) {
-    const d = heroDefence(Array.isArray(items) ? Object.assign({}, st.ch, { items }) : items), cap = gsResCap(), target = gsResTarget();
+  function gsDefence(items, o) {
+    const d = heroDefence(Array.isArray(items) ? Object.assign({}, st.ch, { items }) : items, o), cap = gsResCap(), target = gsResTarget();
     const res = {}; for (const [k, v] of d.resParts) res[k] = v;
     // Resistance penalty (scaling.json Hero ResistPenaltyPerAct 10, ResistPenaltyMax 50; Patch 79 notes: "Each 10% step lands when you break a
     // Gate (20, 30, 40, 50, 60), still 50% in total"): taken off each resistance before the cap, as the owner sets it (GS.set.resPenalty).
@@ -19192,7 +19200,37 @@ window.BOStartApp = function () {
     const taken = (0.5 * (1 - (L.armour ? armDR : 0)) + 0.5 * (1 - avg / 100)) * (1 - 0.5 * (L.evasion ? evade : 0)) * (1 - (L.block ? block * blockCut : 0));
     // Mana before life (patch 79): a share s of what gets past the shield comes off mana, so life lasts min(life / (1 - s), life + mana).
     const s = (d.manaFirst || 0) / 100, lifePool = s > 0 ? Math.min(s < 1 ? d.life / (1 - s) : Infinity, d.life + (d.mana || 0)) : d.life;
-    return { life: d.life, es: d.es, res, armour: d.armour, armDR, evasion: d.evasion, evade, block, manaFirst: d.manaFirst || 0, ehp: Math.max(1, (L.life ? lifePool : 0) + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
+    const resCapped = {}; for (const [k, v] of d.resParts) resCapped[k] = Math.min(cap, v - pen);
+    return { life: d.life, es: d.es, res, resCapped, pen, pool: lifePool + d.es, armHit, armour: d.armour, armDR, evasion: d.evasion, evade, block, manaFirst: d.manaFirst || 0, ehp:Math.max(1, (L.life ? lifePool : 0) + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
+  }
+  // Max hit per damage type (owner, 18 Nov 2026; the table of artifacts/db-planner.html): the biggest single hit the whole pool
+  // (life, with mana before life, + energy shield) takes, from the same rules as gsDefence above and nothing new. Physical: armour
+  // (with the ES share), a hit over ArmourBigHitRef counting as that much. Fire / Cold / Lightning / Poison: that resistance,
+  // capped, less the penalty set. The hit is one that lands: no evade, no block. Glancing blows (scaling.json Hero EvasionGlance,
+  // switches r80.BIGHIT) are left out: what those numbers do is not checked against a tooltip or log.
+  // D: a gsDefence result. -> { pool, rows: [[type, max hit, taken of a `probe` hit]] }
+  function maxHits(D, probe) {
+    const H = GD.scaling.Hero || {}, ref = H.ArmourBigHitRef || 1000, af = H.ArmourFactor75 || H.ArmourFactor || 5, mx = (H.ArmourMaxReduction || 80) / 100;
+    const taken = (type, hit) => type === 'Physical'
+      ? hit * (1 - (D.armHit > 0 ? Math.min(mx, D.armHit / (D.armHit + af * Math.min(hit, ref))) : 0))
+      : hit * (1 - (D.resCapped[type] || 0) / 100);
+    const max = type => {
+      if (!(D.pool > 0)) return 0;
+      let lo = 0, hi = D.pool; while (taken(type, hi) < D.pool && hi < 1e12) hi *= 2;
+      for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (taken(type, m) < D.pool) lo = m; else hi = m; }
+      return lo;
+    };
+    return { pool: D.pool, rows: ['Physical', 'Fire', 'Cold', 'Lightning', 'Poison'].map(t => [t, max(t), taken(t, probe)]) };
+  }
+  // The EHP cell's hover box (summary strip): what the estimate counts, then the max hit table.
+  function ehpTipHtml(D) {
+    const probe = 5000, M = maxHits(D, probe);
+    return '<b>EHP (est.) ' + num(D.ehp) + '</b><span class="pl-tip-sub">An estimate, not a number from the game</span>' +
+      '<span class="pl-tip-desc">Life + energy shield against a boss hit of ' + num((GD.scaling.Hero || {}).ArmourBigHitRef || 1000) + ' or more: half physical, half elemental, half of the hits attacks. Counted: ' + esc(gsLayerNames().join(', ')) + '.</span>' +
+      '<span class="pl-tip-head">Max hit you survive</span>' +
+      '<table class="pl-tip-hits"><tr><th>Damage type</th><th>Max hit</th><th>Taken of a ' + num(probe) + ' hit</th></tr>' +
+      M.rows.map(([t, mh, tk]) => '<tr><td style="color:' + typeColor(t) + '">' + t + '</td><td><b>' + num(Math.floor(mh)) + '</b></td><td' + (tk >= M.pool ? ' class="bad"' : '') + '>' + num(Math.round(tk)) + ' <small>(' + (M.pool > 0 ? Math.round(tk / M.pool * 100) : 0) + '% of pool)</small></td></tr>').join('') + '</table>' +
+      '<span class="pl-tip-desc">The biggest single hit your pool of ' + num(Math.floor(M.pool)) + ' (life + energy shield) takes, after armour (physical) or that resistance (capped at ' + gsResCap() + '%' + (D.pen ? ', with the ' + D.pen + '% penalty' : ', no penalty') + '). A hit that lands: not evaded, not blocked. Glancing blows are not counted.</span>';
   }
   // Which defences the estimate counts (one setting everywhere, with the slider). Resistances always count.
   const GS_LAYERS = [['life', 'Life', 'Life'], ['es', 'Energy Shield', 'EnergyShield'], ['armour', 'Armour', 'Armour'], ['evasion', 'Evasion', 'Evasion'], ['block', 'Block', 'Block']];
@@ -20336,16 +20374,18 @@ window.BOStartApp = function () {
     return h;
   }
   function show(e) {
-    const t = e.target, el = t && t.closest && t.closest('[title], [data-title]');
+    const t = e.target, el = t && t.closest && t.closest('[title], [data-title], [data-tiphtml]');
     if (!el || el.closest('svg')) return hide();
     if (el.hasAttribute('title')) take(el);
     const own = t.closest(OWN);
     if (own && (own === el || el.contains(own))) return hide(); // that one draws its own
-    const text = el.dataset.title; if (!text) return hide();
+    // data-tiphtml: a ready-made box built by the page itself (the EHP cell's max hit table), shown as it is.
+    const html = el.dataset.tiphtml, text = el.dataset.title; if (!text && !html) return hide();
     if (cur === el && tip && !tip.hidden) return;
     if (!tip) { tip = document.createElement('div'); tip.className = 'pl-tip pl-tip-plain'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
-    const h = heading(el, text);
-    tip.innerHTML = (h ? '<b>' + esc(h) + '</b>' : '') + '<span class="pl-tip-desc">' + esc(text).replace(/\n/g, '<br>') + '</span>';
+    tip.classList.toggle('pl-tip-plain', !html);
+    const h = html ? '' : heading(el, text);
+    tip.innerHTML = html || (h ? '<b>' + esc(h) + '</b>' : '') + '<span class="pl-tip-desc">' + esc(text).replace(/\n/g, '<br>') + '</span>';
     tip.hidden = false; cur = el;
     const r = el.getBoundingClientRect(), w = tip.offsetWidth, hg = tip.offsetHeight;
     let y = r.bottom + 6; if (y + hg > innerHeight - 8) y = Math.max(8, r.top - hg - 6);

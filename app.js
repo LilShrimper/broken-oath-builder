@@ -9903,6 +9903,24 @@ window.BOCharacter = function (ctx) {
         if (text && /\n/.test(text.trim()) && /\d/.test(text)) { e.preventDefault(); readShot(text); }
       });
       back.addEventListener('input', e => { if (e.target.id === 'ioSearch') { M.q = e.target.value; renderList(); } });
+      // Mouse wheel over a number box steps its value (1 a notch), held inside its min/max unless already outside.
+      back.addEventListener('wheel', e => {
+        const t = e.target;
+        if (!(t instanceof HTMLInputElement) || t.type !== 'number' || t.disabled || t.readOnly || !e.deltaY) return;
+        e.preventDefault();
+        const st = parseFloat(t.step), step = st > 0 ? st : 1, dir = e.deltaY < 0 ? 1 : -1;
+        const cur = parseFloat(t.value) || 0, lo = parseFloat(t.min), hi = parseFloat(t.max);
+        let v = Math.round((cur + dir * step) * 1e6) / 1e6;
+        if (dir > 0 && !isNaN(hi) && cur <= hi) v = Math.min(v, hi);
+        if (dir < 0 && !isNaN(lo) && cur >= lo) v = Math.max(v, lo);
+        if (v === cur) return;
+        // Each notch only changes the box; the edit (sim + redraw, the slow part) runs once the wheel rests.
+        if (wheelHold && wheelHold.t !== t) wheelFlush();
+        t.value = v;
+        if (!wheelHold) wheelHold = { t, n: Array.from(back.querySelectorAll('input[type=number]')).indexOf(t) };
+        clearTimeout(wheelHold.timer); wheelHold.timer = setTimeout(wheelFlush, 250);
+      }, { passive: false });
+      back.addEventListener('mouseout', e => { if (wheelHold && e.target === wheelHold.t) wheelFlush(); });
       document.addEventListener('keydown', e => { if (M && e.key === 'Escape') { e.preventDefault(); closeItem(); } });
       document.body.appendChild(back);
     }
@@ -9910,7 +9928,18 @@ window.BOCharacter = function (ctx) {
     renderItem();
     const f = back.querySelector('.io-x'); if (f) f.focus({ preventScroll: true });
   }
+  let wheelHold = null;
+  function wheelFlush() {
+    const w = wheelHold; wheelHold = null; if (!w) return;
+    clearTimeout(w.timer);
+    if (!w.t.isConnected) return;
+    w.t.dispatchEvent(new Event('change', { bubbles: true }));
+    // The window redraws after a change: keep the same box focused so typing and the next notch land on it.
+    const again = back && back.querySelectorAll('input[type=number]')[w.n];
+    if (again && again !== w.t) again.focus({ preventScroll: true });
+  }
   function closeItem() {
+    wheelFlush();
     M = null; if (back) back.hidden = true; document.body.classList.remove('io-open');
     if (lastFocus && lastFocus.isConnected) lastFocus.focus({ preventScroll: true });
     else { const s = lastFocus && lastFocus.dataset && lastFocus.dataset.slot; const n = s && document.querySelector('#characterPane .ch-slot[data-slot="' + s + '"]'); if (n) n.focus({ preventScroll: true }); }
@@ -9927,8 +9956,51 @@ window.BOCharacter = function (ctx) {
     let h = '<div class="io-win"><div class="io-head">' + tab('select', 'Select') + tab('edit', 'Edit', !it) +
       '<span class="io-slotname">' + esc(planner.slotName[M.slot] || M.slot) + '</span><button class="io-x" type="button" data-io="close" aria-label="Close">×</button></div>';
     h += '<div class="io-body" id="ioBody">' + readBar() + (M.tab === 'select' ? selectHtml() : editHtml(ch, it)) + '</div>';
+    const old = back.querySelector('#ioBody'), keep = old && old.dataset.tab === M.tab ? old.scrollTop : 0;
     back.innerHTML = h + '</div>';
+    const body = back.querySelector('#ioBody'); body.dataset.tab = M.tab; if (keep) body.scrollTop = keep; // an edit redraws in place, not back at the top
+    back.querySelectorAll('select.io-add').forEach(pickify);
     if (M.tab === 'select') renderList();
+  }
+  // The "Add Vow" lists are long: a search box over each. The <select> stays (hidden) and gets the pick as a change.
+  function pickify(sel) {
+    const items = [];
+    for (const n of sel.children) {
+      if (n.tagName === 'OPTGROUP') { items.push({ head: n.label }); for (const o of n.children) items.push({ v: o.value, t: o.textContent }); }
+      else if (n.value) items.push({ v: n.value, t: n.textContent });
+    }
+    const label = sel.getAttribute('aria-label') || 'Add';
+    const wrap = document.createElement('div'); wrap.className = 'io-pick';
+    const box = document.createElement('input');
+    box.type = 'search'; box.className = 'io-add'; box.placeholder = '<' + label + '>  type to search'; box.setAttribute('aria-label', label); box.autocomplete = 'off'; box.spellcheck = false;
+    const list = document.createElement('div'); list.className = 'io-pick-list'; list.setAttribute('role', 'listbox'); list.hidden = true;
+    wrap.append(box, list); sel.hidden = true; sel.after(wrap);
+    let hits = [], at = 0;
+    const draw = () => {
+      const words = box.value.toLowerCase().split(/\s+/).filter(Boolean);
+      hits = []; let h = '', head = null;
+      for (const x of items) {
+        if (x.head) { head = x.head; continue; }
+        const low = x.t.toLowerCase();
+        if (!words.every(w => low.includes(w))) continue;
+        if (head) { h += '<div class="io-pick-head">' + esc(head) + '</div>'; head = null; }
+        h += '<div class="io-pick-opt' + (hits.length === at ? ' on' : '') + '" role="option" data-i="' + hits.length + '">' + esc(x.t) + '</div>';
+        hits.push(x);
+      }
+      list.innerHTML = h || '<div class="io-pick-none">No line matches</div>';
+      list.hidden = false;
+      const on = list.querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+    };
+    const pick = x => { if (!x) return; sel.value = x.v; sel.dispatchEvent(new Event('change', { bubbles: true })); };
+    box.addEventListener('focus', () => { at = 0; draw(); });
+    box.addEventListener('input', () => { at = 0; draw(); });
+    box.addEventListener('blur', () => setTimeout(() => { if (wrap.isConnected) { list.hidden = true; box.value = ''; } }, 150));
+    box.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); if (hits.length) { at = (at + (e.key === 'ArrowDown' ? 1 : hits.length - 1)) % hits.length; draw(); } }
+      else if (e.key === 'Enter') { e.preventDefault(); pick(hits[at]); }
+      else if (e.key === 'Escape' && !list.hidden) { e.preventDefault(); e.stopPropagation(); list.hidden = true; box.value = ''; }
+    });
+    list.addEventListener('mousedown', e => { e.preventDefault(); const o = e.target.closest('.io-pick-opt'); if (o) pick(hits[+o.dataset.i]); });
   }
 
   // ----- Screenshot: read an item from a screenshot or its tooltip text (itemread.js) into this slot -----

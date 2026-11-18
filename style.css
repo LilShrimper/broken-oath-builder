@@ -1880,6 +1880,14 @@ body.io-open { overflow: hidden; }
 .io-rm:hover, .io-rm:focus-visible { color: var(--bad); border-color: var(--bad); outline: none; }
 .io-add { display: block; width: 100%; margin: 4px 0 0; padding: 7px 8px; border: 1px dashed var(--line); border-radius: 6px; background: none; color: var(--faint); font: inherit; cursor: pointer; }
 .io-add:hover, .io-add:focus-visible { color: var(--text); border-color: var(--dashboard-gold); outline: none; }
+input.io-add { cursor: text; box-sizing: border-box; }
+input.io-add:focus { color: var(--text); border-color: var(--dashboard-gold); border-style: solid; outline: none; }
+input.io-add::placeholder { color: var(--faint); }
+.io-pick-list { max-height: 320px; overflow-y: auto; margin-top: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
+.io-pick-head { padding: 6px 10px 2px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dashboard-gold); }
+.io-pick-opt { padding: 6px 10px; cursor: pointer; color: var(--text); }
+.io-pick-opt:hover, .io-pick-opt.on { background: color-mix(in srgb, var(--dashboard-gold) 16%, transparent); }
+.io-pick-none { padding: 6px 10px; color: var(--faint); }
 .io-foot { margin-top: 18px; }
 @media (max-width: 760px) {
   .io-back { padding: 0; }

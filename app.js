@@ -3004,16 +3004,63 @@ window.BOPlanner = function (ctx) {
   const vowLevel = a => a && ((GD.affixes[lc(a.id)] || {}).Mod || {}).Stat === 'SkillLevel' ? S.vowLevelShare(GD) : 1;
   const vowTag = (n, a) => { const sh = S.vowShare(GD, n) * vowLevel(a); return 'Vow ' + (n + 1) + (sh < 1 ? ' · counts ' + Math.round(sh * 100) + '%' : ''); };
   const vowLevelNote = a => vowLevel(a) < 1 ? ' <span class="meta">(skill levels count half)</span>' : '';
+  // Vow order matters (the 1st counts in full, later ones less), so Vows can be reordered: drag the grip, or the up/down
+  // buttons (touch screens). attr = the click attribute the editor listens on ('act' here, 'io' in character.js); prev/next =
+  // the neighbouring Vows' affix indices (null at the ends). A drop fires a click with data-<attr>="mvaffix" (see vowDragInit).
+  function vowMove(attr, ai, prev, next) {
+    const b = (to, lbl, sym) => '<button class="vow-mv" type="button" aria-label="' + lbl + '" data-' + attr + '="mvaffix" data-ai="' + ai + '" data-to="' + to + '"' + (to == null ? ' disabled' : '') + '>' + sym + '</button>';
+    return '<span class="vow-grip" draggable="true" aria-hidden="true">⠿</span>' + b(prev, 'Move up', '↑') + b(next, 'Move down', '↓');
+  }
+  function moveAffix(it, from, to) {
+    if (!it || !it.affixes[from] || !it.affixes[to] || from === to) return false;
+    const [a] = it.affixes.splice(from, 1); it.affixes.splice(to, 0, a); return true;
+  }
+  // One drag handler for every Vow list on the page (.vow-list, rows carry data-ai): a row moves only within its own list.
+  let vowDrag = null;
+  (function vowDragInit() {
+    const clear = () => document.querySelectorAll('.vow-dragging, .vow-over-up, .vow-over-down').forEach(n => n.classList.remove('vow-dragging', 'vow-over-up', 'vow-over-down'));
+    const target = e => { if (!vowDrag) return null; const r = e.target.closest && e.target.closest('[data-ai]'); return r && r.parentElement === vowDrag.list ? r : null; };
+    document.addEventListener('dragstart', e => {
+      const g = e.target.closest && e.target.closest('.vow-grip'), row = g && g.closest('[data-ai]'), list = row && row.closest('.vow-list');
+      if (!list) return;
+      vowDrag = { row, list };
+      e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', '');
+      try { e.dataTransfer.setDragImage(row, 12, 12); } catch (_) {}
+      row.classList.add('vow-dragging');
+    });
+    // Capture phase on window, stopped there: the page's file drop (app.js: saves, screenshots) and the item window's
+    // screenshot drop (character.js) must not see a Vow drag.
+    window.addEventListener('dragover', e => {
+      if (!vowDrag) return;
+      e.stopPropagation();
+      const r = target(e); if (!r) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('.vow-over-up, .vow-over-down').forEach(n => { if (n !== r) n.classList.remove('vow-over-up', 'vow-over-down'); });
+      if (r !== vowDrag.row) r.classList.add(+r.dataset.ai < +vowDrag.row.dataset.ai ? 'vow-over-up' : 'vow-over-down');
+    }, true);
+    window.addEventListener('drop', e => {
+      if (!vowDrag) return;
+      e.stopPropagation(); e.preventDefault();
+      const r = target(e), { row, list } = vowDrag; vowDrag = null; clear();
+      if (!r || r === row) return;
+      const b = document.createElement('button'); b.type = 'button'; b.hidden = true;
+      b.setAttribute('data-' + list.dataset.mv, 'mvaffix'); b.dataset.ai = row.dataset.ai; b.dataset.to = r.dataset.ai;
+      row.appendChild(b); b.click(); b.remove(); // the editor's own click handler does the move and re-renders
+    }, true);
+    window.addEventListener('dragenter', e => { if (vowDrag) e.stopPropagation(); }, true);
+    window.addEventListener('dragleave', e => { if (vowDrag) e.stopPropagation(); }, true);
+    document.addEventListener('dragend', () => { if (vowDrag) { vowDrag = null; clear(); } });
+  })();
   // One affix: its type (P / S, or "Vow" on a unique), tier, numbers and text.
-  function affixRow(it, a, ai, edit, dis, tag, note) {
+  function affixRow(it, a, ai, edit, dis, tag, note, mv) {
     const af = GD.affixes[lc(a.id)], x = edit ? '<button class="x" type="button" aria-label="Remove" data-act="rmaffix" data-ai="' + ai + '">×</button>' : '';
-    if (!af) return '<div class="pl-affix"><span class="meta bad">Unknown affix ' + esc(a.id) + '</span>' + x + '</div>';
+    if (!af) return '<div class="pl-affix" data-ai="' + ai + '">' + (mv || '') + '<span class="meta bad">Unknown affix ' + esc(a.id) + '</span>' + x + '</div>';
     const t = af.Tiers[a.tier] || af.Tiers[0], two = t && t.Min2 != null;
     // Outside the tier's range: flagged, not refused (see character.js affixRow).
     const lim = (lo, hi) => lo == null || hi == null ? '' : ' min="' + Math.min(lo, hi) + '" max="' + Math.max(lo, hi) + '" title="Rolls ' + lo + ' to ' + hi + '"';
     const out = (x, lo, hi) => lo != null && hi != null && (x < Math.min(lo, hi) || x > Math.max(lo, hi));
     const off = t && (out(a.v, t.Min, t.Max) || (two && out(a.v2, t.Min2, t.Max2)));
-    return '<div class="pl-affix" data-ai="' + ai + '"><span class="pl-type" title="' + (tag ? tag + ' · ' : '') + af.Type + '">' + (tag ? tag[0] : af.Type[0]) + '</span>' +
+    return '<div class="pl-affix" data-ai="' + ai + '">' + (mv || '') + '<span class="pl-type" title="' + (tag ? tag + ' · ' : '') + af.Type + '">' + (tag ? tag[0] : af.Type[0]) + '</span>' +
       '<select data-f="tier"' + dis + '>' + af.Tiers.map((y, ti) => opt(ti, (af.Kind || 'T' + (ti + 1)) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')', ti === a.tier)).join('') + '</select>' +
       '<input class="mini" type="number" step="any" data-f="v" value="' + a.v + '"' + (t ? lim(t.Min, t.Max) : '') + dis + '>' + (two ? '<input class="mini" type="number" step="any" data-f="v2" value="' + a.v2 + '"' + lim(t.Min2, t.Max2) + dis + '>' : '') +
       '<span class="pl-text">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(modLine(af.Mod, a.v, a.v2)) + (tag && tag.startsWith('Vow') ? vowLevelNote(a) : '') + (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') + (off ? ' <span class="bad">outside its range</span>' : '') + (note || '') + '</span>' + x + '</div>';
@@ -3090,7 +3137,10 @@ window.BOPlanner = function (ctx) {
       if (u && (edit || nVows)) h += '<div class="meta pl-vows"><b>Vows ' + nVows + '</b> (' + (isIdol ? 'Awakening turns a magic idol rare, and that rare idol can give a red idol its Vow' : 'a rare ' + SLOT_NAME[slot].toLowerCase() + ' gives this red item its finest line at the cube') + ')</div>';
       let vi = 0; // the 1st Vow counts in full, each later one less (sim.js vowShare)
       const pool = vowPool(slot, base);
-      it.affixes.forEach((a, ai) => { if (!a.id.startsWith('unique:')) h += affixRow(it, a, ai, edit, dis, vowTag(vi++, a), vowMisfit(pool, a, slot, base)); });
+      const vix = it.affixes.map((a, ai) => a.id.startsWith('unique:') ? -1 : ai).filter(ai => ai >= 0);
+      const reorder = edit && !dis && vix.length > 1;
+      if (vix.length) h += '<div class="vow-list" data-mv="act">' + vix.map((ai, n) => affixRow(it, it.affixes[ai], ai, edit, dis, vowTag(vi++, it.affixes[ai]), vowMisfit(pool, it.affixes[ai], slot, base),
+        reorder ? vowMove('act', ai, n ? vix[n - 1] : null, n < vix.length - 1 ? vix[n + 1] : null) : '')).join('') + '</div>';
       if (u && edit && nVows < VOW_MAX) {
         const all = isIdol ? Object.values(GD.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length) : affixesFor(base);
         const used = new Set(it.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
@@ -3630,6 +3680,7 @@ window.BOPlanner = function (ctx) {
     const act = b.dataset.act, { it, key } = itemOf(ch, b);
     if (act === 'rmitem' && it) { ch.items = ch.items.filter(i => i !== it); k.openItems.clear(); return done(); }
     if (act === 'rmaffix' && it) { it.affixes.splice(+b.dataset.ai, 1); k.openItems.add(String(key)); return done(); }
+    if (act === 'mvaffix' && it && moveAffix(it, +b.dataset.ai, +b.dataset.to)) { k.openItems.add(String(key)); return done(); }
   }
   // Reading an item from a screenshot or its tooltip text (itemread.js) into one gear box of the Build tab.
   // The box's read area takes focus on click, so Ctrl+V there (or anywhere in an open box) reads the clipboard.
@@ -3763,7 +3814,7 @@ window.BOPlanner = function (ctx) {
     return p;
   }
   // The item editor for the Item Compare tab (app.js): its own state from gear.newKit(true), edits on its own holder.
-  const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, baseLine, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, markBases, affixesFor, vowPool, vowMisfit, fixHands, handOk,
+  const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, baseLine, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, markBases, affixesFor, vowPool, vowMisfit, vowMove, moveAffix, fixHands, handOk,
     // for the Character tab's item overlay (character.js)
     oathwordsFor, oathwordBases, rollUnique, topTier, runeSlots, runeList, modLine, LIMIT, VOW_MAX };
   // Take a skill, its supports and its bar slot out of a character (Build tab ×, Character tab ×).
@@ -9996,16 +10047,16 @@ window.BOCharacter = function (ctx) {
   }
 
   // ----- Edit tab -----
-  function affixRow(it, a, ai, tag, after, note) {
+  function affixRow(it, a, ai, tag, after, note, mv) {
     const af = GD().affixes[lc(a.id)];
-    if (!af) return '<div class="io-aff" data-ai="' + ai + '"><span class="meta bad">Unknown affix ' + esc(a.id) + '</span><button class="io-rm" type="button" data-io="rmaffix" data-ai="' + ai + '" title="Remove">×</button></div>';
+    if (!af) return '<div class="io-aff" data-ai="' + ai + '">' + (mv || '') + '<span class="meta bad">Unknown affix ' + esc(a.id) + '</span><button class="io-rm" type="button" data-io="rmaffix" data-ai="' + ai + '" title="Remove">×</button></div>';
     const t = af.Tiers[a.tier] || af.Tiers[0], two = t && t.Min2 != null;
     // A value outside its tier's range is flagged, not refused (as on a unique's lines): an Unsworn item can be Twisted
     // ("every value x0.8 to x1.2", forge.json Oathcinder), so a real line can sit outside the range.
     const lim = (lo, hi) => lo == null || hi == null ? '' : ' min="' + Math.min(lo, hi) + '" max="' + Math.max(lo, hi) + '" title="Rolls ' + lo + ' to ' + hi + '"';
     const out = (x, lo, hi) => lo != null && hi != null && (x < Math.min(lo, hi) || x > Math.max(lo, hi));
     const off = t && (out(a.v, t.Min, t.Max) || (two && out(a.v2, t.Min2, t.Max2)));
-    return '<div class="io-aff" data-ai="' + ai + '"><span class="io-afftext">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(safe(() => G.modLine(af.Mod, a.v, a.v2))) + (af.Kind ? ' <span class="meta">(' + esc(af.Kind) + ')</span>' : '') + (after ? ' <span class="io-extra">(' + esc(after) + ')</span>' : '') +
+    return '<div class="io-aff" data-ai="' + ai + '">' + (mv || '') + '<span class="io-afftext">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(safe(() => G.modLine(af.Mod, a.v, a.v2))) + (af.Kind ? ' <span class="meta">(' + esc(af.Kind) + ')</span>' : '') + (after ? ' <span class="io-extra">(' + esc(after) + ')</span>' : '') +
       (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') +
       (off ? ' <span class="bad">outside this tier\'s range (' + t.Min + ' to ' + t.Max + (two ? ' / ' + t.Min2 + ' to ' + t.Max2 : '') + ')</span>' : '') + (note || '') + '</span>' +
       '<select data-f="tier" aria-label="Tier">' + af.Tiers.map((y, ti) => '<option value="' + ti + '"' + (ti === a.tier ? ' selected' : '') + '>T' + (ti + 1) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')</option>').join('') + '</select>' +
@@ -10071,7 +10122,10 @@ window.BOCharacter = function (ctx) {
       const nV = it.affixes.filter(a => !a.id.startsWith('unique:')).length;
       let vi = 0, vows = '';
       const pool = G.vowPool(M.slot, base); // a Vow its base can't roll is marked (planner.js vowMisfit)
-      it.affixes.forEach((a, ai) => { if (!a.id.startsWith('unique:')) vows += affixRow(it, a, ai, 'Vow ' + (++vi), '', G.vowMisfit(pool, a, M.slot, base)); });
+      // Vow order matters (planner.js vowMove): drag the grip or use the arrows; the click lands in onIo as data-io="mvaffix".
+      const vix = it.affixes.map((a, ai) => a.id.startsWith('unique:') ? -1 : ai).filter(ai => ai >= 0);
+      if (vix.length) vows += '<div class="vow-list" data-mv="io">' + vix.map((ai, n) => affixRow(it, it.affixes[ai], ai, 'Vow ' + (++vi), '', G.vowMisfit(pool, it.affixes[ai], M.slot, base),
+        vix.length > 1 ? G.vowMove('io', ai, n ? vix[n - 1] : null, n < vix.length - 1 ? vix[n + 1] : null) : '')).join('') + '</div>';
       if (u && nV < G.VOW_MAX) vows += addSelect(it, base, 'Prefix', 'Add Vow (prefix)', isIdol) + addSelect(it, base, 'Suffix', 'Add Vow (suffix)', isIdol);
       h += section('Vows <small>' + nV + ' / ' + G.VOW_MAX + '</small>', vows || '<div class="io-imp meta">None</div>');
     } else {
@@ -10154,6 +10208,7 @@ window.BOCharacter = function (ctx) {
       ch.items = ch.items.filter(i => i !== it); M.tab = 'select'; return commit(ch);
     }
     if (act === 'rmaffix') { it.affixes.splice(+b.dataset.ai, 1); return commit(ch); }
+    if (act === 'mvaffix') { if (G.moveAffix(it, +b.dataset.ai, +b.dataset.to)) return commit(ch); return; }
   }
   function onIoChange(e) {
     const t = e.target, f = t.dataset.f;
@@ -12069,7 +12124,7 @@ window.BOCharacter = function (ctx) {
     // 62 -> 66. The same +4 on baselines 15 apart: inside the formula Samtest's increased crit would have multiplied it.
     // Which ground's crit counts when several are up is not proven: the biggest crit is taken (the damage taken side is
     // strongest-only, see hallowBest). The 95% cap is kept on the total (not checked).
-    const hallowSrc = o.enemyHallowedGround ? hallowedSources(GD, ch, mods) : [];
+    const hallowSrc = o.enemyHallowedGround ? hallowedSources(GD, ch, mods, true) : [];
     const hallowCrit = hallowSrc.reduce((b, s) => Math.max(b, s.crit || 0), 0);
     const critBase = clamp((baseCrit + critFlat) * (1 + critInc / 100) * critMore, 0, 95);
     let critChance = hallowCrit ? Math.min(95, critBase + hallowCrit) : critBase;
@@ -13005,6 +13060,7 @@ window.BOCharacter = function (ctx) {
     res.hallowed = { sources: hallowSrc, best: hallowBest, taken: groundTaken, crit: hallowCrit, critBefore: critBase };
     if (o.enemyHallowedGround) res.notes.push(hallowBest
       ? 'Hallowed ground: the enemy takes ' + +hallowBest.taken.toFixed(1) + '% more damage from your hits (' + hallowBest.name + (hallowBest.half ? ', half outside the Paladin' : '') + '). Only your strongest hallowed ground counts, on top of your curses (game log 14 Nov, on a Guardian).' +
+        (!(ch.hotbar || []).map(lc).includes('consecrated_ground') && hallowBest.name === (GD.skills.consecrated_ground || {}).Name ? ' Consecrated Ground is not on your skill bar: counted anyway, as ticked.' : '') +
         (hallowCrit ? ' Your hits on it get +' + +hallowCrit.toFixed(1) + '% critical strike chance, added after your increased crit (' + +critBase.toFixed(1) + '% becomes ' + +critChance.toFixed(1) + '%).' : '')
       : 'Hallowed ground: none of your skills or Dragonling nodes makes hallowed ground, so no extra damage taken is counted.');
     // Maim (support): the skill's hits make the enemy take X% more Physical damage from you. The game's skill
@@ -13586,6 +13642,34 @@ window.BOCharacter = function (ctx) {
         const what = t.when === 'Hit' ? (t.nth > 1 ? 'every ' + t.nth + 'th hit' : 'every hit') + (t.state.length ? ' on a ' + (t.state.includes('VsBurningOrShocked') ? 'Burning or Shocked' : 'Burning') + ' enemy (' + Math.round(share * 100) + '% of the time)' : '')
           : t.when === 'Crit' ? (t.nth > 1 ? 'every ' + t.nth + 'th crit' : 'every crit') : (t.nth > 1 ? 'every ' + t.nth + 'th use' : 'every use');
         res.notes.push(name + ': ' + what + ' adds ' + (t.count > 1 ? t.count + ' x ' : '') + +(+t.pct).toFixed(1) + '% of the hit' + (t.element ? ' as ' + t.element : '') + capped + ', ' + events.toFixed(2) + ' a second = +' + Math.round(hitDpsNow > 0 ? dps / hitDpsNow * 100 : 0) + '% hit damage on one enemy (splash to others not counted).' + (/Pyre|Overclock|Ninth Storm|One Breath/.test(name) ? '' : ' From the node text; not checked against the game yet.'));
+      }
+      // Windburst (ascended Rider of the Gale, flag Asc71_Windburst; dragonling.json Rules71.Windburst Every 3, Pct 2.0, Radius 400,
+      // Delay 0.35): "Every third movement skill you use ends in a Windburst where you land: 200% of your last Bow hit as Physical
+      // damage to every enemy within 4 m". PROVEN, game log 17 Nov 2026, Rangtest on the Training Post (tests/rangtest-windburst.md):
+      // "AscB72: Windburst - 66892 Physical in 400 cm" = 2 x 33446, the DEALT number of the last single Bow hit ("TrigRaw76: ... from
+      // 32740 (before defences) instead of 33446 (dealt)"); the same 66892 again after three more dashes with no shot between (a
+      // snapshot); bursts on vault 3 and 6, 0.35 s after; Flame Dash's own hits did not replace it; it still burst with no bow worn.
+      // The last single hit is what counts: Lightning Arrow's chain-back leap (x0.13 on a lone target) lands after the arrow and
+      // replaced a 1.34M crit, so a Chain skill is not counted (the sim has no leap hits). Rate: the player's movement skills a
+      // second (o.windburstMoves; blank = not counted). ASSUMPTIONS: the burst is a new Physical hit, cut by the enemy's Physical
+      // defences and damage taken again (like the other Physical bursts here); the stored hit is the sheet's average dealt hit.
+      if (ascFlag('Asc71_Windburst')) {
+        const wb = ((GD.dragon || {}).rules || {}).Windburst || {};
+        const every = wb.Every > 0 ? wb.Every : 3, pct = wb.Pct > 0 ? wb.Pct : 2, nth = every + (every === 1 ? 'st' : every === 2 ? 'nd' : every === 3 ? 'rd' : 'th');
+        const bow = !!(mainBase && (lc(mainBase.Class) === 'bow' || (mainBase.Tags || []).includes('Bow')));
+        const ownBow = bow && isAttack && !isSummon(sk) && !(sk.Totem && sk.Totem.Interval > 0) && !host && !ctx.tags.has('movement');
+        const moves = +o.windburstMoves > 0 ? +o.windburstMoves : 0;
+        if (!ownBow) { if (isAttack && !ctx.tags.has('movement')) res.notes.push('Windburst: only Bow hits are stored; ' + (bow ? sk.Name + ' is not your own bow hit' : 'no bow in your main hand') + ', so it is not counted here.'); }
+        else if (ctx.tags.has('chain')) res.notes.push('Windburst: ' + (+pct * 100) + '% of your last single Bow hit. ' + sk.Name + ' chains back into a lone enemy with small hits that land after the arrow, and the burst takes those (game log, 17 Nov 2026: a 33k leap replaced a 1.34M crit), so it is not counted.');
+        else if (!(moves > 0)) res.notes.push('Windburst: every ' + nth + ' movement skill bursts for ' + (+pct * 100) + '% of your last Bow hit. Set "Movement skills a second" in Configure Enemy to count it.');
+        else if (hitsPerSec > 0 && hitDpsNow > 0) {
+          const stored = hitDpsNow / hitsPerSec, size = stored * pct, events = moves / every, mt = mitig.Physical;
+          let dps = size * events;
+          if (mt) { const dr = Math.min(H.ArmourMaxReduction, 100 * armour / (armour + H.ArmourFactor * size)); dps *= (1 - dr / 100) * (1 - mt.effRes / 100) * mt.taken * shockF; }
+          byType.Physical = (byType.Physical || 0) + dps; hitDpsVs += dps; res.hitDps = hitDpsVs;
+          (res.triggers = res.triggers || []).push({ src: 'Dragonling · Windburst', when: 'Move', nth: every, pct: pct * 100, count: 1, element: 'Physical', perSec: events, dps });
+          res.notes.push('Windburst: every ' + nth + ' movement skill (' + moves + ' a second) bursts for ' + (+pct * 100) + '% of your last Bow hit (' + Math.round(stored).toLocaleString('en-US') + ' dealt, the average hit) as Physical, ' + events.toFixed(2) + ' a second = +' + Math.round(dps / hitDpsNow * 100) + '% hit damage on one enemy. The game stores the hit\'s number when it lands and keeps it even with the bow taken off (game log, 17 Nov 2026).');
+        }
       }
     }
     // Elemental Overload's buff: up for 8 s after any crit, so the share of time it is up is 1 - exp(-crits a second x 8).
@@ -14350,11 +14434,16 @@ window.BOCharacter = function (ctx) {
   // its home class is halved: switches r98.META sHallowHome74 "Paladin", fHallowOff74 0.5, and the game log
   // "Econ74: hallowed ground x0.50 for Samurai" / "x1.00 for Paladin" (14 Nov 2026). A skill counts when it is on the
   // bar or in a socket; a dragon node when its flag is in the build.
-  function hallowedSources(GD, ch, mods) {
+  // consecrated: the page's "Consecrated Ground" box is ticked (owner, 17 Nov 2026: the box is always shown, as the enemy
+  // setup's one place for damage taken). Then Consecrated Ground counts even when it is not on the bar, like a ticked curse,
+  // cast by this hero (so the off-class half applies to non-Paladins). Its numbers are the game data's (Ground.HallowedTakenPct 20,
+  // HallowedCrit 8; switch r98.META fHallowOff74 0.5); only the strongest ground counts (game log 14 Nov, see hallowBest).
+  function hallowedSources(GD, ch, mods, consecrated) {
     const out = [];
     const home = String((GD.rules || {})['r98.META.sHallowHome74'] || 'Paladin').toLowerCase();
     const off = lc(ch.classId || '') === home ? 1 : ruleNum(GD, 'r98.META.fHallowOff74', 0.5);
     const ids = new Set([...(ch.hotbar || []), ...(ch.sockets || []).map(s => s.skill)].filter(Boolean).map(lc));
+    if (consecrated && GD.skills.consecrated_ground) ids.add('consecrated_ground');
     for (const id of ids) {
       const g = (GD.skills[id] || {}).Ground;
       if (g && g.HallowedTakenPct > 0) out.push({ name: GD.skills[id].Name, taken: g.HallowedTakenPct * off, crit: (g.HallowedCrit || 0) * off, half: off !== 1 });
@@ -15410,7 +15499,7 @@ window.BOStartApp = function () {
 
   const st = {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0 },
-    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: false, enemyLife: null, graveCall: false, flashfire: false, leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
+    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: false, enemyLife: null, graveCall: false, flashfire: false, windburstMoves: null, leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
     penFloor: false, potionsOn: store.get('potionsOn', true) !== false, opt: null, optJob: null, last: null,
     keepSup: new Set(), blockSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
   };
@@ -15619,7 +15708,7 @@ window.BOStartApp = function () {
     for (const d of DT) if (st.res[d] !== '' && st.res[d] != null && isFinite(+st.res[d])) res[d] = +st.res[d];
     return Object.assign({
       off: st.off, vowbreak: st.vowbreak, tryHeralds: st.tryHeralds, charges: st.charges, supportsOverride: st.supports, gemLevel: st.gemLevel || undefined,
-      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: st.enemyHallowedGround, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire, leechUptime: st.leechUptime !== null && st.leechUptime !== '' && !isNaN(+st.leechUptime) ? +st.leechUptime / 100 : undefined, mainSkill: st.skill, execSim: st.execOn || {},
+      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: st.enemyHallowedGround, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire, windburstMoves: +st.windburstMoves > 0 ? +st.windburstMoves : undefined, leechUptime: st.leechUptime !== null && st.leechUptime !== '' && !isNaN(+st.leechUptime) ? +st.leechUptime / 100 : undefined, mainSkill: st.skill, execSim: st.execOn || {},
       projOnTarget: +st.projOnTarget || undefined, totemCount: st.totemCount > 0 ? +st.totemCount : undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, castsPerSecOverride: st.cps > 0 ? +st.cps : undefined, penFloor: st.penFloor,
       conduit: st.conduit == null ? undefined : st.conduit,
       coc: st.coc === false ? false : undefined, cocSource: typeof st.coc === 'string' ? st.coc : undefined,
@@ -15809,9 +15898,8 @@ window.BOStartApp = function () {
     }).join('') || '<li class="hint">Every Herald is already on your bar.</li>';
     // Fight toggles only when this build can use them (still shown if already ticked)
     const dragonFlags = new Set(); try { S.collectMods(GD, ch, opts()).mods.forEach(m => { if (m.stat === 'Dragonling') (m.tags || []).forEach(t => dragonFlags.add(t)); }); } catch (e) { /* keep them hidden */ }
-    let hallowSrc = []; try { hallowSrc = S.hallowedSources(GD, ch, S.collectMods(GD, ch, opts()).mods); } catch (e) { /* keep the box hidden */ }
-    $('#rowHallowed').hidden = !(dragonFlags.has('Asc71_InevitableJudgement') || hallowSrc.length || st.enemyHallowedGround);
     $('#rowFlashfire').hidden = !(dragonFlags.has('Asc71_Flashfire') || st.flashfire);
+    $('#rowWindburst').hidden = !(dragonFlags.has('Asc71_Windburst') || st.windburstMoves);
     $('#rowGraveCall').hidden = !(r.minion || st.graveCall);
     // Curses
     const isBoss = st.rarity === 'boss';
@@ -15833,7 +15921,20 @@ window.BOStartApp = function () {
         : (c.Text || '').replace('{0}', c.TakenPct || 0).replace('{1}', Object.values(c.ElementTakenPct || {})[0] || '').replace('{3}', Object.values(c.ResistDown || {})[0] || '').replace(/[;,]? ?[^;]*\{[24]\}[^;]*/g, '').trim() || 'does not change your damage';
       return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + '<span class="meta">' + esc(effect) + (cs.on && !onBar && c.Skill ? ' · <span class="off-bar">not on your skill bar, counted anyway</span>' : '') + (cs.on && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · not counted: an enemy holds ' + (c.Kind === 'Woe' ? 'two Woes' : 'one ' + c.Kind) + ' at a time' : '') + '</span></span></label>' +
         (c.Dread && c.Dread.Cap && cs.on ? '<input class="mini" type="number" min="0" max="' + (row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c)) + '" value="' + (cs.dread || 0) + '" title="' + (c.Kind === 'Banner' ? 'Valour' : 'Dread') + ' on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + (row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c)) + (c.Kind === 'Banner' ? '' : ', bosses ' + c.Dread.BossCap) + ')" data-dread="' + esc(c.Id) + '">' : '') + '</li>';
-    }).join('');
+    }).join('') + hallowedItem(r, ch);
+  }
+  // Consecrated Ground in the curse list, always shown (owner, 17 Nov 2026: the enemy setup is the one place for every
+  // damage taken source). Ticked = the enemy stands on hallowed ground; the sim counts Consecrated Ground even when it is
+  // not on the bar, and only the strongest of your hallowed grounds (S.hallowedSources).
+  function hallowedItem(r, ch) {
+    const cg = GD.skills.consecrated_ground; if (!cg) return '';
+    const g = cg.Ground || {}, h = r && r.hallowed && r.hallowed.best;
+    const half = String(ch.classId || '').toLowerCase() !== String(GD.rules['r98.META.sHallowHome74'] || 'Paladin').toLowerCase();
+    const effect = h ? 'now: ' + ['+' + num(h.taken, 1) + '% taken from hits'].concat(r.hallowed.crit ? ['+' + num(r.hallowed.crit, 1) + '% crit chance'] : []).join(', ') + (h.name !== cg.Name ? ' (' + h.name + ')' : '')
+      : 'Takes ' + g.HallowedTakenPct + '% more damage from hits, +' + g.HallowedCrit + '% crit chance' + (half ? ' (half: not a Paladin)' : '');
+    const onBar = (ch.hotbar || []).map(x => String(x).toLowerCase()).includes('consecrated_ground');
+    return '<li title="The enemy stands on your hallowed ground: only your strongest one counts, on top of your curses. Inevitable Judgement: critical strikes keep 1.5x their critical bonus, non-critical hits deal 10% less"><label><input type="checkbox" data-hallowed="1"' + (st.enemyHallowedGround ? ' checked' : '') + '><span class="name">' + esc(cg.Name) + '<span class="meta">' + esc(effect) +
+      (st.enemyHallowedGround && !onBar ? ' · <span class="off-bar">not on your skill bar, counted anyway</span>' : '') + '</span></span></label></li>';
   }
 
   // Mana a second for this skill alone, against what comes back.
@@ -16818,7 +16919,7 @@ window.BOStartApp = function () {
   const supName = id => (GD.supports[String(id).toLowerCase()] || { Name: id }).Name;
   function optSig() {
     const o = opts();
-    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.enemyLife, o.graveCall, o.flashfire, o.leechUptime, o.execSim, o.mainSkill, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
+    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.enemyLife, o.graveCall, o.flashfire, o.windburstMoves, o.leechUptime, o.execSim, o.mainSkill, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
       off: [...st.off].filter(k => !k.startsWith('support:')).sort(), vb: [...st.vowbreak].sort(), th: o.tryHeralds, ch: o.charges, po: o.potions });
   }
   function runSearch() {
@@ -17021,9 +17122,9 @@ window.BOStartApp = function () {
   $('#extraTaken').addEventListener('input', e => { st.extraTaken = e.target.value; render(); });
   $('#enemyLife').addEventListener('input', e => { st.enemyLife = e.target.value === '' ? null : +e.target.value; render(); });
   $('#leechUptime').addEventListener('input', e => { st.leechUptime = e.target.value === '' ? null : e.target.value; render(); });
+  $('#windburstMoves').addEventListener('input', e => { st.windburstMoves = e.target.value === '' ? null : e.target.value; render(); });
   $('#flashfire').addEventListener('change', e => { st.flashfire = e.target.checked; render(); });
   $('#graveCall').addEventListener('change', e => { st.graveCall = e.target.checked; render(); });
-  $('#enemyHallowedGround').addEventListener('change', e => { st.enemyHallowedGround = e.target.checked; render(); });
   $('#projOnTarget').addEventListener('input', e => { st.projOnTarget = e.target.value; render(); });
   $('#totemCount').addEventListener('input', e => { st.totemCount = +e.target.value || null; render(); });
   $('#hpsOverride').addEventListener('input', e => { st.hps = +e.target.value || null; render(); });
@@ -17050,6 +17151,7 @@ window.BOStartApp = function () {
     else if (t.dataset.tryheraldLvl) { st.tryHeralds[t.dataset.tryheraldLvl] = Math.max(1, Math.min(30, +t.value || 1)); render(); }
     else if (t.dataset.vowbreak) { if (t.checked) st.vowbreak.add(t.dataset.vowbreak); else st.vowbreak.delete(t.dataset.vowbreak); render(); }
     else if (t.dataset.curse) { st.curses[t.dataset.curse] = Object.assign(st.curses[t.dataset.curse] || { dread: 0 }, { on: t.checked }); render(); }
+    else if (t.dataset.hallowed) { st.enemyHallowedGround = t.checked; render(); if (!t.isConnected) { const again = document.querySelector('[data-hallowed]'); if (again) again.focus(); } }
     else if (t.dataset.dread) { st.curses[t.dataset.dread] = Object.assign(st.curses[t.dataset.dread] || { on: true }, { dread: Math.max(0, +t.value || 0) }); render(); }
     // The curse list is drawn again on every change: keep the keyboard on the box just used.
     if ((t.dataset.curse || t.dataset.dread) && !t.isConnected) { const again = document.querySelector(t.dataset.curse ? '[data-curse="' + CSS.escape(t.dataset.curse) + '"]' : '[data-dread="' + CSS.escape(t.dataset.dread) + '"]'); if (again) again.focus(); }

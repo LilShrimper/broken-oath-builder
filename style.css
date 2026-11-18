@@ -629,6 +629,15 @@ tr.cmp-counted td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .pl-affix { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 3px 0; }
 .pl-affix select { flex: 0 1 260px; width: auto; padding: 4px 7px; font-size: 12.5px; }
 .pl-affix .mini { width: 72px; padding: 4px 6px; font-size: 12.5px; }
+/* Vow reordering (planner.js vowMove): a drag grip and up/down buttons on each Vow row. */
+.vow-grip { cursor: grab; color: var(--muted); font-size: 15px; line-height: 1; padding: 2px 2px; user-select: none; }
+.vow-grip:active { cursor: grabbing; }
+.vow-mv { width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--muted); cursor: pointer; font-size: 13px; line-height: 1; }
+.vow-mv:hover:not(:disabled), .vow-mv:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
+.vow-mv:disabled { opacity: .35; cursor: default; }
+.vow-list > .vow-dragging { opacity: .45; }
+.vow-list > .vow-over-up { box-shadow: inset 0 2px 0 var(--accent); }
+.vow-list > .vow-over-down { box-shadow: inset 0 -2px 0 var(--accent); }
 .pl-type { font-size: 11px; font-weight: 700; color: var(--accent); width: 14px; text-align: center; }
 .pl-text { flex: 1 1 220px; font-size: 12.5px; min-width: 0; }
 .pl-lines { margin: 4px 0; padding-left: 18px; font-size: 12.5px; }

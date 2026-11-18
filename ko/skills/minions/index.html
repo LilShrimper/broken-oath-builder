@@ -46,7 +46,7 @@
 <meta property="og:url" content="https://builder.lilshrimper.dev/ko/skills/minions/"><meta property="og:image" content="https://builder.lilshrimper.dev/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=356">
+<link rel="stylesheet" href="../../../style.css?v=357">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -395,10 +395,10 @@
         <label class="field" title="Spell totems max 10, Ballistas max 6"><span>Totems out</span><input type="number" id="totemCount" min="1" max="10" step="1" placeholder="auto"></label>
         <label class="field"><span>Hits per second</span><input type="number" id="hpsOverride" min="0" step="0.1" placeholder="auto"></label>
         <label class="field" id="rowLeech" title="Only matters for skills with the Life Leech support: 15% more damage only while you leech, and leech needs you below full life. Default: 40% of the fight (the sim cannot see your life). Raise it to sim higher, 100 = always on."><span>Time spent leeching (%)</span><input type="number" id="leechUptime" min="0" max="100" step="5" placeholder="40"></label>
+        <label class="field" id="rowWindburst" title="Windburst: every third movement skill bursts for 200% of your last Bow hit. How many movement skills you use a second in the fight (0.5 = one every 2 s). Blank = not counted." hidden><span>Movement skills a second</span><input type="number" id="windburstMoves" min="0" step="0.1" placeholder="0"></label>
         <p class="hint enemy-life-note">Enemy life sets the size of Shock: lower life means a bigger Shock. Blank = the sim's estimate.</p>
       </div>
       <div class="enemy-toggles">
-        <label class="check" id="rowHallowed" title="The enemy stands on your hallowed ground: your strongest one makes it take more damage from your hits. Inevitable Judgement: critical strikes keep 1.5x their critical bonus, non-critical hits deal 10% less" hidden><input type="checkbox" id="enemyHallowedGround"><span>Enemy on Hallowed Ground</span></label>
         <label class="check" id="rowFlashfire" title="Flashfire: Fire hits in the 2 s after a Flame Dash deal 40% more. Counts it as always up." hidden><input type="checkbox" id="flashfire"><span>Flame Dash just used</span></label>
         <label class="check" id="rowGraveCall" title="Minions: 30% more damage and 20% faster for 4 s after each cast. The game's panel leaves it out." hidden><input type="checkbox" id="graveCall"><span>Grave Call active</span></label>
       </div>
@@ -616,7 +616,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":356,"at":"2026-11-18T00:53:41.094Z"};
+window.SITE_VERSION = {"v":357,"at":"2026-11-18T02:49:05.249Z"};
 window.SITE_LANG = 'ko';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -625,6 +625,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=53dde52b","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../../app.js?v=356"></script>
+<script src="../../../app.js?v=357"></script>
 </body>
 </html>

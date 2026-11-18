@@ -464,6 +464,8 @@ details.report pre { white-space: pre-wrap; word-break: break-word; font-size: 1
 :root[data-theme="light"] .tree-tab-act.add { color: var(--accent); }
 .tree-bar .check-row { margin: 0; }
 .tree-points { font-weight: 600; margin-right: auto; }
+.tree-points .tp-n.over { color: var(--bad); }
+.tree-over { border-left-color: var(--bad); color: var(--bad); font-weight: 600; margin: 0 0 8px; }
 .tree-search input { width: 190px; }
 .tree-view { position: relative; height: 68vh; min-height: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; touch-action: none; cursor: grab; }
 .tree-view.dragging { cursor: grabbing; }

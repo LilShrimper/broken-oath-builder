@@ -3544,7 +3544,7 @@ window.BOPlanner = function (ctx) {
         Object.assign(ch, { classId: v, passives: rt.list, dragonNodes: [] });
         return done({ cls: true, tree: true });
       }
-      case 'level': ch.level = Math.max(1, Math.min(100, +v || 1)); return done({ tree: true });
+      case 'level': ch.level = Math.max(1, Math.min(100, +v || 1)); delete ch.levelBase; return done({ tree: true }); // a typed level is the new floor for the tree's level-follows-points
       case 'bonus': ch.bonusPoints = Math.max(0, +v || 0); return done({ tree: true });
       case 'aspect': ch.dragonAspect = v; return done();
       case 'dextra': ch.dragonExtra = Math.max(0, Math.min(dExtraMax(), +v || 0)); return done();
@@ -18083,10 +18083,27 @@ window.BOStartApp = function () {
   }
 
   function treeReset() { clearOpt(); T.undo = []; T.scores = new Map(); T.job++; T.built = false; }
+  // The most passive points a character can have: one per level up to max level 100 plus the 19 Inscribed Quartz.
+  // Proof (owner's screenshot, 11 Nov 2026): a level 100 character shows 111 allocated and "1 point left" = 112 points.
+  // Inscribed Quartz: 7 Gates + 12 Guardian milestones = 19 bonus points (log and saves, 6 Nov 2026: 13; six more at
+  // RL 64-84 seen 14 Nov 2026, an online save at 19 bonus points; see QUARTZ_RL in creator.js). None more up to RL 129.
+  // The tree lets you go past it (owner, 18 Nov 2026): the counter turns red and a warning says how many to refund.
+  const QUARTZ = 19;
+  const pointsPer = () => (GD.scaling.Hero || {}).PassivePointsPerLevel || 1;
+  const pointsCap = () => Math.round((100 - 1) * pointsPer() + QUARTZ);
+  const pointsIn = list => (list || []).filter(x => !/^(start_|om103_)/.test(x)).length; // Oath seats cost no point (patch notes 17 Nov 2026)
+  // The level follows the points (owner, 18 Nov 2026): never under the character's own level (levelBase: the level before
+  // the tree raised it), and up to the lowest level that has this many points (bonus points unknown: all 19 Quartz), 100 at most.
+  function levelFor(ch, list) {
+    const base = ch.levelBase != null ? ch.levelBase : ch.level, bonus = ch.bonusPoints != null ? ch.bonusPoints : QUARTZ;
+    const level = Math.max(base, Math.min(100, 1 + Math.ceil(Math.max(0, pointsIn(list) - bonus) / pointsPer())));
+    return { level, levelBase: level !== base ? base : undefined };
+  }
   function setPassives(list, undo) {
     if (undo !== false) T.undo.push(st.ch.passives.slice());
-    if (st.chOrig && st.chOrig.plan) { st.chOrig.passives = list; st.ch = st.chOrig; keepChars(); }
-    else st.ch = Object.assign({}, st.ch, { passives: list }); // keeps Dragonling edits made on this tab
+    const lv = levelFor(st.ch, list);
+    if (st.chOrig && st.chOrig.plan) { Object.assign(st.chOrig, lv, { passives: list }); st.ch = st.chOrig; keepChars(); }
+    else st.ch = Object.assign({}, st.ch, lv, { passives: list }); // keeps Dragonling edits made on this tab
     st.pinned = null; stopSearch(); st.opt = null;
     T.scores = new Map();
     render();
@@ -18436,7 +18453,10 @@ window.BOStartApp = function () {
     const saved = (st.chOrig.passives || []).filter(x => !/^om103_/.test(x)).length;
     const free = S.freePoints(GD, st.chOrig || st.ch);
     const nHave = [...have].filter(x => !/^om103_/.test(x)).length; // Oath seats cost no point (patch notes 17 Nov 2026)
-    $('#treePoints').textContent = nHave + ' points taken' + (nHave !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level + (free ? ' · ' + free + ' free' : '') + (sw.size ? ' · ' + sw.size + ' Oath' + (sw.size > 1 ? 's' : '') + ' sworn' : '');
+    const cap = pointsCap(), over = nHave - cap, ov = $('#treeOver');
+    ov.hidden = over <= 0;
+    if (over > 0) ov.textContent = 'You have ' + nHave + '/' + cap + ' passive points (' + cap + ' is the most at level 100, the ' + QUARTZ + ' quartz points included): refund ' + over + ' point' + (over > 1 ? 's' : '') + '.';
+    $('#treePoints').innerHTML = '<span class="tp-n' + (over > 0 ? ' over' : '') + '">' + nHave + ' / ' + cap + '</span> points taken' + (nHave !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level + (free ? ' · ' + free + ' free' : '') + (sw.size ? ' · ' + sw.size + ' Oath' + (sw.size > 1 ? 's' : '') + ' sworn' : '');
     const pp = $('#planPoints'), who = (st.chOrig || st.ch).id + '|' + (st.chOrig || st.ch).level;
     if (pp.dataset.for !== who) {
       pp.dataset.for = who; pp.value = free > 0 ? free : 5;
@@ -18824,20 +18844,7 @@ window.BOStartApp = function () {
     else if (banned(id)) $('#treeStatus').textContent = n.Name + ' is marked never take. Right-click it to allow it again.';
     else {
       const pl = planTake(have, id); if (!pl) return;
-      // Cap: one point per level up to max level 100 (not the character's own level, so you can plan ahead) plus the 19 Inscribed Quartz.
-      // Proof (owner's screenshot, 11 Nov 2026): a level 100 character shows 111 allocated and "1 point left" = 112 points.
-      const per = (GD.scaling.Hero || {}).PassivePointsPerLevel || 1;
-      {
-        // Inscribed Quartz: 7 Gates + 12 Guardian milestones = 19 bonus points (log and saves, 6 Nov 2026: 13; six more at
-        // RL 64-84 seen 14 Nov 2026, an online save at 19 bonus points; see QUARTZ_RL in creator.js). None more up to RL 129.
-        const QUARTZ = 19, cap = Math.round((100 - 1) * per + QUARTZ);
-        const used = pl.list.filter(x => GD.nodes[x] && GD.nodes[x].Kind !== 'Start' && !/^om103_/.test(x)).length;
-        if (used > cap && pl.list.length > have.size) {
-          $('#treeStatus').textContent = 'No points left: level 100 plus ' + QUARTZ + ' quartz points is ' + cap + ' passive points' + (pl.cost > 1 ? ' and this path needs ' + pl.cost : '') + '. Take a point back first.';
-          return;
-        }
-      }
-      setPassives(pl.list);
+      setPassives(pl.list); // no cap: past pointsCap() the counter turns red and #treeOver says how many to refund
     }
   }
 

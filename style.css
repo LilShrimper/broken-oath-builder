@@ -2569,3 +2569,6 @@ details.sw-sub.sw-sup { background: var(--panel); }
 .builds-pane .sb-acts { display: flex; gap: 6px; flex: none; }
 @media (max-width: 640px) { .builds-pane .sb-row { flex-direction: column; align-items: stretch; } .builds-pane .sb-acts { justify-content: flex-end; } }
 .char-pick-more { display: block; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--accent); font: inherit; cursor: pointer; }
+
+/* Bonus points over the patch limit (Build Planner, Character tab Plan row) */
+.pl-over { margin: 6px 0 8px; padding: 6px 10px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--panel-2); color: var(--accent); font-size: .85em; }

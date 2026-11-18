@@ -590,7 +590,7 @@ window.PAGE_LANGS = {
     const ruleVal = v => v === 'True' ? true : v === 'False' ? false : v !== '' && v != null && isFinite(+v) ? +v : v;
     // AILMENTS, MAIN-SKILL, BUGS-D, BUGSB and UNIQUES added 17 Nov 2026: sim.js reads keys there (patch 79/80 ailments, link
     // ramp, minion element lines, unique pulse step) but they were filtered out, so the sim ran on its defaults (equal to b81).
-    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK)$/;
+    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK|CRAFT)$/;
     try { for (const s of (J('Gameplay/switches.json') || {}).switches || []) if (RULE_SECTIONS.test(s.section)) gameRules[s.section + '.' + s.key] = ruleVal(s.value); } catch (e) { /* not served */ }
     try { for (const [k, v] of Object.entries((J('Gameplay/rules.json') || {}).values || {})) gameRules[k] = ruleVal(v && v.value); } catch (e) { /* older game data */ }
     let trapPrice = {};
@@ -2405,7 +2405,7 @@ window.PAGE_LANGS = {
     // number is taken back before its tier is looked for. Sorrow Tread copy, 14 Nov 2026: "FLAWLESS RARE", +82 to Armour
     // P T4 [58-77] = 63 x 1.3, +35% to Fire Resistance S T4 [26-30] = 27 x 1.3.
     const kindM = !u && raw.join(' ').match(/\b(flawless|great)\s*rare\b/i), rareKind = kindM ? lc(kindM[1]) : '';
-    const rareBoost = rareKind === 'flawless' ? 1.3 : rareKind === 'great' ? 1.1 : 1;
+    const rareBoost = S.rareBoostOf ? S.rareBoostOf(GD, rareKind) : rareKind === 'flawless' ? 1.3 : rareKind === 'great' ? 1.1 : 1; // build 83: 1.22 / 1.075 from the switches (sim.js rareBoostOf)
     const unboost = (x, stat) => {
       if (rareBoost === 1 || !x || (S.RARE_COUNT_STATS && S.RARE_COUNT_STATS.has(stat))) return x;
       const r = x / Math.fround(rareBoost);
@@ -2721,7 +2721,12 @@ window.BOPlanner = function (ctx) {
   const newId = () => 'plan:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   // A new plan starts with every bonus point the patch gives (player request, 18 Nov 2026): the 19 Inscribed Quartz, 7 Gates +
   // 12 Rupture milestones, the same number the Skill tree tab's point cap uses (QUARTZ in app.js clickNode).
-  const MAX_BONUS = 19;
+  // 24 from Patch 77: five more at RL 86, 89, 92, 95, 98. Game log, 18 Nov 2026 (build 83): "Quartz100: on (milestones read the
+  // Rupture Level, +86 89 92 95 98)"; the owner's two heroes past RL 98 both hold 24 in their saves.
+  const MAX_BONUS = 24;
+  // Shown under the Bonus points box when a plan holds more than the patch gives (owner, 18 Nov 2026). The number is still kept:
+  // a later patch may raise the limit before the page knows.
+  const bonusWarn = ch => (ch.bonusPoints || 0) > MAX_BONUS ? '<p class="pl-over">' + ch.bonusPoints + ' bonus points is more than this patch gives: ' + MAX_BONUS + ' at most (7 from Gates, ' + (MAX_BONUS - 7) + ' from Rupture milestones up to Rupture Level 98). The extra ' + (ch.bonusPoints - MAX_BONUS) + ' cannot be earned in the game.</p>' : '';
   function blankPlan(classId, level) {
     return { id: newId(), name: classId + ' plan', classId, level, league: '', lastZone: '', items: [], passives: [], bonusPoints: MAX_BONUS, gems: [], gemLevels: {}, sockets: [], hotbar: [],
       weaponId: '', dragonNodes: [], dragonAspect: '', mainSkill: '', supportGems: [], plan: true, savedAt: new Date().toISOString() };
@@ -2826,7 +2831,7 @@ window.BOPlanner = function (ctx) {
         '<label class="field inline" title="Changing class keeps the passive tree and links it to the new class\'s start; the Dragonling starts over"><span>Class</span><select data-f="cls">' + classOpts + '</select></label>' +
         '<label class="field inline"><span>Level</span><input type="number" min="1" max="100" data-f="level" value="' + ch.level + '"></label>' +
         '<label class="field inline" title="Passive points on top of one a level: the Inscribed Quartz from Gates and Rupture milestones (' + MAX_BONUS + ' at most this patch)"><span>Bonus points</span><input type="number" min="0" max="60" data-f="bonus" value="' + (ch.bonusPoints || 0) + '"></label>' +
-        '</div><div class="pl-row">' +
+        '</div>' + bonusWarn(ch) + '<div class="pl-row">' +
         '<button class="btn small" type="button" data-act="code">Copy plan code</button>' +
         '<button class="btn small ghost" type="button" data-act="dup">Duplicate</button>' +
         '<button class="btn small ghost" type="button" data-act="del">Delete plan</button>' +
@@ -3821,6 +3826,19 @@ window.BOPlanner = function (ctx) {
   }
   const el = pane();
   el.addEventListener('change', onChange);
+  // The mouse wheel changes Level and Bonus points while the pointer is over the box, without clicking into it first (owner,
+  // 18 Nov 2026). Also the Character tab's Plan row (data-plf). The page itself does not scroll while over these two boxes. The
+  // change is sent once the wheel rests, so a long spin redraws the tree once.
+  let wheelT = 0;
+  document.addEventListener('wheel', e => {
+    const t = e.target && e.target.closest && e.target.closest('input[type="number"]');
+    if (!t || t.disabled || !['level', 'bonus'].includes(t.dataset.f || t.dataset.plf) || !e.deltaY) return;
+    e.preventDefault();
+    const lo = t.min === '' ? -Infinity : +t.min, hi = t.max === '' ? Infinity : +t.max;
+    t.value = Math.max(lo, Math.min(hi, (+t.value || 0) + (e.deltaY < 0 ? 1 : -1)));
+    clearTimeout(wheelT);
+    wheelT = setTimeout(() => { if (t.isConnected) t.dispatchEvent(new Event('change', { bubbles: true })); }, 140);
+  }, { passive: false });
   el.addEventListener('click', onClick);
   el.addEventListener('toggle', onToggle, true);
   el.addEventListener('mousedown', e => { const sel = e.target.closest && e.target.closest(PICKER); if (sel && !sel.disabled && e.button === 0) { e.preventDefault(); if (pick && pick.sel === sel) closePicker(); else openPicker(sel); } });
@@ -3922,7 +3940,7 @@ window.BOPlanner = function (ctx) {
     return status;
   }
   const classIds = () => Object.values(GD.classes).map(c => c.Id);
-  return { setPlanField, classIds, MAX_BONUS, skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, supTip, oathwordForItem, wordRunes, slotName: SLOT_NAME, rows, render, fromCode, toCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
+  return { setPlanField, classIds, MAX_BONUS, bonusWarn, skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, supTip, oathwordForItem, wordRunes, slotName: SLOT_NAME, rows, render, fromCode, toCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
 };
 
 ;
@@ -4580,7 +4598,10 @@ window.BOCreator = function (ctx) {
   // Six more since (log, 14 Nov 2026): "Guardian The Cyclops Tyrant at ML 84 dropped 6 Guardian Quartz (RL 64,67,74,77,82,84;
   // 13 claimed so far)"; that online save then held 164,167,174,177,182,184 too, with 19 bonus points. Its map stood at
   // RivenOpen 129, so no other milestone pays quartz up to 129; whether any pays above it is not known yet.
-  const QUARTZ_RL = [42, 45, 48, 52, 55, 58, 64, 67, 74, 77, 82, 84];
+  // Five more from Patch 77 (game log, 18 Nov 2026, build 83: "Quartz100: on (milestones read the Rupture Level, +86 89 92 95
+  // 98)"); three saves played past RL 98 hold 186,189,192,195,198 as well, two of them with all 24 bonus points. The flag
+  // lists none higher.
+  const QUARTZ_RL = [42, 45, 48, 52, 55, 58, 64, 67, 74, 77, 82, 84, 86, 89, 92, 95, 98];
   const QUARTZ_T = ['ArrayProperty', ['IntProperty']];
   function quartzWant() {
     const best = Math.max(mval('BestML', 0) || 0, mval('DeepBest', 0) || 0, mval('RivenOpen', 0) || 0);
@@ -9734,7 +9755,7 @@ window.BOCharacter = function (ctx) {
       '<label class="field inline" title="Changing class keeps the passive tree and links it to the new class start; the Dragonling starts over"><span>Class</span><select data-plf="cls">' + planner.classIds().map(id => o(id, id === ch.classId)).join('') + '</select></label>' +
       '<label class="field inline"><span>Level</span><input type="number" min="1" max="100" data-plf="level" value="' + ch.level + '"></label>' +
       '<label class="field inline" title="Passive points on top of one a level: the Inscribed Quartz from Gates and Rupture milestones (' + planner.MAX_BONUS + ' at most this patch)"><span>Bonus points</span><input type="number" min="0" max="60" data-plf="bonus" value="' + (ch.bonusPoints || 0) + '"></label>' +
-      '<span class="hint">This build is a plan: change its class or level here. Gear and skills stay.</span></div></div>';
+      '<span class="hint">This build is a plan: change its class or level here. Gear and skills stay.</span></div>' + (planner.bonusWarn ? planner.bonusWarn(ch) : '') + '</div>';
   }
 
   function render() {
@@ -10894,7 +10915,14 @@ window.BOCharacter = function (ctx) {
   // Only in the support's text, not in its stats.
   const COC_ATTACK_GAP = 0.75, COC_ATTACK_LESS = -44;
   // The minion army (game log 6 Nov, ArmyBack81): 40 in all, past 27 each body adds 0.50 of a body.
-  const ARMY_TOTAL = 40, ARMY_FULL = 27, ARMY_PAST = 0.5;
+  // From the public API's switches.json: r81.MINIONS Army / ShareFrom / Marginal. Build 81: 40 / 27 / 0.5 (the log's numbers);
+  // build 83 (read 18 Nov 2026): Army 28, ShareFrom 28, Marginal 0.5, so at most 28 stand and none counts for less.
+  const armyRule = GD => ({ total: ruleNum(GD, 'r81.MINIONS.Army', 40), full: ruleNum(GD, 'r81.MINIONS.ShareFrom', 27), past: ruleNum(GD, 'r81.MINIONS.Marginal', 0.5) });
+  // A Great / Flawless Rare's boost on its rolled lines. x1.1 / x1.3 is the game's code default (panel, 12 Nov 2026, below);
+  // the public API's switches.json of build 83 (read 18 Nov 2026) sets r85.CRAFT.fRareGreat85 1.075 and fRareFlawless85 1.22:
+  // "a GREAT / FLAWLESS rare's rolled lines up-scale less (late gear depth only; was 1.10 / 1.30 code default)". Not yet
+  // checked on an in-game tooltip; 'late gear depth only' is read here as applying to every graded rare.
+  const rareBoostOf = (GD, kind) => /flawless/i.test(kind || '') ? ruleNum(GD, 'r85.CRAFT.fRareFlawless85', 1.3) : /great/i.test(kind || '') ? ruleNum(GD, 'r85.CRAFT.fRareGreat85', 1.1) : 1;
   // Each Spell Echo repeat of a Spell Totem's cast, at 80% (patch notes 4 Nov, patch 0.53). Log 9 Nov 2026, Heartwood
   // Ancient fight (10 totems): 357 numbered Judgement casts in 7.46 s, 71-80/s once 10 stood against 27.8/s from the
   // totems alone, so the echoes do fire (2 per cast). The game's panel DPS does NOT count them: the owner's tooltips that
@@ -11174,7 +11202,7 @@ window.BOCharacter = function (ctx) {
       // boosted x1.3 it would be 1,052. With 904 the sheet's Ember Bolt panel DPS is within 0.3% of the game's in all four
       // test states. A rare with exactly 4 or 5 lines, all top tier, is Flawless (the rule above).
       const rareKind = topLines >= 4 && topLines === graded.length ? 'Flawless Rare' : topLines >= 4 ? 'Great Rare' : '';
-      const rareBoost = rareKind === 'Flawless Rare' ? 1.3 : rareKind === 'Great Rare' ? 1.1 : 1;
+      const rareBoost = rareBoostOf(GD, rareKind);
       for (const a of it.affixes) {
         if (a.id.startsWith('unique:')) {
           const u = GD.uniques[lc(it.unique)]; const ui = +a.id.slice(7), um = u && u.Mods[ui];
@@ -14472,10 +14500,11 @@ window.BOCharacter = function (ctx) {
     // Past 40 "your oldest one goes": which skill loses them depends on summon order, so each kind keeps its share.
     const army = o.armyProbe ? null : oneKind ? { total: alive, parts: [{ name: sk.Name, n: alive }] } : armyCount(GD, ch, sk, alive, o);
     let armyK = 1;
+    const AR = armyRule(GD);
     if (army) {
-      if (army.total > ARMY_TOTAL && !oneOnly) alive = Math.max(1, Math.round(alive * ARMY_TOTAL / army.total));
-      const standing = Math.min(ARMY_TOTAL, army.total);
-      armyK = armyBodies(standing) / standing;
+      if (army.total > AR.total && !oneOnly) alive = Math.max(1, Math.round(alive * AR.total / army.total));
+      const standing = Math.min(AR.total, army.total);
+      armyK = armyBodies(GD, standing) / standing;
     }
     let strikes = 1;
     // Multistrike's extra strikes count for shooting minions (Skeletal Mage) too, each at its 52% less (2 Nov boss
@@ -14606,9 +14635,9 @@ window.BOCharacter = function (ctx) {
     if (kind !== 1) res.notes.push('Harmony: ' + kinds + ' kind' + (kinds > 1 ? 's' : '') + ' of minion on your bar, ' + Math.round((kind - 1) * 100) + '% more damage.');
     if (shotRepeats) res.notes.push('Multistrike on ' + sk.Name + ': each blow strikes ' + strikes + ' times at Multistrike\'s ' + (is070(GD) ? 56 : 52) + '% less, as the game\'s panel counts it. Since the 5 Nov patch the mage throws a bolt for each repeat.');
     if (golem && golem.stat !== 'EnemyTaken') res.notes.push('Your ' + golem.name + ' blesses minions near it, itself included: ' + golem.text + ' (counted, as the game\'s panel does).');
-    if (army && (army.parts.length > 1 || army.total > ARMY_FULL)) {
-      const standing = Math.min(ARMY_TOTAL, army.total);
-      res.notes.push('Your army: ' + army.parts.map(p => p.n + ' ' + p.name).join(', ') + ' (' + army.total + ' in all' + (army.total > ARMY_TOTAL ? ', at most ' + ARMY_TOTAL + ' stand: past that your oldest go, counted here as each kind losing its share' : '') + ').' + (armyK < 1 ? ' Past ' + ARMY_FULL + ' each minion adds half a minion of damage, so every blow deals x' + armyK.toFixed(3) + ' (' + armyBodies(standing).toFixed(1) + ' minions of damage from ' + standing + ').' : ''));
+    if (army && (army.parts.length > 1 || army.total > AR.full)) {
+      const standing = Math.min(AR.total, army.total);
+      res.notes.push('Your army: ' + army.parts.map(p => p.n + ' ' + p.name).join(', ') + ' (' + army.total + ' in all' + (army.total > AR.total ? ', at most ' + AR.total + ' stand: past that your oldest go, counted here as each kind losing its share' : '') + ').' + (armyK < 1 ? ' Past ' + AR.full + ' each minion adds ' + (AR.past === 0.5 ? 'half' : AR.past + ' of') + ' a minion of damage, so every blow deals x' + armyK.toFixed(3) + ' (' + armyBodies(GD, standing).toFixed(1) + ' minions of damage from ' + standing + ').' : ''));
     }
     res.minion.army = army ? { total: army.total, k: armyK } : null;
     // Minion poison, and Sleepy's Continental Strap's burst on it (PoisonBurst76: "Every 12th Poison you or your Minions lay on
@@ -14681,7 +14710,7 @@ window.BOCharacter = function (ctx) {
   }
 
   // Bodies of damage from n standing: full up to 27, half past it (40 -> 33.5, the log's "each blow x0.837").
-  function armyBodies(n) { return Math.min(n, ARMY_FULL) + ARMY_PAST * Math.max(0, n - ARMY_FULL); }
+  function armyBodies(GD, n) { const a = armyRule(GD); return Math.min(n, a.full) + a.past * Math.max(0, n - a.full); }
 
   // Every summon on the bar with its count (this skill's from the sheet being built). Each other one is worked
   // out with its own sheet (armyProbe stops it counting the army again).
@@ -15401,7 +15430,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
+  const api = { rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
     // The share at which a support works on minion skills despite "Minion" in its ExcludeTags (0 = it does not), for tooltips.
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -18088,7 +18117,9 @@ window.BOStartApp = function () {
   // Inscribed Quartz: 7 Gates + 12 Guardian milestones = 19 bonus points (log and saves, 6 Nov 2026: 13; six more at
   // RL 64-84 seen 14 Nov 2026, an online save at 19 bonus points; see QUARTZ_RL in creator.js). None more up to RL 129.
   // The tree lets you go past it (owner, 18 Nov 2026): the counter turns red and a warning says how many to refund.
-  const QUARTZ = 19;
+  // 24 from Patch 77 (five more at RL 86, 89, 92, 95, 98): game log 18 Nov 2026, "Quartz100: on (milestones read the Rupture
+  // Level, +86 89 92 95 98)", and two saves past RL 98 holding 24 bonus points.
+  const QUARTZ = 24;
   const pointsPer = () => (GD.scaling.Hero || {}).PassivePointsPerLevel || 1;
   const pointsCap = () => Math.round((100 - 1) * pointsPer() + QUARTZ);
   const pointsIn = list => (list || []).filter(x => !/^(start_|om103_)/.test(x)).length; // Oath seats cost no point (patch notes 17 Nov 2026)

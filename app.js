@@ -8323,7 +8323,9 @@ window.BOFaq = function (ctx) {
       list([
         '<b>Plain "more" lines</b> on the tree, keystones and supports: Holy "more" lines, Glass Cannon, Bone Sovereign\'s 15%, Multistrike\'s ' + msLess(GD) + '% less.',
         '<b>Damage over Time Multiplier</b> and <b>increased Poison damage over time</b>: each is a group of its own (see <b>Ailments</b>).',
-        '<b>Crit multiplier</b>, and anything that makes the enemy take more damage: curses, Marks, shock. On a Guardian only the strongest plain "takes more damage" counts; typed ones (more Physical, more damage from ailments) still multiply (see <b>Curses &amp; Marks</b>).',
+        +GD.apiBuild >= 82
+          ? '<b>Crit multiplier</b>, shock, and all the "takes more damage" effects together: curses, Marks and the rest add into one bonus, which then multiplies (since Patch 82; see <b>Curses &amp; Marks</b>).'
+          : '<b>Crit multiplier</b>, and anything that makes the enemy take more damage: curses, Marks, shock. On a Guardian only the strongest plain "takes more damage" counts; typed ones (more Physical, more damage from ailments) still multiply (see <b>Curses &amp; Marks</b>).',
         '<b>For minions:</b> the summon skill\'s own increased damage, affinity, near you and zone level (see the Skills tab, Minion Scaling).',
         'The Rampart Strike support pays "more damage for each 1% chance to Block" but its text does not put it in the engine; the sim counts it separately. Not checked in the game.',
         'Checked on the character panel: Glass Cannon gave the same ×1.165 with Runic Ward on and off (11 Nov 2026), and the same ×1.181 with Boundless Mind on and off (12 Nov 2026). In the engine it would have given less with the other node on. Both poison groups: game log, 11 Nov 2026.',
@@ -8520,6 +8522,11 @@ window.BOFaq = function (ctx) {
       '<b>Sentences</b>: one enemy at a time. It pays out when the enemy dies.',
       'Woes and Sentences are separate, so an enemy can have both. Woes work at half effect on a Guardian.',
       '<b>Hunter\'s Marks</b> and the <b>War Banner</b> are separate again and add on top of curses. Marks fall off 3 s after your last hit, so any skill that hits more often keeps them at the cap.',
+    ].concat(+GD.apiBuild >= 82 ? [
+      // Patch 82 notes (Discord 18 Nov 2026 02:30 UTC): "All 'takes more damage' effects add together now, bosses included." See takenRule in sim.js.
+      '<b>All "takes more damage" effects add together</b>, on every monster, Guardians included (since Patch 82): Woes, Sentences, Marks, the War Banner, typed lines like "more Physical damage", the venom golem and hallowed ground make one bonus. Example: +25% and +20% give ×1.45, not ×1.5.',
+      'Shock is counted apart and multiplies on top. Whether the venom golem, hallowed ground and daze are in the sum is our reading of the patch notes, not checked in the game yet.',
+    ] : [
       'On normal, magic and rare monsters all of these multiply: two Woes, a Sentence and Marks are each their own "more damage taken" (game log, 13 Nov 2026).',
       // Patch 73 / data Meta.bGuardianStrongestTaken; log GuardianTaken59 13-14 Nov 2026; golem and daze on top: PoisonTaken63 ticks, 13 Nov 2026.
       // Typed lines outside the choice: GuardianTaken59 "Woe/Sentence best 0.0%" with Woe of Sundering + Sentence of Rot on, Rot ticks still x1.45-1.52 (logs 16 Nov 2026; see curseTakenK in sim.js).
@@ -8527,7 +8534,7 @@ window.BOFaq = function (ctx) {
       '<b>Typed lines are not in that choice</b> and still multiply on top, also on a Guardian: "more Physical damage" (Woe of Sundering), "more damage from Bleed, Poison and Ignite" (Sentence of Rot) and the like. Example: Woe of Sundering, Sentence of Rot and Hunter\'s Marks all count together (game log, 16 Nov 2026). The venom golem\'s blessing and daze also multiply on top.',
       'Woe of Sundering also makes your <b>bleeds</b> bigger: the bleed is laid from the hit it raised (the bleed ticks are not raised a second time). Suggested by the game log (16 Nov 2026), not proven yet; the sim counts it.',
       'A curse with both kinds (Woe of Withering: more damage and more Poison damage) works differently on a Guardian: it joins the choice at its biggest line (the Poison one), and that counts for all your damage, not only poison. Its two lines do not add. With Death Sentence on, Withering adds nothing there (game logs, 17 Nov 2026).',
-    ]));
+    ])));
     if (D.EffectPct) h += card('Dread', list([
       'While you channel a Woe it builds <b>Dread</b>: each point is +' + D.EffectPct + '% curse effect, up to ' + D.Cap + ' (' + D.BossCap + ' on Guardians).',
       T.Holds ? 'On Rares, Uniques and Guardians a Woe holds and builds Dread by itself, up to ' + T.Cap + '.' : '',
@@ -10573,6 +10580,16 @@ window.BOCharacter = function (ctx) {
   // Patch 73 notes: "On a Guardian only your strongest damage taken effect counts". The game data carries it as a switch
   // (scaling.json Meta.bGuardianStrongestTaken: false in build 70, true in build 73), read from there when present.
   const guardianStrongestTaken = GD => { const v = ((GD.scaling || {}).Meta || {}).bGuardianStrongestTaken; return v != null ? !!v : is073(GD); };
+  // Patch 82 (developer's patch notes, Discord 18 Nov 2026 02:30 UTC): "All 'takes more damage' effects add together now, bosses
+  // included." This replaces both rules proven from the logs before it (13-17 Nov: sources multiply off Guardians; on a Guardian only
+  // the strongest general one counts, typed lines, golem and daze on top). Switches on with the API's game data build 82.
+  // Read as: every curse line (general and typed, for the damage type at hand), Hunter's Marks, the War Banner, Maim, the Configure
+  // Enemy extra, the venom golem's blessing and the hallowed ground (hits only) go into ONE sum. Shock stays its own multiplier
+  // (Patch 72 notes make it a stronger hit, and 82 reworks its size apart). ASSUMPTIONS, not checked in game: that golem, ground and
+  // Maim count among "all", and that daze (not in the sim) does too.
+  const is082 = GD => apiBuildAtLeast(GD, 82, '2026-11-18T02');
+  // The rule for "takes more damage" sources: 'add' (Patch 82), true = strongest only (Guardian, Patch 73 to 81), false = multiply.
+  const takenRule = (GD, isBoss) => is082(GD) ? 'add' : !!(isBoss && guardianStrongestTaken(GD));
   // Curse "damage taken" factor for one damage type d (and dot = Bleed/Poison/Ignite ticks). rows = active curse rows
   // ({ taken, elem, dot }), extras = other general taken % (Marks, Banner, the Configure Enemy extra, Maim on physical).
   // Off a Guardian every source multiplies (lines inside one curse add). On a Guardian (one = true) only the strongest
@@ -10597,6 +10614,7 @@ window.BOCharacter = function (ctx) {
   // would be x0.80). Woe of Withering is the only curse with both kinds (curses.json, build 79).
   const curseTakenK = (rows, d, dot, one, extras) => {
     const typedOf = r => (d ? r.elem[d] || 0 : 0) + (dot ? r.dot || 0 : 0);
+    if (one === 'add') return 1 + (rows.reduce((a, r) => a + (r.taken || 0) + typedOf(r), 0) + (extras || []).reduce((a, x) => a + (x || 0), 0)) / 100;
     if (!one) return rows.reduce((p, r) => p * (1 + (r.taken + typedOf(r)) / 100), 1) * (extras || []).reduce((p, x) => p * (1 + (x || 0) / 100), 1);
     const general = rows.filter(r => (r.taken || 0) > 0), typedOnly = rows.filter(r => !((r.taken || 0) > 0));
     const top = r => Math.max(r.taken, r.dot || 0, ...Object.values(r.elem || {}));
@@ -10836,16 +10854,16 @@ window.BOCharacter = function (ctx) {
   // Rounding is a fit on that one item: 3 x 0.25 = 0.75 shows and counts as 1, 2.5 x 0.25 = 0.625 shows as 0.6, so a
   // scaled number keeps the decimals of the number it came from. Not checked on a roll between the ends.
   // UNIQUE_LINE_SCALE:BEGIN (tools/unique-scale.js rewrites everything down to the END marker from the game log; watch.js runs it)
-  // Table from the game log (2026.11.17-10.40.09): "MetaSys85: UniqueLineScale ON, 121 line(s) on 57 unique(s)".
+  // Table from the game log (2026.11.17-22.53.59): "MetaSys85: UniqueLineScale ON, 121 line(s) on 57 unique(s)".
   // Evidence for the scale itself: the Mouth of the Mire tooltip of 16 Nov 2026 (+1 levels vs data 2, [10-13] vs 20-25, [20-30] vs 40-60) = x0.5.
-  // Entries the log lists as x1 are left out. New uniques at this refresh: the_thousand_sparks, kingbreaker_primal, gravesong_primal, gravecleaver_primal, stormfang_primal, rimecrown_staff_primal.
+  // Entries the log lists as x1 are left out.
   const UNIQUE_LINE_SCALE = {
     wyrmblade_of_the_black_oath: { 0: 1.5, 4: 1.5 }, kingbreaker: { 0: 1.5, 1: 1.5, 3: 1.5 }, gravesong: { 0: 1.5, 1: 1.5, 2: 1.5, 4: 1.5 },
     gravecleaver: { 1: 1.5, 2: 2 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff: { 0: 1.5, 1: 2.5, 3: 2 },
     cinderwick: { 0: 1.5, 1: 2, 2: 3, 3: 1.5, 5: 3 }, dawnforge_maul: { 0: 1.25, 1: 1.25, 2: 1.25, 4: 1.25 }, glass_soul: { 0: 0.5, 1: 0.5 },
     the_unyielding_vow: { 0: 0.25 }, the_patient_bastion: { 0: 0.25 }, the_heartwood_girdle: { 0: 0.25 },
     crown_of_the_quiet_ward: { 0: 0.25 }, windwrit_treads: { 0: 0.25 }, the_oathkeepers_stand: { 0: 0.25 },
-    mouth_of_the_mire: { 0: 0.5, 1: 0.5, 2: 0.5 }, drune_grave_rot: { 1: 0.5 }, cinderwick_primal: { 0: 1.5, 1: 2, 2: 3, 3: 1.5, 7: 3 },
+    mouth_of_the_mire: { 0: 0.5, 1: 0.5, 2: 0.5 }, drune_grave_rot: { 1: 0.5 }, cinderwick_primal: { 0: 1.5, 1: 2, 2: 1.8, 3: 1.5, 7: 3 },
     heart_of_the_white_silence: { 0: 2 }, starcallers_staff: { 1: 2, 3: 1.5, 5: 1.5 }, wintercall_orb: { 0: 2, 1: 2 },
     orrery_of_the_long_night: { 0: 1.5, 2: 0.4 }, dawnwardens_verdict: { 0: 1.5, 1: 2.5, 2: 3 }, halo_of_the_restless_saint: { 2: 2, 3: 0.4 },
     lightsworn_reliquary: { 0: 2, 2: 2 }, hollowhorn: { 2: 2, 4: 1.3 }, crown_of_the_bone_king: { 0: 2, 2: 2 },
@@ -13056,7 +13074,9 @@ window.BOCharacter = function (ctx) {
     // strongest ground counts. Shown on a Guardian; off Guardians the same rule is assumed (not checked). Hits only:
     // Consecrated Ground says "from every hit". The ground's crit chance is in the crit section (hallowSrc is set there).
     const hallowBest = hallowSrc.reduce((b, s) => s.taken > (b ? b.taken : 0) ? s : b, null);
-    const groundTaken = hallowBest ? 1 + hallowBest.taken / 100 : 1;
+    const groundPct = hallowBest ? hallowBest.taken : 0;
+    // Patch 82: the ground joins the one sum in takenOf (hits only), so it no longer multiplies here.
+    const groundTaken = groundPct && takenRule(GD, isBoss) !== 'add' ? 1 + groundPct / 100 : 1;
     res.hallowed = { sources: hallowSrc, best: hallowBest, taken: groundTaken, crit: hallowCrit, critBefore: critBase };
     if (o.enemyHallowedGround) res.notes.push(hallowBest
       ? 'Hallowed ground: the enemy takes ' + +hallowBest.taken.toFixed(1) + '% more damage from your hits (' + hallowBest.name + (hallowBest.half ? ', half outside the Paladin' : '') + '). Only your strongest hallowed ground counts, on top of your curses (game log 14 Nov, on a Guardian).' +
@@ -13073,10 +13093,13 @@ window.BOCharacter = function (ctx) {
     // effect counts." So on a Guardian from data build 73 the sources above (each curse, Marks, Maim, the
     // Configure Enemy extra; not the venom golem, see takenOf) no longer multiply: the biggest one alone counts. Lines inside one curse still add (one effect).
     // Shock stays outside (the notes of Patch 72 make it a stronger hit, not a taken effect): not checked in the game yet.
-    const strongestTaken = isBoss && guardianStrongestTaken(GD); // scaling.json Meta.bGuardianStrongestTaken (true from data build 73)
+    const rule = takenRule(GD, isBoss); // 'add' from data build 82; else scaling.json Meta.bGuardianStrongestTaken (true from data build 73)
+    const strongestTaken = rule === true;
     const takenOf = (d, phys, dot) => {
       // General taken competes on a Guardian, typed lines (Woe of Sundering's Physical, Sentence of Rot's DoT) multiply on top: curseTakenK.
       const extras = [o.extraTakenPct || 0, markPct]; if (phys) extras.push(maimPct);
+      // Patch 82: one sum of everything, the venom golem and (for hits) the hallowed ground included (see takenRule).
+      if (rule === 'add') return curseTakenK(activeCurses, d, dot, 'add', extras.concat(golemTaken - 1 ? [(golemTaken - 1) * 100] : [], !dot && groundPct ? [groundPct] : []));
       // The venom golem is NOT in that choice: it multiplies on top. Game log 13 Nov 2026 23:20 (Rangtest, RL 130
       // cyclops_tyrant, Armoured = LessTakenPct 23; Death Sentence growing 0.75 a second, Marks up, golem within 9 m):
       // six PoisonTaken63 ticks x1.047115, 1.053324, 1.059551, 1.065726, 1.071977, 1.078100 = (1 + Sentence 26.5,
@@ -13087,6 +13110,10 @@ window.BOCharacter = function (ctx) {
       // 30.25, 31, 31.75%) x 1.075 exactly; the first, x1.74015, = 1.295 x 1.075 x 1.25 (DazeOpen89 daze, on top as well).
       return curseTakenK(activeCurses, d, dot, strongestTaken, extras) * golemTaken;
     };
+    if (rule === 'add') {
+      const n = activeCurses.filter(r => r.taken > 0 || r.dot > 0 || Object.values(r.elem).some(v => v > 0)).length + (o.extraTakenPct > 0) + (markPct > 0) + (maimPct > 0) + (golemTaken > 1) + (groundPct > 0);
+      if (n > 1) res.notes.push('"Takes more damage" effects: your ' + n + ' sources add together into one bonus (patch 82: "All takes more damage effects add together now, bosses included"). Counted with the venom golem and hallowed ground in that sum and shock apart; not checked in game yet.');
+    }
     if (strongestTaken) {
       const n = activeCurses.filter(r => r.taken > 0).length + (o.extraTakenPct > 0) + (markPct > 0) + (maimPct > 0);
       // Only curses with no general line keep their typed lines outside the choice (Withering's Poison line competes: log 17 Nov).
@@ -13170,7 +13197,7 @@ window.BOCharacter = function (ctx) {
     // Ticks are not reduced by resistance (the log: "tick 23520 = 47039.7/s x 0.5, poison taken x1.00");
     // they are raised by damage taken.
     let shockF = 1; // set below once the ailment modifiers are read; shocks raise all damage taken
-    const dotTakenFor = d => (o.dotElementTaken ? mitig[d].taken * takenOf(undefined, false, true) / takenOf(undefined, false) : takenOf(undefined, false, true)) * shockF;
+    const dotTakenFor = d => (o.dotElementTaken && rule === 'add' ? takenOf(d, false, true) : o.dotElementTaken ? mitig[d].taken * takenOf(undefined, false, true) / takenOf(undefined, false) : takenOf(undefined, false, true)) * shockF;
     let dotMulti = 0;
     for (const m of pickMods(mods, 'DotMulti', 'Flat')) { dotMulti += m.v; use(m); }
     const sumMod = (stat, mode) => { let s = mode === 'More' ? 1 : 0; for (const m of pickMods(mods, stat, mode)) if (applies(ctx, m)) { s = mode === 'More' ? s * (1 + m.v / 100) : s + m.v; use(m); } return s; };
@@ -14275,7 +14302,7 @@ window.BOCharacter = function (ctx) {
     let curseK = 1;
     if (activeCurses.length && avg > 0) {
       // Patch 73 notes (13 Nov 2026): on a Guardian only the strongest damage taken effect counts (see takenOf above).
-      const one = isBoss && guardianStrongestTaken(GD);
+      const one = takenRule(GD, isBoss);
       curseK = Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTot * curseTakenK(activeCurses, d, false, one), 0);
       res.notes.push('Curses on minion blows: ' + activeCurses.map(r => r.name).join(' + ') + ' make the enemy take x' + curseK.toFixed(3) + ' on these hits. Counted in the vs-enemy DPS only (not the game\'s panel number, which comes before curses, nor the enemy\'s resistances). Checked only in direction against a Guardian fight on 11 Nov 2026.');
     }
@@ -14306,7 +14333,7 @@ window.BOCharacter = function (ctx) {
       const every = Math.ceil((t.cooldown || 1) / MINION_PULSE_STEP - 1e-9) * MINION_PULSE_STEP;
       const size = avg * critFactor * t.pct / 100 * armyK;
       const el = t.element && DT.includes(t.element) ? t.element : null;
-      const one = isBoss && guardianStrongestTaken(GD);
+      const one = takenRule(GD, isBoss);
       const cK = el ? curseTakenK(activeCurses, el, false, one) : curseK;
       const pDps = alive * size / every * cK;
       res.pulses.push({ src: m.src, pct: t.pct, element: el, every, size, dps: pDps });
@@ -14380,7 +14407,7 @@ window.BOCharacter = function (ctx) {
         }
         const stacks = cap - left;
         const remain = R * dur > cap ? dur - cap / R / 2 : dur / 2;
-        const one = isBoss && guardianStrongestTaken(GD);
+        const one = takenRule(GD, isBoss);
         const taken = A.bPoisonTakesDamageTaken ? curseTakenK(activeCurses, 'Poison', false, one) : 1;
         const poisonDps = mine * taken;
         let burstPct = 0; for (const m of pickMods(mods, 'PoisonBurst76', 'Flat')) { burstPct += m.v; use(m, 'minion poison burst'); }

@@ -3540,7 +3540,7 @@ window.BOPlanner = function (ctx) {
           (pts ? ' The ' + pts + ' passive point' + (pts === 1 ? '' : 's') + ' stay and get linked to the ' + v + ' start' + (rt.added ? ', which takes ' + rt.added + ' more point' + (rt.added === 1 ? '' : 's') : '') + '.' : '') +
           (ch.dragonNodes.length ? ' The Dragonling nodes are cleared (each class has its own).' : '') + ' Skills and gear stay.')) return render();
         if (ch.name === ch.classId + ' plan') ch.name = v + ' plan';
-        status = 'Class changed to ' + v + (pts ? ': the tree was kept and linked to the new start' + (rt.added ? ' (' + rt.added + ' more point' + (rt.added === 1 ? '' : 's') + ')' : '') + (rt.lost ? ', ' + rt.lost + ' node' + (rt.lost === 1 ? '' : 's') + ' could not be reached and were left out' : '') + '. Check it on the Skill tree tab.' : '.');
+        status = 'Class changed to ' + v + (pts ? ': the tree was kept and linked to the new start' + (rt.added ? ' (' + rt.added + ' more point' + (rt.added === 1 ? '' : 's') + ')' : '') + (rt.lost ? ', ' + rt.lost + ' node' + (rt.lost === 1 ? '' : 's') + ' could not be reached and were left out' : '') + '. Check it on the Passive tree tab.' : '.');
         Object.assign(ch, { classId: v, passives: rt.list, dragonNodes: [] });
         return done({ cls: true, tree: true });
       }
@@ -3913,7 +3913,16 @@ window.BOPlanner = function (ctx) {
     const rs = rows(ch), r = rs.find(x => x.skill === skill); if (!r) return '';
     return skillRow(ch, r, true, '', rs, onBar(ch));
   }
-  return { skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, supTip, oathwordForItem, wordRunes, slotName: SLOT_NAME, rows, render, fromCode, toCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
+  // A plan's class, level and bonus points from outside the Skills view (the Character tab's Plan row, owner 18 Nov 2026): the same
+  // handlers as the Plan setup fields, so a class change keeps and re-links the tree with the same confirm. Returns the status line.
+  function setPlanField(f, value) {
+    if (!['cls', 'level', 'bonus'].includes(f) || !(ctx.current() || {}).plan) return '';
+    status = '';
+    onChange({ target: { dataset: { f }, value: String(value), closest: () => null } });
+    return status;
+  }
+  const classIds = () => Object.values(GD.classes).map(c => c.Id);
+  return { setPlanField, classIds, MAX_BONUS, skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, supTip, oathwordForItem, wordRunes, slotName: SLOT_NAME, rows, render, fromCode, toCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
 };
 
 ;
@@ -9716,6 +9725,18 @@ window.BOCharacter = function (ctx) {
       '<p class="hint">Saved in this browser as you type. They travel with <b>Copy share link</b>, so whoever opens your link sees them too.</p></div>';
   }
 
+  // A plan's class, level and bonus points, right on this tab (owner, 18 Nov 2026: the Plan setup fold on the Skills view was hard
+  // to find). Changes go through the planner's own handlers (planner.setPlanField). Saves show none: their class is the game's.
+  function planRow(ch) {
+    if (!ch.plan || !planner.setPlanField) return '';
+    const o = (v, on) => '<option value="' + esc(v) + '"' + (on ? ' selected' : '') + '>' + esc(v) + '</option>';
+    return '<div class="card ch-plan-row"><div class="pl-row">' +
+      '<label class="field inline" title="Changing class keeps the passive tree and links it to the new class start; the Dragonling starts over"><span>Class</span><select data-plf="cls">' + planner.classIds().map(id => o(id, id === ch.classId)).join('') + '</select></label>' +
+      '<label class="field inline"><span>Level</span><input type="number" min="1" max="100" data-plf="level" value="' + ch.level + '"></label>' +
+      '<label class="field inline" title="Passive points on top of one a level: the Inscribed Quartz from Gates and Rupture milestones (' + planner.MAX_BONUS + ' at most this patch)"><span>Bonus points</span><input type="number" min="0" max="60" data-plf="bonus" value="' + (ch.bonusPoints || 0) + '"></label>' +
+      '<span class="hint">This build is a plan: change its class or level here. Gear and skills stay.</span></div></div>';
+  }
+
   function render() {
     const el = $('#characterPane'); if (!el || el.hidden) return;
     bind(el);
@@ -9723,7 +9744,7 @@ window.BOCharacter = function (ctx) {
     let h = '<div class="cmp-intro results-heading"><div><div class="eyebrow">BUILD OVERVIEW</div><h2>Character</h2><p>The loaded character at a glance: gear by slot, skills with their supports and the notable passives. Click a gear slot to pick or edit an item; hover an item or gem for its details.</p></div>' + (ch && ctx.enemyBtn ? ctx.enemyBtn() : '') + '</div>';
     if (!ch) { el.innerHTML = h + '<div class="card"><p class="hint">No character loaded. Load a save, a build code or start a plan first.</p></div>'; return; }
     if (note && note.id === ch.id) h += '<p class="hint pl-status" role="status">' + esc(note.text) + '</p>';
-    el.innerHTML = h + undoBar(ch) + '<div class="ch-cols"><div class="ch-col">' + gearCard(ch) + (ctx.beltCard ? ctx.beltCard() : '') + notesCard() + '</div><div class="ch-col">' + skillsCard(ch) + passivesCard(ch) + '</div></div>';
+    el.innerHTML = h + planRow(ch) + undoBar(ch) + '<div class="ch-cols"><div class="ch-col">' + gearCard(ch) + (ctx.beltCard ? ctx.beltCard() : '') + notesCard() + '</div><div class="ch-col">' + skillsCard(ch) + passivesCard(ch) + '</div></div>';
   }
 
   // Tooltips: the same item, skill and support text the Build tab shows.
@@ -9808,6 +9829,8 @@ window.BOCharacter = function (ctx) {
     });
     el.addEventListener('change', e => {
       if (e.target && e.target.dataset && e.target.dataset.barsel != null) return setBar(+e.target.dataset.barsel, e.target.value);
+      const pf = e.target && e.target.dataset && e.target.dataset.plf;
+      if (pf) { const s = planner.setPlanField(pf, e.target.value); if (s) note = { id: (ctx.current() || {}).id, text: s }; return render(); }
       const cf = e.target && e.target.dataset && e.target.dataset.chf;
       if (cf) {
         const card = e.target.closest('[data-skwin]'), sk = card && card.dataset.skwin; if (!sk) return;

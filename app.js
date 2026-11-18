@@ -12397,7 +12397,7 @@ window.BOCharacter = function (ctx) {
     // 62 -> 66. The same +4 on baselines 15 apart: inside the formula Samtest's increased crit would have multiplied it.
     // Which ground's crit counts when several are up is not proven: the biggest crit is taken (the damage taken side is
     // strongest-only, see hallowBest). The 95% cap is kept on the total (not checked).
-    const hallowSrc = o.enemyHallowedGround ? hallowedSources(GD, ch, mods, true) : [];
+    const hallowSrc = o.enemyHallowedGround ? hallowedSources(GD, ch, mods, !!o.hallowedCG) : [];
     const hallowCrit = hallowSrc.reduce((b, s) => Math.max(b, s.crit || 0), 0);
     const critBase = clamp((baseCrit + critFlat) * (1 + critInc / 100) * critMore, 0, 95);
     let critChance = hallowCrit ? Math.min(95, critBase + hallowCrit) : critBase;
@@ -12423,7 +12423,8 @@ window.BOCharacter = function (ctx) {
     // {CritBonusMult 1.5, NonCritLess 10} and its text. The 6 Nov tooltip's "twice" is out of date. Read from the data.
     const ijRule = ((GD.dragon || {}).rules || {}).InevitableJudgement || {};
     const ijBonus = ijRule.CritBonusMult != null ? +ijRule.CritBonusMult : 1.5, ijNonCrit = 1 - (ijRule.NonCritLess != null ? +ijRule.NonCritLess : 10) / 100;
-    const hallowedCritBonus = ascFlag('Asc71_InevitableJudgement') && !!o.enemyHallowedGround;
+    // Needs one of your own hallowed grounds (18 Nov 2026: Consecrated Ground off the bar is no longer added by the box).
+    const hallowedCritBonus = ascFlag('Asc71_InevitableJudgement') && !!o.enemyHallowedGround && hallowSrc.length > 0;
     let effectiveMulti = hallowedCritBonus ? 100 + (multi - 100) * ijBonus : multi;
     // Moonlit Stance (Rules71 BigCritMore 20; live text "Your critical strikes on Rare, Unique and Guardian enemies deal 20% more damage", its
     // non-crit price gone in Rules76): a crit on a big enemy x1.2. From the node text and rule file; not checked.
@@ -14744,9 +14745,11 @@ window.BOCharacter = function (ctx) {
   // its home class is halved: switches r98.META sHallowHome74 "Paladin", fHallowOff74 0.5, and the game log
   // "Econ74: hallowed ground x0.50 for Samurai" / "x1.00 for Paladin" (14 Nov 2026). A skill counts when it is on the
   // bar or in a socket; a dragon node when its flag is in the build.
-  // consecrated: the page's "Consecrated Ground" box is ticked (owner, 17 Nov 2026: the box is always shown, as the enemy
-  // setup's one place for damage taken). Then Consecrated Ground counts even when it is not on the bar, like a ticked curse,
-  // cast by this hero (so the off-class half applies to non-Paladins). Its numbers are the game data's (Ground.HallowedTakenPct 20,
+  // consecrated: the page's "count Consecrated Ground" box is ticked. Then Consecrated Ground counts even when it is not on
+  // the bar, like a ticked curse, cast by this hero (so the off-class half applies to non-Paladins). Owner, 18 Nov 2026 (a
+  // player found no way to count the Paladin's hallowed Dragonling nodes): the page's box is now "Hallowed ground", ticked
+  // by default when the build makes its own ground, and Consecrated Ground off the bar has its own tick. Before, ticking
+  // always added Consecrated Ground's 20%, so a build with only Hallowed Verdict or Sanctuary (10%) was shown 20%. Its numbers are the game data's (Ground.HallowedTakenPct 20,
   // HallowedCrit 8; switch r98.META fHallowOff74 0.5); only the strongest ground counts (game log 14 Nov, see hallowBest).
   function hallowedSources(GD, ch, mods, consecrated) {
     const out = [];
@@ -15823,7 +15826,7 @@ window.BOStartApp = function () {
 
   const st = {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0 },
-    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: false, enemyLife: null, graveCall: false, flashfire: false, windburstMoves: null, leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
+    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: null, hallowCG: false, enemyLife: null, graveCall: false, flashfire: false, windburstMoves: null, leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
     penFloor: false, potionsOn: store.get('potionsOn', true) !== false, opt: null, optJob: null, last: null,
     keepSup: new Set(), blockSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
   };
@@ -15967,6 +15970,7 @@ window.BOStartApp = function () {
     buildCopy = null;
     document.body.classList.remove('landing-view');
     st.ch = ch; st.chOrig = ch; st.pinned = null; stopSearch(); st.opt = null; treeReset();
+    st.enemyHallowedGround = null; // back to "ticked when the build makes its own ground"
     TT = null;
     if (!ch) return;
     store.set('char', ch.id);
@@ -16032,7 +16036,7 @@ window.BOStartApp = function () {
     for (const d of DT) if (st.res[d] !== '' && st.res[d] != null && isFinite(+st.res[d])) res[d] = +st.res[d];
     return Object.assign({
       off: st.off, vowbreak: st.vowbreak, tryHeralds: st.tryHeralds, charges: st.charges, supportsOverride: st.supports, gemLevel: st.gemLevel || undefined,
-      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: st.enemyHallowedGround, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire, windburstMoves: +st.windburstMoves > 0 ? +st.windburstMoves : undefined, leechUptime: st.leechUptime !== null && st.leechUptime !== '' && !isNaN(+st.leechUptime) ? +st.leechUptime / 100 : undefined, mainSkill: st.skill, execSim: st.execOn || {},
+      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: hallowOn(st.ch), hallowedCG: st.hallowCG, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire, windburstMoves: +st.windburstMoves > 0 ? +st.windburstMoves : undefined, leechUptime: st.leechUptime !== null && st.leechUptime !== '' && !isNaN(+st.leechUptime) ? +st.leechUptime / 100 : undefined, mainSkill: st.skill, execSim: st.execOn || {},
       projOnTarget: +st.projOnTarget || undefined, totemCount: st.totemCount > 0 ? +st.totemCount : undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, castsPerSecOverride: st.cps > 0 ? +st.cps : undefined, penFloor: st.penFloor,
       conduit: st.conduit == null ? undefined : st.conduit,
       coc: st.coc === false ? false : undefined, cocSource: typeof st.coc === 'string' ? st.coc : undefined,
@@ -16247,18 +16251,32 @@ window.BOStartApp = function () {
         (c.Dread && c.Dread.Cap && cs.on ? '<input class="mini" type="number" min="0" max="' + (row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c)) + '" value="' + (cs.dread || 0) + '" title="' + (c.Kind === 'Banner' ? 'Valour' : 'Dread') + ' on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + (row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c)) + (c.Kind === 'Banner' ? '' : ', bosses ' + c.Dread.BossCap) + ')" data-dread="' + esc(c.Id) + '">' : '') + '</li>';
     }).join('') + hallowedItem(r, ch);
   }
-  // Consecrated Ground in the curse list, always shown (owner, 17 Nov 2026: the enemy setup is the one place for every
-  // damage taken source). Ticked = the enemy stands on hallowed ground; the sim counts Consecrated Ground even when it is
-  // not on the bar, and only the strongest of your hallowed grounds (S.hallowedSources).
+  // Hallowed ground in the curse list, always shown (owner, 17 Nov 2026: the enemy setup is the one place for every damage
+  // taken source). Owner, 18 Nov 2026 (a player could not find how to count the Paladin's Hallowed Verdict / Sanctuary /
+  // Consecrated Bulwark / Inevitable Judgement): the box is "Hallowed ground", names what makes it, and is ticked by default
+  // when your own skills (bar or sockets) or Dragonling nodes make it (st.enemyHallowedGround null = that default). Consecrated
+  // Ground not on the bar has its own tick (st.hallowCG). Only the strongest of your hallowed grounds counts (S.hallowedSources).
+  function hallowOwn(ch) {
+    if (!ch) return [];
+    try { return S.hallowedSources(GD, ch, S.collectMods(GD, ch, { off: st.off }).mods, false); } catch (e) { return []; }
+  }
+  function hallowOn(ch) { return st.enemyHallowedGround == null ? hallowOwn(ch).length > 0 : !!st.enemyHallowedGround; }
   function hallowedItem(r, ch) {
-    const cg = GD.skills.consecrated_ground; if (!cg) return '';
-    const g = cg.Ground || {}, h = r && r.hallowed && r.hallowed.best;
-    const half = String(ch.classId || '').toLowerCase() !== String(GD.rules['r98.META.sHallowHome74'] || 'Paladin').toLowerCase();
-    const effect = h ? 'now: ' + ['+' + num(h.taken, 1) + '% taken from hits'].concat(r.hallowed.crit ? ['+' + num(r.hallowed.crit, 1) + '% crit chance'] : []).join(', ') + (h.name !== cg.Name ? ' (' + h.name + ')' : '')
-      : 'Takes ' + g.HallowedTakenPct + '% more damage from hits, +' + g.HallowedCrit + '% crit chance' + (half ? ' (half: not a Paladin)' : '');
-    const onBar = (ch.hotbar || []).map(x => String(x).toLowerCase()).includes('consecrated_ground');
-    return '<li title="The enemy stands on your hallowed ground: only your strongest one counts, on top of your curses. Inevitable Judgement: critical strikes keep 1.5x their critical bonus, non-critical hits deal 10% less"><label><input type="checkbox" data-hallowed="1"' + (st.enemyHallowedGround ? ' checked' : '') + '><span class="name">' + esc(cg.Name) + '<span class="meta">' + esc(effect) +
-      (st.enemyHallowedGround && !onBar ? ' · <span class="off-bar">not on your skill bar, counted anyway</span>' : '') + '</span></span></label></li>';
+    const cg = GD.skills.consecrated_ground;
+    const own = hallowOwn(ch), on = hallowOn(ch), h = r && r.hallowed && r.hallowed.best;
+    const names = [...new Set(own.map(s => s.name))];
+    const effect = on && h ? 'now: ' + ['+' + num(h.taken, 1) + '% taken from hits'].concat(r.hallowed.crit ? ['+' + num(r.hallowed.crit, 1) + '% crit chance'] : []).join(', ') + ' (' + h.name + ')'
+      : names.length ? 'made by your ' + names.join(', ') : 'none of your skills or Dragonling nodes make it';
+    let out = '<li title="The enemy stands on your hallowed ground: only your strongest one counts, on top of your curses. Ticked by default when your skills or Dragonling nodes make it. Inevitable Judgement: critical strikes keep 1.5x their critical bonus, non-critical hits deal 10% less"><label><input type="checkbox" data-hallowed="1"' + (on ? ' checked' : '') + '><span class="name">Hallowed ground<span class="meta">' + esc(effect) + '</span></span></label></li>';
+    // Consecrated Ground when it is not already one of yours: tick to count it anyway, like a curse not on the bar.
+    if (cg && !own.some(s => s.name === cg.Name)) {
+      const g = cg.Ground || {};
+      const half = String(ch.classId || '').toLowerCase() !== String(GD.rules['r98.META.sHallowHome74'] || 'Paladin').toLowerCase();
+      out += '<li title="Count Consecrated Ground on the hallowed ground even though it is not on your skill bar"><label><input type="checkbox" data-hallowcg="1"' + (st.hallowCG ? ' checked' : '') + (on ? '' : ' disabled') + '><span class="name">' + esc(cg.Name) + '<span class="meta">' +
+        esc((on ? '' : 'needs Hallowed ground ticked · ') + 'Takes ' + g.HallowedTakenPct * (half ? 0.5 : 1) + '% more damage from hits, +' + g.HallowedCrit * (half ? 0.5 : 1) + '% crit chance' + (half ? ' (half: not a Paladin)' : '')) +
+        (st.hallowCG && on ? ' · <span class="off-bar">not on your skill bar, counted anyway</span>' : '') + '</span></span></label></li>';
+    }
+    return out;
   }
 
   // Mana a second for this skill alone, against what comes back.
@@ -17143,7 +17161,7 @@ window.BOStartApp = function () {
       '- Skill: ' + st.skill + ' gem ' + (r.gem ? r.gem.own + '+' + r.gem.bonus : '?') + (r.conduit ? ', cast by ' + r.conduit.host + ' Channel Conduit (' + num(r.speed.usesPerSec, 2) + '/s, tick ' + Math.round(r.conduit.tick * 1000) + ' ms, interval ' + Math.round(r.conduit.interval * 1000) + ' ms)' : '') + (r.coc ? ', Cast on Crit from ' + r.coc.source + ' (' + f2(r.coc.rate) + '/s)' : ''),
       '- Supports: ' + (sup.join(', ') || 'none'),
       '- Uniques worn: ' + (uniq.join(', ') || 'none'),
-      '- Sheet settings: enemy boss' + (st.enemyHallowedGround ? ' on Hallowed Ground' : '') + ', ' + (st.hps ? 'hits per second set by hand ' + st.hps + '/s' : st.cps ? 'fight cast rate ' + st.cps + '/s' : 'sheet cast rate') + (st.charges && st.charges.bloodlust ? ', Bloodlust ' + st.charges.bloodlust : '') + (r.enemy && r.enemy.activeCurses && r.enemy.activeCurses.length ? ', curses ' + r.enemy.activeCurses.join('+') : ''),
+      '- Sheet settings: enemy boss' + (hallowOn(st.ch) ? ' on Hallowed Ground' : '') + ', ' + (st.hps ? 'hits per second set by hand ' + st.hps + '/s' : st.cps ? 'fight cast rate ' + st.cps + '/s' : 'sheet cast rate') + (st.charges && st.charges.bloodlust ? ', Bloodlust ' + st.charges.bloodlust : '') + (r.enemy && r.enemy.activeCurses && r.enemy.activeCurses.length ? ', curses ' + r.enemy.activeCurses.join('+') : ''),
       '- Sheet hit: avg ' + Math.round(r.hitAvg || 0) + ' (with crits ' + Math.round(r.hitAvgCrit || 0) + '), crit ' + f2(r.crit && r.crit.chance, 1) + '% x' + (r.crit ? r.crit.multi : '') + ', ' + f2(r.speed && r.speed.usesPerSec) + ' uses/s' + (r.speed && r.speed.animRate && r.speed.animRate !== 1 ? ' (anim x' + r.speed.animRate + ')' : '') + ', ' + (r.hits ? r.hits.hitsPerUse + ' hits/use, ' + r.hits.projOnTarget + ' projectile(s) on target' : '') + ', panel ' + Math.round(r.panelDps || 0),
       panel ? '- Game skill panel (log, at hero level ' + panel.hero + '): ' + panel.dps + ' DPS, x' + panel.mult + ' with ' + panel.extra + ' (sheet panel now ' + Math.round(r.panelDps || 0) + ')' : '',
       st.log && st.log.poisonCheck ? '- Game poison self-check: ' + st.log.poisonCheck : '',
@@ -17243,7 +17261,7 @@ window.BOStartApp = function () {
   const supName = id => (GD.supports[String(id).toLowerCase()] || { Name: id }).Name;
   function optSig() {
     const o = opts();
-    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.enemyLife, o.graveCall, o.flashfire, o.windburstMoves, o.leechUptime, o.execSim, o.mainSkill, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
+    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.hallowedCG, o.enemyLife, o.graveCall, o.flashfire, o.windburstMoves, o.leechUptime, o.execSim, o.mainSkill, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
       off: [...st.off].filter(k => !k.startsWith('support:')).sort(), vb: [...st.vowbreak].sort(), th: o.tryHeralds, ch: o.charges, po: o.potions });
   }
   function runSearch() {
@@ -17510,6 +17528,7 @@ window.BOStartApp = function () {
     else if (t.dataset.vowbreak) { if (t.checked) st.vowbreak.add(t.dataset.vowbreak); else st.vowbreak.delete(t.dataset.vowbreak); render(); }
     else if (t.dataset.curse) { st.curses[t.dataset.curse] = Object.assign(st.curses[t.dataset.curse] || { dread: 0 }, { on: t.checked }); render(); }
     else if (t.dataset.hallowed) { st.enemyHallowedGround = t.checked; render(); if (!t.isConnected) { const again = document.querySelector('[data-hallowed]'); if (again) again.focus(); } }
+    else if (t.dataset.hallowcg) { st.hallowCG = t.checked; render(); if (!t.isConnected) { const again = document.querySelector('[data-hallowcg]'); if (again) again.focus(); } }
     else if (t.dataset.dread) { st.curses[t.dataset.dread] = Object.assign(st.curses[t.dataset.dread] || { on: true }, { dread: Math.max(0, +t.value || 0) }); render(); }
     // The curse list is drawn again on every change: keep the keyboard on the box just used.
     if ((t.dataset.curse || t.dataset.dread) && !t.isConnected) { const again = document.querySelector(t.dataset.curse ? '[data-curse="' + CSS.escape(t.dataset.curse) + '"]' : '[data-dread="' + CSS.escape(t.dataset.dread) + '"]'); if (again) again.focus(); }

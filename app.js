@@ -3050,6 +3050,27 @@ window.BOPlanner = function (ctx) {
     window.addEventListener('dragenter', e => { if (vowDrag) e.stopPropagation(); }, true);
     window.addEventListener('dragleave', e => { if (vowDrag) e.stopPropagation(); }, true);
     document.addEventListener('dragend', () => { if (vowDrag) { vowDrag = null; clear(); } });
+    // A move re-renders the editor, which can throw the page (or the item window) back to the top (owner, 17 Nov 2026).
+    // Before the editor's own click handler runs, note where the row sits on screen; after the re-render, scroll its
+    // nearest scrolling box so the moved Vow is back at that spot, and keep focus on the arrow that was used.
+    window.addEventListener('click', e => {
+      const b = e.target.closest && e.target.closest('[data-act="mvaffix"], [data-io="mvaffix"]');
+      const row = b && b.parentElement.closest('[data-ai]'), list = row && row.closest('.vow-list'); if (!list) return; // the button has data-ai too
+      const lists = () => [...document.querySelectorAll('.vow-list')], li = lists().indexOf(list), top = row.getBoundingClientRect().top;
+      const to = b.dataset.to, arrow = b.hidden ? '' : b.getAttribute('aria-label');
+      const back = () => {
+        const l = lists()[li], r = l && l.querySelector(':scope > [data-ai="' + to + '"]'); if (!r) return;
+        const d = r.getBoundingClientRect().top - top;
+        if (Math.abs(d) >= 1) {
+          let s = r.parentElement;
+          while (s && s !== document.body && !(/(auto|scroll)/.test(getComputedStyle(s).overflowY) && s.scrollHeight > s.clientHeight)) s = s.parentElement;
+          if (s && s !== document.body) s.scrollTop += d; else window.scrollBy(0, d);
+        }
+        const f = arrow && r.querySelector('[aria-label="' + arrow + '"]');
+        if (f && !f.disabled && document.activeElement !== f) f.focus({ preventScroll: true });
+      };
+      requestAnimationFrame(back); setTimeout(back, 80);
+    }, true);
   })();
   // One affix: its type (P / S, or "Vow" on a unique), tier, numbers and text.
   function affixRow(it, a, ai, edit, dis, tag, note, mv) {

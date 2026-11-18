@@ -231,7 +231,7 @@ window.PAGE_LANGS = {
     'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json', 'Gameplay/monster_affixes.json', 'Gameplay/monsters.json', 'Gameplay/oath_masteries.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
   // Read when the folder has them; an older game folder without them still loads.
-  const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json', 'Items/quality_stones.json', 'Gameplay/league_rules.json', 'Gameplay/new_gems85.json', 'Items/base_implicits95.json'];
+  const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json', 'Items/quality_stones.json', 'Gameplay/league_rules.json', 'Gameplay/new_gems85.json', 'Items/base_implicits95.json', 'Gameplay/late2_98.json'];
   // Bump when the page needs more from the game files than an older cached copy has (2: tree layout).
   const SCHEMA = 32; // 32: Guardian signature runes (Grail, Item Search tabs); 31: armour / shield / axe family lines (base_implicits95.json; Damage tab); 30: per-gem base poison chance (new_gems85.json; Damage tab); 29: the game's rule numbers (rules.json, switches.json; Damage tab); 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
@@ -590,7 +590,7 @@ window.PAGE_LANGS = {
     const ruleVal = v => v === 'True' ? true : v === 'False' ? false : v !== '' && v != null && isFinite(+v) ? +v : v;
     // AILMENTS, MAIN-SKILL, BUGS-D, BUGSB and UNIQUES added 17 Nov 2026: sim.js reads keys there (patch 79/80 ailments, link
     // ramp, minion element lines, unique pulse step) but they were filtered out, so the sim ran on its defaults (equal to b81).
-    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES)$/;
+    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK)$/;
     try { for (const s of (J('Gameplay/switches.json') || {}).switches || []) if (RULE_SECTIONS.test(s.section)) gameRules[s.section + '.' + s.key] = ruleVal(s.value); } catch (e) { /* not served */ }
     try { for (const [k, v] of Object.entries((J('Gameplay/rules.json') || {}).values || {})) gameRules[k] = ruleVal(v && v.value); } catch (e) { /* older game data */ }
     let trapPrice = {};
@@ -599,6 +599,11 @@ window.PAGE_LANGS = {
     // A gem's own base poison chance (new_gems85.json, public API game data 73: Viper Fang 100, Caustic Arrow 50). It takes
     // the place of the general Ailments.PoisonChance (10) for that gem. Skill id -> percent.
     const gemPoison = {};
+    // A second late-only damage segment per skill (game file Gameplay/late2_98.json, switch r98.META bLate2_98; not served by the
+    // public API: copied into our snapshot from the installed game build 83 on the owner's OK, 18 Nov 2026). Its own note: "x1 up to
+    // gem From, straight to x Mult at gem At, flat after". Patch 83 notes: Mage core spells +15% at gem 20 to +45% at 24; Necro cuts.
+    const late2 = {};
+    try { for (const [id, x] of Object.entries((J('Gameplay/late2_98.json') || {}).skills || {})) if (x && x.Mult > 0) late2[id.toLowerCase()] = { From: +x.From, At: +x.At, Mult: +x.Mult }; } catch (e) { /* older data: none */ }
     try { for (const x of (J('Gameplay/new_gems85.json') || {}).gems || []) if (x && x.Id && x.PoisonChance > 0) gemPoison[x.Id.toLowerCase()] = +x.PoisonChance; } catch (e) { /* older game data: none */ }
 
     // The Tundra Desert wave arena (deep_wound93.json, in the game files since 0.56.8): display only, FAQ tab. Its reward rule
@@ -631,7 +636,7 @@ window.PAGE_LANGS = {
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {}, { loot },
       { skills, classes, supports, nodes, masteries, oaths, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, sigRuneRule, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice, gemPoison, rules: gameRules });
+        affixes, late2, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, sigRuneRule, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice, gemPoison, rules: gameRules });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, OPTIONAL, SCHEMA };
@@ -10477,7 +10482,7 @@ window.BOCharacter = function (ctx) {
     'BannerEffect',
     'DexLife']); // Wind Dancer: "+{v} to maximum Life for every 10 Dexterity" (statText)
   // Stats this model uses.
-  const HANDLED = new Set(['MinionOneKind', 'RepeatOwnDamage', 'StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
+  const HANDLED = new Set(['MinionOneKind', 'RepeatOwnDamage', 'StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'UnravelOnHit', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
     'Cooldown', 'Repeats', 'Projectiles', 'Penetration', 'SkillLevel', 'PoisonChance', 'PoisonDamage', 'IgniteChance', 'IgniteDamage', 'BleedChance', 'BleedDamage',
     'DotMulti', 'AilmentDuration', 'CurseEffect', 'Str', 'Dex', 'Int', 'Attributes', 'GrantSupport', 'SkyfallRepeat', 'OrbitCount',
     'ShockChance', 'ShockEffect', 'ShockStacks', 'ArmourMore', 'LowLifeMore', 'CullingStrike', 'Keystone', 'BrandCount', 'IntSpellMore',
@@ -10513,7 +10518,10 @@ window.BOCharacter = function (ctx) {
   // x BonusFadeAttack ^ max(0, Bonus - BonusFadeFrom)". Tooltip-proven 17 Nov 2026 (game build 79, Samtest Viper Fang 20
   // playing at 57, +37 from gear): "Each level: 3% more for the first 5, then 6% more", "648% more damage in total" =
   // 1.03^5 x 1.06^32 - 1 = 648.1%.
-  const attackFade = (GD, G) => is073(GD) ? 1.06 : is0568(GD) ? (G.BonusLevelAttackMore > 1 ? G.BonusLevelAttackMore : 1.06) : BONUS_FADE_ATTACK;
+  // Patch 83 (developer's notes, Discord 18 Nov 2026 13:08 UTC): "Gem levels from gear past +5 add less each level. Builds at +5 or
+  // fewer are unchanged." API data build 83 switches.json r83.METAPLAN.BonusFadeAttack 1.06 -> 1.01 (it read 1.06 through build 82,
+  // the value the 17 Nov tooltip proved), so the switch is read from the data. Not tooltip-checked on 83 yet.
+  const attackFade = (GD, G) => is073(GD) ? ruleNum(GD, 'r83.METAPLAN.BonusFadeAttack', 1.06) : is0568(GD) ? (G.BonusLevelAttackMore > 1 ? G.BonusLevelAttackMore : 1.06) : BONUS_FADE_ATTACK;
   const bonusSplit = bonus => [Math.min(bonus, BONUS_FULL_LEVELS), Math.max(0, bonus - BONUS_FULL_LEVELS)];
   // Patch 0.56.0 (developer's patch notes, Discord 6 Nov 2026 21:28 UTC). Its rules below switch on with game data
   // newer than Steam build 26474163 (0.55.2), or, for game files a player loads (no build number), files dated
@@ -10728,6 +10736,24 @@ window.BOCharacter = function (ctx) {
   // Patch 80 Sleepy's Continental Strap: the burst uses up the poisons still coming (evidence at the player burst below). The
   // game is on 80 while the API still serves 79, so on now, like p80.
   const burstUsesUp = GD => true;
+  // Developer's rule file (API data build 83 switches.json r108.BAL.fHeroDamage108 = 0.8, read 18 Nov 2026): "every hero hit on a
+  // monster x this (minions, totems, traps, ailments ride the hit); the DPS the hero reads shows it. Monsters unchanged. Absent = 1.0".
+  // = Patch 82 notes (Discord 18 Nov 02:30 UTC) "player damage lowered overall". Put on the player's hit (with the young-gem factor,
+  // outside the more knee) and on the minion hit; ailments, totems and traps follow from the hit. Not tooltip- or log-checked yet
+  // (the log names it HeroDamage108). Our data never had build 82: the site went from 81 to 83.
+  const heroDamage = GD => ruleNum(GD, 'r108.BAL.fHeroDamage108', 1);
+  // Second late-only damage segment per skill (game file Gameplay/late2_98.json, in GD.late2; switch r98.META.bLate2_98, its comment:
+  // "late-only damage segment ON: tonight's Necro/Venom Spark/Caustic cuts hit gem 19-20+ only, RL 1-60 untouched"). The file's own
+  // note: "x1 up to gem From, straight to x Mult at gem At, flat after". Patch 83 notes (Discord 18 Nov 2026 13:08 UTC) agree: "Mage:
+  // 9 core spells deal 15% more at gem level 20, growing to 45% at gem 24" (From 18, At 24, Mult 1.45 = x1.15 at 20), "Skeletal Mages
+  // and Skeletons deal 20% more at gem level 20. Drain Life, Death Coil and Grave Golem deal 15 to 18% less from gem level 20. Venom
+  // Spark and Caustic Arrow 7 to 10% less". Read at the same gem level as EffectivenessLate (my reading: the file names it a
+  // segment beside it). Not tooltip-checked.
+  const late2K = (GD, id, lvl) => {
+    const x = (GD.late2 || {})[lc(id)];
+    if (!x || !bSwitch(GD, 'r98.META.bLate2_98', false)) return 1;
+    return 1 + (x.Mult - 1) * clamp((lvl - x.From) / Math.max(1, x.At - x.From), 0, 1);
+  };
   const ruleNum = (GD, key, def) => { const v = (GD.rules || {})[key]; const n = typeof v === 'object' && v ? +v.value : +v; return v != null && isFinite(n) ? n : def; };
   // An on/off switch from the game's rules (true/false or "True"/"False"), or the given default when the data has none.
   const bSwitch = (GD, key, def) => { const v = (GD.rules || {})[key]; const x = v && typeof v === 'object' ? v.value : v; return x == null ? !!def : String(x).toLowerCase() === 'true'; };
@@ -10747,8 +10773,17 @@ window.BOCharacter = function (ctx) {
   // gem 20 -> 23: +69% (1.19^3 = 1.685), 25: +139% (1.19^5 = 2.386), 27: +213% (2.386 x 1.16 x 1.13 = 3.128). So steps 1.16 and 1.13
   // are confirmed; 1.10 and 1.08 (levels 28+) are still patch-note only.
   const BONUS_CURVE_056 = [1.16, 1.13, 1.10, 1.08];
-  const spellFade = GD => is056(GD) ? BONUS_CURVE_056 : BONUS_FADE_SPELL;
-  const minionFade = GD => is056(GD) ? BONUS_CURVE_056 : BONUS_FADE_MINION;
+  // The curves are in the developer's rule file: switches.json r83.METAPLAN.BonusFadeSpellCurve and r85.METAPLAN.BonusFadeMinionCurve
+  // (both "1.16,1.13,1.10,1.08" through API data build 82, the curve above). Patch 83 (notes 18 Nov 2026: "Gem levels from gear past
+  // +5 add less each level"): build 83 data spells "1.10,1.07,1.04,1.02", minions "1.09,1.06,1.03,1.01". The switches' own comments
+  // say 14/11/8/6% (spells) and 12/9/6/4% (minions); the sim follows the values (what the game reads). Not tooltip-checked on 83.
+  const fadeCurve = (GD, key) => {
+    const v = (GD.rules || {})[key]; const s = v && typeof v === 'object' ? v.value : v;
+    const c = String(s || '').split(',').map(Number);
+    return s && c.length && c.every(x => x > 0 && isFinite(x)) ? c : BONUS_CURVE_056;
+  };
+  const spellFade = GD => is056(GD) ? fadeCurve(GD, 'r83.METAPLAN.BonusFadeSpellCurve') : BONUS_FADE_SPELL;
+  const minionFade = GD => is056(GD) ? fadeCurve(GD, 'r85.METAPLAN.BonusFadeMinionCurve') : BONUS_FADE_MINION;
   // Growth over n faded levels: a flat x fade a level, or a curve (one step a level, the last step repeating).
   function fadeGrowth(fade, n) {
     if (!Array.isArray(fade)) return Math.pow(fade, n);
@@ -10947,35 +10982,39 @@ window.BOCharacter = function (ctx) {
   // Rounding is a fit on that one item: 3 x 0.25 = 0.75 shows and counts as 1, 2.5 x 0.25 = 0.625 shows as 0.6, so a
   // scaled number keeps the decimals of the number it came from. Not checked on a roll between the ends.
   // UNIQUE_LINE_SCALE:BEGIN (tools/unique-scale.js rewrites everything down to the END marker from the game log; watch.js runs it)
-  // Table from the game log (2026.11.17-22.53.59): "MetaSys85: UniqueLineScale ON, 121 line(s) on 57 unique(s)".
+  // Table from the game log (2026.11.18-10.47.49): "MetaSys85: UniqueLineScale ON, 107 line(s) on 56 unique(s)".
   // Evidence for the scale itself: the Mouth of the Mire tooltip of 16 Nov 2026 (+1 levels vs data 2, [10-13] vs 20-25, [20-30] vs 40-60) = x0.5.
-  // Entries the log lists as x1 are left out.
+  // Entries the log lists as x1 are left out. Gone from the table: heart_of_the_white_silence.
   const UNIQUE_LINE_SCALE = {
-    wyrmblade_of_the_black_oath: { 0: 1.5, 4: 1.5 }, kingbreaker: { 0: 1.5, 1: 1.5, 3: 1.5 }, gravesong: { 0: 1.5, 1: 1.5, 2: 1.5, 4: 1.5 },
-    gravecleaver: { 1: 1.5, 2: 2 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff: { 0: 1.5, 1: 2.5, 3: 2 },
-    cinderwick: { 0: 1.5, 1: 2, 2: 3, 3: 1.5, 5: 3 }, dawnforge_maul: { 0: 1.25, 1: 1.25, 2: 1.25, 4: 1.25 }, glass_soul: { 0: 0.5, 1: 0.5 },
+    wyrmblade_of_the_black_oath: { 0: 1.5, 4: 1.5 }, kingbreaker: { 0: 1.5, 1: 1.5, 3: 1.5 }, gravesong: { 0: 1.5, 1: 1.5, 2: 1.5 },
+    gravecleaver: { 1: 1.5, 2: 2 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff: { 1: 2.5, 3: 2 },
+    cinderwick: { 1: 2, 2: 3, 3: 1.5, 5: 3 }, dawnforge_maul: { 0: 1.25, 1: 1.25, 2: 1.25, 4: 1.25 }, glass_soul: { 0: 0.5, 1: 0.5 },
     the_unyielding_vow: { 0: 0.25 }, the_patient_bastion: { 0: 0.25 }, the_heartwood_girdle: { 0: 0.25 },
     crown_of_the_quiet_ward: { 0: 0.25 }, windwrit_treads: { 0: 0.25 }, the_oathkeepers_stand: { 0: 0.25 },
-    mouth_of_the_mire: { 0: 0.5, 1: 0.5, 2: 0.5 }, drune_grave_rot: { 1: 0.5 }, cinderwick_primal: { 0: 1.5, 1: 2, 2: 1.8, 3: 1.5, 7: 3 },
-    heart_of_the_white_silence: { 0: 2 }, starcallers_staff: { 1: 2, 3: 1.5, 5: 1.5 }, wintercall_orb: { 0: 2, 1: 2 },
-    orrery_of_the_long_night: { 0: 1.5, 2: 0.4 }, dawnwardens_verdict: { 0: 1.5, 1: 2.5, 2: 3 }, halo_of_the_restless_saint: { 2: 2, 3: 0.4 },
-    lightsworn_reliquary: { 0: 2, 2: 2 }, hollowhorn: { 2: 2, 4: 1.3 }, crown_of_the_bone_king: { 0: 2, 2: 2 },
-    charnel_bell: { 0: 2, 2: 0.4 }, wand_of_the_ash_march: { 0: 2, 3: 1.5 }, skyrend: { 2: 2, 3: 3 },
-    weeping_talons: { 3: 2 }, twinscar: { 3: 2 }, thornwake: { 3: 2 },
-    ravenmaw: { 2: 2 }, jarlsbane: { 2: 2, 3: 3 }, hoarfall: { 2: 3 },
-    cinderknuckle: { 2: 3 }, the_fissure_edge: { 2: 2, 3: 2 }, the_bellwarden: { 3: 1.5 },
-    the_oathsplit_fang: { 2: 2, 3: 2 }, the_last_harvest: { 3: 2, 4: 3 }, gravetithe: { 2: 2, 3: 2.5 },
-    nightglass: { 2: 2 }, the_last_petal: { 1: 2 }, rimewrit: { 0: 4, 2: 2, 6: 1.5 },
-    the_slow_verdict: { 0: 1.75 }, templars_troth: { 0: 2, 1: 2 }, the_gate_that_answers: { 0: 1.5 },
-    overclock_coil: { 1: 1.5 }, hexbinders_censer: { 1: 2 }, the_thousand_sparks: { 0: 0.667, 2: 0.5 },
-    kingbreaker_primal: { 0: 1.5, 1: 1.5, 3: 1.5 }, gravesong_primal: { 0: 1.5, 1: 1.5, 2: 1.5, 4: 1.5 }, gravecleaver_primal: { 1: 1.5, 2: 2 },
-    stormfang_primal: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff_primal: { 0: 1.5, 1: 2.5, 3: 2 } };
+    mouth_of_the_mire: { 0: 0.5, 1: 0.5, 2: 0.5 }, drune_grave_rot: { 1: 0.5 }, cinderwick_primal: { 1: 2, 2: 1.8, 3: 1.5, 7: 3 },
+    starcallers_staff: { 1: 2, 3: 1.5 }, wintercall_orb: { 1: 2 }, orrery_of_the_long_night: { 2: 0.4 },
+    dawnwardens_verdict: { 0: 1.5, 1: 2.5, 2: 3 }, halo_of_the_restless_saint: { 2: 2, 3: 0.4 }, lightsworn_reliquary: { 2: 2 },
+    hollowhorn: { 2: 1.25, 4: 1.3 }, crown_of_the_bone_king: { 2: 2 }, charnel_bell: { 2: 0.4 },
+    wand_of_the_ash_march: { 0: 2, 3: 1.5 }, skyrend: { 2: 2, 3: 3 }, weeping_talons: { 3: 2 },
+    twinscar: { 3: 2 }, thornwake: { 3: 2 }, ravenmaw: { 2: 2 },
+    jarlsbane: { 2: 2, 3: 3 }, hoarfall: { 2: 2 }, cinderknuckle: { 2: 2 },
+    the_fissure_edge: { 2: 2, 3: 2 }, the_bellwarden: { 3: 1.5 }, the_oathsplit_fang: { 2: 2, 3: 2 },
+    the_last_harvest: { 3: 2, 4: 3 }, gravetithe: { 2: 2, 3: 2.5 }, nightglass: { 2: 2 },
+    the_last_petal: { 1: 2 }, rimewrit: { 0: 4, 2: 2 }, the_slow_verdict: { 0: 1.25 },
+    templars_troth: { 0: 2, 1: 2 }, the_gate_that_answers: { 0: 1.5 }, overclock_coil: { 1: 1.5 },
+    hexbinders_censer: { 1: 2 }, the_thousand_sparks: { 0: 0.667, 2: 0.5 }, kingbreaker_primal: { 0: 1.5, 1: 1.5, 3: 1.5 },
+    gravesong_primal: { 0: 1.5, 1: 1.5, 2: 1.5 }, gravecleaver_primal: { 1: 1.5, 2: 2 }, stormfang_primal: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 },
+    rimecrown_staff_primal: { 1: 2.5, 3: 2 } };
   // UNIQUE_LINE_SCALE:END
   // How much the game multiplies line i of a unique by (1 = as written).
-  function uniqueLineScale(uid, i) { const u = UNIQUE_LINE_SCALE[lc(uid)]; return (u && u[i]) || 1; }
+  // Still applied on Patch 83: the 18 Nov 2026 10:47 launch printed the table again (107 lines on 56 uniques; an earlier launch that
+  // day had not printed it yet). GD is accepted for callers but not needed.
+  function uniqueLineScale(uid, i, GD) {
+    const u = UNIQUE_LINE_SCALE[lc(uid)]; return (u && u[i]) || 1;
+  }
   // A stored number of that line (a roll or a range end) as the game counts and shows it.
-  function uniqueLineValue(uid, i, x) {
-    const k = uniqueLineScale(uid, i); if (k === 1 || x == null || typeof x !== 'number') return x;
+  function uniqueLineValue(uid, i, x, GD) {
+    const k = uniqueLineScale(uid, i, GD); if (k === 1 || x == null || typeof x !== 'number') return x;
     const p = Math.pow(10, (String(x).split('.')[1] || '').length);
     // A whole number that would round to 0 (The Unyielding Vow's 1 x 0.25) keeps one decimal instead: a guess, no
     // tooltip or log line for those items yet.
@@ -11057,7 +11096,12 @@ window.BOCharacter = function (ctx) {
         if (a.id.startsWith('unique:')) {
           const u = GD.uniques[lc(it.unique)]; const ui = +a.id.slice(7), um = u && u.Mods[ui];
           // Saves keep the unscaled roll; the game counts the scaled one (UNIQUE_LINE_SCALE above).
-          if (um) add(um.Mod, uniqueLineValue(it.unique, ui, a.v), uniqueLineValue(it.unique, ui, a.v2), label, key, { text: um.Text }); else notes.push('Unknown unique line ' + a.id + ' on ' + label);
+          // From data build 83 a saved roll is moved into the line's current range first, as the game does at load (launch log 18 Nov
+          // 2026: "Stash: UniqueClamp69 21 red values moved into their current ranges"): 83 rewrote many ranges (the line scale went
+          // into the data for some lines), so old rolls sit outside them. The range is the raw one; the table scales after.
+          const flag = !um || (um.Mod || {}).Mode === 'Flag' || (um.Min === 0 && um.Max === 0); // flags and keystones (range 0-0) keep their value
+          const fit = (x, lo, hi) => flag || typeof x !== 'number' || lo == null || hi == null || !(+GD.apiBuild >= 83) ? x : clamp(x, Math.min(lo, hi), Math.max(lo, hi));
+          if (um) add(um.Mod, uniqueLineValue(it.unique, ui, fit(a.v, um.Min, um.Max), GD), uniqueLineValue(it.unique, ui, fit(a.v2, um.Min2, um.Max2), GD), label, key, { text: um.Text }); else notes.push('Unknown unique line ' + a.id + ' on ' + label);
         } else {
           const af = GD.affixes[lc(a.id)];
           if (!af) { notes.push('Unknown affix ' + a.id + ' on ' + label); continue; }
@@ -11525,6 +11569,11 @@ window.BOCharacter = function (ctx) {
     const offBase = offItem && GD.bases[lc(offItem.base)];
     const ctx = makeCtx(GD, ch, sk, skillId, mainBase, offBase);
     const isSpell = ctx.isSpell && !isAttack;
+    // Patch 82 notes (Discord 18 Nov 2026 02:30 UTC) and the skill text from API data build 83: Orbiting Hammers "Needs a mace or hammer
+    // in your hand (Paladins call the hammers without one)". A note only; the damage is still shown.
+    if (/^Needs a mace or hammer/i.test(sk.Description || '') && lc(ch.classId || '') !== 'paladin' && !(mainBase && (mainBase.Tags || []).some(t => /^(Mace|Hammer)$/i.test(t)))) {
+      res.notes.push(sk.Name + ' needs a mace or hammer in your hand unless you are a Paladin (patch 82), and your main hand holds ' + (mainBase ? mainBase.Name : 'nothing') + ': in the game it will not work.');
+    }
 
     // Gather mods: character-wide + this skill's supports (+ supports granted by passives/uniques).
     const col = o._col || collectMods(GD, ch, o); // _col: reuse when only supports change (search)
@@ -11945,6 +11994,7 @@ window.BOCharacter = function (ctx) {
         const late = sk.EffectivenessLate * atkAddLift(GD, sk); // Patch 79 attack lifts the API data lacks (ATK_ADD_LIFT_79)
         e = baseEff + (late - baseEff) * clamp(((o._lateOwn ? own : L) - f) / Math.max(1, a - f), 0, 1);
       }
+      e *= late2K(GD, sk.Id, o._lateOwn ? own : L);
       if (sk.EffectivenessEarly != null) {
         const h = sk.EffectivenessEarlyHold || 1, fu = sk.EffectivenessEarlyFull || h + 1;
         e *= sk.EffectivenessEarly + (1 - sk.EffectivenessEarly) * clamp(((o._lateOwn ? own : L) - h) / Math.max(1, fu - h), 0, 1);
@@ -11952,6 +12002,7 @@ window.BOCharacter = function (ctx) {
       return e;
     };
 
+    { const k2 = late2K(GD, sk.Id, o._lateOwn ? own : L); if (k2 !== 1) res.notes.push(sk.Name + ': x' + k2.toFixed(3) + ' late gem-level damage (patch 83, at gem level ' + (o._lateOwn ? own : L) + ').'); }
     // ----- base damage -----
     const parts = {}; DT.forEach(d => parts[d] = [0, 0]);
     const addPart = (d, a, b) => { parts[d][0] += a; parts[d][1] += b; };
@@ -12208,7 +12259,7 @@ window.BOCharacter = function (ctx) {
       for (const m of pickMods(mods, 'Damage', 'More')) if (hitsMore(m)) { more *= 1 + m.v / 100; use(m); }
       // 0.56.7 knee on the more multipliers of your own hits (the young-gem factor `early` stays outside it: my reading).
       if (is0567(GD) && !is0568(GD) && more > 8) { kneeHit = Math.max(kneeHit, more); more = moreKnee(more); }
-      more *= early;
+      more *= early * heroDamage(GD);
       if (p.scales.has('Physical') && ctx.tags.has('melee')) inc += per10('Str', 'StrMeleePhysPer10');
       const k = Math.max(0, 1 + inc / 100) * more;
       const s = scaled[p.type] || (scaled[p.type] = [0, 0]);
@@ -12440,6 +12491,10 @@ window.BOCharacter = function (ctx) {
       let rearm = re ? +re[1] : /re-arms about a second/i.test(d) ? 1 : 2.5; let traps = n ? +n[1] : 3;
       // "+N to maximum Traps" lines (TrapCount) count from 0.56.5 on, where the extra traps' share is in the text.
       if (is0565(GD)) for (const m of pickMods(mods, 'TrapCount', 'Flat')) if (applies(ctx, m)) { traps += m.v; use(m); }
+      // API data build 83 switches.json r108.CAPS.TrapTop 10 (new, no comment in the file; beside r80.CAPS Ballistas/Totems): read as
+      // the most traps that stand at once. Not checked in game.
+      const trapTop = ruleNum(GD, 'r108.CAPS.TrapTop', 0);
+      if (trapTop > 0 && traps > trapTop) { res.notes.push('Traps: ' + traps + ' capped at ' + trapTop + ' (game rule TrapTop).'); traps = trapTop; }
       // 0.56.4: "Trap re-arm speed bends past +100% increased (every point above counts half)". Before it re-arm speed
       // was not modelled; the 2.5 s base is the sim's own assumption.
       if (is0564(GD)) {
@@ -12991,10 +13046,14 @@ window.BOCharacter = function (ctx) {
         const cap = META.AfterimageCap || 3; afterimages = Math.min(cap, n); const pct = (META.AfterimageDamagePct || 40) / 100;
         // 0.56.4 notes: "Afterimages past 3 add half damage each." READ AS: each one past the cap repeats the blow for half
         // an afterimage's share (20% of the blow). NOT CHECKED against the game.
-        const extra = is0564(GD) ? Math.max(0, n - cap) : 0;
+        // Developer's rule file (switches.json r90.METAFIX.fAfterimageTail90, read 18 Nov 2026): "each Afterimage past the cap
+        // (Meta59 3) adds this share of one afterimage's damage (swing count stays 3)". 0.375 through API data build 82 (= Patch 77
+        // notes "each swing past the 3rd now adds 15% to those 3 swings", 0.375 x 40%), 0.25 from build 83 (10%). So the extras add
+        // damage to the 3 swings, no swings of their own. Before the switch (0.56.4 to 76) half an afterimage (0.5).
+        const extra = is0564(GD) ? Math.max(0, n - cap) : 0, tail = ruleNum(GD, 'r90.METAFIX.fAfterimageTail90', 0.5);
         const blow = hitsPerUse / (1 + repeats), full = perHitFactor * hitsPerUse;
-        hitsPerUse += (afterimages + extra) * blow; perHitFactor = (full + (afterimages * pct + extra * pct / 2) * full / (1 + repeats)) / hitsPerUse;
-        res.notes.push('Afterimages: ' + afterimages + (extra ? ' + ' + extra + ' past the cap at half damage (patch 0.56.4)' : n > afterimages ? ' (capped from ' + n + ')' : '') + ', each repeats the blow for ' + Math.round(pct * 100) + '% of its damage.');
+        hitsPerUse += afterimages * blow; perHitFactor = (full + (afterimages * pct + extra * pct * tail) * full / (1 + repeats)) / hitsPerUse;
+        res.notes.push('Afterimages: ' + afterimages + (extra ? ' + ' + extra + ' past the cap, each adding ' + +(pct * tail * 100).toFixed(1) + '% of the blow to those swings' : n > afterimages ? ' (capped from ' + n + ')' : '') + ', each repeats the blow for ' + Math.round(pct * 100) + '% of its damage.');
       }
     }
     // Bina's Spotter's Helm ramp (Patch 81, see spotterGap): Ballista and totem shots in a row at the same enemy deal 2% more each, up to
@@ -13188,9 +13247,27 @@ window.BOCharacter = function (ctx) {
     // Shock stays outside (the notes of Patch 72 make it a stronger hit, not a taken effect): not checked in the game yet.
     const rule = takenRule(GD, isBoss); // 'add' from data build 82; else scaling.json Meta.bGuardianStrongestTaken (true from data build 73)
     const strongestTaken = rule === true;
+    // Unravel (Patch 83 support, API data build 83; switch r109.MAGEMARK.bUnravel109 True). Its text: "Each hit with the linked spell
+    // adds 1 Unravel stack to the enemy for the hit's element (fire, cold or lightning, each counted on its own): it takes 0.7% more
+    // damage of that element per stack, up to 25 (17.5%). Stacks ... last 4 seconds after your last hit ... Unravel adds with curses,
+    // Marks and every other takes more damage effect." Numbers from curses.json unravel_<element> (ElementTakenPct, Dread.Cap).
+    // Counted at full stacks for this spell's own hits of that element (a lasting enemy; any spell hitting more than once in 4 s
+    // keeps them), in the one taken sum. ASSUMPTIONS, not checked in game: other skills' hits of that element and ailment ticks
+    // are left out; Unravel on a minion or totem spell is not counted.
+    const unravel = {};
+    if (isSpell && !o.noUnravel && pickMods(mods, 'UnravelOnHit', 'Flat').some(m => applies(ctx, m) && (use(m), true)) && hitsPerSec >= 0.25) {
+      for (const d of ['Fire', 'Cold', 'Lightning']) {
+        const c = (GD.curses || {})['unravel_' + d.toLowerCase()]; if (!c || !hit[d] || !(hit[d].avg > 0)) continue;
+        unravel[d] = ((c.ElementTakenPct || {})[d] || 0) * ((c.Dread || {}).Cap || 0);
+      }
+      const ks = Object.keys(unravel);
+      if (ks.length) res.notes.push('Unravel: the enemy takes ' + ks.map(d => +unravel[d].toFixed(1) + '% more ' + d.toLowerCase()).join(', ') + ' damage at full stacks (counted for this spell\'s hits, added with your other "takes more damage" effects; ailments left out).');
+    }
+    res.unravel = Object.keys(unravel).length ? unravel : null;
     const takenOf = (d, phys, dot) => {
       // General taken competes on a Guardian, typed lines (Woe of Sundering's Physical, Sentence of Rot's DoT) multiply on top: curseTakenK.
       const extras = [o.extraTakenPct || 0, markPct]; if (phys) extras.push(maimPct);
+      if (!dot && unravel[d]) extras.push(unravel[d]);
       // Patch 82: one sum of everything, the venom golem and (for hits) the hallowed ground included (see takenRule).
       if (rule === 'add') return curseTakenK(activeCurses, d, dot, 'add', extras.concat(golemTaken - 1 ? [(golemTaken - 1) * 100] : [], !dot && groundPct ? [groundPct] : []));
       // The venom golem is NOT in that choice: it multiplies on top. Game log 13 Nov 2026 23:20 (Rangtest, RL 130
@@ -14261,7 +14338,8 @@ window.BOCharacter = function (ctx) {
     for (const m of mods) if (m.stat === 'Damage' && m.mode === 'Inc' && !m.local && (fromSupport(m) || splitTags(m.tags).conds.some(c => lc(c) === 'minion'))) {
       const t = fit(m); if (t && !t.length) { specInc += m.v; use(m, 'minion, the summon skill increased'); }
     }
-    const base = (mi.DamageMult || 1) * aff * near * minionMore * kind * lvlK * (1 + specInc / 100);
+    { const k2 = late2K(GD, sk.Id, minionGem); if (k2 !== 1) res.notes.push(sk.Name + ': x' + k2.toFixed(3) + ' late gem-level damage (patch 83, at gem level ' + minionGem + ').'); }
+    const base = (mi.DamageMult || 1) * aff * near * minionMore * kind * lvlK * (1 + specInc / 100) * heroDamage(GD) * late2K(GD, sk.Id, minionGem); // heroDamage: Patch 82/83 x0.8 (at ruleNum)
     const hit = {}; let avg = 0;
     for (const d of DT) {
       if (!(scaled[d][1] > 0)) continue;
@@ -15226,7 +15304,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
+  const api = { fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
     // The share at which a support works on minion skills despite "Minion" in its ExcludeTags (0 = it does not), for tooltips.
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -16352,7 +16430,7 @@ window.BOStartApp = function () {
     html += '<details><summary>Notes for this skill <span class="count">(' + r.notes.length + ')</span></summary><ul class="notes">' + r.notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul></details>';
     html += '<details><summary>How it is calculated</summary><ul class="notes">' +
       '<li><b>Checked against the game</b> (31 Oct): a Necromancer\'s Death Coil tooltip (crit, cast time, poison per stack, duration, stacks) matches within 1–2% and its skill panel DPS within 2.4%; Unholy Void within 3%; a Paladin\'s Channel Conduit Judgement cast rate matches the game log. Other skills use the same rules but were not checked one by one.</li>' +
-      '<li><b>Spells</b>: SpellMin–SpellMax × 1.19<sup>level − 1</sup> (the first 5 gear levels included; past +5 spells and minions grow × 1.16, × 1.13, × 1.10, then × 1.08 a level) × effectiveness. <b>Attacks</b>: weapon damage (with its local lines) × Effectiveness × (1 + 0.08 per gem level) × 1.06 per gear level (× 1.01 past +5).</li>' +
+      '<li><b>Spells</b>: SpellMin–SpellMax × 1.19<sup>level − 1</sup> (the first 5 gear levels included; past +5 spells grow ' + S.fadeSteps(GD).spell.map(v => '× ' + v.toFixed(2)).join(', ') + ' a level (the last step repeating), minions ' + S.fadeSteps(GD).minion.map(v => '× ' + v.toFixed(2)).join(', ') + ') × effectiveness. <b>Attacks</b>: weapon damage (with its local lines) × Effectiveness × (1 + 0.08 per gem level) × ' + (GD.scaling.Gem.BonusLevelAttackMore || 1.06) + ' per gear level (× ' + S.fadeSteps(GD).attack + ' past +5).</li>' +
       '<li>Young gems get an early-level damage boost (<code>EffectivenessEarly</code>) that fades out by the gem level set in the game data.</li>' +
       '<li>More damage (patch 0.56.7): on your own hits every more multiplier counts in full up to × 8; past × 8 each doubling adds × 1.41. Minions keep their own rules.</li>' +
       '<li>Effectiveness ("of added damage" in the tooltip) moves linearly from its base (1 for spells) to <code>EffectivenessLate</code> between <code>EffectivenessLateFrom</code> and <code>EffectivenessLateAt</code>, at the level the gem plays at.</li>' +
@@ -16766,7 +16844,7 @@ window.BOStartApp = function () {
     h += '<div class="card"><h2>The minion hit <small>' + esc(r.skill.Name) + ' · gem ' + r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus : '') + '</small></h2><div class="table-wrap"><table class="hit"><thead><tr><th>Type</th><th>Hit</th></tr></thead><tbody>' +
       Object.keys(r.hit).map(d => '<tr><td><span class="type" style="--c:' + typeColor(d) + '">' + d + '</span></td><td>' + num(r.hit[d].min) + '–' + num(r.hit[d].max) + '</td></tr>').join('') + '</tbody></table></div>' +
       '<h3>What makes the hit</h3><dl class="kv">' +
-      kv('Gem damage', num(r.base.min) + '–' + num(r.base.max) + ' × 1.19<sup>level − 1</sup>' + (r.gem.bonus > 5 ? ' (× 1.06 for each gear level past +5)' : '') + ' = ' + x(m.growth)) +
+      kv('Gem damage', num(r.base.min) + '–' + num(r.base.max) + ' × 1.19<sup>level − 1</sup>' + (r.gem.bonus > 5 ? ' (past +5: ' + S.fadeSteps(GD).minion.map(v => '× ' + v.toFixed(2)).join(', ') + ' a level)' : '') + ' = ' + x(m.growth)) +
       kv('The gem\'s minion multiplier', x(m.dmgMult)) +
       (m.affinity !== 1 ? kv(m.affinityAttr + ' affinity', x(m.affinity) + ' (+1% per 10 ' + m.affinityAttr + ')') : '') +
       kv('Near you', m.near > 1 ? x(m.near) + ' (60% more within 7 m)' : 'not counted') +

@@ -46,7 +46,7 @@
 <meta property="og:url" content="https://builder.lilshrimper.dev/zh/ladder/"><meta property="og:image" content="https://builder.lilshrimper.dev/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
-<link rel="stylesheet" href="../../style.css?v=368">
+<link rel="stylesheet" href="../../style.css?v=369">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -571,9 +571,10 @@
     <h2 id="nameTitle">Save as new build</h2>
     <p>Saves what you see now (gear, skills, tree, potions, notes) as a build in the Saved Builds tab. What you started from stays as it is.</p>
     <label class="field"><span>Build name</span><input id="nameInput" type="text" maxlength="60" autocomplete="off" spellcheck="false"></label>
+    <p class="hint" id="nameOver" hidden>You already have a saved build with this name. Saving replaces it with what you see now. Type another name to keep both.</p>
     <div class="confirm-actions">
       <button class="btn ghost" type="submit" value="cancel" formnovalidate>Cancel</button>
-      <button class="btn" type="submit" value="confirm">Save build</button>
+      <button class="btn" type="submit" value="confirm" id="nameOk">Save build</button>
     </div>
   </form>
 </dialog>
@@ -622,7 +623,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":368,"at":"2026-11-18T17:29:27.291Z"};
+window.SITE_VERSION = {"v":369,"at":"2026-11-18T18:03:03.904Z"};
 window.SITE_LANG = 'zh';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -631,6 +632,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=4e9487f7","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../app.js?v=368"></script>
+<script src="../../app.js?v=369"></script>
 </body>
 </html>

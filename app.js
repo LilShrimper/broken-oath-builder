@@ -2733,7 +2733,7 @@ window.BOPlanner = function (ctx) {
   }
   function planFrom(ch) {
     const p = JSON.parse(JSON.stringify(ch));
-    for (const k of ['file', 'fromCode', 'fromPlanner', 'codeWarnings', 'from']) delete p[k];
+    for (const k of ['file', 'fromCode', 'fromPlanner', 'codeWarnings', 'from', 'auto']) delete p[k]; // auto: opened from a code, not saved by hand (app.js)
     // Saves don't record Gate kills: give the plan enough of them to hold the Dragonling nodes it already has.
     if (p.dragonExtra == null) { const R = GD.dragon.tree || {}; p.dragonExtra = Math.max(0, (p.dragonNodes || []).length - (R.milestones || []).filter(l => p.level >= l).length - (R.hatch || 0)); }
     return Object.assign(p, { id: newId(), name: ch.name.replace(/ \((code|edited)\)$/, '') + (ch.plan ? ' (copy)' : ''), plan: true, savedAt: new Date().toISOString() });
@@ -3442,7 +3442,15 @@ window.BOPlanner = function (ctx) {
   // Skill pickers (the skill row's dropdown, "Add a skill", the linked-spell list). A native <select> popup gives the page no hover
   // events, so a click opens this list instead; hovering a skill shows its tooltip beside the list. Choosing one sets the real
   // <select> and fires its change event, so the edit goes through onChange as before.
-  const PICKER = 'select[data-f="skill"], select[data-f="addskill"], select[data-f="conduit"]';
+  // Rune sockets open the same list (a player, 18 Nov 2026: "hovering over these runes should tell you a description of what they do").
+  const PICKER = 'select[data-f="skill"], select[data-f="addskill"], select[data-f="conduit"], select[data-f="rune"]';
+  // A rune or jewel: what it gives in a weapon and in armour (runes.json Weapon / Armour), as Item Search words it.
+  function runeTip(r) {
+    const lines = ms => (ms || []).map(m => '<li>' + esc(modLine(m)) + '</li>').join('') || '<li>No effect</li>';
+    const same = JSON.stringify(r.Weapon || []) === JSON.stringify(r.Armour || []);
+    return '<b>' + esc(r.Name) + '</b><span class="pl-tip-sub">' + esc((r.Kind === 'jewel' ? 'Jewel' : 'Rune') + ' · tier ' + (r.Tier || 1) + (r.Level ? ' · level ' + r.Level : '')) + '</span>' +
+      (same ? '<ul>' + lines(r.Weapon) + '</ul>' : '<ul><li class="meta">In a weapon</li>' + lines(r.Weapon) + '</ul><ul><li class="meta">In armour</li>' + lines(r.Armour) + '</ul>');
+  }
   let pick = null;
   function closePicker() {
     if (!pick) return;
@@ -3450,10 +3458,10 @@ window.BOPlanner = function (ctx) {
     pick.box.remove(); const sel = pick.sel; pick = null; hideItemTip(); if (sel.isConnected) sel.focus({ preventScroll: true });
   }
   function pickerTip(box, item) {
-    const id = item.dataset.v, sk = GD.skills[lc(id)];
+    const id = item.dataset.v, rune = pick && pick.sel.dataset.f === 'rune' ? GD.runes[lc(id)] : null, sk = rune || GD.skills[lc(id)];
     if (!sk) return hideItemTip();
     if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'pl-tip'; tipEl.setAttribute('role', 'tooltip'); document.body.appendChild(tipEl); }
-    if (tipEl.dataset.key !== 'pick:' + id) { tipEl.innerHTML = skillTip(ctx.current(), id, false); tipEl.dataset.key = 'pick:' + id; }
+    if (tipEl.dataset.key !== 'pick:' + id) { tipEl.innerHTML = rune ? runeTip(rune) : skillTip(ctx.current(), id, false); tipEl.dataset.key = 'pick:' + id; }
     tipEl.hidden = false;
     const b = box.getBoundingClientRect(), r = item.getBoundingClientRect(), w = tipEl.offsetWidth, hgt = tipEl.offsetHeight;
     let x = b.right + 8; if (x + w > innerWidth - 8) x = Math.max(8, b.left - w - 8);
@@ -3464,11 +3472,12 @@ window.BOPlanner = function (ctx) {
     const cur = sel.value, box = document.createElement('div');
     box.className = 'pl-pick'; box.setAttribute('role', 'listbox');
     const item = o => '<div class="pl-pick-item' + (o.value === cur ? ' on' : '') + '" role="option" data-v="' + esc(o.value) + '" data-t="' + esc(o.textContent.toLowerCase()) + '">' + esc(o.textContent) + '</div>';
-    let h = '<input type="search" placeholder="Search skills" aria-label="Search skills">';
+    const what = sel.dataset.f === 'rune' ? 'Search runes' : 'Search skills';
+    let h = '<input type="search" placeholder="' + what + '" aria-label="' + what + '">';
     for (const c of sel.children) {
       if (c.tagName === 'OPTGROUP') h += '<div class="pl-pick-group">' + esc(c.label) + '</div>' + [...c.children].map(item).join('');
       else if (c.value) h += item(c);
-      else if (sel.dataset.f === 'conduit') h += item(c);
+      else if (sel.dataset.f === 'conduit' || sel.dataset.f === 'rune') h += item(c);
     }
     box.innerHTML = h; document.body.appendChild(box);
     const s = sel.getBoundingClientRect(), bh = Math.min(box.offsetHeight, innerHeight * 0.6);
@@ -9997,6 +10006,9 @@ window.BOCharacter = function (ctx) {
       back = document.createElement('div'); back.className = 'io-back'; back.setAttribute('role', 'dialog'); back.setAttribute('aria-modal', 'true'); back.setAttribute('aria-label', 'Item');
       back.addEventListener('mousedown', e => { if (e.target === back) closeItem(); });
       back.addEventListener('click', onIoClick); back.addEventListener('change', onIoChange);
+      // Rune sockets open the planner's list, which shows what a rune does on hover (a native select cannot).
+      back.addEventListener('mousedown', e => { const s = e.target.closest && e.target.closest('select[data-f="rune"]'); if (s && !s.disabled && e.button === 0) { e.preventDefault(); planner.openPicker(s); } });
+      back.addEventListener('keydown', e => { const s = e.target.closest && e.target.closest('select[data-f="rune"]'); if (s && !s.disabled && (e.key === 'Enter' || e.key === ' ' || (e.altKey && e.key === 'ArrowDown'))) { e.preventDefault(); planner.openPicker(s); } });
       back.addEventListener('dragover', e => e.preventDefault());
       back.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); document.body.classList.remove('dragging'); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f && /^image\//.test(f.type)) readShot(f); });
       back.addEventListener('keydown', e => { const r = e.target.closest && e.target.closest('#ioRead'); if (r && e.target === r && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); const i = r.querySelector('input[type=file]'); if (i) i.click(); } });
@@ -17363,21 +17375,30 @@ window.BOStartApp = function () {
   // ---------- Saved Builds tab ----------
   // Every plan (saved build) in one list, apart from the loaded characters in the side picker (owner, 18 Nov 2026, after a player
   // asked: "im often loading my save files, but i dont want them as builds"). Open, duplicate, delete; newest first.
+  // Only builds saved by hand count as saved (a player, 18 Nov 2026: "the saved build page needs to be ONLY the builds that i
+  // manually save because it gets cluttered"). A plan opened from a share link or a plan code carries auto: true: it is kept in
+  // this browser in its own list below, stays out of the account, and Save (here, or Save as new build) moves it up.
   let buildsFilter = '';
+  const isSaved = c => !!c.plan && !c.auto;
   function renderSavedBuilds() {
     const pane = $('#savedBuildsPane'); if (!pane || pane.hidden) return;
-    const all = CHARS.filter(c => c.plan).sort((x, y) => String(y.savedAt || '').localeCompare(String(x.savedAt || '')));
+    const plans = CHARS.filter(c => c.plan).sort((x, y) => String(y.savedAt || '').localeCompare(String(x.savedAt || '')));
+    const all = plans.filter(isSaved), opened = plans.filter(c => c.auto);
     const q = buildsFilter.trim().toLowerCase();
-    const list = q ? all.filter(c => (c.name + ' ' + c.classId).toLowerCase().includes(q)) : all;
+    const match = l => q ? l.filter(c => (c.name + ' ' + c.classId).toLowerCase().includes(q)) : l;
+    const list = match(all), olist = match(opened);
     const cur = st.chOrig && st.chOrig.id;
     const day = s => { const d = s && new Date(s); return d && !isNaN(d) ? d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : ''; };
     const row = c => '<div class="sb-row' + (c.id === cur ? ' on' : '') + '" data-id="' + esc(c.id) + '">' +
-      '<div class="sb-main"><b class="notranslate">' + esc(c.name) + '</b>' + cloudMark(c) + '<span class="meta">' + esc(c.classId) + ' · level ' + c.level + (day(c.savedAt) ? ' · saved ' + esc(day(c.savedAt)) : '') + (c.id === cur ? ' · open now' : '') + '</span></div>' +
-      '<div class="sb-acts"><button class="btn small" type="button" data-sb="open">Open</button><button class="btn small ghost" type="button" data-sb="dup">Duplicate</button><button class="btn small ghost" type="button" data-sb="del">Delete</button></div></div>';
+      '<div class="sb-main"><b class="notranslate">' + esc(c.name) + '</b>' + (c.auto ? '' : cloudMark(c)) + '<span class="meta">' + esc(c.classId) + ' · level ' + c.level + (day(c.savedAt) ? (c.auto ? ' · opened ' : ' · saved ') + esc(day(c.savedAt)) : '') + (c.id === cur ? ' · open now' : '') + '</span></div>' +
+      '<div class="sb-acts"><button class="btn small" type="button" data-sb="open">Open</button>' + (c.auto ? '<button class="btn small ghost" type="button" data-sb="keep">Save</button>' : '<button class="btn small ghost" type="button" data-sb="dup">Duplicate</button>') + '<button class="btn small ghost" type="button" data-sb="del">Delete</button></div></div>';
     pane.innerHTML = '<div class="card"><h2>Saved Builds <small>' + all.length + '</small></h2>' +
-      '<p class="hint">Builds you saved: Save as new build, Start a New Plan, and codes or links you opened. They stay in this browser, and in your account when you are signed in. Loaded characters are in the Character list on the left.</p>' +
+      '<p class="hint">Only builds you saved yourself: Save as new build, Start a New Plan or Duplicate. They stay in this browser, and in your account when you are signed in. Open one to change it: edits save as you go. Save as new build under a name you already used saves over that build. Loaded characters are in the Character list on the left.</p>' +
       '<div class="pl-row sb-tools"><input type="search" class="sb-search" id="sbSearch" placeholder="Search by name or class" aria-label="Search saved builds" value="' + esc(buildsFilter) + '" autocomplete="off" spellcheck="false"><button class="btn small" type="button" data-sb="new">Start a New Plan</button></div>' +
-      (list.length ? '<div class="sb-list">' + list.map(row).join('') + '</div>' : '<p class="hint">' + (all.length ? 'No saved build matches.' : 'No saved builds yet. Use Save as new build on a character, or Start a New Plan.') + '</p>') + '</div>';
+      (list.length ? '<div class="sb-list">' + list.map(row).join('') + '</div>' : '<p class="hint">' + (all.length ? 'No saved build matches.' : 'No saved builds yet. Use Save as new build on a character, or Start a New Plan.') + '</p>') + '</div>' +
+      (opened.length ? '<div class="card"><h2>Opened, not saved <small>' + opened.length + '</small></h2>' +
+        '<p class="hint">Builds from share links and codes you opened. They are kept in this browser only. Save moves one to Saved Builds.</p>' +
+        (olist.length ? '<div class="sb-list">' + olist.map(row).join('') + '</div>' : '<p class="hint">No opened build matches.</p>') + '</div>' : '');
   }
   $('#savedBuildsPane').addEventListener('input', e => { if (e.target.id !== 'sbSearch') return; buildsFilter = e.target.value; const at = e.target.selectionStart; renderSavedBuilds(); const s = $('#sbSearch'); if (s) { s.focus(); s.setSelectionRange(at, at); } });
   $('#savedBuildsPane').addEventListener('click', async e => {
@@ -17386,6 +17407,7 @@ window.BOStartApp = function () {
     const id = (b.closest('[data-id]') || {}).dataset.id, ch = CHARS.find(c => c.id === id); if (!ch) return;
     if (b.dataset.sb === 'open') { fillChars(id); selectChar(id); showTab('character'); syncUrl('character'); }
     else if (b.dataset.sb === 'dup') { const p = planner.planFrom(ch); if (brewery) brewery.copyBelt(ch.id, p.id); addChars([p], 'plan', p.id); saveTip('Made a copy: ' + p.name + '.'); renderSavedBuilds(); }
+    else if (b.dataset.sb === 'keep') { delete ch.auto; ch.savedAt = new Date().toISOString(); keepChars(); saveTip('Saved "' + ch.name + '" to Saved Builds.'); }
     else if (b.dataset.sb === 'del') { await removeChar(id); renderSavedBuilds(); }
   });
 
@@ -17413,9 +17435,9 @@ window.BOStartApp = function () {
       '<button type="button" class="x" tabindex="-1" data-rmchar="' + esc(c.id) + '" aria-label="' + esc((c.plan ? 'Delete the plan ' : 'Remove ') + c.name + (c.plan ? '' : ' from the list')) + '">×</button></div>';
     // Loaded characters only (owner, 18 Nov 2026: "Left navigation panel should be for loaded characters"); saved builds have their
     // own tab (renderSavedBuilds). The build open now still shows, so the list says what is on screen.
-    const chars = CHARS.filter(c => !c.plan), open = CHARS.find(c => c.plan && c.id === cur), nPlans = CHARS.filter(c => c.plan).length;
+    const chars = CHARS.filter(c => !c.plan), open = CHARS.find(c => c.plan && c.id === cur), nPlans = CHARS.filter(isSaved).length;
     return (chars.length ? '<div class="pl-pick-group">Characters</div>' + chars.map(item).join('') : '<div class="pl-pick-group">No characters loaded</div>') +
-      (open ? '<div class="pl-pick-group">Saved build open now</div>' + item(open) : '') +
+      (open ? '<div class="pl-pick-group">' + (open.auto ? 'Opened build, not saved' : 'Saved build open now') + '</div>' + item(open) : '') +
       (nPlans ? '<button type="button" class="pl-pick-item char-pick-more" tabindex="-1" data-openbuilds="1">Saved Builds (' + nPlans + ') →</button>' : '');
   }
   function placeCharPick() {
@@ -17624,7 +17646,8 @@ window.BOStartApp = function () {
   // Characters loaded here (not the ones built into the page) stay in this browser, so a refresh keeps them.
   // Up to 60 loaded characters plus up to 200 plans (plans are what people keep; an account holds up to 300).
   function keepChars() {
-    const mine = CHARS.filter(c => !c.file), list = mine.filter(c => c.plan).slice(0, 200).concat(mine.filter(c => !c.plan).slice(0, 60));
+    // Saved builds first, so opened ones never push a saved build past the limit.
+    const mine = CHARS.filter(c => !c.file), list = mine.filter(isSaved).concat(mine.filter(c => c.plan && c.auto)).slice(0, 200).concat(mine.filter(c => !c.plan).slice(0, 60));
     const kept = (() => { try { localStorage.setItem('bods:chars', JSON.stringify(list)); return true; } catch (e) { return false; } })();
     if (cloud) cloud.check();
     if (!$('#savedBuildsPane').hidden) renderSavedBuilds();
@@ -17810,7 +17833,7 @@ window.BOStartApp = function () {
     const bdb = brokedCode(text), bShort = brokedShort(text), shared = linkCode(text), id = linkId(text);
     let ch, from = 'code';
     if (bdb || bShort) ch = characterFromBroked(await decodeBroked(bdb || await fetchBroked(bShort)));
-    else if (shared || id || planner.isPlanCode(text)) { ch = keepSharedTabs(await planner.fromCode(id ? await codeForId(id) : shared || text)); from = 'plan'; }
+    else if (shared || id || planner.isPlanCode(text)) { ch = keepSharedTabs(await planner.fromCode(id ? await codeForId(id) : shared || text)); ch.auto = true; from = 'plan'; }
     else ch = S.characterFromCode(GD, await decodeBuildCode(text));
     addChars([ch], from, ch.id);
     return ch;
@@ -17865,9 +17888,12 @@ window.BOStartApp = function () {
   }
   // "Save as new build" (owner, 14 Nov 2026): the character or plan on screen, as a new plan under a name the user picks.
   // Works on plans too (a renamed copy); the one it came from is unchanged.
-  function askName(def) {
+  // over(name): true when that name saves over an existing saved build; the dialog says so while the user types.
+  function askName(def, over) {
     const dialog = $('#nameDialog'), input = $('#nameInput');
     input.value = def;
+    const sync = () => { const o = !!(over && over(input.value.trim())); $('#nameOver').hidden = !o; $('#nameOk').textContent = o ? 'Save over it' : 'Save build'; };
+    input.oninput = sync; sync();
     return new Promise(resolve => {
       dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm' ? input.value.trim() : null), { once: true });
       // Enter in the box saves (a form's implicit submit would use its first button, Cancel).
@@ -17877,12 +17903,22 @@ window.BOStartApp = function () {
   }
   $('#saveBuildBtn').addEventListener('click', async () => {
     if (!st.ch) { alert('Load a character or start a plan first.'); return; }
-    const src = st.ch, def = src.name.replace(/ \((code|edited|copy)\)$/, '') + (src.plan ? ' (copy)' : '');
-    const name = await askName(def); if (name == null) return;
-    const p = keepSharedTabs(planner.planFrom(liveCopy()));
+    // Saving under the name of a build already saved saves over it (a player, 18 Nov 2026: "click again to save over it ...
+    // without making a million builds"): a character loaded again and saved under its own name updates the one build.
+    // An opened, unsaved build (auto) is saved as itself, not as a copy.
+    const src = st.ch, unsaved = !!(src.plan && src.auto), def = src.name.replace(/ \((code|edited|copy)\)$/, '') + (src.plan && !unsaved ? ' (copy)' : '');
+    const named = n => { n = (n || def).slice(0, 60).trim().toLowerCase(); const hit = CHARS.filter(c => isSaved(c) && !c.file && String(c.name).trim().toLowerCase() === n); return hit.find(c => c.id === src.id) || hit.sort((x, y) => String(y.savedAt || '').localeCompare(String(x.savedAt || '')))[0] || null; };
+    const name = await askName(def, n => !!named(n)); if (name == null) return;
+    const target = named(name), p = planner.planFrom(liveCopy());
     p.name = (name || def).slice(0, 60);
+    if (target) {
+      p.id = target.id;
+      if (target.id !== src.id) { store.set('trees:' + p.id, null); store.set('notes:' + p.id, ''); } // the old build's tree tabs and notes go with it
+      if (unsaved) CHARS = CHARS.filter(c => c.id !== src.id); // the opened copy is now that build
+    } else if (unsaved) p.id = src.id;
+    keepSharedTabs(p);
     addChars([p], 'plan', p.id);
-    saveTip('Saved as the plan "' + p.name + '" (in the Saved Builds tab). Edits to it save in this browser as you go.');
+    saveTip(target ? 'Saved over the build "' + p.name + '". Edits to it save in this browser as you go.' : 'Saved as the plan "' + p.name + '" (in the Saved Builds tab). Edits to it save in this browser as you go.');
   });
   $('#shareLinkBtn').addEventListener('click', async () => {
     if (!st.ch) { alert('Load a character or start a plan first.'); return; }
@@ -17917,6 +17953,7 @@ window.BOStartApp = function () {
   async function openShared(code, id) {
     try {
       const p = keepSharedTabs(await planner.fromCode(id ? await codeForId(id) : code));
+      p.auto = true; // opened, not saved by hand: listed under "Opened, not saved" (renderSavedBuilds)
       addChars([p], 'plan', p.id); showTab('build');
     } catch (err) { alert('Could not open that share link:\n' + err.message); }
   }
@@ -17936,6 +17973,7 @@ window.BOStartApp = function () {
     try {
       if (planner.isPlanCode($('#codeInput').value)) {
         const p = keepSharedTabs(await planner.fromCode($('#codeInput').value));
+        p.auto = true;
         addChars([p], 'plan', p.id); $('#codeInput').value = ''; showTab('plan'); return;
       }
       const ch = S.characterFromCode(GD, await decodeBuildCode($('#codeInput').value));
@@ -20200,7 +20238,7 @@ window.BOStartApp = function () {
   }
   cloud = window.BOCloud({
     $, esc, api: SHARE_API, confirm: confirmInPage, tip: saveTip,
-    plans: () => CHARS.filter(c => c.plan && !c.file),
+    plans: () => CHARS.filter(c => c.plan && !c.file && !c.auto), // opened, unsaved builds stay out of the account
     // What a plan looks like now, with what is kept beside it (tree tabs, notes, potions): a change here means "save it".
     sig: ch => JSON.stringify(ch) + '|' + JSON.stringify(store.get('trees:' + ch.id, null)) + '|' + (store.get('notes:' + ch.id, '') || '') + '|' + JSON.stringify(brewery ? brewery.belt(ch.id) || null : null),
     code: ch => { const c = planWithTabs(ch), notes = store.get('notes:' + ch.id, ''); return planner.toCode(notes && String(notes).trim() ? Object.assign({}, c, { notes: String(notes).slice(0, NOTES_MAX) }) : c); },

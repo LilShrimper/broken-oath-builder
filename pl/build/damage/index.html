@@ -50,7 +50,7 @@
   var b = new URL("../../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/pl.json'), langCode: 'pl' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=371">
+<link rel="stylesheet" href="../../../style.css?v=372">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -93,7 +93,7 @@
       <span>ItemDatabase</span><span class="itemdb-credit">(credit frostyunknown on discord)</span>
     </a>
     <div class="nav-end">
-      <div class="nav-support"><a class="bmc-btn" href="https://buymeacoffee.com/Lilshrimper" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h11l-1.3 11.2a2 2 0 0 1-2 1.8H9.3a2 2 0 0 1-2-1.8z" fill="#fff" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/><path d="M5 5.5h13l-.4 2.5H5.4z" fill="#000"/><path d="M7.4 11.5h8.2l-.6 5.5H8z" fill="#FFDD00"/></svg><span class="bmc-btn-text">Buy me a coffee</span></a></div>
+      <div class="nav-support"><a class="bmc-btn" href="https://buymeacoffee.com/Lilshrimper" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h11l-1.3 11.2a2 2 0 0 1-2 1.8H9.3a2 2 0 0 1-2-1.8z" fill="#fff" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/><path d="M5 5.5h13l-.4 2.5H5.4z" fill="#000"/><path d="M7.4 11.5h8.2l-.6 5.5H8z" fill="#FFDD00"/></svg><span class="bmc-btn-text">Buy me a coffee</span></a><a class="kofi-btn" href="https://ko-fi.com/lilshrimper" target="_blank" rel="noopener noreferrer" title="Ko-fi: card or PayPal" aria-label="Support via Ko-fi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h12v6.5A4.5 4.5 0 0 1 11.5 18h-3A4.5 4.5 0 0 1 4 13.5z" fill="#fff"/><path d="M16 8.5h1.5a2.5 2.5 0 0 1 0 5H16" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M10 15.2l-2.6-2.5a1.5 1.5 0 0 1 2.1-2.1l.5.5.5-.5a1.5 1.5 0 0 1 2.1 2.1z" fill="#FF5E5B"/></svg><span class="bmc-btn-text">Support via Ko-fi</span></a></div>
       <span class="site-version" id="siteVersion"></span>
       <button class="nav-reset" id="resetLoadedCharacters" type="button" title="Remove characters loaded from saves or codes, and your build plans. Characters built into the page stay.">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 14h12l1-14M9 7V4h6v3"/></svg>
@@ -505,6 +505,7 @@
         <div class="tree-tip dragon-tip" id="dragonTip" hidden></div>
         <div class="tree-zoom"><button type="button" id="treeZoomIn" title="Zoom in">+</button><button type="button" id="treeZoomOut" title="Zoom out">−</button><button type="button" id="treeFit" title="Show the whole tree">Fit</button></div>
       </div>
+      <div class="warn tree-oath-warn" id="treeOathWarn" hidden></div>
       <p class="hint" id="treeStatus"></p>
       <div class="card opt-card" id="treeOpt" hidden></div>
       <p class="hint">Click a node to take it (the shortest path is added) or to refund it (nodes that lose their connection go too). Hover for its stats and what it does to the selected skill's DPS against the enemy set on the left. Right-click a node (on a touch screen: tap it, then Never take) to mark it never take: it gets a red cross, and Optimize, Plan and the node values skip it and never path through it. Right-click again to allow it. Heat map: brighter green = more DPS per point spent. Diamonds are Oath Masteries: one opens when you take any of its notables, then click it to swear one of its Oaths. Changes here apply to the Damage tab until you reset or switch character.</p>
@@ -627,7 +628,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":371,"at":"2026-11-18T19:01:27.736Z"};
+window.SITE_VERSION = {"v":372,"at":"2026-11-18T19:34:27.714Z"};
 window.SITE_LANG = 'pl';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -636,6 +637,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=4e9487f7","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../../app.js?v=371"></script>
+<script src="../../../app.js?v=372"></script>
 </body>
 </html>

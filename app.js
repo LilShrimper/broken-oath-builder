@@ -3999,6 +3999,7 @@ window.BOCreator = function (ctx) {
     Sockets: ['ArrayProperty', [SCRIPT('BOSkillSockets')]], Hotbar: ['ArrayProperty', ['StrProperty']],
     DragonlingNodes: ['ArrayProperty', ['NameProperty']], DragonlingAspect: 'NameProperty', MainSkillPin: 'StrProperty', ZoneFlags: ['ArrayProperty', ['StrProperty']],
     Level: 'IntProperty', TreeVersion: 'IntProperty', DragonlingTreeVersion: 'IntProperty', QuartzVersion: 'IntProperty',
+    OathMasteries95: ['MapProperty', ['NameProperty', 'NameProperty']], // sworn Oaths, seat id -> Oath id (every save holding it, 18 Nov 2026)
     PotionSatchel79: ['ArrayProperty', [SCRIPT('BOItemInstance')]], PotionSlots79: ['ArrayProperty', [['StructProperty', [['Guid', ['/Script/CoreUObject']]]]]],
   };
   const ITEM = [['ID', ['StructProperty', [['Guid', ['/Script/CoreUObject']]]], 8], ['BaseID', 'NameProperty'], ['ItemLevel', 'IntProperty'], ['Rarity', 'NameProperty'],
@@ -4186,6 +4187,11 @@ window.BOCreator = function (ctx) {
 
       if (GD.treeVersion) setV(rec, 'TreeVersion', Math.max(GD.treeVersion, val(rec, 'TreeVersion', 0)));
       syncQuartz(); // the build's bonus points already hold its quartz: mark what this map has earned as paid out
+
+
+
+      const oaths = Object.entries(ch.oaths || {}).filter(([m, o]) => m && o);
+      if (oaths.length) { setMap(rec, 'OathMasteries95', Object.fromEntries(oaths)); done.push(oaths.length + ' sworn Oath' + (oaths.length === 1 ? '' : 's')); }
       done.push(nodes.length + ' passives' + (lost ? ' (' + lost + ' not in this patch left out)' : ''));
     }
     if (parts.gear) {
@@ -4591,7 +4597,7 @@ window.BOCreator = function (ctx) {
       '<label class="field inline"><span>Level</span><input type="number" id="crLevel" min="1" max="100" value="' + (S.Level || 1) + '"></label>' +
       '<label class="field inline"><span>Bonus passive points</span><input type="number" id="crBonus" min="0" max="200" value="' + val(R(), 'BonusPassivePoints', 0) + '"></label>' +
       '<span class="hint">Passives taken: ' + arr(R(), 'PassiveNodeIds').length + '.</span></div>' +
-      '<p class="hint">Copies the level, passive tree, worn gear, idols, dwarven runes, skill bar, Dragonling and potions. The bag stays, and the checked QoL options are applied afterwards. Tree codes (<code>BO1.</code>) carry no items; other codes carry no rolled stats unless they come from a planner.</p></div>';
+      '<p class="hint">Copies the level, passive tree, sworn Oaths, worn gear, idols, dwarven runes, skill bar, Dragonling and potions. The bag stays, and the checked QoL options are applied afterwards. Tree codes (<code>BO1.</code>) carry no items; other codes carry no rolled stats unless they come from a planner.</p></div>';
   }
 
 
@@ -8930,7 +8936,7 @@ window.BOFaq = function (ctx) {
       '<b>Share links</b>: the short link stores the build code (name, class, level, gear, tree, skills) so the link can open it. The long link carries the code itself and stores nothing.',
       '<b>Reports</b> (Report a problem, Send a check report): your text, the check report\'s numbers if there is one, a Discord username only if you type one (optional, so a reply can reach you), a share link only if you tick it, and fight log lines only if you load your game log and tick "Attach log lines" (you see the exact lines first: fight lines only, no date or time of day, no name, no Steam ID, no file paths). No account. Check reports leave out your character name, Steam ID and file paths. Reports are kept 180 days.',
       'No IP addresses or cookies are stored with share links or reports. To stop spam, the report limit keeps a scrambled IP and date for one hour.',
-      'The <b>Buy me a coffee</b> button is loaded from buymeacoffee.com.',
+      'The Buy me a coffee and Ko-fi buttons are plain links: nothing loads from those sites until you click one.',
     ]));
 
     h += card('Accounts (optional)', list([
@@ -12780,9 +12786,12 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
         const sparkSpeedCap = is079(GD) && floor > 0 ? (sk.CastTime || 0.5) / floor : Infinity;
         if (speedRate > sparkSpeedCap) res.notes.push('Spark strikes: your cast speed (x' + speedRate.toFixed(2) + ') is past the cast speed cap (x' + sparkSpeedCap.toFixed(2) + '), and from patch 79 the strikes stop speeding up there.');
-        let strikeEvery = gather ? +ev[1] / Math.sqrt(Math.max(Math.min(speedRate, sparkSpeedCap), 1)) : +ev[1];
+        let strikeEvery = gather ? +ev[1] / Math.pow(Math.max(Math.min(speedRate, sparkSpeedCap), 1), ruleNum(GD, 'r87.SPARKS.CastSpeedExp', 0.7)) : +ev[1];
         let sparkRate = 0; for (const m of pickMods(mods, 'SparkRate', 'Inc')) if (applies(ctx, m)) { sparkRate += m.v; use(m); }
         if (sparkRate) strikeEvery /= Math.max(0.1, 1 + sparkRate / 100);
 
@@ -12924,15 +12933,20 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
       const ob = sk.Orb, dur = ob.Duration || 6;
       let orbs = ob.Max || 1; for (const m of pickMods(mods, 'OrbCount', 'Flat')) if (applies(ctx, m)) { orbs += m.v; use(m); }
       let orbInc = 0; for (const m of pickMods(mods, 'OrbRate', 'Inc')) if (applies(ctx, m)) { orbInc += m.v; use(m); }
-      const up = Math.min(1, usesPerSec * dur), every = ob.Interval / Math.max(0.1, 1 + orbInc / 100);
+      const orbSpeedCap = is079(GD) && floor > 0 ? (sk.CastTime || 0.55) / floor : Infinity;
+      const orbSpeed = Math.pow(Math.max(Math.min(speedRate, orbSpeedCap), 1), ruleNum(GD, 'r87.SPARKS.CastSpeedExp', 0.7));
+      const up = Math.min(1, usesPerSec * dur), every = ob.Interval / Math.max(0.1, 1 + orbInc / 100) / orbSpeed;
       const icicles = orbs * up / every, bursts = orbs * up / dur, burstScale = ob.ExplodeScale || 0;
       usesPerSec = icicles + (burstScale > 0 ? bursts : 0); useTime = 1 / usesPerSec; ownClock = true;
       shapeWeight = (icicles + bursts * burstScale) / usesPerSec;
       res.orb = { orbs, every, duration: dur, burstScale };
-      res.notes.push(sk.Name + ': ' + orbs + ' orb' + (orbs > 1 ? 's' : '') + (up < 1 ? ' up ' + Math.round(up * 100) + '% of the time' : '') + ', each throwing an icicle every ' + every.toFixed(2) + ' s for ' + dur + ' s, then bursting for ' + Math.round(burstScale * 100) + '% of an icicle. Cast speed only re-forms them (its speed-up of the icicles is not counted). From the game\'s skill data; not checked against the skill panel.');
+      res.notes.push(sk.Name + ': ' + orbs + ' orb' + (orbs > 1 ? 's' : '') + (up < 1 ? ' up ' + Math.round(up * 100) + '% of the time' : '') + ', each throwing an icicle every ' + every.toFixed(2) + ' s for ' + dur + ' s, then bursting for ' + Math.round(burstScale * 100) + '% of an icicle. Cast speed quickens the icicles (x' + orbSpeed.toFixed(2) + ' from cast speed, the game\'s speed^0.70' + (speedRate > orbSpeedCap ? ', stopped at the cast speed cap' : '') + ').');
     } else if (['Orb', 'Orbit', 'Ground', 'Skyfall', 'Rain', 'Totem'].includes(sk.Delivery)) {
       res.notes.push(sk.Delivery + ' skills hit on their own pattern; this sheet counts one hit per cast. Set "hits per second" by hand if you know the real rate.');
     }
@@ -18584,10 +18598,24 @@ window.BOStartApp = function () {
     for (const t of $('#treeSvg').querySelectorAll('text.tlabel')) { const id = t.dataset.id; t.classList.toggle('alloc', have.has(id)); t.classList.toggle('top', top.has(id)); t.classList.toggle('opt', oa.has(id) || orm.has(id)); }
     T.og = new Map(); // Oath DPS values, worked out again when a card or tip asks
     const sw = swornNow();
+
+
+    const unsworn = new Set(Object.values(GD.masteries || {}).filter(m => masteryOpen(m, have) && !sw.has(m.Id) &&
+      m.Oaths.some(oid => GD.oaths[oid] && !oathBlocked(m, oid, have, sw))).map(m => m.Id));
+    const ow = $('#treeOathWarn');
+    if (ow) {
+      ow.hidden = !unsworn.size;
+      if (unsworn.size) {
+        const names = [...unsworn].map(id => GD.masteries[id].Name);
+        ow.innerHTML = '<b>' + unsworn.size + ' Oath seat' + (unsworn.size === 1 ? ' is' : 's are') + ' open with no Oath sworn:</b> ' + esc([...new Set(names)].join(', ')) +
+          '. Click a pulsing diamond on the tree to pick one; an empty seat gives nothing.';
+      }
+    }
     for (const p of $('#treeSvg').querySelectorAll('polygon.tm')) {
       const m = GD.masteries[p.dataset.mid]; if (!m) continue;
       p.classList.toggle('open', masteryOpen(m, have)); p.classList.toggle('sworn', sw.has(m.Id)); p.classList.toggle('sel', m.Id === T.selM);
       p.classList.toggle('found', !!q && masteryText(m).includes(q));
+      p.classList.toggle('unsworn', unsworn.has(m.Id));
     }
     for (const t of $('#treeSvg').querySelectorAll('text.tmlabel')) {
       const m = GD.masteries[t.dataset.mid]; if (!m) continue;

@@ -424,7 +424,7 @@ summary .count { color: var(--faint); font-weight: 400; }
 .foot { color: var(--faint); font-size: 12px; text-align: center; padding: 10px 20px 30px; }
 .foot-legal { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; margin-bottom: 12px; font-size: 13px; }
 .foot-legal a { padding: 5px 0; text-underline-offset: 3px; }
-.nav-support { align-self: stretch; display: flex; justify-content: center; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.nav-support { align-self: stretch; display: flex; flex-direction: column; gap: 8px; justify-content: center; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 /* Buy Me a Coffee: our own plain link in their colours (13 Nov 2026). Their button script loaded from cdnjs.buymeacoffee.com,
    which mainland China DNS-poisons (103.240.180.117), and as a blocking script it held up the whole page there. */
 .bmc-btn { display: inline-flex; align-items: center; color: #000 !important; background: #FFDD00; border: 0; font-weight: 700; line-height: 1; text-decoration: none !important; white-space: nowrap; box-sizing: border-box; }
@@ -433,7 +433,15 @@ summary .count { color: var(--faint); font-weight: 400; }
 .bmc-btn svg { width: auto; flex-shrink: 0; }
 .nav-support .bmc-btn { min-width: 0; width: 100%; height: 40px; padding: 0 12px; justify-content: center; border-radius: 9px; font-size: 16px; }
 .nav-support .bmc-btn svg { height: 24px !important; }
-.nav-support .bmc-btn-text { width: auto; margin-left: 6px; }.drop-hint { position: fixed; inset: 0; background: color-mix(in srgb, var(--bg) 80%, transparent); display: none; align-items: center; justify-content: center; font-size: 20px; color: var(--accent); z-index: 20; border: 3px dashed var(--accent); }
+.nav-support .bmc-btn-text { width: auto; margin-left: 6px; }
+/* Ko-fi (owner, 18 Nov 2026: ko-fi.com/lilshrimper; takes cards and PayPal): a plain link in Ko-fi's blue, beside Buy Me a Coffee. */
+.kofi-btn { display: inline-flex; align-items: center; color: #fff !important; background: #13C3FF; font-weight: 700; line-height: 1; text-decoration: none !important; white-space: nowrap; box-sizing: border-box; }
+.kofi-btn:hover { filter: brightness(1.05); }
+.kofi-btn:focus-visible { outline: 2px solid var(--dashboard-gold, #c9a227); outline-offset: 2px; }
+.kofi-btn svg { width: auto; flex-shrink: 0; }
+.nav-support .kofi-btn { min-width: 0; width: 100%; height: 40px; padding: 0 12px; justify-content: center; border-radius: 9px; font-size: 16px; color: #0b1b2b !important; }
+.nav-support .kofi-btn svg { height: 24px; }
+.nav-support .kofi-btn svg path:first-child { fill: #0b1b2b; } .nav-support .kofi-btn svg path:nth-child(2) { stroke: #0b1b2b; }.drop-hint { position: fixed; inset: 0; background: color-mix(in srgb, var(--bg) 80%, transparent); display: none; align-items: center; justify-content: center; font-size: 20px; color: var(--accent); z-index: 20; border: 3px dashed var(--accent); }
 body.dragging .drop-hint { display: flex; }
 .headline.small { grid-template-columns: 1.4fr 1fr 1.4fr; margin-bottom: 10px; }
 @media (max-width: 700px) { .headline.small { grid-template-columns: 1fr; } }
@@ -505,6 +513,10 @@ details.report pre { white-space: pre-wrap; word-break: break-word; font-size: 1
 .tm { fill: var(--panel-2); stroke: var(--faint); stroke-width: 6; stroke-linejoin: round; cursor: pointer; opacity: .6; }
 .tm.open { stroke: var(--dashboard-gold, #d9b45b); stroke-width: 10; opacity: 1; }
 .tm.sworn { fill: var(--dashboard-gold, #d9b45b); stroke: var(--text); }
+.tm.unsworn { animation: tm-unsworn 1.6s ease-in-out infinite; }
+@keyframes tm-unsworn { 50% { stroke-width: 22; } }
+@media (prefers-reduced-motion: reduce) { .tm.unsworn { animation: none; stroke-width: 18; } }
+.tree-oath-warn { margin: 10px 0 0; }
 .tm.found { stroke: #fff; stroke-width: 16; opacity: 1; }
 .tm:hover, .tm.sel { stroke: var(--text); stroke-width: 14; opacity: 1; }
 .tmlabel { fill: var(--dashboard-gold, #d9b45b); font-size: 46px; font-weight: 600; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 12px; display: none; }
@@ -942,7 +954,10 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
   .nav-end .sub { display: none; }
   .nav-reset { width: 34px; height: 34px; justify-content: center; padding: 0; }
   .nav-reset span { display: none; }
-  .nav-support { align-self: center; margin: 0; padding: 0; border: 0; }
+  .nav-support { align-self: center; flex-direction: row; gap: 6px; margin: 0; padding: 0; border: 0; }
+  .nav-support .kofi-btn { width: auto; flex: none; height: 34px; padding: 0 8px; font-size: 13px; }
+  .nav-support .kofi-btn .bmc-btn-text { display: none; } /* icon only on a phone: the bar has no room for two labels */
+  .nav-support .kofi-btn svg { height: 20px; }
   .nav-support .bmc-btn { height: 34px; padding: 0 10px; font-size: 13px; }
   .nav-support .bmc-btn svg { height: 20px !important; }
   .view-bar, .data-old, .hero, .layout, .fight-check-banner, .zh-beta { width: auto; max-width: none; margin: 10px 12px 0; }

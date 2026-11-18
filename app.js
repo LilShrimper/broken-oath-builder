@@ -16007,12 +16007,19 @@ window.BOStartApp = function () {
     selectSkill(first);
     if (planner) planner.render();
   }
+  const simmable = new Map();
   function fillSkills(ch) {
     const skills = S.listSkills(GD, ch);
     const groups = {};
     for (const s of S.listSkills(GD, ch, true)) (groups[s.where] = groups[s.where] || []).push(s);
     $('#skillSelect').innerHTML = Object.entries(groups).map(([g, list]) => '<optgroup label="' + g + '">' + list.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('') + '</optgroup>').join('');
-    const pickable = skills.filter(s => { const r = S.calcSkill(GD, ch, s.id, {}); return !r.unsupported && !r.error; });
+    // Whether a skill can be simmed depends on the skill alone (calcSkill's only early exits: unknown skill, summon without
+    // damage, no hit of its own), so it is worked out once per skill. Running the full sim for every listed skill on every
+    // edit took ~0.5 s a click on a plan (player report, 18 Nov 2026: "every click lags").
+    const pickable = skills.filter(s => {
+      if (!simmable.has(s.id)) { const r = S.calcSkill(GD, ch, s.id, {}); simmable.set(s.id, !r.unsupported && !r.error); }
+      return simmable.get(s.id);
+    });
     st.pickable = pickable;
     $('#optSkill').innerHTML = pickable.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('');
     if (st.skill) { $('#skillSelect').value = st.skill; $('#optSkill').value = st.skill; }

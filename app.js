@@ -621,7 +621,7 @@ window.PAGE_LANGS = {
     const ruleVal = v => v === 'True' ? true : v === 'False' ? false : v !== '' && v != null && isFinite(+v) ? +v : v;
 
 
-    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK|CRAFT)$/;
+    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK|CRAFT|CURSE)$/;
     try { for (const s of (J('Gameplay/switches.json') || {}).switches || []) if (RULE_SECTIONS.test(s.section)) gameRules[s.section + '.' + s.key] = ruleVal(s.value); } catch (e) { /* not served */ }
     try { for (const [k, v] of Object.entries((J('Gameplay/rules.json') || {}).values || {})) gameRules[k] = ruleVal(v && v.value); } catch (e) { /* older game data */ }
     let trapPrice = {};
@@ -8414,7 +8414,8 @@ window.BOFaq = function (ctx) {
       if (m.GolemAuras) {
         const VAR = { Default: 'Plain golem', Fire: 'Flame golem', Cold: 'Ice golem', Lightning: 'Storm golem', Poison: 'Venom golem' };
         const STAT = { LifeRegenPct: v => v + '% life regeneration', MinionDamage: v => v + '% more minion damage', ArmourPct: v => v + '% more armour', MinionSpeed: v => v + '% minion speed', EnemyTaken: v => 'enemies take ' + v + '% more damage' };
-        rows.push(['Variants', '<span class="faq-note">One golem, one monster. A linked element support (Flame, Ice, Storm, Venom) changes its element and so which blessing it gives; Brutality leaves the plain golem. Radius 9 m.</span>' +
+        rows.push(['Variants', '<span class="faq-note">One golem, one monster. A linked element support (Flame, Ice, Storm, Venom) changes its element and so which blessing it gives; Brutality leaves the plain golem. Radius 9 m.' +
+          (+GD.apiBuild >= 85 ? ' A blessing grows with your increased minion damage and minion life: half strength with none, full strength from 100% of the two together (the gem\'s text, build 85). A hero with no minion lines gets half of the numbers below.' : '') + '</span>' +
           Object.entries(m.GolemAuras).map(([el, a]) => '<br><b>' + esc(VAR[el] || el) + '</b>: ' + esc((STAT[a.Stat] || (v => a.Stat + ' ' + v))(a.Value))).join('')]);
       }
       let body = '<div class="table-wrap"><table class="tbl faq-tbl"><tbody>' + rows.map(r => '<tr><th>' + r[0] + '</th><td>' + r[1] + '</td></tr>').join('') + '</tbody></table></div>';
@@ -8515,7 +8516,60 @@ window.BOFaq = function (ctx) {
 
 
   function multipliers(GD) {
-    let h = intro('Damage Multipliers', 'Which "more" lines add together into one multiplier and which multiply on their own.');
+    let h = intro('Damage Multipliers', 'What adds together and what multiplies. The rule in one line: lines of the same group add to each other, and the groups multiply each other.');
+    const ADD = '<b class="faq-add">ADD</b>', MUL = '<b class="faq-mul">MULTIPLY</b>', kinds = +GD.apiBuild >= 84;
+
+
+    const ST = 'The developer\'s stacking table (public API, build 85)', st = also => ST + '.' + (also ? '<span class="faq-note">Also seen in the game: ' + also + '</span>' : '');
+
+
+
+
+
+
+
+
+
+
+    h += card('Adds or multiplies: the short version',
+      '<p class="faq-stats faq-formula"><b>Hit</b> = base damage × (1 + all increased) × each "more" line × (1 + all engine lines) × enemy takes more × crit</p>' +
+      '<p class="faq-stats faq-formula"><b>DPS</b> = hit × speed × count</p>' +
+      table(['Group', 'What is in it', 'Lines inside the group', 'Against the other groups', 'How we know'], [
+        ['<b>Increased damage</b>', 'Every "X% increased damage" that fits the skill: tree, gear, idols, runes, charges.', ADD, MUL + ' once, as one total', st('every tooltip check fits it.')],
+        ['<b>More damage</b>', 'Every plain "X% more damage": supports, keystones, a unique\'s "more" line, an Oath.', MUL + '<span class="faq-note">each line by itself, they never add</span>', MUL, st('character panel, 11 and 12 Nov 2026 (Glass Cannon).')],
+        ['<b>Damage engine</b>', '"X% more damage for every 1,000 Armour, Life, Energy Shield or Evasion", "per 1% Block", "per 10 Strength or Intelligence", "per 100 Mana".', ADD, MUL + ' once, as one total', 'Measured in the game on build 85 (19 Nov 2026): Judgement with 16 engine lines, one 22.5% line taken off. The hit fell by ×1.1183; adding predicts ×1.1183, multiplying ×1.225.<span class="faq-note">The game\'s log and the developer\'s switch file say the same.</span><span class="faq-note faq-flag"><b>Differs from the developer\'s stacking table</b>, which lists these lines as "multiplies". Reported to the developer on 19 Nov 2026; this page follows the measurement.</span>'],
+        ['<b>Enemy takes more damage</b>', kinds ? 'Five kinds: Woes · Sentences · Hunter\'s Marks with the War Banner · shock, chill and Brittle · hallowed ground, Maim and the golem\'s blessing.' : 'Curses, Marks, the War Banner, shock.',
+          kinds ? ADD + '<span class="faq-note">inside one kind</span>' : 'See <b>Curses &amp; Marks</b>', kinds ? MUL + '<span class="faq-note">kind against kind, and against the rest</span>' : MUL, kinds ? st('game log, build 84.') : 'See <b>Curses &amp; Marks</b>.'],
+        ['<b>Resistance</b>', 'The enemy\'s resistance, less your penetration and "−X% resistance" curses.', ADD + '<span class="faq-note">penetration and resistance cuts add up, then come off the resistance</span>', MUL, st('resistance tests on Guardians.')],
+        ['<b>Crit</b>', 'Crit chance and crit multiplier.', ADD + '<span class="faq-note">chance lines add, multiplier lines add</span>', MUL + '<span class="faq-note">× (1 + chance × (multiplier − 1))</span>', st('tooltip checks.')],
+        ['<b>Speed</b>', 'Attack speed and cast speed.', ADD + '<span class="faq-note">increased speed; a support\'s "more" speed multiplies by itself</span>', MUL + ' the DPS', st('tooltip checks.')],
+        ['<b>Count</b>', 'Projectiles, totems, traps, Sparks, minions standing.', ADD, MUL + ' the DPS', st()],
+        ['<b>Damage over time</b>', 'For poison: "increased Poison damage over time" is one group, "Damage over Time Multiplier" is another.', ADD + '<span class="faq-note">inside each of the two</span>', MUL + '<span class="faq-note">the two groups multiply each other and the hit</span>', st('game log, 11 Nov 2026 (exact on four cases).')],
+      ], 'faq-stack') +
+      hint('The groups and their rules are the game developer\'s own, from the stacking table in the Broken Oath public API (build 85). Where the last column adds "also seen in the game", the rule was checked there too. Numbers and rules can change with any patch.'));
+    h += card('The same in numbers', list([
+      '<b>Two increased lines, 50% and 30%:</b> they add. 1 + 0.5 + 0.3 = <b>×1.80</b> (not ×1.5 × 1.3 = ×1.95).',
+      '<b>Two more lines, 30% and 20%:</b> they multiply. 1.3 × 1.2 = <b>×1.56</b>.',
+      '<b>Two engine lines worth 30% and 20%:</b> they add. <b>×1.50</b>, so a second engine line is worth less than it reads.',
+      kinds ? '<b>Two Woes, +20% and +15% damage taken:</b> same kind, they add. <b>×1.35</b>.' : '',
+      kinds ? '<b>A Woe +20% and Death Sentence +25%:</b> two kinds, they multiply. 1.20 × 1.25 = <b>×1.50</b>. Hunter\'s Marks +10% on top: × 1.10 = <b>×1.65</b>.' : '',
+      '<b>All together:</b> 80% increased, a 30% more support, a 50% engine and a ×1.5 curse total give 1.8 × 1.3 × 1.5 × 1.5 = <b>×5.27</b> on the base hit, before crit.',
+    ]));
+    h += card('Cases players ask about', table(['Case', 'Adds or multiplies', 'How we know'], [
+      ['Glass Cannon with engine lines (Runic Ward, Boundless Mind)', MUL + '<span class="faq-note">Glass Cannon is a plain "more", not part of the engine</span>', st('character panel, 11 and 12 Nov 2026: the same ×1.165 and ×1.181 with the other node on and off.')],
+      ['Glass Cannon on minions', MUL + '<span class="faq-note">×1.25 on every minion</span>', st('skill tooltips, 18 Nov 2026, four summons.')],
+      kinds ? ['A Woe with a Sentence', MUL, st('game log, build 84.')] : null,
+      kinds ? ['Two Woes; or Hunter\'s Marks with the War Banner', ADD, st('game log, build 84 (same kind).')] : null,
+      kinds ? ['Hunter\'s Marks or the War Banner with curses', MUL + '<span class="faq-note">some item and support texts still say they "add with curses"</span>', st('game log, build 84. Marks are their own kind.')] : null,
+      ['A shock laid by another skill with Hunter\'s Marks', MUL, st('game log, 17 Nov 2026 (Lightning Arrow\'s shock on Flame Dash).')],
+      ['Several "increased curse effect" lines', ADD, st('curse tooltips, 17 Nov 2026.')],
+      ['Deepened Woe with increased curse effect', MUL, st('curse tooltips, 17 Nov 2026. Intelligence does not raise a curse\'s damage taken.')],
+      +GD.apiBuild >= 82 ? ['Fervent Vow with a Vow\'s built-in 15%', ADD + '<span class="faq-note">both are shares of the Vow\'s base value: Vow of Iron 44% × 1.30 = 57.2%, not 50.6% × 1.15</span>', 'The gem\'s own text, build 85.'] : null,
+      +GD.apiBuild >= 85 ? ['Ruthless, Executioner and Life Leech "more damage" on Bleed, Poison and Ignite', 'Neither: <b>hits only</b><span class="faq-note">the ailment a Ruthless blow starts is not raised</span>', 'The gems\' own texts, build 85.'] : null,
+      ['"More damage per 1,000 Armour" lines for minions', ADD + '<span class="faq-note">with each other, at half value for minions</span>', 'Patch notes, Patch 78.'],
+      ['Your "increased Poison (Fire, Cold, Lightning) damage" lines for minions', ADD + '<span class="faq-note">to the summon skill\'s own increased damage, which multiplies increased Minion Damage</span>', 'Skeletal Mage tooltips, build 84: three cases exact.'],
+      ['"Afterimages deal X% increased damage"', ADD + '<span class="faq-note">to the hit\'s increased damage, for the afterimages only</span>', st()],
+    ].filter(Boolean), 'faq-stack faq-stack3'));
     h += card('Added together into one multiplier', hint('Every line of the form "X% more damage for every amount of a stat". These add to each other first and then multiply your damage once. The game calls this group the damage engine.') +
       list([
         '<b>For every 1,000 Armour, Evasion, Energy Shield or Life:</b> Bone Armour, Iron Skin, Runic Ward, Bastion\'s Reckoning, the Ironclad Fury support and similar.',
@@ -8525,13 +8579,15 @@ window.BOFaq = function (ctx) {
         '<b>Hammer of Judgement</b> (Slams, for every 1,000 Armour).',
         '<b>Bloodlust</b> stacks were in this group until patch 0.56.7. Since 0.56.8 Bloodlust gives increased melee damage, so it is in neither list.',
         'Example: an engine line worth 30% and one worth 20% give ×1.5 together, not ×1.3 × 1.2 = ×1.56. A second engine line is worth less than it reads.',
-        'From the developer\'s patch notes (0.56.5) and the game log. Oath of a Thousand Cuts is taken to follow the same rule; that one is not checked yet.',
+        'From the developer\'s patch notes (0.56.5), and measured again on build 85 (19 Nov 2026): with 16 engine lines on a Paladin, taking one 22.5% line off changed the hit of Judgement by exactly what adding predicts (×1.118, not ×1.225). The engine lines of a support (Ironclad Fury) are in the same sum. Oath of a Thousand Cuts is taken to follow the same rule; that one is not checked yet.',
       ]), 'the damage engine');
     h += card('Multiply separately', hint('Everything written as a plain "X% more damage". Each one multiplies by itself, so it is worth what it reads.') +
       list([
         '<b>Plain "more" lines</b> on the tree, keystones and supports: Holy "more" lines, Glass Cannon, Bone Sovereign\'s 15%, Multistrike\'s ' + msLess(GD) + '% less.',
         '<b>Damage over Time Multiplier</b> and <b>increased Poison damage over time</b>: each is a group of its own (see <b>Ailments</b>).',
-        +GD.apiBuild >= 82
+        +GD.apiBuild >= 84
+          ? '<b>Crit multiplier</b>, and each kind of "takes more damage" effect: Woes, Sentences, Marks with the War Banner, the shock family and vulnerability. Effects of one kind add; the kinds multiply each other and your damage (since Patch 84; see <b>Curses &amp; Marks</b>).'
+          : +GD.apiBuild >= 82
           ? '<b>Crit multiplier</b>, shock, and all the "takes more damage" effects together: curses, Marks and the rest add into one bonus, which then multiplies (since Patch 82; see <b>Curses &amp; Marks</b>).'
           : '<b>Crit multiplier</b>, and anything that makes the enemy take more damage: curses, Marks, shock. On a Guardian only the strongest plain "takes more damage" counts; typed ones (more Physical, more damage from ailments) still multiply (see <b>Curses &amp; Marks</b>).',
         '<b>For minions:</b> the summon skill\'s own increased damage, affinity, near you and zone level (see the Skills tab, Minion Scaling).',
@@ -8734,7 +8790,11 @@ window.BOFaq = function (ctx) {
 
 
       '<b>Every "takes more damage" effect counts</b>, on every monster, Guardians included (since Patch 84). Effects of the same kind add together and different kinds multiply. The game names five kinds: Woes; Sentences; Hunter\'s Marks with the War Banner; the shock family; vulnerability (we count Maim, the venom golem and hallowed ground here). Example: Death Sentence +25% with a Woe +20% is ×1.25 × 1.20 = ×1.50; add Marks +10% and it is ×1.50 × 1.10.',
-      'The five kinds are from the game\'s own log. Where Maim, the golem, hallowed ground and Unravel belong is our reading, not checked in the game yet.',
+
+
+      '<b>In short: same kind = add, different kind = multiply.</b> Two Woes add. A Woe and a Sentence multiply. Marks and the War Banner add with each other and multiply with curses.',
+      'The five kinds are from the game\'s own log (build 84). The developer\'s stacking table in the public API (build 85) says where the rest belong: "more Fire (Cold, Lightning, Physical) damage taken" lines and Unravel count with the <b>Woes</b>; shock, chill\'s damage taken and Brittle are one kind; hallowed ground, Maim and the golem\'s blessing are one kind. Lowered resistance is never part of these: it changes the resistance itself.',
+      'Some item and support texts still say Marks "add with curses". The game log and the developer\'s table both make Marks their own kind, so they multiply with curses.',
     ] : +GD.apiBuild >= 82 ? [
 
       '<b>All "takes more damage" effects add together</b>, on every monster, Guardians included (since Patch 82): Woes, Sentences, Marks, the War Banner, typed lines like "more Physical damage", the venom golem and hallowed ground make one bonus. Example: +25% and +20% give ×1.45, not ×1.5.',
@@ -8915,6 +8975,9 @@ window.BOFaq = function (ctx) {
         'There are <b>' + riven.length + '</b> Riven mods. Each is a stronger copy of a normal mod: same line, one tier above the best normal tier, item level ' + (ex.Tiers[0].ILvl || 84) + '.',
         twin ? 'Example: ' + esc(line(ex, ex.Tiers[0]).replace(String(ex.Tiers[0].Max), ex.Tiers[0].Min + '–' + ex.Tiers[0].Max)) + ' as a Riven mod, against ' + twin.Tiers[0].Min + '–' + twin.Tiers[0].Max + ' at the best normal tier.' : '',
         'A Riven mod takes the place of the normal mod of its kind: an item cannot have both.',
+
+
+        +GD.apiBuild >= 85 ? 'The game counts most Riven damage lines a little under the number on the item: ×0.85 to ×0.96 of the roll, but never under the best normal tier\'s top × 1.05. Skill level lines count in full (+3 is +3). Life, resistance, defence and attribute lines count in full. From the game\'s own log, build 85.' : '',
         'The full list is in <b>Item Search</b>: choose Item mods and search for "riven". The Build Planner offers them on every item their normal mod can roll on.',
       ]) + hint('Where they roll is worked out, not written in the game data: each Riven mod matches one normal mod, and top ladder builds wear them on the same item types.'));
     }
@@ -11332,7 +11395,7 @@ window.BOCharacter = function (ctx) {
   const OATHWORD_2H = 1;
   function wordPower2H(rw, twoHand, GD) { return twoHand && rw && rw.Power2H > 1 ? (GD && is084(GD) ? rw.Power2H : OATHWORD_2H) : 1; }
 
-  function vowLevelShare(GD) { return is056(GD) ? ruleNum(GD, 'r83.VOWS.VowSkillLevelShare', 0.5) : 1; }
+  function vowLevelShare(GD) { return is085(GD) ? 1 : is056(GD) ? ruleNum(GD, 'r83.VOWS.VowSkillLevelShare', 0.5) : 1; }
   function vowShare(GD, n) { const s = GD.vowShares || []; return s.length ? s[Math.min(n, s.length - 1)] : 1; }
 
 
@@ -11418,18 +11481,38 @@ window.BOCharacter = function (ctx) {
 
   const AFFIX_SCALE = { riven95_area: 0.83, riven95_attack_speed_local: 0.89, riven95_cast_speed: 0.85, riven95_cast_speed_2h: 0.86, riven95_cold_added_local: 0.83, riven95_cold_dmg_inc: 0.83, riven95_cold_dmg_inc_2h: 0.83, riven95_cold_spell_added: 0.84, riven95_cold_spell_added_2h: 0.84, riven95_cooldown_recovery: 0.77, riven95_crit_global: 0.87, riven95_crit_local: 0.87, riven95_crit_multi: 0.87, riven95_dot_multi: 0.78, riven95_fire_added_local: 0.83, riven95_fire_dmg_inc: 0.83, riven95_fire_dmg_inc_2h: 0.83, riven95_fire_spell_added: 0.84, riven95_fire_spell_added_2h: 0.84, riven95_lightning_added_local: 0.83, riven95_lightning_dmg_inc: 0.83, riven95_lightning_dmg_inc_2h: 0.83, riven95_lightning_spell_added: 0.84, riven95_lightning_spell_added_2h: 0.84, riven95_minion_dmg: 0.84, riven95_minion_dmg_2h: 0.84, riven95_minion_dmg_jewel: 0.84, riven95_phys_added_local: 0.84, riven95_phys_inc_local: 0.84, riven95_poison_dmg_inc: 0.83, riven95_poison_dmg_inc_2h: 0.83, riven95_poison_spell_added: 0.84, riven95_poison_spell_added_2h: 0.84, riven95_skill_level: 0.66, riven95_skill_level_2h: 0.5, riven95_skill_level_bow: 0.66, riven95_spell_inc: 0.85, riven95_spell_inc_2h: 0.85 };
   const AFFIX_SCALE_PREFIX = { skill_level: 0.75, mythic_breaker_world: 0.3 };
+
+
+
+
+
+
+
+
+
+
+  const AFFIX_SCALE_85 = { riven95_area: 0.93, riven95_attack_speed_local: 0.95, riven95_cast_speed: 0.93, riven95_cast_speed_2h: 0.95, riven95_cold_added_local: 0.95, riven95_cold_dmg_inc: 0.96, riven95_cold_dmg_inc_2h: 0.95, riven95_cold_spell_added: 0.94, riven95_cold_spell_added_2h: 0.95, riven95_cooldown_recovery: 0.85, riven95_crit_global: 0.94, riven95_crit_local: 0.94, riven95_crit_multi: 0.94, riven95_dot_multi: 0.88, riven95_fire_added_local: 0.95, riven95_fire_dmg_inc: 0.96, riven95_fire_dmg_inc_2h: 0.95, riven95_fire_spell_added: 0.94, riven95_fire_spell_added_2h: 0.95, riven95_lightning_added_local: 0.95, riven95_lightning_dmg_inc: 0.96, riven95_lightning_dmg_inc_2h: 0.95, riven95_lightning_spell_added: 0.94, riven95_lightning_spell_added_2h: 0.95, riven95_minion_dmg: 0.95, riven95_minion_dmg_2h: 0.96, riven95_minion_dmg_jewel: 0.94, riven95_phys_added_local: 0.95, riven95_phys_inc_local: 0.95, riven95_poison_dmg_inc: 0.96, riven95_poison_dmg_inc_2h: 0.95, riven95_poison_spell_added: 0.94, riven95_poison_spell_added_2h: 0.95, riven95_spell_inc: 0.95, riven95_spell_inc_2h: 0.96 };
+  const IDOL_SCALE_85 = Object.assign({}, IDOL_SCALE, { 'idol_phys_': 0.75, 'idol_elemental_': 0.75, 'idol_spell_': 0.75, 'idol_melee_': 0.75, 'idol_crit_': 0.75, 'idol_grand_eng_': 1.0 });
   function affixLineScale(GD, id) {
     if (!is082(GD)) return 1;
     id = lc(id);
     if (is084(GD) && /^riven95_skill_level/.test(id)) return 1;
-    if (AFFIX_SCALE[id] != null) return AFFIX_SCALE[id];
+    if (is085(GD) && id.startsWith('skill_level')) return 1;
+    const T = is085(GD) ? AFFIX_SCALE_85 : AFFIX_SCALE;
+    if (T[id] != null) return T[id];
     for (const p in AFFIX_SCALE_PREFIX) if (id.startsWith(p)) return AFFIX_SCALE_PREFIX[p];
     return 1;
+  }
+
+  function rivenFloor(GD, id) {
+    if (!is085(GD) || !/^riven95_/i.test(id || '')) return null;
+    const t = ((GD.affixes[lc(id).replace(/^riven95_/, '')] || {}).Tiers || [])[0];
+    return t && t.Max > 0 ? [t.Max * 1.05, t.Max2 > 0 ? t.Max2 * 1.05 : 0] : null;
   }
   function idolLineScale(GD, id, tier, itemLevel, lines) {
     if (!is082(GD)) return 1;
     id = lc(id); let k = IDOL_SCALE_EXACT[id];
-    if (k == null) { let best = ''; for (const p in IDOL_SCALE) if (id.startsWith(p) && p.length > best.length) best = p; if (!best) return 1; k = IDOL_SCALE[best]; }
+    if (k == null) { let best = ''; const T = is085(GD) ? IDOL_SCALE_85 : IDOL_SCALE; for (const p in T) if (id.startsWith(p) && p.length > best.length) best = p; if (!best) return 1; k = T[best]; }
     if (is084(GD) && k < 0.7 && itemLevel >= 84 && (tier === 1 || lines >= 5)) k = 0.7;
     return k;
   }
@@ -11539,7 +11622,9 @@ window.BOCharacter = function (ctx) {
 
           const cnt = x => sh === 1 || !x ? x : boost && af.Mod && af.Mod.Stat === 'Resist' ? x * sh : Number.isInteger(x) ? (Math.round(x * sh) || (isVow ? Math.sign(x) : 0)) : Math.round(x * sh * 10) / 10;
           const ik = it.slot === 'Idol' ? (af.Mod && af.Mod.Mode !== 'Flag' && !RARE_COUNT_STATS.has(af.Mod.Stat) ? idolLineScale(GD, a.id, a.tier, it.level || 0, it.affixes.length) : 1) : af.Mod && af.Mod.Mode !== 'Flag' ? affixLineScale(GD, a.id) : 1;
-          add(af.Mod, idolRound(cnt(a.v), ik), idolRound(cnt(a.v2), ik), label + (ik !== 1 ? (it.slot === 'Idol' ? ' (idol line x' : ' (line x') + +ik.toFixed(2) + ')' : '') + (isVow ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
+          const rf = ik < 1 && sh === 1 && it.slot !== 'Idol' ? rivenFloor(GD, a.id) : null;
+          const lineV = (x, lo) => { const y = idolRound(cnt(x), ik); return rf && lo > 0 && typeof x === 'number' && x > 0 ? Math.max(y, Math.min(x, Number.isInteger(x) ? Math.round(lo) : Math.round(lo * 10) / 10)) : y; };
+          add(af.Mod, lineV(a.v, rf && rf[0]), lineV(a.v2, rf && rf[1]), label + (ik !== 1 ? (it.slot === 'Idol' ? ' (idol line x' : ' (line x') + +ik.toFixed(2) + ')' : '') + (isVow ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
         }
       }
       const weaponSlot = it.slot === 'MainHand' || it.slot === 'OffHand';
@@ -12375,6 +12460,10 @@ window.BOCharacter = function (ctx) {
         const b = get('Block'); use(m, 'more per 1% block');
         mods.push({ stat: 'Damage', mode: 'More', tags: [], v: m.v * b, v2: 0, local: false, src: m.src + ' (' + Math.round(b) + '% block, estimated)', key: m.key });
       }
+
+
+
+
 
 
 
@@ -13794,7 +13883,7 @@ window.BOCharacter = function (ctx) {
 
     const golemB = golemBlessing(GD, ch, sk, o, mods);
     const golemTaken = golemB && golemB.stat === 'EnemyTaken' ? 1 + golemB.v / 100 : 1;
-    if (golemTaken !== 1) res.notes.push('Your ' + golemB.name + ' makes enemies near it take ' + golemB.v + '% more damage (counted as if it is always within 9 m of the enemy).');
+    if (golemTaken !== 1) res.notes.push('Your ' + golemB.name + ' makes enemies near it take ' + +golemB.v.toFixed(2) + '% more damage (counted as if it is always within 9 m of the enemy).');
 
 
 
@@ -15549,8 +15638,20 @@ window.BOCharacter = function (ctx) {
 
 
     const gh = modsOf(mods || NO_MODS, 'GolemAuraStack76').filter(m => m.stat === 'GolemAuraStack76').reduce((x, m) => x + (m.v || 0), 0);
-    const v = a.Value * (1 + gh / 100);
-    return { element: el, stat: a.Stat, v, name: name + (gh ? ' (Golemheart +' + gh + '%)' : ''), text: a.Stat === 'MinionDamage' ? +v.toFixed(2) + '% more damage' : a.Stat === 'EnemyTaken' ? 'enemies take ' + +v.toFixed(2) + '% more damage' : +v.toFixed(2) + '% faster' };
+
+
+
+
+
+    const gBase = is085(GD) ? ruleNum(GD, 'r108.CURSE.GolemBlessBase', 0.5) : is084(GD) ? 0.7 : 1;
+    let grow = 1;
+    if (gBase < 1) {
+      let incs = 0;
+      for (const st of ['MinionDamage', 'MinionLife']) for (const m of pickMods(mods || NO_MODS, st, 'Inc')) if (!String(m.key || '').startsWith('support:')) incs += m.v || 0;
+      grow = gBase + (1 - gBase) * clamp(incs / 100, 0, 1);
+    }
+    const v = a.Value * grow * (1 + gh / 100);
+    return { element: el, stat: a.Stat, v, grow, name: name + (gh ? ' (Golemheart +' + gh + '%)' : '') + (grow < 1 ? ' (blessing at ' + Math.round(grow * 100) + '% strength: under 100% increased minion damage and life)' : ''), text: a.Stat === 'MinionDamage' ? +v.toFixed(2) + '% more damage' : a.Stat === 'EnemyTaken' ? 'enemies take ' + +v.toFixed(2) + '% more damage' : +v.toFixed(2) + '% faster' };
   }
 
   function earlyDamage(cls, level) {

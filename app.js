@@ -2903,12 +2903,13 @@ window.BOPlanner = function (ctx) {
     const text = codeDraft.trim();
     if (!text || importing) return;
     importing = true; status = ''; render();
-    try { await ctx.importCode(text); codeDraft = ''; status = 'Opened the code as a plan.'; }
+    try { if (await ctx.importCode(text)) { codeDraft = ''; status = 'Opened the code as a plan.'; } }
     catch (err) { status = 'Could not open that code: ' + err.message; }
     importing = false; render();
   }
   async function startNewPlan(classId, level) {
     if (!await ctx.confirm('Start a new build?', 'A new empty build plan will be started. You can keep any existing plans.', 'Start plan')) return false;
+    if (ctx.leave && !await ctx.leave()) return false; // the open build's unsaved changes: save or discard first
     const current = ctx.current();
     const defaultClass = current && current.classId || Object.values(GD.classes)[0].Id;
     const defaultLevel = current && current.level || 60;
@@ -3798,7 +3799,11 @@ window.BOPlanner = function (ctx) {
       catch (err) { window.prompt('Copy this plan code:', code); }
       return render();
     }
-    if (act === 'dup' && ch.plan) { const p = planFrom(ch); status = 'Duplicated.'; ctx.add(p, ch); return render(); }
+    if (act === 'dup' && ch.plan) {
+      const id = ch.id;
+      (async () => { if (ctx.leave && !await ctx.leave()) return; const c = ctx.chars ? ctx.chars().find(x => x.id === id) || ch : ch; const p = planFrom(c); status = 'Duplicated.'; ctx.add(p, c); render(); })(); // a discard puts a new object in its place
+      return;
+    }
     if (act === 'del' && ch.plan) { if (!window.confirm('Delete the plan "' + ch.name + '"? This cannot be undone (copy its plan code first to keep it).')) return; status = ''; ctx.remove(ch); return render(); }
     if (act === 'rmskill') { removeSkill(ch, skill); return done({ skills: true }); }
     if (act === 'togsup') {
@@ -4875,6 +4880,7 @@ window.BOCreator = function (ctx) {
     C.err = ''; C.msg = 'Reading the code…'; render();
     try {
       const ch = await ctx.importCode(text);
+      if (!ch) { C.msg = ''; return render(); } // stayed on a build with unsaved changes
       C.buildId = ch.id;
       const S = C.save && summary();
       if (!S) C.msg = 'Imported ' + ch.name + ' (' + ch.classId + ' ' + ch.level + '). Load an offline ' + ch.classId + ' save to copy it onto.';
@@ -13889,7 +13895,6 @@ window.BOCharacter = function (ctx) {
         const more = Math.min(te.Cap ?? 25, (te.PerHit ?? 3) * hitsPerSec);
         k *= 1 + more / 100; why.push('Tempest Edge: ' + hitsPerSec.toFixed(1) + ' melee hits a second, ' + +more.toFixed(1) + '% more');
       }
-      if (lit('frostbreak')) why.push('Frostbreak: its 50% more needs a Brittle Guardian (after its freeze bar fills); not counted');
       if (k !== 1) { for (const d of Object.keys(byType)) byType[d] *= k; hitDpsVs *= k; }
       if (why.length) res.notes.push(why.join('. ') + '. Patch 79 supports, from their texts.');
     }
@@ -13990,17 +13995,28 @@ window.BOCharacter = function (ctx) {
 
 
     res.barShock = [];
-    if (A.bEnabled && A.ShockCoef && o.barShock !== false && !o._barProbe) {
-      const ids = new Map();
-      for (const id of ch.hotbar || []) if (id) ids.set(lc(id), id);
-      for (const s of ch.sockets || []) if (s.conduit && ids.has(lc(s.skill)) && !ids.has(lc(s.conduit))) ids.set(lc(s.conduit), s.conduit);
-      ids.delete(lc(skillId));
+
+
+    let barIds = null; const barSheets = new Map();
+    const barOthers = () => {
+      if (barIds) return barIds;
+      barIds = new Map();
+      for (const id of ch.hotbar || []) if (id) barIds.set(lc(id), id);
+      for (const s of ch.sockets || []) if (s.conduit && barIds.has(lc(s.skill)) && !barIds.has(lc(s.conduit))) barIds.set(lc(s.conduit), s.conduit);
+      barIds.delete(lc(skillId));
+      for (const lid of [...barIds.keys()]) { const k = GD.skills[lid]; if (!k || isSummon(k) || !((k.Tags || []).includes('Attack') || k.SpellMin > 0)) barIds.delete(lid); }
+      return barIds;
+    };
+    const barSheet = (lid, id) => {
+      if (barSheets.has(lid)) return barSheets.get(lid);
       const ho = Object.assign({}, o, { _barProbe: true, _panelPass: true, _risen: true, _col: col, _gfHeld: gfHeld });
       for (const k of ['supportsOverride', 'gemLevel', 'projOnTarget', 'totemCount', 'hitsPerSecOverride', 'castsPerSecOverride', 'conduit', 'coc', 'cocSource']) delete ho[k];
-      for (const [lid, id] of ids) {
+      const r = calcSkill(GD, ch, id, ho); barSheets.set(lid, r); return r;
+    };
+    if (A.bEnabled && A.ShockCoef && o.barShock !== false && !o._barProbe) {
+      for (const [lid, id] of barOthers()) {
         const k = GD.skills[lid];
-        if (!k || isSummon(k) || !((k.Tags || []).includes('Attack') || k.SpellMin > 0)) continue;
-        const r = calcSkill(GD, ch, id, ho);
+        const r = barSheet(lid, id);
         const s = r && !r.error && !r.unsupported && r.ailments && r.ailments.shock;
         if (!s || !(s.rate > 0)) continue;
         const key = 'barshock:' + lid;
@@ -14051,6 +14067,17 @@ window.BOCharacter = function (ctx) {
         ail.crack = { dps: crack, freezeInc: fd };
         res.notes.push('Crack (patch 79): the ' + (isBoss ? 'Guardian' : 'rare') + ' stores ' + p80(GD, 'r103.AILMENTS.CrackPct103', 25) + '% of the cold it takes (x' + Math.max(0, 1 + (dotMulti + fd) / 100).toFixed(2) + ' from your damage over time multiplier and freeze duration) and it breaks as a cold hit every 3 s: +' + Math.round(crack).toLocaleString('en-US') + ' DPS. From the patch notes; not checked in game.');
       }
+    }
+
+
+
+
+
+
+
+    {
+      const takenK = (mitig.Cold ? mitig.Cold.taken : 1) * groundTaken * shockF;
+      res.freeze = { coldPerSec: takenK > 0 ? Math.max(0, (byType.Cold || 0) - (ail.crack ? ail.crack.dps : 0)) / takenK : 0 };
     }
     let poisonDps = 0, igniteDps = 0, bleedDps = 0;
     if (A.bEnabled) {
@@ -14502,6 +14529,58 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    if (res.freeze && !o._barProbe && is079(GD) && res.supports.some(x => x.ok && lc(x.id) === 'frostbreak' && !(o.off && o.off.has(x.key)))) {
+      const META = (GD.scaling && GD.scaling.Meta) || {};
+      const barPct = META.FreezeMeterPct > 0 ? META.FreezeMeterPct : 12, grow = META.FreezeMeterGrowth > 1 ? META.FreezeMeterGrowth : 1.5;
+      const win = (META.FreezeMeterSeconds != null ? META.FreezeMeterSeconds : 1.5) + (META.BrittleSeconds != null ? META.BrittleSeconds : 4);
+      const more = ((((GD.supports.frostbreak || {}).Mods || []).find(m => m.Stat === 'FreezeBreak103') || {}).Value) || 50;
+      if (!isBoss) res.notes.push('Frostbreak: its ' + more + '% more only counts on a Brittle Guardian or boss (after its freeze bar fills). Set the enemy to Guardian to see it.');
+      else {
+        const helpers = [];
+        for (const [lid, id] of barOthers()) {
+          const r = barSheet(lid, id);
+          const c = r && !r.error && !r.unsupported && r.freeze ? r.freeze.coldPerSec : 0;
+          if (!(c > 0)) continue;
+          const key = 'barfreeze:' + lid;
+          helpers.push({ id, key, name: (GD.skills[lid] || {}).Name || id, coldPerSec: c, dps: r.totalDps || 0, on: !(o.off && o.off.has(key)) });
+        }
+        const ownD = hitDpsVs + poisonDps + igniteDps + bleedDps;
+        let cold = res.freeze.coldPerSec, dmg = ownD;
+        for (const h of helpers) if (h.on) { cold += h.coldPerSec; dmg += h.dps; }
+        const life = o.enemyLife || guardianLifeAt(GD, guardianRL(GD, o, lvl));
+        const share = dmg > 0 ? Math.min(1, cold / dmg) : 0;
+
+        const bars = share > 0 ? Math.max(0, Math.floor(Math.log(1 + share * 100 * (grow - 1) / barPct) / Math.log(grow) + 1e-9)) : 0;
+        const fightSec = dmg > 0 ? life / dmg : 0;
+        const uptime = fightSec > 0 ? Math.min(1, bars * win / fightSec) : 0;
+        const k = 1 + more / 100 * uptime;
+        Object.assign(res.freeze, { frostbreak: true, helpers, bars, uptime, fightSec, life, share, firstFillSec: cold > 0 ? barPct / 100 * life / cold : 0, more: (k - 1) * 100 });
+        if (k !== 1) { for (const d of Object.keys(byType)) byType[d] *= k; hitDpsVs *= k; res.hitDps = hitDpsVs; }
+        const who = helpers.filter(h => h.on).map(h => h.name);
+        res.notes.push(cold > 0
+          ? 'Frostbreak: ' + Math.round(share * 100) + '% of the damage on the Guardian is cold that fills its freeze bar' + (who.length ? ' (this skill with ' + who.join(', ') + ', taken as kept up; untick them under Vows, Heralds & charges)' : '') +
+            '. The first bar (' + barPct + '% of its ~' + Math.round(life).toLocaleString('en-US') + ' life) fills after about ' + Math.round(barPct / 100 * life / cold) + ' s, each next one is ' + grow + ' times bigger: ' +
+            bars + ' bar' + (bars === 1 ? '' : 's') + ' in a fight of about ' + Math.round(fightSec) + ' s, ' + win + ' s Brittle each = ' + Math.round(uptime * 100) + '% of the fight -> hits ' + ((k - 1) * 100).toFixed(1) + '% more on average (' + more + '% while it is Brittle). Game log 19 Nov 2026.' +
+            (bars ? '' : ' Under ' + barPct + '% cold, the bar never fills before the Guardian dies.')
+          : 'Frostbreak: nothing on your bar deals cold hit damage, so the Guardian\'s freeze bar never fills and the ' + more + '% more never counts.');
+      }
+    }
     const noHero = modsOf(mods, 'Keystone').find(m => m.stat === 'Keystone' && m.mode === 'Flag' && (m.tags || []).includes('NoHeroDamage'));
     if (noHero && !res.totem && !res.conduit) {
       use(noHero, 'no damage yourself');
@@ -16386,14 +16465,19 @@ window.BOStartApp = function () {
     return fn => { if (!document.hidden) { setTimeout(fn, 0); return; } q.push(fn); mc.port2.postMessage(0); };
   })();
   function confirmInPage(title, message, action, danger) {
-    const dialog = $('#confirmDialog'), button = $('#confirmAction');
+    return askInPage(title, message, action, danger).then(a => a === 'confirm');
+  }
+
+  function askInPage(title, message, action, danger, alt) {
+    const dialog = $('#confirmDialog'), button = $('#confirmAction'), altBtn = $('#confirmAlt');
     $('#confirmTitle').textContent = title;
     $('#confirmMessage').textContent = message;
     button.textContent = action;
     button.classList.toggle('danger', !!danger);
+    altBtn.hidden = !alt; altBtn.textContent = alt || '';
     return new Promise(resolve => {
-      dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm'), { once: true });
-      dialog.showModal();
+      dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm' ? 'confirm' : dialog.returnValue === 'alt' ? 'alt' : 'cancel'), { once: true });
+      dialog.returnValue = ''; dialog.showModal();
     });
   }
   const buildSettings = document.querySelector('.build-settings');
@@ -16813,6 +16897,12 @@ window.BOStartApp = function () {
     $('#barShockBox').hidden = !bsh.length;
     $('#barShockList').innerHTML = bsh.map(b => '<li><label><input type="checkbox" data-src="' + esc(b.key) + '"' + (b.on ? ' checked' : '') + '><span class="name">' + skillDot(b.id) + esc(b.name) + '</span></label>' +
       '<span class="meta">' + num(b.size, 1) + '% shock, up ' + Math.round(b.uptime * 100) + '% of the time' + (b.coc ? ' (Cast on Crit)' : '') + '</span></li>').join('');
+
+
+    const bfr = (r.freeze && r.freeze.helpers) || [];
+    $('#barFreezeBox').hidden = !bfr.length;
+    $('#barFreezeList').innerHTML = bfr.map(b => '<li><label><input type="checkbox" data-src="' + esc(b.key) + '"' + (b.on ? ' checked' : '') + '><span class="name">' + skillDot(b.id) + esc(b.name) + '</span></label>' +
+      '<span class="meta">' + num(b.coldPerSec, 0) + ' cold a second on the bar</span></li>').join('');
 
     $('#heraldTryList').innerHTML = Object.values(GD.blessings).filter(b => /herald/i.test(b.Id) && b.Kind === 'Vow' && b.Skill && !ch.hotbar.includes(b.Skill)).map(b => {
       const lv = st.tryHeralds[b.Id] || 0;
@@ -18032,13 +18122,19 @@ window.BOStartApp = function () {
   async function discardChanges() {
     const ch = st.chOrig, s = ch && SNAPS[ch.id]; if (!ch || !s || !isSaved(ch)) return;
     if (!await confirmInPage('Discard unsaved changes?', 'Everything changed on "' + ch.name + '" since it was last saved is dropped, and the saved build comes back. This cannot be undone.', 'Discard changes', true)) return;
+    const p = await dropChanges(ch);
+    if (p) saveTip('Back to the saved build "' + p.name + '".');
+  }
+
+  async function dropChanges(ch) {
+    const s = ch && SNAPS[ch.id]; if (!ch || !s || !isSaved(ch)) return null;
     const id = ch.id, btns = [$('#unsavedSave'), $('#unsavedDiscard')];
 
     discarding = true; btns.forEach(b => { b.disabled = true; }); $('#unsavedText').textContent = 'Opening the saved build…';
     await new Promise(r => setTimeout(r, 30));
     let p; try { p = await planner.fromCode(await snapCode(ch)); } catch (e) { saveTip('Could not open the saved build again: ' + e.message); p = null; }
     discarding = false; btns.forEach(b => { b.disabled = false; });
-    if (!p || !CHARS.includes(ch)) return syncUnsaved();
+    if (!p || !CHARS.includes(ch)) { syncUnsaved(); return null; }
 
     store.set('trees:' + id, null); store.set('notes:' + id, ''); if (brewery) brewery.clearBelt(id);
     p.id = id; p.name = s.name || ch.name; p = keepSharedTabs(p); p.from = 'plan'; p.savedAt = s.at;
@@ -18046,7 +18142,18 @@ window.BOStartApp = function () {
     if (st.chOrig === ch) { TT = null; fillChars(id); selectChar(id); }
     s.h = snapHash(p); keepSnaps(); keepChars(); syncUnsaved();
     if (planner) planner.render();
-    saveTip('Back to the saved build "' + p.name + '".');
+    return p;
+  }
+
+
+
+  async function leaveOk(nextId) {
+    const ch = st.chOrig;
+    if (!snapDirty(ch) || (nextId && nextId === ch.id)) return true;
+    const a = await askInPage('Unsaved changes', 'You have unsaved changes to "' + ch.name + '". Save them to the build, or discard them, before you move on?', 'Save', false, 'Discard');
+    if (a === 'confirm') { saveOpenBuild(); return true; }
+    if (a === 'alt') return !!(await dropChanges(ch));
+    return false;
   }
   $('#unsavedSave').addEventListener('click', saveOpenBuild);
   $('#unsavedDiscard').addEventListener('click', discardChanges);
@@ -18076,15 +18183,21 @@ window.BOStartApp = function () {
   $('#savedBuildsPane').addEventListener('click', async e => {
     const b = e.target.closest('[data-sb]'); if (!b) return;
     if (b.dataset.sb === 'new') { if (await planner.startNewPlan()) showTab('plan'); return; }
-    const id = (b.closest('[data-id]') || {}).dataset.id, ch = CHARS.find(c => c.id === id); if (!ch) return;
-    if (b.dataset.sb === 'open') { fillChars(id); selectChar(id); showTab('character'); syncUrl('character'); }
-    else if (b.dataset.sb === 'dup') { const p = planner.planFrom(ch); if (brewery) brewery.copyBelt(ch.id, p.id); addChars([p], 'plan', p.id); saveTip('Made a copy: ' + p.name + '.'); renderSavedBuilds(); }
+    const id = (b.closest('[data-id]') || {}).dataset.id; let ch = CHARS.find(c => c.id === id); if (!ch) return;
+    if (b.dataset.sb === 'open') { if (!await leaveOk(id)) return; fillChars(id); selectChar(id); showTab('character'); syncUrl('character'); }
+    else if (b.dataset.sb === 'dup') {
+      if (!await leaveOk()) return; ch = CHARS.find(c => c.id === id); if (!ch) return; // a discard puts a new object in its place
+      const p = planner.planFrom(ch); if (brewery) brewery.copyBelt(ch.id, p.id); addChars([p], 'plan', p.id); saveTip('Made a copy: ' + p.name + '.'); renderSavedBuilds(); }
     else if (b.dataset.sb === 'keep') { delete ch.auto; ch.savedAt = new Date().toISOString(); keepChars(); saveTip('Saved "' + ch.name + '" to Saved Builds.'); }
     else if (b.dataset.sb === 'del') { await removeChar(id); renderSavedBuilds(); }
   });
 
 
-  $('#charSelect').addEventListener('change', e => selectChar(e.target.value));
+  $('#charSelect').addEventListener('change', async e => {
+    const id = e.target.value, cur = st.chOrig && st.chOrig.id;
+    if (!await leaveOk(id)) { e.target.value = cur; return; }
+    if (CHARS.some(c => c.id === id)) { e.target.value = id; selectChar(id); }
+  });
 
 
 
@@ -18146,10 +18259,11 @@ window.BOStartApp = function () {
     const on = box.querySelector('.on') || box.querySelector('.char-pick-item');
     if (on) { box.scrollTop = on.offsetTop - 60; on.focus({ preventScroll: true }); }
   }
-  function pickChar(id) {
+  async function pickChar(id) {
     closeCharPick(true);
     const sel = $('#charSelect');
-    if (id !== sel.value) { sel.value = id; selectChar(id); }
+    if (id === sel.value || !await leaveOk(id)) return;
+    if (CHARS.some(c => c.id === id)) { fillChars(id); selectChar(id); }
   }
   async function removeChar(id, at) {
     const ch = CHARS.find(c => c.id === id); if (!ch) return;
@@ -18341,7 +18455,7 @@ window.BOStartApp = function () {
   async function loadFile(file) {
     if (window.BOGrail.isGrailFile(file.name)) { try { grail.addSources([window.BOGrail.compact(window.parseGvas(new Uint8Array(await file.arrayBuffer())), file.name, new Date(file.lastModified).toISOString())]); } catch (e) { /* read below */ } }
     if (/^BO_Stash_/i.test(file.name)) { saveTip('Read the stash for the Grail tab.'); return; }
-    try { const ch = await readSave(file); if (!addChars([ch], 'file', ch.id)) saveTip('Loaded ' + ch.name + '.' + KEEP_FAIL); }
+    try { const ch = await readSave(file); if (!await leaveOk(ch.id)) return; if (!addChars([ch], 'file', ch.id)) saveTip('Loaded ' + ch.name + '.' + KEEP_FAIL); }
     catch (err) { alert('Could not read ' + file.name + ':\n' + err.message); }
   }
 
@@ -18398,6 +18512,7 @@ window.BOStartApp = function () {
       got.splice(0, got.length, ...picked);
     }
     const sel = st.ch && got.some(c => c.id === st.ch.id) ? st.ch.id : got[0].id; // stay on the one you are looking at
+    if (!await leaveOk(sel)) return;
     const kept = addChars(got, 'folder', sel);
     saveTip('Loaded ' + got.length + ' character' + (got.length > 1 ? 's' : '') + ' (' + got.map(c => c.name).join(', ') + ').' + (bad.length ? ' Skipped ' + bad.length + ' save' + (bad.length > 1 ? 's' : '') + ' it could not read.' : '') +
       (kept ? ' They stay in this browser after a refresh. After you play, use Reload saves and pick the same folder.' : KEEP_FAIL), kept);
@@ -18509,11 +18624,12 @@ window.BOStartApp = function () {
     if (bdb || bShort) ch = characterFromBroked(await decodeBroked(bdb || await fetchBroked(bShort)));
     else if (shared || id || planner.isPlanCode(text)) { ch = keepSharedTabs(await planner.fromCode(id ? await codeForId(id) : shared || text)); ch.auto = true; from = 'plan'; }
     else ch = S.characterFromCode(GD, await decodeBuildCode(text));
+    if (!await leaveOk(ch.id)) return null;
     addChars([ch], from, ch.id);
     return ch;
   }
   async function openBroked(code, shortId) {
-    try { const ch = characterFromBroked(await decodeBroked(code || await fetchBroked(shortId))); addChars([ch], 'code', ch.id); showTab('damage'); }
+    try { const ch = characterFromBroked(await decodeBroked(code || await fetchBroked(shortId))); if (!await leaveOk(ch.id)) return; addChars([ch], 'code', ch.id); showTab('damage'); }
     catch (err) { alert('Could not load that planner link:\n' + err.message); }
   }
   const linkCode = text => { const m = String(text || '').match(/#build=(BO[PS]1\.[\w-]+)/); return m ? m[1] : null; };
@@ -18629,6 +18745,7 @@ window.BOStartApp = function () {
     try {
       const p = keepSharedTabs(await planner.fromCode(id ? await codeForId(id) : code));
       p.auto = true; // opened, not saved by hand: listed under "Opened, not saved" (renderSavedBuilds)
+      if (!await leaveOk(p.id)) return;
       addChars([p], 'plan', p.id); showTab('build');
     } catch (err) { alert('Could not open that share link:\n' + err.message); }
   }
@@ -18649,9 +18766,11 @@ window.BOStartApp = function () {
       if (planner.isPlanCode($('#codeInput').value)) {
         const p = keepSharedTabs(await planner.fromCode($('#codeInput').value));
         p.auto = true;
+        if (!await leaveOk(p.id)) return;
         addChars([p], 'plan', p.id); $('#codeInput').value = ''; showTab('plan'); return;
       }
       const ch = S.characterFromCode(GD, await decodeBuildCode($('#codeInput').value));
+      if (!await leaveOk(ch.id)) return;
       CHARS = CHARS.filter(c => c.id !== ch.id); CHARS.unshift(ch);
       addChars([ch], 'code', ch.id); $('#codeInput').value = ''; showTab('damage');
     } catch (err) { alert('Could not load that build code:\n' + err.message); }
@@ -20783,6 +20902,7 @@ window.BOStartApp = function () {
     linksEdited: () => linksEdited(), resetLinks: () => resetLinks(),
     changed: planChanged,
     edited: buildEdited,
+    leave: () => leaveOk(), chars: () => CHARS,
     add: (p, from) => { if (from && brewery) brewery.copyBelt(from.id, p.id); addChars([p], 'plan', p.id); }, // from: the plan it duplicates
     remove: ch => {
       if (ch.plan && cloud) cloud.removed(ch.id);
@@ -20794,7 +20914,7 @@ window.BOStartApp = function () {
   creator = window.BOCreator({
     GD, $, esc, planner, savePath: SAVE_PATH, sim: S, skillDot,
     chars: () => CHARS, importCode: importAnyCode, belt: id => brewery && brewery.belt(id), ownBelt: id => brewery && brewery.ownBelt(id),
-    preview: ch => { addChars([ch], 'file', ch.id); showTab('damage'); saveTip('Showing ' + ch.name + ' as the Save Creator would write it. Your save file is unchanged until you put the new one in place.'); },
+    preview: async ch => { if (!await leaveOk(ch.id)) return; addChars([ch], 'file', ch.id); showTab('damage'); saveTip('Showing ' + ch.name + ' as the Save Creator would write it. Your save file is unchanged until you put the new one in place.'); },
   });
 
   fossil = window.BOFossil({ $, esc, gd: () => GD, chars: () => CHARS });
@@ -20911,7 +21031,7 @@ window.BOStartApp = function () {
       const r = S.calcSkill(GD, ch, ch.mainSkill, { enemyRarity: 'boss', enemyLevel: lvl, ruptureLevel: rl > 0 ? rl : undefined, curses });
       return r && !r.error && !r.unsupported && r.totalDps > 0 ? r.totalDps : null;
     },
-    openBuild: ch => { addChars([ch], 'code', ch.id); showTab('character'); saveTip('Loaded a ladder build as a plan. Damage Analysis sims it; your own characters are unchanged.'); },
+    openBuild: async ch => { if (!await leaveOk(ch.id)) return; addChars([ch], 'code', ch.id); showTab('character'); saveTip('Loaded a ladder build as a plan. Damage Analysis sims it; your own characters are unchanged.'); },
   });
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '' });
   character = window.BOCharacter({

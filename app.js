@@ -14758,7 +14758,14 @@ window.BOCharacter = function (ctx) {
       const t = fit(m); if (t && !t.length) { specInc += m.v; use(m, 'minion, the summon skill increased'); }
     }
     { const k2 = late2K(GD, sk.Id, minionGem); if (k2 !== 1) res.notes.push(sk.Name + ': x' + k2.toFixed(3) + ' late gem-level damage (patch 83, at gem level ' + minionGem + ').'); }
-    const base = (mi.DamageMult || 1) * aff * near * minionMore * kind * lvlK * (1 + specInc / 100) * heroDamage(GD) * late2K(GD, sk.Id, minionGem); // heroDamage: Patch 82/83 x0.8 (at ruleNum)
+
+
+
+
+
+    const youngK = sk.EffectivenessEarly != null ? sk.EffectivenessEarly + (1 - sk.EffectivenessEarly) * clamp((minionGem - (sk.EffectivenessEarlyHold || 1)) / Math.max(1, (sk.EffectivenessEarlyFull || (sk.EffectivenessEarlyHold || 1) + 1) - (sk.EffectivenessEarlyHold || 1)), 0, 1) : 1;
+    if (youngK !== 1) res.notes.push(sk.Name + ': x' + youngK.toFixed(3) + ' young gem damage at gem level ' + minionGem + ' (x' + sk.EffectivenessEarly + ' up to gem ' + sk.EffectivenessEarlyHold + ', none from gem ' + sk.EffectivenessEarlyFull + '); checked against the game log, 18 Nov 2026.');
+    const base = (mi.DamageMult || 1) * aff * near * minionMore * kind * lvlK * (1 + specInc / 100) * heroDamage(GD) * late2K(GD, sk.Id, minionGem) * youngK; // heroDamage: Patch 82/83 x0.8 (at ruleNum)
     const hit = {}; let avg = 0;
     for (const d of DT) {
       if (!(scaled[d][1] > 0)) continue;
@@ -14862,7 +14869,16 @@ window.BOCharacter = function (ctx) {
 
 
     if (o.graveCall) { spMore *= 1.2; res.notes.push('Grave Call active: minions deal 30% more damage and attack 20% faster (lasts 4 s after each cast; not in the game\'s panel).'); }
-    const pace = (mi.AttackEvery || 1) * MINION_PACE / Math.max(0.05, (1 + spInc / 100) * spMore);
+
+
+
+
+
+
+
+    const spd = Math.max(0.05, (1 + spInc / 100) * spMore);
+    const skelFit = lc(sk.Id) === 'summon_skeletons';
+    const pace = skelFit ? 0.5917 / spd + 0.0501 : (mi.AttackEvery || 1) * MINION_PACE / spd;
 
 
     if (mi.ShareBeyond > 0 && mi.SharePerBody > 0 && alive > mi.ShareBeyond) {
@@ -14975,7 +14991,7 @@ window.BOCharacter = function (ctx) {
     }
 
     res.minion = { specAvg: DT.reduce((a, d) => a + (scaled[d][0] + scaled[d][1]) / 2, 0) * (1 + specInc / 100), specInc, soloK, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.stat === 'MinionDamage' ? 1 + golem.v / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth, oneKind };
-    res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
+    res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + (skelFit ? '; Skeletons: 0.592 s / speed + 0.050 s, fitted to the game log' : '') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
     if (oneKind) res.notes.push('Legion of One: only one kind of minion stands, counted here as ' + sk.Name + ' alone: ' + alive + ' at once (' + aliveBefore + ' doubled, at least +2), dealing 30% less. Your other summons are dismissed when you raise these' + (mi.GolemAuras ? '' : ', the Grave Golem and its blessing with them') + ' (game log, 12 Nov 2026).');
     if (near > 1) res.notes.push('Counted at your side: minions deal ' + MINION_NEAR + '% more within 7 m of you (fading to none at 12 m), as the game\'s panel counts it.');
     if (mi.LevelDamage) res.notes.push(sk.Name + ' also grows with the level of the zone it fights in (the Monster level box): x' + lvlK.toFixed(3) + ' at level ' + zoneLevel + ' with the gem at level ' + minionGem + '. It makes up for the gap between the monsters there (taken halfway to your own level) and the gem, so a higher gem level gets less of it. Set the Monster level box to the Rupture you run: the game shows this number for where you stand (in the hub, your own level). The game\'s own rule (developer\'s formulas file), checked against the game log in the hub and Ruptures 31 to 69 (11 Nov 2026).');

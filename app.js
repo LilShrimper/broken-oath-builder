@@ -3352,7 +3352,7 @@ window.BOPlanner = function (ctx) {
     const lines = uniq.concat(vows, pre, suf, extra, other);
     if (lines.length) h += '<ul>' + lines.join('') + '</ul>';
     if (word) {
-      const twoHand = base && (base.bTwoHanded || (base.Tags || []).includes('TwoHand')), pm = S.wordPower2H(word, twoHand);
+      const twoHand = base && (base.bTwoHanded || (base.Tags || []).includes('TwoHand')), pm = S.wordPower2H(word, twoHand, GD);
       const lv = word.PowerBandILvl || [], cnt = word.PowerBandCount || [];
       let band = -1; for (let i = 0; i < lv.length; i++) if ((it.level || 0) >= lv[i]) band = i;
       const from = cnt.slice(0, band).reduce((x, y) => x + y, 0);
@@ -6855,7 +6855,7 @@ window.BOItemSearch = function (ctx) {
         const rows = [[lv[0] ? 'Below item level ' + lv[0] : 'At any item level', w.PowerMods]]; // the secret words have no item level bands
         let from = 0; lv.forEach((l, i) => { if (w.PowerBandMods && cnt[i]) rows.push(['Item level ' + l + '+', w.PowerBandMods.slice(from, from + cnt[i])]); from += cnt[i] || 0; });
 
-        const band = ([k, mods]) => '<div class="is-band"><b>' + esc(k) + (S.wordPower2H(w, true) > 1 ? ' <small>(×' + S.wordPower2H(w, true) + ' on two-handed)</small>' : '') + '</b><ul class="is-lines oathword">' + mods.map(mm => li(wordLine(GD, mm))).join('') + '</ul></div>';
+        const band = ([k, mods]) => '<div class="is-band"><b>' + esc(k) + (S.wordPower2H(w, true, GD) > 1 ? ' <small>(×' + S.wordPower2H(w, true, GD) + ' on two-handed)</small>' : '') + '</b><ul class="is-lines oathword">' + mods.map(mm => li(wordLine(GD, mm))).join('') + '</ul></div>';
         const top = rows[rows.length - 1], lower = rows.slice(0, -1);
         body += '<div class="is-power is-power-top">' + band(top) + '</div>';
         if (lower.length) body += '<details class="is-power"><summary>Lower item levels</summary>' + lower.reverse().map(band).join('') + '</details>';
@@ -8682,7 +8682,11 @@ window.BOFaq = function (ctx) {
       '<b>Sentences</b>: one enemy at a time. It pays out when the enemy dies.',
       'Woes and Sentences are separate, so an enemy can have both. Woes work at half effect on a Guardian.',
       '<b>Hunter\'s Marks</b> and the <b>War Banner</b> are separate again and add on top of curses. Marks fall off 3 s after your last hit, so any skill that hits more often keeps them at the cap.',
-    ].concat(+GD.apiBuild >= 82 ? [
+    ].concat(+GD.apiBuild >= 84 ? [
+
+      '<b>Every "takes more damage" effect counts</b>, on every monster, Guardians included (since Patch 84). Effects of the same kind add together and different kinds multiply: Woes, Sentences and Unravel are one kind (curses); Hunter\'s Marks and the War Banner are another; vulnerability (Maim, the venom golem, hallowed ground) a third. Example: Death Sentence +25% with a Woe +20% is ×1.45; add Marks +10% and it is ×1.45 × 1.10.',
+      'Shock is counted apart and multiplies on top. Which kind each source belongs to is our reading of the patch notes, not checked in the game yet.',
+    ] : +GD.apiBuild >= 82 ? [
 
       '<b>All "takes more damage" effects add together</b>, on every monster, Guardians included (since Patch 82): Woes, Sentences, Marks, the War Banner, typed lines like "more Physical damage", the venom golem and hallowed ground make one bonus. Example: +25% and +20% give ×1.45, not ×1.5.',
       'Shock is counted apart and multiplies on top. Whether the venom golem, hallowed ground and daze are in the sum is our reading of the patch notes, not checked in the game yet.',
@@ -10843,7 +10847,15 @@ window.BOCharacter = function (ctx) {
 
   const is082 = GD => apiBuildAtLeast(GD, 82, '2026-11-18T02');
 
-  const takenRule = (GD, isBoss) => is082(GD) ? 'add' : !!(isBoss && guardianStrongestTaken(GD));
+
+
+
+
+
+
+
+  const is084 = GD => apiBuildAtLeast(GD, 84, '2026-11-19T00');
+  const takenRule = (GD, isBoss) => is084(GD) ? 'kinds' : is082(GD) ? 'add' : !!(isBoss && guardianStrongestTaken(GD));
 
 
 
@@ -10868,6 +10880,13 @@ window.BOCharacter = function (ctx) {
 
   const curseTakenK = (rows, d, dot, one, extras) => {
     const typedOf = r => (d ? r.elem[d] || 0 : 0) + (dot ? r.dot || 0 : 0);
+    if (one === 'kinds') {
+
+      let cur = 0, mk = 0, vu = 0;
+      for (const r of rows) (r.kind === 'Banner' || r.kind === 'Mark' ? (mk += (r.taken || 0) + typedOf(r)) : (cur += (r.taken || 0) + typedOf(r)));
+      for (const x of extras || []) { if (x && typeof x === 'object') { if (x.k === 'curse') cur += x.v || 0; else mk += x.v || 0; } else vu += x || 0; }
+      return (1 + cur / 100) * (1 + mk / 100) * (1 + vu / 100);
+    }
     if (one === 'add') return 1 + (rows.reduce((a, r) => a + (r.taken || 0) + typedOf(r), 0) + (extras || []).reduce((a, x) => a + (x || 0), 0)) / 100;
     if (!one) return rows.reduce((p, r) => p * (1 + (r.taken + typedOf(r)) / 100), 1) * (extras || []).reduce((p, x) => p * (1 + (x || 0) / 100), 1);
     const general = rows.filter(r => (r.taken || 0) > 0), typedOnly = rows.filter(r => !((r.taken || 0) > 0));
@@ -11128,8 +11147,10 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
   const OATHWORD_2H = 1;
-  function wordPower2H(rw, twoHand) { return twoHand && rw && rw.Power2H > 1 ? OATHWORD_2H : 1; }
+  function wordPower2H(rw, twoHand, GD) { return twoHand && rw && rw.Power2H > 1 ? (GD && is084(GD) ? rw.Power2H : OATHWORD_2H) : 1; }
 
   function vowLevelShare(GD) { return is056(GD) ? ruleNum(GD, 'r83.VOWS.VowSkillLevelShare', 0.5) : 1; }
   function vowShare(GD, n) { const s = GD.vowShares || []; return s.length ? s[Math.min(n, s.length - 1)] : 1; }
@@ -11189,6 +11210,32 @@ window.BOCharacter = function (ctx) {
   }
 
   const RARE_COUNT_STATS = new Set(['SkillLevel', 'Projectiles', 'Chains', 'TotemCount', 'MinionCap', 'CurseLimit', 'MaxResist']);
+
+
+
+
+
+
+
+
+
+
+  const IDOL_SCALE = { 'idol_': 0.7, 'idol_phys_': 0.5, 'idol_elemental_': 0.5, 'idol_spell_': 0.5, 'idol_melee_': 0.5, 'idol_crit_': 0.5, 'idol_attack_speed_': 0.55, 'idol_cast_speed_': 0.55,
+    'idol_chain_damage_': 1.3, 'idol_orbit_damage_': 1.3, 'idol_slam_': 1.3, 'idol_projectile_damage_': 1.3, 'idol_holy_damage_': 1.3, 'idol_poison_damage_': 1.0, 'idol_fire_damage_': 1.3,
+    'idol_cold_damage_': 1.3, 'idol_lightning_damage_': 1.3, 'idol_minion_': 1.0, 'idol_minion_life_': 1.3, 'idol_ballista_': 1.3, 'idol_channel_': 1.3, 'idol_bow_area_': 1.3,
+    'idol_trap_damage_': 1.3, 'idol_shield_damage_': 1.3, 'idol_bleed_damage_': 1.3 };
+  const IDOL_SCALE_EXACT = { idol_grand_life_inc: 1.0 };
+
+
+
+  const idolRound = (x, k) => k === 1 || !x || typeof x !== 'number' ? x : Number.isInteger(x) ? (Math.round(x * Math.fround(k)) || Math.sign(x)) : Math.round(x * Math.fround(k) * 10) / 10;
+  function idolLineScale(GD, id, tier, itemLevel, lines) {
+    if (!is082(GD)) return 1;
+    id = lc(id); let k = IDOL_SCALE_EXACT[id];
+    if (k == null) { let best = ''; for (const p in IDOL_SCALE) if (id.startsWith(p) && p.length > best.length) best = p; if (!best) return 1; k = IDOL_SCALE[best]; }
+    if (is084(GD) && k < 0.7 && itemLevel >= 84 && (tier === 1 || lines >= 5)) k = 0.7;
+    return k;
+  }
   function itemLabel(GD, it) {
     const base = GD.bases[lc(it.base)];
     const u = GD.uniques[lc(it.unique)];
@@ -11294,7 +11341,8 @@ window.BOCharacter = function (ctx) {
 
 
           const cnt = x => sh === 1 || !x ? x : boost && af.Mod && af.Mod.Stat === 'Resist' ? x * sh : Number.isInteger(x) ? (Math.round(x * sh) || (isVow ? Math.sign(x) : 0)) : Math.round(x * sh * 10) / 10;
-          add(af.Mod, cnt(a.v), cnt(a.v2), label + (isVow ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
+          const ik = it.slot === 'Idol' && af.Mod && af.Mod.Mode !== 'Flag' && !RARE_COUNT_STATS.has(af.Mod.Stat) ? idolLineScale(GD, a.id, a.tier, it.level || 0, it.affixes.length) : 1;
+          add(af.Mod, idolRound(cnt(a.v), ik), idolRound(cnt(a.v2), ik), label + (ik !== 1 ? ' (idol line x' + +ik.toFixed(2) + ')' : '') + (isVow ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
         }
       }
       const weaponSlot = it.slot === 'MainHand' || it.slot === 'OffHand';
@@ -11319,7 +11367,7 @@ window.BOCharacter = function (ctx) {
         for (const mm of rw.Mods) add(mm.Mod, mm.Mod.Value, mm.Mod.Value2, label + ' · runeword ' + rw.Name, key);
 
         const twoHand = base.bTwoHanded || (base.Tags || []).includes('TwoHand');
-        const pm = wordPower2H(rw, twoHand);
+        const pm = wordPower2H(rw, twoHand, GD);
         const power = runewordPower(rw, it.level);
         for (const mm of power.mods) add(mm.Mod, (mm.Mod.Value || 0) * pm, (mm.Mod.Value2 || 0) * pm, label + ' · runeword ' + rw.Name + ' (power' + (power.band ? ', item level ' + power.band + '+' : '') + (pm > 1 ? ' x' + pm + ' two-handed' : '') + ')', key);
       }
@@ -11480,10 +11528,12 @@ window.BOCharacter = function (ctx) {
   }
 
 
-  function levelBonus(sk, isGem, mods) {
+
+
+  function levelBonus(sk, isGem, mods, GD) {
     const tags = new Set([...(sk.Tags || []), sk.Delivery].map(lc)); if (isGem) tags.add('gem');
     let b = 0;
-    for (const m of mods) if (m.stat === 'SkillLevel' && m.mode === 'Flat' && (m.tags || []).every(t => tags.has(lc(t)))) b += Math.ceil(m.v - 0.5);
+    for (const m of mods) if (m.stat === 'SkillLevel' && m.mode === 'Flat' && (m.tags || []).every(t => tags.has(lc(t))) && !(GD && is084(GD) && /(DwarvenRune)/.test(m.src || ''))) b += Math.ceil(m.v - 0.5);
     return Math.floor(b);
   }
 
@@ -11522,7 +11572,7 @@ window.BOCharacter = function (ctx) {
       const play = gemPlayLevel(GD, sk, ch, attrsFrom(GD, ch, mods), own);
       if (play && play.level < own) own = play.level;
     }
-    return own + (sk ? levelBonus(sk, tryLevel ? sk.Kind === 'Gem' : ch.gems.includes(blessing.Skill) || sk.Kind === 'Gem', mods) : 0);
+    return own + (sk ? levelBonus(sk, tryLevel ? sk.Kind === 'Gem' : ch.gems.includes(blessing.Skill) || sk.Kind === 'Gem', mods, GD) : 0);
   }
 
 
@@ -12116,6 +12166,11 @@ window.BOCharacter = function (ctx) {
     for (const m of mods) if (m.stat === 'SkillLevel' && m.mode === 'Flat') {
       const { types, conds } = splitTags(m.tags);
 
+
+
+
+
+      if (is084(GD) && /(DwarvenRune)/.test(m.src || '')) continue;
       if (condsOk(ctx, conds) && types.every(t => ctx.tags.has(lc(t)))) { bonus += Math.ceil(m.v - 0.5); use(m); }
     }
     bonus = Math.floor(bonus);
@@ -12129,7 +12184,9 @@ window.BOCharacter = function (ctx) {
 
 
 
-    if (is079(GD) && sk.Kind === 'Gem' && !(sk.Tags || []).includes('Movement') && !o.noLinkRule) {
+
+
+    if (is079(GD) && sk.Kind === 'Gem' && !o.noLinkRule) {
       const from = ruleNum(GD, 'r103.MAIN-SKILL.fLinkFrom103', 9);
       const w = clamp((L - from) / Math.max(1, 20 - from), 0, 1);
       const open = Math.min(6, (G.SocketsAtLevel || [1, 2, 5, 12, 15, 20]).filter(l => L >= l).length);
@@ -12139,6 +12196,24 @@ window.BOCharacter = function (ctx) {
 
       let links = res.supports.filter(s => s.ok && (s.granted || !(o.off && o.off.has(s.key)))).length;
       if (!res.supports.some(s => lc(s.id) === 'tether') && modsOf(mods, 'GrantSupport').some(m => m.stat === 'GrantSupport' && (m.tags || []).some(t => lc(t) === 'tether') && (m.tags || []).every(t => lc(t) === 'tether' || ctx.tags.has(lc(t))))) links++;
+
+
+
+
+      if (is084(GD)) {
+        const hostSock = ch.sockets.find(x => lc(x.skill) !== lc(skillId) && x.conduit && lc(x.conduit) === lc(skillId) && x.supports.some(y => lc(String(y).replace('@granted', '')) === 'cast_on_crit'));
+        if (hostSock) {
+          const have = new Set(res.supports.map(x => lc(x.id)));
+          let add = 0;
+          for (const y of hostSock.supports) {
+            const id = lc(String(y).replace('@granted', '')), sd = GD.supports[id];
+            if (!sd || id === 'cast_on_crit' || have.has(id)) continue;
+            const req = sd.RequiresAnyTag || [], ex = exTagsFor(sd, sk, GD);
+            if ((!req.length || req.some(t => ctx.tags.has(lc(t)))) && !ex.some(t => ctx.tags.has(lc(t))) && !noFit(sd, sk)) { add++; have.add(id); }
+          }
+          if (add) { links += add; res.notes.push('Links: ' + add + ' of the supports in ' + hostSock.skill.replace(/_/g, ' ') + ' fit ' + sk.Name + ' and count as links here (the game tooltip, build 84).'); }
+        }
+      }
       links = Math.min(open, links);
       const empty = Math.max(0, open - links);
       const f = 1 - w * empty / 7;
@@ -12576,8 +12651,13 @@ window.BOCharacter = function (ctx) {
 
 
     const clipFloor = (CLIP_FLOOR[lc(ch.classId)] || {})[skillId];
+
+
+
+
+    const channelOver = is084(GD) && !!(sk.Channel && sk.Channel.Tick) && !isAttack;
     const floor = clipFloor || (!mirage && !flight && sk.Delivery !== 'Summon' ? 0.12 : 0);
-    if (floor &&!(sk.Channel && sk.Channel.Tick) && useTime < floor) {
+    if (floor && (channelOver || !(sk.Channel && sk.Channel.Tick)) && useTime < floor) {
       res.notes.push('Speed cap: ' + skillId.replace(/_/g, ' ') + ' can\'t be used faster than once per ' + floor + ' s (' + (1 / floor).toFixed(2) + ' a second; ' + (clipFloor ? 'the game\'s animation plays at most ' + (H.ActionRateMax || 4) + 'x its speed' : 'the game\'s shortest use time for any skill') + '). You have ' + usesPerSec.toFixed(2) + ' a second of speed, so more attack speed adds nothing to this skill.');
 
 
@@ -12632,12 +12712,24 @@ window.BOCharacter = function (ctx) {
       }
 
       if (moveRecharge) {
-        cooldown = cooldown / moveRecharge;
+
+
+
+        cooldown = Math.max(Math.min(cooldown, 0.3), cooldown / moveRecharge);
         res.notes.push('Movement skill: its cooldown recovers with Dexterity (1% per 10), not with ' + (isAttack ? 'attack' : 'cast') + ' speed: ' + cooldown.toFixed(2) + ' s at ' + (attr.Dex || 0) + ' Dexterity.');
       } else if (is0562(GD) && !(META.bRainCooldownBySpeed && isAttack && sk.Delivery === 'Rain') && !(!isAttack && sk.Delivery === 'Brand') && speedRate > 0) {
 
-        cooldown = Math.max(Math.min(sk.MinCooldown || 0, cdBeforeSpeed), cooldown / speedRate);
+        const cdRaw = cooldown / speedRate, cdFloor = Math.min(sk.MinCooldown || 0, cdBeforeSpeed);
+        cooldown = Math.max(cdFloor, cdRaw);
         res.notes.push('Cooldown recovers with ' + (isAttack ? 'attack' : 'cast') + ' speed: ' + cooldown.toFixed(2) + ' s.');
+
+
+
+
+        if (is084(GD) && !isAttack && cdFloor > 0 && cdRaw < cdFloor && usesPerSec >= 1 / cooldown) {
+          const k = Math.sqrt(cdFloor / cdRaw); speedOverK *= k;
+          res.notes.push('Cooldown floor: speed would take the cooldown to ' + cdRaw.toFixed(2) + ' s, under its ' + cdFloor.toFixed(2) + ' s floor, so the overshoot becomes damage x' + k.toFixed(3) + ' (patch 84: "CastOver110", the game log; exponent 0.5 assumed).');
+        }
       }
       usesPerSec = Math.min(usesPerSec, 1 / cooldown);
     }
@@ -13359,7 +13451,7 @@ window.BOCharacter = function (ctx) {
       const eff = (1 + (curseEffInc + bannerEffectInc(c, mods)) / 100) * (1 + dreadPct / 100) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
 
 
-      const row = { id, name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, dot: (c.DotTakenPct || 0) * eff };
+      const row = { id, kind: c.Kind || '', name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, dot: (c.DotTakenPct || 0) * eff };
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
 
 
@@ -13422,7 +13514,7 @@ window.BOCharacter = function (ctx) {
     const hallowBest = hallowSrc.reduce((b, s) => s.taken > (b ? b.taken : 0) ? s : b, null);
     const groundPct = hallowBest ? hallowBest.taken : 0;
 
-    const groundTaken = groundPct && takenRule(GD, isBoss) !== 'add' ? 1 + groundPct / 100 : 1;
+    const groundTaken = groundPct && takenRule(GD, isBoss) !== 'add' && takenRule(GD, isBoss) !== 'kinds' ? 1 + groundPct / 100 : 1;
     res.hallowed = { sources: hallowSrc, best: hallowBest, taken: groundTaken, crit: hallowCrit, critBefore: critBase };
     if (o.enemyHallowedGround) res.notes.push(hallowBest
       ? 'Hallowed ground: the enemy takes ' + +hallowBest.taken.toFixed(1) + '% more damage from your hits (' + hallowBest.name + (hallowBest.half ? ', half outside the Paladin' : '') + '). Only your strongest hallowed ground counts, on top of your curses (game log 14 Nov, on a Guardian).' +
@@ -13463,7 +13555,12 @@ window.BOCharacter = function (ctx) {
       const extras = [o.extraTakenPct || 0, markPct]; if (phys) extras.push(maimPct);
       if (!dot && unravel[d]) extras.push(unravel[d]);
 
-      if (rule === 'add') return curseTakenK(activeCurses, d, dot, 'add', extras.concat(golemTaken - 1 ? [(golemTaken - 1) * 100] : [], !dot && groundPct ? [groundPct] : []));
+      if (rule === 'kinds') {
+
+        const vuln = [o.extraTakenPct || 0].concat(phys ? [maimPct] : [], golemTaken - 1 ? [(golemTaken - 1) * 100] : [], !dot && groundPct ? [groundPct] : []);
+        return curseTakenK(activeCurses, d, dot, 'kinds', [{ k: 'mark', v: markPct }, { k: 'curse', v: !dot && unravel[d] ? unravel[d] : 0 }].concat(vuln));
+      }
+      if (rule === 'add') return curseTakenK(activeCurses, d, dot, 'add',extras.concat(golemTaken - 1 ? [(golemTaken - 1) * 100] : [], !dot && groundPct ? [groundPct] : []));
 
 
 
@@ -13474,6 +13571,9 @@ window.BOCharacter = function (ctx) {
 
       return curseTakenK(activeCurses, d, dot, strongestTaken, extras) * golemTaken;
     };
+    if (rule === 'kinds') {
+      res.notes.push('"Takes more damage" effects (patch 84): the same kind adds, different kinds multiply. Curses (Woes, Sentences, Unravel) add together, Marks and the War Banner add together, vulnerability (Maim, the venom golem, hallowed ground) adds together, and shock stays apart. Which kind each source belongs to is our reading of the patch notes, not checked in game yet.');
+    }
     if (rule === 'add') {
       const n = activeCurses.filter(r => r.taken > 0 || r.dot > 0 || Object.values(r.elem).some(v => v > 0)).length + (o.extraTakenPct > 0) + (markPct > 0) + (maimPct > 0) + (golemTaken > 1) + (groundPct > 0);
       if (n > 1) res.notes.push('"Takes more damage" effects: your ' + n + ' sources add together into one bonus (patch 82: "All takes more damage effects add together now, bosses included"). Counted with the venom golem and hallowed ground in that sum and shock apart; not checked in game yet.');
@@ -13561,7 +13661,7 @@ window.BOCharacter = function (ctx) {
 
 
     let shockF = 1; // set below once the ailment modifiers are read; shocks raise all damage taken
-    const dotTakenFor = d => (o.dotElementTaken && rule === 'add' ? takenOf(d, false, true) : o.dotElementTaken ? mitig[d].taken * takenOf(undefined, false, true) / takenOf(undefined, false) : takenOf(undefined, false, true)) * shockF;
+    const dotTakenFor = d => (o.dotElementTaken && (rule === 'add' || rule === 'kinds') ? takenOf(d, false, true) : o.dotElementTaken ? mitig[d].taken * takenOf(undefined, false, true) / takenOf(undefined, false) : takenOf(undefined, false, true)) * shockF;
     let dotMulti = 0;
     for (const m of pickMods(mods, 'DotMulti', 'Flat')) { dotMulti += m.v; use(m); }
     const sumMod = (stat, mode) => { let s = mode === 'More' ? 1 : 0; for (const m of pickMods(mods, stat, mode)) if (applies(ctx, m)) { s = mode === 'More' ? s * (1 + m.v / 100) : s + m.v; use(m); } return s; };
@@ -14448,7 +14548,49 @@ window.BOCharacter = function (ctx) {
 
 
     const treeExtra = m => is078(GD) && (m.key === 'passives' || m.key === 'dragon') && !!fit(m);
-    for (const m of mods) if ((fromSupport(m) || treeExtra(m)) && m.stat === 'DamageAsExtra' && m.mode === 'Flat') {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    const minionElem84 = is084(GD);
+    if (minionElem84) {
+      const typedK = {}, pre = {}, conv = {}, convBase = {}, ext = {};
+      for (const d of DT) {
+        let g = 1, ty = 1;
+        for (const m of mods) {
+          if (!(fromSupport(m) || m.key === 'engine') || m.mode !== 'More' || m.stat !== 'Damage' || isRuthless(m)) continue;
+          const t = fit(m); if (!t) continue;
+          if (!t.length) g *= 1 + m.v / 100; else if (t.includes(d)) ty *= 1 + m.v / 100;
+        }
+        const all = moreFor(d); typedK[d] = ty; const rest = g * ty > 0 ? all / (g * ty) : 1; // rest: the hero's element "more" lines (patch 79), kept with the typed ones
+        typedK[d] = ty * rest;
+        pre[d] = [parts[d][0] * g, parts[d][1] * g]; conv[d] = [0, 0]; convBase[d] = [0, 0]; ext[d] = [0, 0];
+      }
+      for (const m of mods) if (String(m.key || '').startsWith('support:') && m.stat === 'Convert' && m.mode === 'Flat') {
+        const t = splitTags(m.tags).types, to = t[t.length - 1]; if (!to || !pre[to]) continue;
+        for (const d of DT) { if (d === to || d === 'Poison' || !(pre[d][1] > 0)) continue; for (const i of [0, 1]) { const a = pre[d][i] * m.v / 100; pre[d][i] -= a; convBase[to][i] += a; conv[to][i] += a * typedK[d] * typedK[to]; } }
+        use(m, 'minion'); res.notes.push(m.src.replace(/^Support · /, '') + ': ' + m.v + '% of the minion damage is converted to ' + to + ' and keeps its Physical lines (skill tooltips in the game, build 84).');
+      }
+      const heraldExtra = m => /^vow:/.test(String(m.key || '')) && /herald/i.test(String(m.key));
+      for (const m of mods) if ((fromSupport(m) || treeExtra(m) || heraldExtra(m)) && m.stat === 'DamageAsExtra' && m.mode === 'Flat') {
+        const t = splitTags(m.tags).types; if (t.length < 2 || !pre[t[0]] || !ext[t[1]]) continue;
+        const from = t[0], to = t[1]; let any = false;
+        for (const i of [0, 1]) { const a = (pre[from][i] + convBase[from][i]) * m.v / 100; if (a > 0) any = true; ext[to][i] += a * typedK[to]; }
+        if (any) use(m, 'minion');
+      }
+      for (const d of DT) scaled[d] = [pre[d][0] * typedK[d] + conv[d][0] + ext[d][0], pre[d][1] * typedK[d] + conv[d][1] + ext[d][1]];
+    }
+    else for (const m of mods) if ((fromSupport(m) || treeExtra(m)) && m.stat === 'DamageAsExtra' && m.mode === 'Flat') {
       const t = splitTags(m.tags).types; if (t.length < 2) continue;
       scaled[t[1]][0] += scaled[t[0]][0] * m.v / 100; scaled[t[1]][1] += scaled[t[0]][1] * m.v / 100; use(m, 'minion');
     }
@@ -14476,7 +14618,7 @@ window.BOCharacter = function (ctx) {
     const incFor = d => {
       let v = attr.Int / 10 * (H.IntMinionDamagePer10 || 0);
       for (const m of pickMods(mods, 'MinionDamage', 'Inc')) { const t = fit(m); if (t && (!t.length || t.includes(d))) { v += m.v; use(m, 'minion'); } }
-      if (elemInc) for (const m of pickMods(mods, 'Damage', 'Inc')) { const t = elemOnly(m); if (t && t.includes(d)) { v += m.v; use(m, 'minion (patch 78: element lines reach minions)'); } }
+      if (elemInc && !minionElem84) for (const m of pickMods(mods, 'Damage', 'Inc')) { const t = elemOnly(m); if (t && t.includes(d)) { v += m.v; use(m, 'minion (patch 78: element lines reach minions)'); } }
       if (spellbound) for (const m of pickMods(mods, 'Damage', 'Inc')) { const t = spellboundLine(m); if (t && (!t.length || t.includes(d))) { v += m.v * spellbound; use(m, 'minion, Spellbound Dead x' + spellbound); } }
       return v;
     };
@@ -14549,7 +14691,13 @@ window.BOCharacter = function (ctx) {
     const hit = {}; let avg = 0;
     for (const d of DT) {
       if (!(scaled[d][1] > 0)) continue;
-      const k = base * (1 + incFor(d) / 100);
+
+      let elemSpec = 0;
+      if (minionElem84 && elemInc) for (const m of pickMods(mods, 'Damage', 'Inc')) {
+        const t = elemOnly(m) || (m.key === 'dragon' && !m.local ? (() => { const st = splitTags(m.tags); return st.types.length > 0 && !st.conds.length && st.types.every(x => x !== 'Physical') ? st.types : null; })() : null);
+        if (t && t.includes(d)) { elemSpec += m.v; use(m, 'minion (element lines, with the summon skill increased)'); }
+      }
+      const k = base * (1 + incFor(d) / 100) * (1 + specInc / 100 + elemSpec / 100) / (1 + specInc / 100);
       hit[d] = { min: scaled[d][0] * k, max: scaled[d][1] * k }; hit[d].avg = (hit[d].min + hit[d].max) / 2; avg += hit[d].avg;
     }
 
@@ -14564,7 +14712,12 @@ window.BOCharacter = function (ctx) {
       use(m, 'minion crit');
     }
     for (const m of mods) if (fromEngine(m) && m.stat === 'CritChance' && m.mode === 'Flat') { mCritBase += m.v; use(m, 'minion crit'); }
-    const chance = Math.min(100, ((H.SpellCritBase || 6) + mCritBase) * (1 + mCritInc / 100)), multi = (H.CritMultiBase || 150) + mCritMulti, critFactor = 1 + chance / 100 * (multi / 100 - 1);
+
+
+
+
+    const mStaff = (() => { const it = ch.items.find(i => i.slot === 'MainHand'), b = it && GD.bases[lc(it.base)]; return is084(GD) && b && lc(b.Class) === 'staff' && b.Crit > 0 ? b.Crit : 0; })();
+    const chance = Math.min(100, ((mStaff || H.SpellCritBase || 6) + mCritBase) * (1 + mCritInc / 100)), multi = (H.CritMultiBase || 150) + mCritMulti, critFactor = 1 + chance / 100 * (multi / 100 - 1);
     if (mCritInc || mCritMulti || mCritBase) res.notes.push('Minion crit: ' + chance.toFixed(1) + '% chance, x' + (multi / 100).toFixed(2) + ' (your minion crit lines on the base ' + (H.SpellCritBase || 6) + '% and x' + ((H.CritMultiBase || 150) / 100).toFixed(1) + '). Not checked against the game yet.');
 
     let alive = (mi.Cap || mi.Count || 1) + (mi.CountEvery ? Math.floor((L - 1) / mi.CountEvery) : 0) + (mi.PerLevels || []).filter(l => L >= l).length;
@@ -14632,7 +14785,14 @@ window.BOCharacter = function (ctx) {
     const hitsPerSec = alive * strikes / pace;
     const physShare = avg > 0 && hit.Physical ? hit.Physical.avg / avg : 0;
     const ruthK = 1 + ruthPct / 100 * physShare;
-    const dps = avg * critFactor * hitsPerSec * ruthK * armyK;
+
+
+
+    let minionMaim = 0;
+    if (is084(GD)) for (const m of mods) if (fromSupport(m) && m.stat === 'MaimOnHit' && m.mode === 'Flat') { minionMaim += m.v; use(m, 'minion, in the DPS'); }
+    const maimK = 1 + minionMaim / 100 * physShare;
+    if (minionMaim) res.notes.push('Maim: the enemy takes ' + minionMaim + '% more Physical damage from these minions, counted in the DPS as the panel in the game does (tooltip, build 84).');
+    const dps = avg * critFactor * hitsPerSec * ruthK * armyK * maimK;
     res.attr = attr;
     res.base = { kind: 'minion', min: sk.SpellMin, max: sk.SpellMax, growth };
     res.hit = hit; res.hitAvg = avg; res.hitAvgCrit = avg * critFactor;
@@ -14663,7 +14823,7 @@ window.BOCharacter = function (ctx) {
       let curseMore = 0;
       for (const sid of woeSups) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'CurseMore' && m.Mode === 'Flat') curseMore += m.Value;
       const eff = (1 + (curseInc + bannerEffectInc(c, mods)) / 100) * (1 + dreadPct / 100) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
-      const row = { id, name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, resDown: {} };
+      const row = { id, kind: c.Kind || '', name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, resDown: {} };
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
       curseRows.push(row);
     }

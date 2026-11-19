@@ -11010,6 +11010,7 @@ window.BOCharacter = function (ctx) {
 
 
   const is084 = GD => apiBuildAtLeast(GD, 84, '2026-11-19T00');
+  const VOW_BUILT_IN = 0.15; // every Vow gem's lines x1.15 since patch 82 (gem texts, API game data build 85; see the Vow block)
   const takenRule = (GD, isBoss) => is084(GD) ? 'kinds' : is082(GD) ? 'add' : !!(isBoss && guardianStrongestTaken(GD));
 
 
@@ -11333,7 +11334,7 @@ window.BOCharacter = function (ctx) {
 
 
   const UNIQUE_LINE_SCALE = {
-    wyrmblade_of_the_black_oath: { 0: 1.5, 4: 1.5 }, kingbreaker: { 0: 1.5, 1: 1.5, 3: 1.5 }, gravesong: { 0: 1.5, 1: 1.5, 2: 1.5 },
+    wyrmblade_of_the_black_oath: { 0: 1.5, 4: 1.5 }, kingbreaker: { 0: 0.6, 1: 0.6, 3: 1.5 }, gravesong: { 0: 1.5, 1: 1.5, 2: 1.5 },
     gravecleaver: { 1: 1.5, 2: 2 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff: { 1: 2.5, 3: 2 },
     cinderwick: { 1: 2, 2: 3, 3: 1.5, 5: 3 }, dawnforge_maul: { 0: 1.25, 1: 1.25, 2: 1.25, 4: 1.25 }, glass_soul: { 0: 0.5, 1: 0.5 },
     the_unyielding_vow: { 0: 0.25 }, the_patient_bastion: { 0: 0.25 }, the_heartwood_girdle: { 0: 0.25 },
@@ -11349,7 +11350,7 @@ window.BOCharacter = function (ctx) {
     the_last_harvest: { 3: 2, 4: 3 }, gravetithe: { 2: 2, 3: 2.5 }, nightglass: { 2: 2 },
     the_last_petal: { 1: 2 }, rimewrit: { 0: 4, 2: 2 }, the_slow_verdict: { 0: 1.25 },
     templars_troth: { 0: 2, 1: 2 }, the_gate_that_answers: { 0: 1.5 }, overclock_coil: { 1: 1.5 },
-    hexbinders_censer: { 1: 2 }, the_thousand_sparks: { 0: 0.667, 2: 0.5 }, kingbreaker_primal: { 0: 1.5, 1: 1.5, 3: 1.5 },
+    hexbinders_censer: { 1: 2 }, the_thousand_sparks: { 0: 0.667, 2: 0.5 }, kingbreaker_primal: { 0: 0.6, 1: 0.6, 3: 1.5 },
     gravesong_primal: { 0: 1.5, 1: 1.5, 2: 1.5 }, gravecleaver_primal: { 1: 1.5, 2: 2 }, stormfang_primal: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 },
     rimecrown_staff_primal: { 1: 2.5, 3: 2 } };
 
@@ -11649,7 +11650,14 @@ window.BOCharacter = function (ctx) {
         const inc = modsOf(mods, 'VowEffect').filter(m => m.stat === 'VowEffect' && m.mode === 'Inc').reduce((x, m) => x + m.v, 0);
         const so = (ch.sockets || []).find(s => lc(s.skill) === lc(b.Skill));
         const linked = so ? so.supports.reduce((x, sid) => x + ((GD.supports[lc(sid)] || {}).Mods || []).filter(m => m.Stat === 'VowEffect' && m.Mode === 'Flat').reduce((y, m) => y + (m.Value || 0), 0), 0) : 0;
-        eff = (1 + inc / 100) * (1 + linked / 100);
+
+
+
+
+
+
+
+        eff = (1 + inc / 100) * (is082(GD) ? 1 + VOW_BUILT_IN + linked / 100 : 1 + linked / 100);
       }
       const effOn = m => herald ? m.Stat === 'DamageAsExtra' : true;
       for (const m of b.Mods || []) add(m, ((m.Value || 0) + (m.PerLevel || 0) * (lvl - 1)) * brk * (m.Stat === 'DamageAsExtra' ? lone : 1) * (effOn(m) ? eff : 1), m.Value2, b.Name + (brk > 1 ? ' (Vowbreak x' + brk + ')' : '') + (lone > 1 ? ' (Lone Herald x' + +lone.toFixed(2) + ')' : '') + (eff !== 1 ? ' (' + (herald ? 'Herald' : 'Vow') + ' effect x' + +eff.toFixed(2) + ')' : ''), key);
@@ -12397,7 +12405,12 @@ window.BOCharacter = function (ctx) {
       res.notes.push('Hammer of Judgement: ~' + Math.round(armourTotal).toLocaleString('en-US') + ' armour (estimated from your gear and Strength).' + (is0564(GD) ? ' 8% per 1,000 up to 20,000, 3% above (patch 0.56.4).' : ''));
     }
 
+
+
+
+    let ruthK = 1;
     for (const m of modsOf(mods, 'RuthlessBlow').filter(m => m.stat === 'RuthlessBlow' && m.mode === 'Flat')) {
+      ruthK *= 1 + m.v / 300;
       use(m, 'averaged over 3 blows');
       mods.push({ stat: 'Damage', mode: 'More', tags: ['Physical'], v: m.v / 3, v2: 0, local: false, src: m.src + ' (every 3rd blow, averaged)', key: m.key });
     }
@@ -14094,7 +14107,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-      const eligible = ((hit.Poison ? hit.Poison.avg : 0) + (poisonChanceStat > 0 && hit.Physical ? hit.Physical.avg : 0)) * critFactor / hitFactor;
+      const eligible = ((hit.Poison ? hit.Poison.avg : 0) + (poisonChanceStat > 0 && hit.Physical ? hit.Physical.avg / ruthK : 0)) * critFactor / hitFactor; // ruthK: Ruthless does not raise the poison (its text, build 85)
       if (!hasPoison && !(poisonChanceStat > 0 && hit.Physical)) pChance = 0;
       if (pChance > 0 && eligible > 0) {
         const pInc = sumMod('PoisonDamage', 'Inc'), pMore = sumMod('PoisonDamage', 'More');
@@ -14209,7 +14222,7 @@ window.BOCharacter = function (ctx) {
         for (const s of res.supports) { const d = s.ok && GD.supports[lc(s.id)] && /Bleeding[^.]*?for (\d+(?:\.\d+)?) seconds/i.exec(GD.supports[lc(s.id)].Description || ''); if (d) { baseDur = +d[1]; break; } }
         const dur = snap(baseDur * (1 + ailDur / 100));
         const coef = (A.BleedFracPerSec || 0.5) * Math.max(0, 1 + bInc / 100) * bMore * Math.max(0, 1 + dotMulti / 100);
-        const dps1 = hit.Physical.avg * critFactor * coef; // a bleed from the average hit
+        const dps1 = hit.Physical.avg / ruthK * critFactor * coef; // a bleed from the average hit (Ruthless taken out: it does not raise the bleed, its text, build 85)
 
 
         const rollsPerSec = hitsPerSec * perHitFactor / arrowShare * hitFactor * bleedChance / 100;
@@ -14495,10 +14508,11 @@ window.BOCharacter = function (ctx) {
       const leechUp = o.leechUptime != null ? Math.max(0, Math.min(1, o.leechUptime)) : LEECH_UPTIME;
       const lf = 1 + leechMore * leechUp / 100;
       res.leech = { more: leechMore, uptime: leechUp, factor: lf };
+
+
       for (const d of Object.keys(byType)) byType[d] *= lf;
-      hitDpsVs *= lf; res.hitDps = hitDpsVs; poisonDps *= lf; igniteDps *= lf; bleedDps *= lf;
-      res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
-      res.notes.push('Life Leech: ' + leechMore + '% more damage while you are leeching (below full life), counted for ' + Math.round(leechUp * 100) + '% of the fight' + (o.leechUptime != null ? ' (your setting)' : ' (the default: you only leech while below full life; change "Time spent leeching" in the enemy settings to sim higher or lower)') + ': x' + lf.toFixed(3) + '.');
+      hitDpsVs *= lf; res.hitDps = hitDpsVs;
+      res.notes.push('Life Leech: its hits deal ' + leechMore + '% more damage while you are leeching (below full life; not its Bleed, Poison or Ignite), counted for ' + Math.round(leechUp * 100) + '% of the fight' + (o.leechUptime != null ? ' (your setting)' : ' (the default: you only leech while below full life; change "Time spent leeching" in the enemy settings to sim higher or lower)') + ': x' + lf.toFixed(3) + '.');
     }
     let chillMore = 0; for (const m of pickMods(mods, 'ChilledLightningMore', 'Flat')) if (applies(ctx, m)) { chillMore += m.v; use(m); }
 
@@ -14545,8 +14559,12 @@ window.BOCharacter = function (ctx) {
       res.panelDps += panelHitDps * (execPanelF - 1); res.sheetHitDps *= execPanelF;
       res.executioner = { more: lowMore, below: T * 100, cull: C * 100, factor: execF, finisher: execFinisher, on: execOn };
       if (execOn) {
+
+
+
+        const execDot = execFinisher ? 1 : 1 / (1 - C);
         for (const d of Object.keys(byType)) byType[d] *= execF;
-        hitDpsVs *= execF; res.hitDps = hitDpsVs; poisonDps *= execF; igniteDps *= execF; bleedDps *= execF;
+        hitDpsVs *= execF; res.hitDps = hitDpsVs; poisonDps *= execDot; igniteDps *= execDot; bleedDps *= execDot;
         res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
         res.notes.push(execFinisher
           ? 'Executioner as a finisher: this skill is used on enemies below ' + Math.round(T * 100) + '% life, so all its hits deal ' + lowMore + '% more (x' + execF.toFixed(2) + '). The kills below ' + Math.round(C * 100) + '% are not counted as extra damage.'

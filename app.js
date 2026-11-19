@@ -11478,8 +11478,14 @@ window.BOCharacter = function (ctx) {
       const key = 'vow:' + b.Id;
       const lvl = blessingGemLevel(GD, ch, b, mods, o, trying ? +tryH[b.Id] : 0);
       const brk = o.vowbreak && o.vowbreak.has(b.Id) && b.Vowbreak ? b.Vowbreak.Mult : 1;
-      sources.push({ key, label: b.Name + ' (gem ' + lvl + (trying ? ', what-if, not on bar' : '') + ')', group: 'Vows & Heralds', vowbreak: !!b.Vowbreak, vowId: b.Id, defaultOff: !/herald/i.test(b.Id) });
+      const echoVow = b.Id === 'ns103_elemental_echo';
+      sources.push({ key, label: b.Name + ' (gem ' + lvl + (trying ? ', what-if, not on bar' : '') + ')', group: 'Vows & Heralds', vowbreak: !!b.Vowbreak, vowId: b.Id, defaultOff: !/herald/i.test(b.Id),
+        vowbreakTip: echoVow ? 'Vowbreak: 20% more damage for 4 s, then the Echo cannot be sworn for 10 s. The echoes are left out while it is broken.' : '' });
       if (off.has(key)) continue;
+
+
+
+      if (echoVow && brk > 1) for (const m of b.Vowbreak.BurstMods || []) add(m, m.Value, m.Value2, b.Name + ' (Vowbreak)', key);
 
 
 
@@ -11515,6 +11521,7 @@ window.BOCharacter = function (ctx) {
 
 
 
+
     if (is079(GD)) for (const id of new Set(ch.hotbar || [])) {
       const sk0 = GD.skills[lc(id)]; if (!sk0 || !/^ns103_/.test(lc(id))) continue;
       const tagsK = sk0.Tags || [];
@@ -11539,6 +11546,25 @@ window.BOCharacter = function (ctx) {
       }
 
       if (id === 'kindling' && n > 50) { n = 50; notes.push('Kindling: at most 50 stacks.'); }
+
+
+
+
+
+
+
+
+
+
+
+      if (/^ns103_echo_/.test(id)) {
+        const vow = GD.blessings.ns103_elemental_echo;
+        if (!vow || !ch.hotbar.includes(vow.Skill) || off.has('vow:' + vow.Id) || (o.vowbreak && o.vowbreak.has(vow.Id))) continue;
+        n = Math.min(n0, b.Max || 1);
+        for (const m of b.Mods || []) add(m, (m.Value || 0) * (m.PerStack ? n : 1), m.Value2, vow.Name + ' · ' + b.Name, 'charge:' + id);
+        if (!notes.some(x => /^Elemental Echo: /.test(x))) notes.push('Elemental Echo: the ticked echoes are counted as up the whole time. An echo needs a kill by your own hit of that element (minion kills and Herald bursts started none in a logged Rupture, 18 Nov 2026), so on a single boss it is only up while other enemies die. Your minions get the echo of their element too (tooltip, 19 Nov 2026).');
+        continue;
+      }
       for (const m of b.Mods || []) add(m, (m.Value || 0) * (m.PerStack ? n : 1), m.Value2, b.Name + ' x' + n, 'charge:' + id);
     }
 
@@ -14602,7 +14628,12 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const elemOnly = m => !m.local && (m.key === 'passives' || m.key === 'oaths' || /^item:/.test(String(m.key || ''))) && (() => { const st = splitTags(m.tags); return st.types.length > 0 && !st.conds.length && st.types.every(t => t !== 'Physical') ? st.types : null; })();
+
+
+
+
+
+    const elemOnly = m => !m.local && (m.key === 'passives' || m.key === 'oaths' || /^item:/.test(String(m.key || '')) || /^charge:ns103_echo_/.test(String(m.key || ''))) && (() => { const st = splitTags(m.tags); return st.types.length > 0 && !st.conds.length && st.types.every(t => t !== 'Physical') ? st.types : null; })();
     const elemInc = is078(GD) && bSwitch(GD, 'r102.BUGSB.bMinionElem102', true), elemMore = is079(GD) && bSwitch(GD, 'r103.BUGS-D.bMinionMore103', true);
     const moreFor = d => {
       let k = 1;
@@ -16587,8 +16618,14 @@ window.BOStartApp = function () {
     const src = r.sources || S.collectMods(GD, ch, opts()).sources;
     const vows = src.filter(s => s.group === 'Vows & Heralds' || s.group === 'Potions');
     $('#vowList').innerHTML = vows.length ? vows.map(s => '<li><label><input type="checkbox" data-src="' + esc(s.key) + '"' + (st.off.has(s.key) ? '' : ' checked') + '><span class="name">' + esc(s.label) + '</span></label>' +
-      (s.vowbreak ? '<label title="Vowbreak: the Herald\'s extra damage x2.5 for 4 s"><input type="checkbox" data-vowbreak="' + esc(s.vowId) + '"' + (st.vowbreak.has(s.vowId) ? ' checked' : '') + '><span class="meta">Vowbreak</span></label>' : '') + '</li>').join('')
+      (s.vowbreak ? '<label title="' + esc(s.vowbreakTip || 'Vowbreak: the Herald\'s extra damage x2.5 for 4 s') + '"><input type="checkbox" data-vowbreak="' + esc(s.vowId) + '"' + (st.vowbreak.has(s.vowId) ? ' checked' : '') + '><span class="meta">Vowbreak</span></label>' : '') + '</li>').join('')
       : '<li class="hint">No Vows or Heralds on your hotbar, and ' + (st.potionsOn ? 'no potions set in the Brewery.' : 'potions are off (Configure Enemy).') + '</li>';
+
+
+    const echoVow = GD.blessings.ns103_elemental_echo;
+    const echoes = echoVow && ch.hotbar.includes(echoVow.Skill) ? Object.values(GD.blessings).filter(b => /^ns103_echo_/.test(b.Id)) : [];
+    $('#echoBox').hidden = !echoes.length;
+    $('#echoList').innerHTML = echoes.map(b => '<li><label><input type="checkbox" data-echo="' + esc(b.Id) + '"' + (st.charges[b.Id] ? ' checked' : '') + '><span class="name">' + esc(b.Name) + '</span></label></li>').join('');
 
     const bsh = r.barShock || [];
     $('#barShockBox').hidden = !bsh.length;
@@ -17927,6 +17964,7 @@ window.BOStartApp = function () {
     else if (t.dataset.tryherald) { if (t.checked) st.tryHeralds[t.dataset.tryherald] = st.tryHeralds[t.dataset.tryherald] || 20; else delete st.tryHeralds[t.dataset.tryherald]; render(); }
     else if (t.dataset.tryheraldLvl) { st.tryHeralds[t.dataset.tryheraldLvl] = Math.max(1, Math.min(30, +t.value || 1)); render(); }
     else if (t.dataset.vowbreak) { if (t.checked) st.vowbreak.add(t.dataset.vowbreak); else st.vowbreak.delete(t.dataset.vowbreak); render(); }
+    else if (t.dataset.echo) { st.charges[t.dataset.echo] = t.checked ? 1 : 0; render(); }
     else if (t.dataset.curse) { st.curses[t.dataset.curse] = Object.assign(st.curses[t.dataset.curse] || { dread: 0 }, { on: t.checked }); render(); }
     else if (t.dataset.hallowed) { st.enemyHallowedGround = t.checked; render(); if (!t.isConnected) { const again = document.querySelector('[data-hallowed]'); if (again) again.focus(); } }
     else if (t.dataset.hallowcg) { st.hallowCG = t.checked; render(); if (!t.isConnected) { const again = document.querySelector('[data-hallowcg]'); if (again) again.focus(); } }

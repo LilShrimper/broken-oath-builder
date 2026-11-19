@@ -10768,7 +10768,7 @@ window.BOCharacter = function (ctx) {
 
 
     'WoeOnHit', 'WoeLinger', 'CurseMore',
-    'BloodMagic', 'LifeLeech', 'Dragonling', 'ShockSpreadOnKill',
+    'BloodMagic', 'LifeLeech', 'Dragonling', 'ShockSpreadOnKill', 'IgniteSpreadOnKill', // IgniteSpreadOnKill: Kindling Rod (build 85), a pack effect like the Shock spread
 
     'FortifyMax', 'FortifyEffect', 'CryFury', 'CryLinger', 'BannerStartValour', 'BannerKeepValour', 'VowReserveLess',
     'AuraDrainLess', 'PoisonSpreadOnKill', 'HeraldKillRadius',
@@ -10794,7 +10794,9 @@ window.BOCharacter = function (ctx) {
 
     'WoeWeave103', 'WoeWeaveLess103', 'BleedTear103', 'HeraldFocus103', 'MinionQuarry103', 'MinionQuarryLess103',
 
-    'DexAttackMore', 'ChannelRamp', 'OrbitMovingDamage', 'CooldownRecovery', 'VowEffect', 'HeraldEffect', 'TrogNote100', 'BleedStacks', 'BallistaVolley76', 'GolemAuraStack76']);
+    'DexAttackMore', 'ChannelRamp', 'OrbitMovingDamage', 'CooldownRecovery', 'VowEffect', 'HeraldEffect', 'TrogNote100', 'BleedStacks', 'BallistaVolley76', 'GolemAuraStack76',
+
+    'AfterimageDamage']);
 
 
 
@@ -11010,6 +11012,7 @@ window.BOCharacter = function (ctx) {
 
 
   const is084 = GD => apiBuildAtLeast(GD, 84, '2026-11-19T00');
+  const is085 = GD => apiBuildAtLeast(GD, 85, '2026-11-19T19');
   const VOW_BUILT_IN = 0.15; // every Vow gem's lines x1.15 since patch 82 (gem texts, API game data build 85; see the Vow block)
   const takenRule = (GD, isBoss) => is084(GD) ? 'kinds' : is082(GD) ? 'add' : !!(isBoss && guardianStrongestTaken(GD));
 
@@ -11304,8 +11307,18 @@ window.BOCharacter = function (ctx) {
       else if (DT.includes(t)) types.push(t);
       else conds.push(t);
     }
-    return { when, shape, conds, types, state, nth: p.Nth || 1, pct: p.Pct || 0, count: p.Count || 1, element: p.Element || null, perTarget: p.PerTarget || 0, cooldown: m.v2 || 0 };
+    return { when, shape, conds, types, state, nth: p.Nth || 1, pct: p.Pct || 0, count: p.Count || 1, element: p.Element || null, perTarget: p.PerTarget || 0, cooldown: m.v2 || 0, params: p };
   }
+
+
+
+
+
+
+
+
+
+  const SUPPORT_TRIGGERS_85 = new Set(['skyward_oath', 'stormhound_pact', 'rimewake']);
 
 
 
@@ -12298,7 +12311,12 @@ window.BOCharacter = function (ctx) {
 
     {
       const sumOf = st => { let v = 0; for (const m of mods) if (m.stat === st && m.mode === 'Flat' && !m.local && condsOk(ctx, splitTags(m.tags).conds)) { v += m.v; use(m); } return v; };
-      const dexMore = isAttack ? sumOf('DexAttackMore') : 0;
+
+
+
+
+      const dexFits = isAttack && (is085(GD) ? ctx.tags.has('projectile') || sk.Delivery === 'Rain' || ctx.tags.has('rain') : ctx.tags.has('bow'));
+      const dexMore = dexFits ? sumOf('DexAttackMore') : 0;
       if (dexMore) mods.push({ stat: 'Damage', mode: 'More', tags: ['Attack'], v: dexMore * (attr.Dex || 0) / 10, v2: 0, local: false, src: dexMore + '% more Attack damage per 10 Dexterity (' + (attr.Dex || 0) + ' Dex)', key: 'dexmore' });
       const ramp = sk.Channel ? sumOf('ChannelRamp') : 0;
       if (ramp) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: ramp, v2: 0, local: false, src: 'Channel ramp (full after the first second)', key: 'channelramp' });
@@ -13452,6 +13470,10 @@ window.BOCharacter = function (ctx) {
 
 
     const orbitOn = shape === 'orbit';
+
+
+
+    if (orbitOn && projectiles) for (const m of pickMods(mods, 'OrbitCount', 'Flat')) if (applies(ctx, m)) { projectiles += m.v; use(m); }
     let focusShare = 0; for (const m of pickMods(mods, 'FocusShare', 'Flat')) if (applies(ctx, m)) { focusShare = Math.max(focusShare, m.v / 100); use(m); }
     let projOnTarget = 1, projWeight = 1;
     let rollShares = null; // each projectile's share of a full hit, when they differ (Focused Volley, Orbit); for the bleed's strongest roll
@@ -13592,7 +13614,18 @@ window.BOCharacter = function (ctx) {
       if (n > 0 && (ctx.tags.has('channelling') || ctx.tags.has('movement'))) res.notes.push('Afterimages: ' + sk.Name + ' is a ' + (ctx.tags.has('movement') ? 'Movement' : 'Channelling') + ' skill, so it gets none (the game\'s rule).');
       else if (n > 0) {
         for (const m of ai) use(m);
-        const cap = META.AfterimageCap || 3; afterimages = Math.min(cap, n); const pct = (META.AfterimageDamagePct || 40) / 100;
+        const cap = META.AfterimageCap || 3; afterimages = Math.min(cap, n); let pct = (META.AfterimageDamagePct || 40) / 100;
+
+
+
+
+        let aiInc = 0; for (const m of pickMods(mods, 'AfterimageDamage', 'Inc')) if (applies(ctx, m)) { aiInc += m.v; use(m); }
+        if (aiInc) {
+          let wInc = 0, wSum = 0; for (const si of Object.values(res.scaleInfo || {})) if (si.scaledAvg > 0) { wInc += (si.inc || 0) * si.scaledAvg; wSum += si.scaledAvg; }
+          const inc = wSum > 0 ? wInc / wSum : 0, k = Math.max(0, 1 + (inc + aiInc) / 100) / (1 + inc / 100);
+          pct *= k;
+          res.notes.push('Afterimages deal ' + aiInc + '% increased damage, added to your ' + Math.round(inc) + '% increased: each afterimage x' + k.toFixed(3) + '.');
+        }
 
 
 
@@ -14340,7 +14373,8 @@ window.BOCharacter = function (ctx) {
 
 
 
-        if (m.stat !== 'Trigger' || !(m.key === 'passives' || String(m.key || '').startsWith('item:'))) continue;
+        const supTrig = m.stat === 'Trigger' && String(m.key || '').startsWith('support:') && SUPPORT_TRIGGERS_85.has(lc(String(m.key).slice(8)));
+        if (m.stat !== 'Trigger' || !(m.key === 'passives' || String(m.key || '').startsWith('item:') || supTrig)) continue;
         const t = trigParse(m);
         if (!['Hit', 'Crit', 'SkillUse'].includes(t.when) || !t.pct) continue;
 
@@ -14360,7 +14394,7 @@ window.BOCharacter = function (ctx) {
         if (named.length) { if (!named.some(x => lc(x) === lc(skillId))) continue; t.conds = t.conds.filter(x => !GD.skills[lc(x)]); }
         if (!condsOk(ctx, t.conds)) continue;
 
-        if (!t.types.every(d => ctx.tags.has(lc(d)))) continue;
+        if (t.shape !== 'StormWolf' && !t.types.every(d => ctx.tags.has(lc(d)))) continue; // Storm Wolf: its own "a quarter Lightning" check below
         let share = 1; // VsBurning: only while the enemy burns
         if (t.state.includes('VsBurning')) share = ail.ignite ? ail.ignite.uptime : 0;
         if (t.state.includes('VsBurningOrShocked')) { const ig = ail.ignite ? ail.ignite.uptime : 0, sh = ail.shock ? 1 - Math.exp(-ail.shock.rate * ail.shock.duration) : 0; share = 1 - (1 - ig) * (1 - sh); }
@@ -14426,7 +14460,18 @@ window.BOCharacter = function (ctx) {
         else if (t.when === 'Crit') { events = hitsPerSec * share * critChance / 100 / t.nth; size = avgHit / (critFactor || 1) * effectiveMulti / 100 * t.pct / 100 * t.count; }
         else { events = usesPerSec * share / t.nth; size = avgHit * t.pct / 100 * t.count; }
         let capped = '';
-        const gap = Math.max(t.cooldown, t.perTarget);
+
+
+
+        if (t.shape === 'StormWolf') {
+          const q = t.params || {}, ltShare = rawPerSec > 0 ? (rawBy.Lightning || 0) / rawPerSec : 0;
+          if (ltShare < 0.25) { res.notes.push((m.src || '').replace(/^Support · /, '') + ': only ' + Math.round(ltShare * 100) + '% of the hit is Lightning (it needs a quarter), so no Storm Wolves.'); continue; }
+          const spawn = Math.min(events, 1 / (t.cooldown > 0 ? t.cooldown : 1));
+          const alive = Math.min(q.Max > 0 ? q.Max : 2, spawn * (q.Life > 0 ? q.Life : 4));
+          events = alive / (q.Interval > 0 ? q.Interval : 0.8);
+          capped = ' (' + alive.toFixed(2) + ' wolves up on average, each leaping every ' + (q.Interval > 0 ? q.Interval : 0.8) + ' s)';
+        }
+        const gap = t.shape === 'StormWolf' ? 0 : Math.max(t.cooldown, t.perTarget);
         if (gap > 0 && events > 1 / gap) { events = 1 / gap; capped = ' (at most once every ' + gap + ' s)'; }
         if (!(events > 0) || !(size > 0)) continue;
         let dps;
@@ -14443,7 +14488,7 @@ window.BOCharacter = function (ctx) {
         }
         hitDpsVs += dps; res.hitDps = hitDpsVs;
         use(m, 'trigger');
-        const name = (m.src || '').replace(/^Passive · /, '');
+        const name = (m.src || '').replace(/^(Passive|Support) · /, '');
         (res.triggers = res.triggers || []).push({ src: name, when: t.when, nth: t.nth, pct: t.pct, count: t.count, element: t.element, perSec: events, dps });
         const what = t.when === 'Hit' ? (t.nth > 1 ? 'every ' + t.nth + 'th hit' : 'every hit') + (t.state.length ? ' on a ' + (t.state.includes('VsBurningOrShocked') ? 'Burning or Shocked' : 'Burning') + ' enemy (' + Math.round(share * 100) + '% of the time)' : '')
           : t.when === 'Crit' ? (t.nth > 1 ? 'every ' + t.nth + 'th crit' : 'every crit') : (t.nth > 1 ? 'every ' + t.nth + 'th use' : 'every use');
@@ -14697,7 +14742,13 @@ window.BOCharacter = function (ctx) {
         if (!b.Skill || !(ch.hotbar.includes(b.Skill) || tryLvl) || (o.off && o.off.has('vow:' + b.Id))) continue;
         if (!b.ReserveFlat && !b.ReservePct) continue;
         const lvl = blessingGemLevel(GD, ch, b, mods, o, tryLvl);
-        reserved += Math.round(((b.ReserveFlat || 0) + (b.ReserveFlatPerLevel || 0) * (lvl - 1) + (b.ReservePct || 0) / 100 * max) * Math.max(0, 1 + resInc / 100));
+
+
+
+        const resDesc = /^woebringer/i.test(b.Id) ? (GD.supports.woebringer || {}).Description : (GD.skills[lc(b.Skill)] || {}).Description;
+        const resTxt = /reserves (\d+(?:\.\d+)?)% of your mana/i.exec(resDesc || '');
+        const resPct = resTxt && b.ReservePct ? +resTxt[1] : (b.ReservePct || 0);
+        reserved += Math.round(((b.ReserveFlat || 0) + (b.ReserveFlatPerLevel || 0) * (lvl - 1) + resPct / 100 * max) * Math.max(0, 1 + resInc / 100));
       }
 
 

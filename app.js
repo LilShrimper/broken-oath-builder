@@ -14598,7 +14598,11 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const elemOnly = m => !m.local && (m.key === 'passives' || /^item:/.test(String(m.key || ''))) && (() => { const st = splitTags(m.tags); return st.types.length > 0 && !st.conds.length && st.types.every(t => t !== 'Physical') ? st.types : null; })();
+
+
+
+
+    const elemOnly = m => !m.local && (m.key === 'passives' || m.key === 'oaths' || /^item:/.test(String(m.key || ''))) && (() => { const st = splitTags(m.tags); return st.types.length > 0 && !st.conds.length && st.types.every(t => t !== 'Physical') ? st.types : null; })();
     const elemInc = is078(GD) && bSwitch(GD, 'r102.BUGSB.bMinionElem102', true), elemMore = is079(GD) && bSwitch(GD, 'r103.BUGS-D.bMinionMore103', true);
     const moreFor = d => {
       let k = 1;

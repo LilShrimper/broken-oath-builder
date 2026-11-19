@@ -2646,3 +2646,46 @@ details.sw-sub.sw-sup { background: var(--panel); }
 
 /* Bonus points over the patch limit (Build Planner, Character tab Plan row) */
 .pl-over { margin: 6px 0 8px; padding: 6px 10px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--panel-2); color: var(--accent); font-size: .85em; }
+
+/* Heat map marks and legend (19 Nov 2026). Red = taking it lowers the value; dashed = taken but adds nothing; dotted = has lines the number does not count. */
+.tn.loss { fill: #8c3a3a; }
+.tn.ic.loss { fill-opacity: .5; }
+.tn.alloc.dead, .tn.ic.alloc.dead { stroke: var(--muted); stroke-dasharray: 18 12; }
+.tn.alloc.dead:not(.ic) { fill: color-mix(in srgb, var(--accent) 35%, var(--panel-2)); }
+.tn.unc { stroke-dasharray: 5 9; stroke-linecap: round; }
+.tn.unc:not(.next):not(:hover):not(.found):not(.sel):not(.ban) { stroke: #9fb0d0; }
+.tree-legend { position: absolute; right: 10px; top: 78px; z-index: 3; max-width: 230px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--panel-2) 92%, transparent); font-size: 11.5px; line-height: 1.35; color: var(--muted); cursor: default; }
+.tree-legend.open { border-color: color-mix(in srgb, var(--dashboard-gold) 35%, var(--line)); }
+.tree-legend .tl-btn { display: flex; align-items: center; gap: 7px; width: 100%; padding: 7px 10px; border: 0; background: none; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.tree-legend .tl-btn:hover { color: var(--accent); }
+.tree-legend .tl-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+.tree-legend .tl-arrow { width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-right: 7px solid currentColor; transition: transform .15s; }
+.tree-legend.open .tl-arrow { transform: rotate(-90deg); }
+.tree-legend .tl-body { padding: 0 10px 8px; }
+.tree-legend .tl-body[hidden] { display: none; }
+.tree-seats { position: absolute; left: 10px; top: 10px; z-index: 3; padding: 7px 11px; border: 1px solid var(--dashboard-gold, #d9b45b); border-radius: 8px; background: color-mix(in srgb, var(--panel-2) 92%, transparent); color: var(--dashboard-gold, #d9b45b); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.tree-seats[hidden] { display: none; }
+.tree-seats:hover { background: color-mix(in srgb, var(--dashboard-gold, #d9b45b) 18%, var(--panel-2)); }
+.tree-seats:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tree-view.full .tree-seats { left: 12px; top: 54px; }
+:root[data-theme="light"] .tree-seats { color: #795714; border-color: #a57a1c; }
+@media (pointer: coarse) { .tree-seats, .tree-legend .tl-btn { min-height: 40px; } }
+/* The Oath menu of a seat: Oaths side by side, tall enough that none needs scrolling to reach. */
+.tree-sheet.oaths .tree-sheet-body { max-height: calc(var(--view-h, 68vh) - 34px); }
+.tree-sheet.oaths .oath-list { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: stretch; gap: 6px; }
+.tree-sheet.oaths button.oath-row { align-content: start; padding: 6px 9px; }
+.tree-legend .tl-t { color: var(--text); margin-bottom: 4px; }
+.tree-legend .tl-t::first-letter { text-transform: uppercase; }
+.tree-legend .tl-bar { height: 8px; border-radius: 4px; min-width: 150px; }
+.tree-legend .tl-nums { display: flex; justify-content: space-between; gap: 10px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tree-legend .tl-keys { display: flex; flex-direction: column; gap: 2px; margin-top: 5px; }
+.tree-legend .tl-keys:empty { display: none; }
+.tree-legend .tl-keys span { display: flex; align-items: center; gap: 6px; }
+.tree-legend .tl-sw { flex: none; width: 11px; height: 11px; border-radius: 50%; box-sizing: border-box; border: 2px solid var(--muted); }
+.tree-legend .tl-sw.loss { background: #8c3a3a; border-color: var(--faint); }
+.tree-legend .tl-sw.dead { border-style: dashed; background: color-mix(in srgb, var(--accent) 35%, var(--panel-2)); }
+.tree-legend .tl-sw.unc { border-style: dotted; border-color: #9fb0d0; }
+:root[data-theme="light"] .tn.unc:not(.next):not(:hover):not(.found):not(.sel):not(.ban) { stroke: #5a6f9c; }
+:root[data-theme="light"] .tree-legend .tl-sw.unc { border-color: #5a6f9c; }
+@media (max-width: 560px) { .tree-legend { max-width: 170px; font-size: 10.5px; } .tree-legend .tl-bar { min-width: 110px; } .tree-sheet.oaths .oath-list { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .tree-sheet.oaths ~ .tree-zoom { display: none; } } /* phone: the Oath menu is tall, the zoom buttons would sit on the legend */

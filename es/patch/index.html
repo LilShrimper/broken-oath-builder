@@ -50,7 +50,7 @@
   var b = new URL("../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/es.json'), langCode: 'es' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../../style.css?v=392">
+<link rel="stylesheet" href="../../style.css?v=393">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -398,7 +398,6 @@
       <div class="tree-bar">
         <span class="tree-points" id="treePoints"></span>
         <label class="field inline tree-search"><input type="text" id="treeSearch" placeholder="Find a node or stat" autocomplete="off"><span class="tree-found-count" id="treeFoundCount" hidden></span></label>
-        <label class="check-row"><input type="checkbox" id="treeHeat" checked><span>Heat map</span></label>
         <button class="btn small ghost" type="button" id="treeBanClear" hidden title="Nodes you marked never take (right-click a node). Click to allow them all again.">Never take: 0 · clear</button>
         <button class="btn small ghost" type="button" id="treeKeepClear" hidden title="Nodes you marked keep or must take (right-click a node). Click to clear them all.">Keep: 0 · clear</button>
         <button class="btn small ghost" type="button" id="treeUndo">Undo</button>
@@ -426,6 +425,8 @@
         <svg id="treeSvg" xmlns="http://www.w3.org/2000/svg"></svg>
         <div class="tree-tip" id="treeTip" hidden></div>
         <span class="tree-full-pts" id="treeFullPts"></span>
+        <div class="tree-legend" id="treeLegend"><button type="button" class="tl-btn" id="treeLegendBtn" aria-expanded="true" aria-controls="treeLegendBody"><span class="tl-arrow" aria-hidden="true"></span><span>Heat map</span></button><div class="tl-body" id="treeLegendBody" hidden></div></div>
+        <button type="button" class="tree-seats" id="treeSeats" title="Go to the seat and pick an Oath" hidden></button>
         <div class="tree-sheet" id="treeSheet" hidden>
           <div class="tree-sheet-body tree-tip" id="treeSheetBody"></div>
           <div class="tree-sheet-acts"><button type="button" class="btn small" id="treeSheetAct">Take</button><button type="button" class="btn small ghost" id="treeSheetKeep">Keep</button><button type="button" class="btn small ghost" id="treeSheetBan">Never take</button><button type="button" class="tree-sheet-x" id="treeSheetClose" title="Close" aria-label="Close">×</button></div>
@@ -645,7 +646,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":392,"at":"2026-11-19T19:52:30.780Z"};
+window.SITE_VERSION = {"v":393,"at":"2026-11-19T20:31:23.257Z"};
 window.SITE_LANG = 'es';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -654,6 +655,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=4e9487f7","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../app.js?v=392"></script>
+<script src="../../app.js?v=393"></script>
 </body>
 </html>

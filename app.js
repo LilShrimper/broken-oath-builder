@@ -19312,8 +19312,16 @@ window.BOStartApp = function () {
     const have = allocSet(), s0 = startNode(), adj = treeAdj();
     const next = new Set(); for (const id of [s0, ...have]) for (const v of adj[id] || []) if (!have.has(v) && !blocked(v) && !banned(v)) next.add(v);
     const q = ($('#treeSearch').value || '').trim().toLowerCase();
-    const heat = $('#treeHeat').checked, foundIds = new Set();
-    let best = 0; for (const [id, s] of T.scores) if (!have.has(id) && perPt(s) > best) best = perPt(s);
+    const heat = T.heat !== false, foundIds = new Set();
+
+
+
+    const oh = T.scores.oath || new Map(), swHeat = swornNow();
+    const vals = []; for (const [id, s] of T.scores) if (!have.has(id) && s.d > 0.0005) vals.push(perPt(s));
+    for (const [mid, s] of oh) if (!swHeat.has(mid) && s.d > 0.0005) vals.push(perPt(s));
+    vals.sort((x, y) => x - y);
+    const rank = v => { let lo = 0, hi = vals.length; while (lo < hi) { const m = (lo + hi) >> 1; if (vals[m] <= v + 1e-12) lo = m + 1; else hi = m; } return vals.length > 1 ? Math.max(0, lo - 1) / (vals.length - 1) : 1; };
+    let nLoss = 0, nDead = 0, nUnc = 0;
     const top = new Set(bestRows(have, 8).map(([id]) => id));
 
     const oa = T.opt && T.opt.addSet || new Set(), orm = T.opt && T.opt.remSet || new Set();
@@ -19328,11 +19336,17 @@ window.BOStartApp = function () {
       c.classList.toggle('found', found); if (found) foundIds.add(id);
       c.classList.toggle('sel', id === T.sel);
       const s = T.scores.get(id);
-      if (heat && !on && !oa.has(id) && s && s.d > 0.0005 && best > 0) {
-        const t = Math.min(1, perPt(s) / best);
-        c.style.fill = 'hsl(' + Math.round(110 - 70 * (1 - t)) + ', ' + Math.round(40 + 45 * t) + '%, ' + Math.round(26 + 30 * t) + '%)';
-        c.style.fillOpacity = ic ? '0.45' : ''; // a tint over the icon
-      } else { c.style.fill = ''; c.style.fillOpacity = ''; }
+      const gain = heat && !on && !oa.has(id) && !!s && s.d > 0.0005;
+      if (gain) { c.style.fill = heatFill(rank(perPt(s))); c.style.fillOpacity = ic ? '0.45' : ''; } // on an icon: a tint over it
+      else { c.style.fill = ''; c.style.fillOpacity = ''; }
+
+
+      const hm = heat && n.Kind !== 'Start' ? heatMark(n) : null;
+      const loss = heat && !on && !oa.has(id) && !!s && s.d < -0.0005;
+      const dead = !!hm && on && !orm.has(id) && !!s && s.d > -0.0005 && hm.dmg;
+      const unc = !!hm && !on && !gain && !oa.has(id) && !banned(id) && hm.unc;
+      c.classList.toggle('loss', loss); c.classList.toggle('dead', dead); c.classList.toggle('unc', unc);
+      if (loss) nLoss++; if (dead) nDead++; if (unc) nUnc++;
     }
     for (const ln of $('#treeSvg').querySelectorAll('line.tl')) {
       const a = ln.dataset.a, b = ln.dataset.b;
@@ -19348,6 +19362,12 @@ window.BOStartApp = function () {
 
     const unsworn = new Set(Object.values(GD.masteries || {}).filter(m => masteryOpen(m, have) && !sw.has(m.Id) &&
       m.Oaths.some(oid => GD.oaths[oid] && !oathBlocked(m, oid, have, sw))).map(m => m.Id));
+    T.unsworn = [...unsworn];
+    const sb = $('#treeSeats');
+    if (sb) {
+      const txt = unsworn.size ? unsworn.size + ' Oath seat' + (unsworn.size === 1 ? '' : 's') + ' open' : '';
+      sb.hidden = !unsworn.size; if (sb._t !== txt) { sb._t = txt; sb.textContent = txt; }
+    }
     const ow = $('#treeOathWarn');
     if (ow) {
       ow.hidden = !unsworn.size;
@@ -19362,12 +19382,16 @@ window.BOStartApp = function () {
       p.classList.toggle('open', masteryOpen(m, have)); p.classList.toggle('sworn', sw.has(m.Id)); p.classList.toggle('sel', m.Id === T.selM);
       p.classList.toggle('found', !!q && masteryText(m).includes(q));
       p.classList.toggle('unsworn', unsworn.has(m.Id));
+
+      const os = heat && !sw.has(m.Id) ? oh.get(m.Id) : null;
+      p.style.fill = os && os.d > 0.0005 ? heatFill(rank(perPt(os))) : '';
     }
     for (const t of $('#treeSvg').querySelectorAll('text.tmlabel')) {
       const m = GD.masteries[t.dataset.mid]; if (!m) continue;
       const o = sw.get(m.Id); t.textContent = o ? o.Name : m.Name;
       t.classList.toggle('sworn', !!o); t.classList.toggle('open', masteryOpen(m, have));
     }
+    heatLegend(heat, vals, nLoss, nDead, nUnc);
     const order = pickOrder();
     for (const b of $('#treeSvg').querySelectorAll('text.tnum')) { const k = order.get(b.dataset.id); b.textContent = k || ''; b.style.display = k ? 'block' : 'none'; }
     const bc = $('#treeBanClear'), nb = st.ban ? st.ban.size : 0; bc.hidden = !nb; bc.textContent = 'Never take: ' + nb + ' · clear';
@@ -19426,6 +19450,7 @@ window.BOStartApp = function () {
     const pl = !on && n.Kind !== 'Start' && !blocked(id) && !banned(id) ? planTake(have, id) : null, cost = s ? s.cost : pl && pl.cost;
     const bb = $('#treeSheetBan'); bb.hidden = n.Kind === 'Start'; bb.textContent = banned(id) ? 'Allow again' : 'Never take';
     const kb = $('#treeSheetKeep'); kb.hidden = n.Kind === 'Start'; kb.textContent = keepMarked(id) ? 'Unkeep' : on ? 'Keep' : 'Must take';
+    $('#treeSheet').classList.remove('oaths');
     const act = $('#treeSheetAct');
     act.hidden = !on && !pl;
     act.textContent = on ? 'Refund' : s && s.swapped ? 'Swap' : cost > 1 ? 'Take (' + cost + ' points)' : 'Take';
@@ -19473,6 +19498,9 @@ window.BOStartApp = function () {
     if (!open) {
       const names = m.Notables.map(id => (GD.nodes[id] || {}).Name).filter(Boolean);
       h += '<div>Opens when you take one of its notables: ' + esc(names.slice(0, 6).join(', ')) + (names.length > 6 ? ' and ' + (names.length - 6) + ' more' : '') + '.</div>';
+      const os = T.scores.oath && T.scores.oath.get(mid), bo = os && GD.oaths[os.oid];
+      if (bo && Math.abs(os.d) > 0.0005) h += '<div class="gain ' + (os.d > 0 ? 'up' : 'down') + '">Best Oath here: ' + esc(bo.Name) + ', ' + pct(os.d) + ' ' + heatUnit() +
+        (os.cost > 0 ? ' with the ' + os.cost + ' point' + (os.cost > 1 ? 's' : '') + ' to open it (' + pct(perPt(os)) + ' per point)' : '') + '</div>';
     }
     const rows = m.Oaths.map(oid => {
       const o = GD.oaths[oid]; if (!o) return '';
@@ -19489,13 +19517,23 @@ window.BOStartApp = function () {
     h += pick ? '<div class="oath-list">' + rows + '</div>' : '<ul class="oath-list">' + rows + '</ul><div class="tk">Click to ' + (open ? 'pick an Oath' : 'see its Oaths') + '</div>';
     return h;
   }
+
+  function focusSeat(mid) {
+    const m = GD.masteries && GD.masteries[mid]; if (!m || !T.vb || !isFinite(m.X)) return;
+    showMastery(mid);
+    const vh = $('#treeView').clientHeight || 1, free = Math.max(0.25, 1 - $('#treeSheet').offsetHeight / vh);
+    const w = Math.min(T.vb[2], 2600), h = T.vb[3] * w / T.vb[2];
+    setVB([m.X - w / 2, m.Y - h * free / 2, w, h]);
+  }
   function showMastery(mid) {
     if (!GD.masteries || !GD.masteries[mid]) return hideSheet();
     if (T.sel) hideSheet();
     T.selM = mid;
     $('#treeSheetBody').innerHTML = masteryHtml(mid, true);
-    $('#treeSheetAct').hidden = true;
+    $('#treeSheetAct').hidden = true; $('#treeSheetKeep').hidden = true; $('#treeSheetBan').hidden = true;
     const sh = $('#treeSheet'); sh.hidden = false;
+
+    sh.classList.add('oaths'); sh.style.setProperty('--view-h', $('#treeView').clientHeight + 'px');
     $('#treeView').classList.add('sheet-open');
     $('#treeView').style.setProperty('--sheet-h', sh.offsetHeight + 'px');
     for (const p of $('#treeSvg').querySelectorAll('polygon.tm')) p.classList.toggle('sel', p.dataset.mid === mid);
@@ -19513,12 +19551,47 @@ window.BOStartApp = function () {
   function hideSheet() {
     if (T.selM) { T.selM = null; for (const p of $('#treeSvg').querySelectorAll('polygon.tm.sel')) p.classList.remove('sel'); }
     const was = T.sel; T.sel = null;
-    $('#treeSheet').hidden = true; $('#treeView').classList.remove('sheet-open');
+    $('#treeSheet').hidden = true; $('#treeSheet').classList.remove('oaths'); $('#treeView').classList.remove('sheet-open');
     if (was) { const c = $('#treeSvg').querySelector('circle.tn[data-id="' + was + '"]'); if (c) c.classList.remove('sel'); }
   }
 
 
   const perPt = s => s.d / Math.max(1, s.cost);
+
+  const heatFill = t => 'hsl(' + Math.round(110 - 70 * (1 - t)) + ', ' + Math.round(40 + 45 * t) + '%, ' + Math.round(26 + 30 * t) + '%)';
+
+  const heatW = () => T.scores.w || 0;
+  const heatUnit = () => heatW() >= 1 ? 'defence' : heatW() > 0 ? 'DPS and defence' : 'DPS';
+
+
+
+
+  const HEAT_MARK = new WeakMap();
+  function heatMark(n) {
+    let m = HEAT_MARK.get(n);
+    if (!m) {
+      const mods = n.Mods || [], tf = x => x.Mode === 'Trigger' || x.Mode === 'Flag', un = x => tf(x) || !S.counted(x.Stat);
+      const big = n.Kind === 'Notable' || n.Kind === 'Choice' || n.Kind === 'Keystone';
+      m = { unc: mods.some(tf) || (big && mods.some(un)),
+        dmg: n.Kind !== 'Keystone' && n.Kind !== 'Socket' && !/^om103_/.test(n.Id) && !mods.some(un) && mods.some(x => S.damageStat(x.Stat)) };
+      HEAT_MARK.set(n, m);
+    }
+    return m;
+  }
+
+  function heatLegend(heat, vals, nLoss, nDead, nUnc) {
+
+    const el = $('#treeLegendBody'), btn = $('#treeLegendBtn'); if (!el || !btn) return;
+    btn.setAttribute('aria-expanded', heat ? 'true' : 'false'); el.hidden = !heat; $('#treeLegend').classList.toggle('open', heat);
+    if (!heat) return;
+    const f = v => '+' + num(v * 100, v < 0.0095 ? 2 : 1) + '%';
+    let h = '<div class="tl-t">' + heatUnit() + ' per point</div>' + (vals.length || nLoss || nDead || nUnc ? '' : '<div>' + (st.skill ? 'Scoring…' : 'Pick a damage skill') + '</div>');
+    if (vals.length) h += '<div class="tl-bar" style="background:linear-gradient(90deg,' + [0, 0.25, 0.5, 0.75, 1].map(heatFill).join(',') + ')"></div>' +
+      '<div class="tl-nums notranslate"><span>' + f(vals[0]) + '</span>' + (vals.length > 2 ? '<span>' + f(vals[vals.length >> 1]) + '</span>' : '') + '<span>' + f(vals[vals.length - 1]) + '</span></div>';
+    h += '<div class="tl-keys">' + (nLoss ? '<span><i class="tl-sw loss"></i>Lowers it</span>' : '') + (nDead ? '<span><i class="tl-sw dead"></i>Taken, adds nothing</span>' : '') +
+      (nUnc ? '<span><i class="tl-sw unc"></i>Has lines not counted</span>' : '') + '</div>';
+    if (el._h !== h) { el._h = h; el.innerHTML = h; }
+  }
   const bestRows = (have, n) => [...T.scores].filter(([id, s]) => !have.has(id) && s.d > 0.0005).sort((a, b) => perPt(b[1]) - perPt(a[1])).slice(0, n);
 
 
@@ -19562,11 +19635,14 @@ window.BOStartApp = function () {
     if (keepMarked(id)) h += '<div class="gain keep">' + (on ? 'Marked keep: Optimize never refunds it.' : 'Marked must take: Optimize and Plan route to it first.') + '</div>';
     const s = T.scores.get(id);
     const skillName = optLabel() + (optExtra().length ? ' weighted' : '');
+
+    const what = s && s.def != null ? (heatW() >= 1 ? 'defence (EHP estimate)' : 'DPS and defence weighed') : esc(skillName) + ' DPS';
     if (s) {
       const cls = s.d > 0.0005 ? 'up' : s.d < -0.0005 ? 'down' : '';
-      if (on) h += '<div class="gain ' + cls + '">Refund: ' + pct(s.d) + ' ' + esc(skillName) + ' DPS' + (s.cost < -1 ? ' (' + (-s.cost) + ' nodes go with it)' : '') + '</div>';
-      else if (s.swapped) h += '<div class="gain ' + cls + '">Swap for ' + esc(GD.nodes[s.swapped].Name) + ' (one choice per altar): ' + pct(s.d) + ' ' + esc(skillName) + ' DPS' + (s.cost > 0 ? ' · ' + s.cost + ' more point' + (s.cost > 1 ? 's' : '') : '') + '</div>';
-      else h += '<div class="gain ' + cls + '">Take: ' + pct(s.cost > 1 ? s.d / s.cost : s.d) + ' ' + esc(skillName) + ' DPS' + (s.cost > 1 ? ' per point · ' + s.cost + ' points (' + pct(s.d) + ' total)' : ' · ' + s.cost + ' point') + '</div>';
+      if (on) h += '<div class="gain ' + cls + '">Refund: ' + pct(s.d) + ' ' + what + (s.cost < -1 ? ' (' + (-s.cost) + ' nodes go with it)' : '') + '</div>';
+      else if (s.swapped) h += '<div class="gain ' + cls + '">Swap for ' + esc(GD.nodes[s.swapped].Name) + ' (one choice per altar): ' + pct(s.d) + ' ' + what + (s.cost > 0 ? ' · ' + s.cost + ' more point' + (s.cost > 1 ? 's' : '') : '') + '</div>';
+      else h += '<div class="gain ' + cls + '">Take: ' + pct(s.cost > 1 ? s.d / s.cost : s.d) + ' ' + what + (s.cost > 1 ? ' per point · ' + s.cost + ' points (' + pct(s.d) + ' total)' : ' · ' + s.cost + ' point') + '</div>';
+      if (s.def != null) h += '<div class="tk">' + esc(skillName) + ' DPS ' + pct(s.dps) + ' · defence ' + pct(s.def) + ' · ' + esc(gsPrioText(Math.round(heatW() * 100))) + '</div>';
     } else h += '<div class="tk">' + (on ? 'Click to refund' : 'Click to take') + ' · scoring…</div>';
     if ((n.Mods || []).some(m => m.Stat === 'MinionOneKind') && optExtra().length) h += '<div class="tk" style="margin-top:5px">Only one kind of minion stands with this node: of the summon skills you count, only the strongest is counted, the others as 0.</div>';
     const unc = [n, s && s.swapped ? GD.nodes[s.swapped] : null].filter(Boolean).flatMap(uncounted);
@@ -19577,7 +19653,7 @@ window.BOStartApp = function () {
 
   function scoreSoon() { clearTimeout(T.timer); T.timer = setTimeout(scoreTree, 250); }
 
-  const scoreKey = () => JSON.stringify([st.skill, optExtra(), st.ch, opts(), comboOpts(), [...(st.ban || [])].sort(), GD.steamBuild, GD.apiBuild, GD.apiHash, GD.filesAt], (k, v) => v instanceof Set ? [...v].sort() : v);
+  const scoreKey = () => JSON.stringify([st.skill, optExtra(), st.ch, opts(), comboOpts(), [...(st.ban || [])].sort(), GS.set.prio > 0 ? [GS.set.prio, GS.set.layers, GS.set.resPenalty, GS.set.resTarget, GS.set.resPoison] : 0, GD.steamBuild, GD.apiBuild, GD.apiHash, GD.filesAt], (k, v) => v instanceof Set ? [...v].sort() : v);
   function scoreTree() {
 
 
@@ -19589,6 +19665,7 @@ window.BOStartApp = function () {
       T.scoreKey = key;
     } else T.scoreKey = '';
     const job = ++T.job; T.scores = new Map(); T.scoreMap = T.scores; T.scoreJob = job; T.resume = null;
+    T.scores.oath = new Map(); // best Oath per empty seat, for the heat map (on the scores map, so every reset drops it too)
     if (!st.ch || !st.skill) return;
     const o = opts();
     const base = S.calcSkill(GD, st.ch, st.skill, o);
@@ -19599,13 +19676,45 @@ window.BOStartApp = function () {
     const wSum = 1 + more.reduce((a, g) => a + g.w, 0);
     const b = base.totalDps, have = allocSet();
 
-    const rel = list => {
-      const c = Object.assign({}, st.ch, { passives: list }), r0 = S.calcSkill(GD, c, st.skill, o);
+    const relDps = c => {
+      const r0 = S.calcSkill(GD, c, st.skill, o);
       if (!more.length) return r0.totalDps / b - 1;
       const rs = [r0].concat(more.map(g => S.calcSkill(GD, c, g.id, co))), lost = S.oneKindLost(rs);
       let v = lost[0] ? 0 : r0.totalDps / b;
       more.forEach((g, i) => { if (!lost[i + 1]) v += g.w * rs[i + 1].totalDps / g.b; });
       return v / wSum - 1;
+    };
+
+
+    const dw = Math.max(0, Math.min(1, GS.set.prio / 100)), def0 = dw > 0 ? Math.max(1, gsDefence(st.ch).ehp) : 0;
+    T.scores.w = dw;
+    const val = c => {
+      const dps = relDps(c); if (!(dw > 0)) return { d: dps };
+      const def = Math.max(1, gsDefence(c).ehp) / def0 - 1;
+      return { d: 1 + dps > 0 ? Math.pow(1 + dps, 1 - dw) * Math.pow(1 + def, dw) - 1 : -1, dps, def };
+    };
+    const rel = list => val(Object.assign({}, st.ch, { passives: list }));
+
+    const mids = Object.keys(GD.masteries || {}), sw = swornNow(), swornIds = new Set([...sw.values()].map(x => x.Id)); let j = 0;
+    const oathScore = m => {
+      if (sw.has(m.Id)) return;
+      let list = null, cost = 0;
+      if (!masteryOpen(m, have)) {
+        for (const nid of m.Seat ? [m.Seat] : m.Notables) {
+          if (!GD.nodes[nid] || blocked(nid) || banned(nid)) continue;
+          const pl = planTake(have, nid); if (!pl || pl.swapped) continue;
+          const c2 = pl.list.filter(x => !have.has(x) && !/^om103_/.test(x)).length;
+          if (!list || c2 < cost) { list = pl.list; cost = c2; }
+        }
+        if (!list) return;
+      }
+      let top = null;
+      for (const oid of m.Oaths) {
+        if (!GD.oaths[oid] || (OATH_ONCE && swornIds.has(oid))) continue;
+        const v = val(Object.assign({}, st.ch, list ? { passives: list } : null, { oaths: Object.assign({}, st.ch.oaths || {}, { [m.Id]: oid }) }));
+        if (!top || v.d > top.d) top = Object.assign(v, { oid, cost });
+      }
+      if (top) T.scores.oath.set(m.Id, top);
     };
     const ids = Object.keys(GD.nodes).filter(id => !blocked(id) && !banned(id) && GD.nodes[id].Kind !== 'Start');
     let i = 0;
@@ -19618,21 +19727,22 @@ window.BOStartApp = function () {
         let swapped = null;
         if (have.has(id)) { const rem = refundList(have, id); const r = new Set(rem); list = [...have].filter(x => !r.has(x)); cost = -rem.length; }
         else { const pl = planTake(have, id); if (!pl) continue; list = pl.list; cost = pl.cost; swapped = pl.swapped; }
-        T.scores.set(id, { d: rel(list), cost, swapped });
+        T.scores.set(id, Object.assign(rel(list), { cost, swapped }));
       }
-      if (i < ids.length) { $('#treeStatus').textContent = 'Scoring nodes for ' + skillName + '… ' + Math.round(i / ids.length * 100) + '%'; if (i % 200 < 30) paintTree(); soon(step); }
-      else { $('#treeStatus').textContent = 'Node values: ' + skillName + ' vs a ' + (st.rarity || 'rare') + ' (level ' + (st.enemyLevel || st.ch.level) + '), with the supports and settings on the left. Base ' + num(b) + ' DPS' + (more.length ? ' (' + sName(st.skill) + '); values are the weighted mean % of ' + (more.length + 1) + ' skills' : '') + '.'; paintTree(); bestList(); }
+      while (i >= ids.length && j < mids.length && performance.now() - t0 < 25) oathScore(GD.masteries[mids[j++]]);
+      if (i < ids.length || j < mids.length) { $('#treeStatus').textContent = 'Scoring nodes for ' + skillName + '… ' + Math.round(i / ids.length * 100) + '%'; if (i < ids.length && i % 200 < 30) paintTree(); soon(step); }
+      else { $('#treeStatus').textContent = 'Node values: ' + skillName + ' vs a ' + (st.rarity || 'rare') + ' (level ' + (st.enemyLevel || st.ch.level) + '), with the supports and settings on the left. Base ' + num(b) + ' DPS' + (more.length ? ' (' + sName(st.skill) + '); values are the weighted mean % of ' + (more.length + 1) + ' skills' : '') + '.' + (dw > 0 ? ' Defence is weighed in (' + gsPrioText(GS.set.prio) + ', the Prioritize slider).' : ''); paintTree(); bestList(); }
     };
     step();
   }
   function bestList() {
     const have = allocSet();
     const rows = bestRows(have, 12);
-    $('#treeBest').innerHTML = '<h2>Best next picks <span class="hint">DPS per point, path included</span></h2>' + (rows.length
+    $('#treeBest').innerHTML = '<h2>Best next picks <span class="hint">' + heatUnit() + ' per point, path included</span></h2>' + (rows.length
       ? '<ul class="best-list">' + rows.map(([id, s]) => '<li data-take="' + esc(id) + '"><span>' + esc(GD.nodes[id].Name) + ' <span class="c">' + esc(GD.nodes[id].Kind) + ' · ' +
         (s.swapped ? 'swap for ' + esc(GD.nodes[s.swapped].Name) : s.cost + ' pt' + (s.cost > 1 ? 's' : '')) + (uncounted(GD.nodes[id]).length || (s.swapped && uncounted(GD.nodes[s.swapped]).length) ? ' · has uncounted lines' : '') +
         '</span></span><span class="g">' + (s.swapped && s.cost <= 0 ? pct(s.d) : pct(perPt(s)) + '/pt · ' + pct(s.d)) + '</span></li>').join('') + '</ul>'
-      : '<p class="hint">' + (T.scores.size ? 'No node adds DPS to this skill.' : 'Scoring…') + '</p>');
+      : '<p class="hint">' + (T.scores.size ? (heatW() > 0 ? 'No node adds anything at this setting.' : 'No node adds DPS to this skill.') : 'Scoring…') + '</p>');
     $('#treeBest').querySelectorAll('[data-take]').forEach(li => li.onclick = () => clickNode(li.dataset.take));
   }
 
@@ -20084,6 +20194,12 @@ window.BOStartApp = function () {
 
 
 
+
+
+
+
+
+
   const gsResCap = () => (GD.scaling.Hero || {}).ResistCap || 75;
   const gsResTarget = () => GS.set.resTarget > 0 ? GS.set.resTarget : gsResCap();
   function gsDefence(items, o) {
@@ -20107,8 +20223,10 @@ window.BOStartApp = function () {
 
     const s = (d.manaFirst || 0) / 100, lifePool = s > 0 ? Math.min(s < 1 ? d.life / (1 - s) : Infinity, d.life + (d.mana || 0)) : d.life;
     const resCapped = {}; for (const [k, v] of d.resParts) resCapped[k] = Math.min(cap, v - pen);
-    return { life: d.life, es: d.es, res, resCapped, pen, pool: lifePool + d.es, armHit, armour: d.armour, armDR, evasion: d.evasion, evade, block, manaFirst: d.manaFirst || 0, ehp:Math.max(1, (L.life ? lifePool : 0) + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
+    const gl = R['r80.BIGHIT.fEvasionGlance'], glance = L.evasion ? Math.min(0.95, evade * (gl != null && isFinite(+gl) ? +gl : 1)) : 0;
+    return { life: d.life, es: d.es, res, resCapped, pen, pool: lifePool + d.es, armHit, armour: d.armour, armDR, evasion: d.evasion, evade, glance, block, manaFirst: d.manaFirst || 0, ehp:Math.max(1, (L.life ? lifePool : 0) + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
   }
+
 
 
 
@@ -20120,13 +20238,14 @@ window.BOStartApp = function () {
     const taken = (type, hit) => type === 'Physical'
       ? hit * (1 - (D.armHit > 0 ? Math.min(mx, D.armHit / (D.armHit + af * Math.min(hit, ref))) : 0))
       : hit * (1 - (D.resCapped[type] || 0) / 100);
-    const max = type => {
+    const max = (type, f) => {
       if (!(D.pool > 0)) return 0;
-      let lo = 0, hi = D.pool; while (taken(type, hi) < D.pool && hi < 1e12) hi *= 2;
-      for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (taken(type, m) < D.pool) lo = m; else hi = m; }
+      const tk = h => taken(type, h) * (f || 1);
+      let lo = 0, hi = D.pool; while (tk(hi) < D.pool && hi < 1e12) hi *= 2;
+      for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (tk(m) < D.pool) lo = m; else hi = m; }
       return lo;
     };
-    return { pool: D.pool, rows: ['Physical', 'Fire', 'Cold', 'Lightning', 'Poison'].map(t => [t, max(t), taken(t, probe)]) };
+    return { pool: D.pool, rows: ['Physical', 'Fire', 'Cold', 'Lightning', 'Poison'].map(t => [t, max(t), taken(t, probe)]), glancePhys: D.glance > 0 ? max('Physical', 1 - D.glance) : 0 };
   }
 
   function ehpTipHtml(D) {
@@ -20136,7 +20255,8 @@ window.BOStartApp = function () {
       '<span class="pl-tip-head">Max hit you survive</span>' +
       '<table class="pl-tip-hits"><tr><th>Damage type</th><th>Max hit</th><th>Taken of a ' + num(probe) + ' hit</th></tr>' +
       M.rows.map(([t, mh, tk]) => '<tr><td style="color:' + typeColor(t) + '">' + t + '</td><td><b>' + num(Math.floor(mh)) + '</b></td><td' + (tk >= M.pool ? ' class="bad"' : '') + '>' + num(Math.round(tk)) + ' <small>(' + (M.pool > 0 ? Math.round(tk / M.pool * 100) : 0) + '% of pool)</small></td></tr>').join('') + '</table>' +
-      '<span class="pl-tip-desc">The biggest single hit your pool of ' + num(Math.floor(M.pool)) + ' (life + energy shield) takes, after armour (physical) or that resistance (capped at ' + gsResCap() + '%' + (D.pen ? ', with the ' + D.pen + '% penalty' : ', no penalty') + '). A hit that lands: not evaded, not blocked. Glancing blows are not counted.</span>';
+      '<span class="pl-tip-desc">The biggest single hit your pool of ' + num(Math.floor(M.pool)) + ' (life + energy shield) takes, after armour (physical) or that resistance (capped at ' + gsResCap() + '%' + (D.pen ? ', with the ' + D.pen + '% penalty' : ', no penalty') + '). A hit that lands: not evaded, not blocked.' +
+      (D.glance > 0 ? ' You evade ' + Math.round(D.evade * 100) + '% of attacks. An attack you cannot evade glances for ' + Math.round(D.glance * 100) + '% less: up to ' + num(Math.floor(M.glancePhys)) + ' physical.' : '') + '</span>';
   }
 
   const GS_LAYERS = [['life', 'Life', 'Life'], ['es', 'Energy Shield', 'EnergyShield'], ['armour', 'Armour', 'Armour'], ['evasion', 'Evasion', 'Evasion'], ['block', 'Block', 'Block']];
@@ -20146,7 +20266,7 @@ window.BOStartApp = function () {
   const gsLayersHtml = off => '<span class="gs-layers">' + gsLayersInner(off) + '</span>';
   const gsLayerNames = () => { const n = GS_LAYERS.filter(([k]) => GS.set.layers[k]).map(x => x[1].toLowerCase()); return n[0] === 'life' ? ['life', 'resistances'].concat(n.slice(1)) : ['resistances'].concat(n); };
   const gsDefStats = () => ['Resist'].concat(GS_LAYERS.filter(([k]) => GS.set.layers[k]).map(x => x[2])).concat(GS.set.layers.armour || GS.set.layers.evasion || GS.set.layers.es ? ['Defences'] : []);
-  const gsDefNote = () => 'Defence is an estimate against a boss hit of ' + num((GD.scaling.Hero || {}).ArmourBigHitRef || 1000) + ' or more: half physical, half elemental, half of the hits attacks. Counted: ' + gsLayerNames().join(', ') + ' (resistances capped at ' + gsResCap() + '%). Glancing blows are not' + ((+GS.set.resPenalty || 0) ? '; resistances count with a ' + GS.set.resPenalty + '% penalty.' : ', and no resistance penalty (set one under the defences).');
+  const gsDefNote = () => 'Defence is an estimate against a boss hit of ' + num((GD.scaling.Hero || {}).ArmourBigHitRef || 1000) + ' or more: half physical, half elemental, half of the hits attacks. Counted: ' + gsLayerNames().join(', ') + ' (resistances capped at ' + gsResCap() + '%).' + (GS.set.layers.evasion ? ' Evasion counts on every attack: evaded, or cut by your evade chance when it cannot be evaded (a glancing blow).' : '') + ((+GS.set.resPenalty || 0) ? ' Resistances count with a ' + GS.set.resPenalty + '% penalty.' : ' No resistance penalty (set one under the defences).');
 
   function gsLayerLine(A, B) {
     const L = GS.set.layers, p = x => Math.round(x * 100) + '%', out = [];
@@ -20155,8 +20275,8 @@ window.BOStartApp = function () {
     if (L.block) out.push('Block ' + p(A.block) + ' → ' + p(B.block));
     return out.join(' · ');
   }
-  function setGsPenalty(v) { GS.set.resPenalty = Math.max(0, Math.min(50, +v || 0)); store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) { clearOpt(); paintTree(); } }
-  function setGsLayer(k, on) { GS.set.layers[k] = !!on; store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) { clearOpt(); paintTree(); } }
+  function setGsPenalty(v) { GS.set.resPenalty = Math.max(0, Math.min(50, +v || 0)); store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) { clearOpt(); paintTree(); } if (T.visible && GS.set.prio > 0) scoreSoon(); }
+  function setGsLayer(k, on) { GS.set.layers[k] = !!on; store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) { clearOpt(); paintTree(); } if (T.visible && GS.set.prio > 0) scoreSoon(); }
 
   const gsPrioHtml = off => '<label class="field gs-prio" title="What counts when items are weighed. Defence is an estimate; tick the defences that count below"><span>Prioritize <b id="gsPrioText">' + gsPrioText(GS.set.prio) + '</b></span>' +
     '<span class="gs-prio-row"><span>DPS</span><input type="range" id="gsPrio" min="0" max="100" step="10" value="' + GS.set.prio + '" aria-label="Prioritize DPS or defence"' + (off ? ' disabled' : '') + '><span>Defence</span></span></label>';
@@ -20201,7 +20321,7 @@ window.BOStartApp = function () {
   const syncOptPrio = () => { const p = $('#optPrio'), x = $('#optPrioText'), l = $('#optLayers'); if (p) p.value = GS.set.prio; if (x) x.textContent = gsPrioText(GS.set.prio); if (l) { l.innerHTML = gsLayersInner(false); l.classList.toggle('off', !(GS.set.prio > 0)); } };
   if ($('#optPrio')) {
     $('#optPrio').addEventListener('input', e => { $('#optPrioText').textContent = gsPrioText(+e.target.value); });
-    $('#optPrio').addEventListener('change', e => { GS.set.prio = Math.max(0, Math.min(100, Math.round(+e.target.value / 10) * 10 || 0)); store.set('gearSim', GS.set); syncOptPrio(); clearOpt(); paintTree(); });
+    $('#optPrio').addEventListener('change', e => { GS.set.prio = Math.max(0, Math.min(100, Math.round(+e.target.value / 10) * 10 || 0)); store.set('gearSim', GS.set); syncOptPrio(); clearOpt(); paintTree(); scoreSoon(); });
     $('#optLayers').addEventListener('change', e => { const k = e.target.dataset && e.target.dataset.gsLayer; if (k) setGsLayer(k, e.target.checked); if (e.target.dataset && e.target.dataset.gsPen != null) setGsPenalty(e.target.value); });
     setTimeout(syncOptPrio, 0);
   }
@@ -20730,7 +20850,7 @@ window.BOStartApp = function () {
   const pts = new Map();
   const pinchInfo = () => { const [a, b] = [...pts.values()]; return { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; };
   view.addEventListener('pointerdown', e => {
-    if (e.target.closest('.tree-zoom, .tree-sheet') || inDragon(e) || !T.vb) return;
+    if (e.target.closest('.tree-zoom, .tree-sheet, .tree-legend, .tree-seats') || inDragon(e) || !T.vb) return;
     if (e.button === 2) return; // right-click marks a node never take (contextmenu below); it never takes or drags
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { view.setPointerCapture(e.pointerId); } catch (_) { /* pointer already gone */ }
@@ -20827,7 +20947,12 @@ window.BOStartApp = function () {
   $('#treeBanClear').onclick = () => { if (!st.ban || !st.ban.size) return; st.ban = new Set(); store.set(banStoreKey(), []); clearOpt(); T.scores = new Map(); paintTree(); scoreSoon(); $('#treeStatus').textContent = 'Every node can be taken again.'; };
   $('#treeSheetBody').addEventListener('click', e => { const b = e.target.closest && e.target.closest('button[data-oath]'); if (b && T.selM && !b.disabled) swearOath(T.selM, b.dataset.oath); });
   $('#treeSearch').addEventListener('input', paintTree);
-  $('#treeHeat').addEventListener('change', paintTree);
+
+
+  T.heat = store.get('treeHeat', true) !== false;
+  $('#treeLegendBtn').onclick = () => { T.heat = T.heat === false; store.set('treeHeat', T.heat); paintTree(); };
+
+  $('#treeSeats').onclick = () => { const list = T.unsworn || []; if (list.length) focusSeat(list[(list.indexOf(T.selM) + 1) % list.length]); };
   $('#treeUndo').onclick = () => { if (T.undo.length) setPassives(T.undo.pop(), false); };
   $('#treeReset').onclick = () => { if (st.chOrig) { clearOpt(); T.undo.push(st.ch.passives.slice()); st.ch = st.chOrig; st.pinned = null; T.job++; T.scores = new Map(); render(); } };
   $('#treeCopy').onclick = async () => {

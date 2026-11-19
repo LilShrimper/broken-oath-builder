@@ -2723,7 +2723,10 @@ window.BOPlanner = function (ctx) {
   const gradeField = (it, base, dis, qualityOnly) => {
     if (!it || !base || !(base.Armour || base.Evasion || base.EnergyShield || base.DamageMin)) return '';
     const g = it.grade || 0, ts = g >= TRUESWORN;
-    return (qualityOnly ? '' : '<label class="field inline" title="Base Grade 1-100 scales the base number from 85% to 125%; 90 or more is Truesworn. 0 = not set (the base as listed)"><span>Base Grade</span><input type="number" min="' + (ts ? TRUESWORN : 0) + '" max="' + (ts ? 100 : TRUESWORN - 1) + '" data-f="grade" value="' + g + '"' + (dis || '') + '></label>') +
+    return (qualityOnly ? '' : '<label class="field inline" title="Base Grade 1-100 scales the base number from 85% to 125%; 90 or more is Truesworn. 0 = not set (the base as listed)"><span>Base Grade</span><input type="number" min="' + (ts ? TRUESWORN : 0) + '" max="' + (ts ? 100 : TRUESWORN - 1) + '" data-f="grade" value="' + g + '"' + (dis || '') + '></label>' +
+
+
+      '<label class="field inline" title="Type the % the game shows on the item: Base Grade: 98 Truesworn, 124% of the base. 85% to 125%; 119% or more is Truesworn"><span>% of base</span><input type="number" min="85" max="125" data-f="gradepct" value="' + (g > 0 && S.gradeMult ? Math.round(S.gradeMult(g) * 100) : '') + '" placeholder="100"' + (dis || '') + '></label>') +
       '<label class="field inline" title="Quality: up to 20% from stones and the Forge, up to 30% with Cogs. A weapon\'s counts as increased physical damage of that weapon, armour\'s as increased defences of that piece"><span>Quality</span><input type="number" min="0" max="' + QUALITY_MAX + '" data-f="quality" value="' + (it.quality || 0) + '"' + (dis || '') + '></label>' +
       (qualityOnly ? '' : '<label class="check-row pl-truesworn" title="Truesworn: Base Grade 90 or more"><input type="checkbox" data-f="truesworn"' + (ts ? ' checked' : '') + (dis || '') + '><span>Truesworn</span></label>');
   };
@@ -2732,6 +2735,14 @@ window.BOPlanner = function (ctx) {
     const v = t.value;
     if (f === 'truesworn') { it.grade = t.checked ? Math.max(TRUESWORN, it.grade || 0) : Math.min(TRUESWORN - 1, it.grade || 0); return true; }
     if (f === 'grade') { const ts = (it.grade || 0) >= TRUESWORN, n = Math.round(+v) || 0; it.grade = ts ? Math.max(TRUESWORN, Math.min(100, n)) : Math.max(0, Math.min(TRUESWORN - 1, n)); return true; }
+
+    if (f === 'gradepct') {
+      const pc = +v;
+      if (!v || !pc) { it.grade = 0; return true; }
+      const r = Math.max(0, Math.min(1, (Math.max(85, Math.min(125, pc)) / 100 - 0.85) / 0.40));
+      it.grade = Math.max(1, Math.min(100, Math.round(100 * Math.pow(r, 2 / 3))));
+      return true;
+    }
     if (f === 'quality') { it.quality = Math.max(0, Math.min(QUALITY_MAX, Math.round(+v) || 0)); return true; }
     return false;
   }
@@ -3704,7 +3715,7 @@ window.BOPlanner = function (ctx) {
         else { if (it.rarity === 'Unique') { it.affixes = []; it.unique = 'None'; it.name = ''; } it.rarity = v; if (v === 'Normal') it.affixes = []; }
         return done();
       case 'ilvl': it.level = Math.max(1, Math.min(100, +v || 1)); return done();
-      case 'grade': case 'truesworn': case 'quality': gradeChange(it, f, t); return done();
+      case 'grade': case 'gradepct': case 'truesworn': case 'quality': gradeChange(it, f, t); return done();
       case 'addaffix': {
         const af = GD.affixes[lc(v)]; if (!af) return render();
         const ti = topTier(af, it.level || ch.level), tt = af.Tiers[ti];
@@ -10466,7 +10477,7 @@ window.BOCharacter = function (ctx) {
     switch (f) {
       case 'rarity': it.rarity = v; if (v === 'Normal') it.affixes = []; break;
       case 'ilvl': it.level = Math.max(1, Math.min(100, +v || 1)); break;
-      case 'grade': case 'truesworn': case 'quality': G.gradeChange(it, f, t); break;
+      case 'grade': case 'gradepct': case 'truesworn': case 'quality': G.gradeChange(it, f, t); break;
       case 'ubase': { const u = gd.uniques[lc(it.unique)], b = u && G.markBases(u, M.slot, ch).find(x => lc(x.Id) === lc(v)); if (!b) return renderItem(); it.base = b.Id; break; }
       case 'addaffix': { const af = gd.affixes[lc(v)]; if (!af) return renderItem(); const ti = G.topTier(af, it.level || ch.level), tt = af.Tiers[ti]; it.affixes.push(Object.assign({ id: af.Id, tier: ti, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }, t.dataset.x === 'oath' ? { oath: true } : t.dataset.x === 'scar' ? { scar: true } : {})); break; }
       case 'tier': { const a = it.affixes[ai], af = a && gd.affixes[lc(a.id)], tt = af && af.Tiers[+v]; if (!tt) return; Object.assign(a, { tier: +v, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); break; }
@@ -14915,6 +14926,7 @@ window.BOCharacter = function (ctx) {
     const base = (H.LifeBase || 130) + (H.LifePerLevel || 11.5) * Math.max(0, (ch.level || 1) - 1) + (H.LifePerStr || 0.5) * (attr.Str || 0) + flat;
     return base * Math.max(0, 1 + inc / 100) * more;
   }
+
 
 
 

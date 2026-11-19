@@ -14736,7 +14736,11 @@ window.BOCharacter = function (ctx) {
       soloK = 1 + 0.30 * Math.max(0, extra);
       if (soloK !== 1) { for (const d of Object.keys(hit)) { hit[d].min *= soloK; hit[d].max *= soloK; hit[d].avg *= soloK; } avg *= soloK; }
     }
-    else for (const m of pickMods(mods, 'MinionCap', 'Flat')) if (fit(m)) { alive += m.v; use(m, 'minion'); }
+
+
+
+
+    else for (const m of pickMods(mods, 'MinionCap', 'Flat')) if (fit(m) || ((m.tags || []).length && (m.tags || []).every(t => lc(t) === lc(mi.MonsterId || '')))) { alive += m.v; use(m, 'minion'); }
 
     const aliveBefore = alive;
     if (oneKind) alive = Math.max(alive * 2, alive + 2);

@@ -14777,19 +14777,33 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
     let mCritInc = 0, mCritMulti = 0, mCritBase = 0;
-    for (const m of mods) if (!m.local && (m.stat === 'CritChance' && m.mode === 'Inc' || m.stat === 'CritMulti' && m.mode === 'Flat') && (splitTags(m.tags).conds.some(c => lc(c) === 'minion') || fromEngine(m)) && fit(m)) {
+    for (const m of mods) if (!m.local && (m.stat === 'CritChance' && m.mode === 'Inc' || m.stat === 'CritMulti' && m.mode === 'Flat') && (splitTags(m.tags).conds.some(c => lc(c) === 'minion') || fromSupport(m)) && fit(m)) {
       if (m.stat === 'CritChance') mCritInc += m.v; else mCritMulti += m.v;
       use(m, 'minion crit');
     }
-    for (const m of mods) if (fromEngine(m) && m.stat === 'CritChance' && m.mode === 'Flat') { mCritBase += m.v; use(m, 'minion crit'); }
+    for (const m of mods) if (fromSupport(m) && m.stat === 'CritChance' && m.mode === 'Flat') { mCritBase += m.v; use(m, 'minion crit'); }
 
 
 
 
-    const mStaff = (() => { const it = ch.items.find(i => i.slot === 'MainHand'), b = it && GD.bases[lc(it.base)]; return is084(GD) && b && lc(b.Class) === 'staff' && b.Crit > 0 ? b.Crit : 0; })();
+
+
+
+
+    const mStaff = (() => {
+      const it = ch.items.find(i => i.slot === 'MainHand'), b = it && GD.bases[lc(it.base)];
+      if (!(is084(GD) && b && lc(b.Class) === 'staff' && b.Crit > 0)) return 0;
+      let ci = 0;
+      for (const m of mods) if (m.local && m.key === 'item:' + it.slot && m.stat === 'CritChance' && m.mode === 'Inc') ci += m.v;
+      return b.Crit * (1 + ci / 100);
+    })();
     const chance = Math.min(100, ((mStaff || H.SpellCritBase || 6) + mCritBase) * (1 + mCritInc / 100)), multi = (H.CritMultiBase || 150) + mCritMulti, critFactor = 1 + chance / 100 * (multi / 100 - 1);
-    if (mCritInc || mCritMulti || mCritBase) res.notes.push('Minion crit: ' + chance.toFixed(1) + '% chance, x' + (multi / 100).toFixed(2) + ' (your minion crit lines on the base ' + (H.SpellCritBase || 6) + '% and x' + ((H.CritMultiBase || 150) / 100).toFixed(1) + '). Not checked against the game yet.');
+    if (mCritInc || mCritMulti || mCritBase) res.notes.push('Minion crit: ' + chance.toFixed(1) + '% chance, x' + (multi / 100).toFixed(2) + ' (your minion crit lines on the base ' + +(mStaff || H.SpellCritBase || 6).toFixed(2) + '%' + (mStaff ? ' of your staff' : '') + ' and x' + ((H.CritMultiBase || 150) / 100).toFixed(1) + '). Checked against an in-game Summon Skeletons tooltip, 18 Nov 2026.');
 
     let alive = (mi.Cap || mi.Count || 1) + (mi.CountEvery ? Math.floor((L - 1) / mi.CountEvery) : 0) + (mi.PerLevels || []).filter(l => L >= l).length;
 
@@ -15558,7 +15572,7 @@ window.BOCharacter = function (ctx) {
   const noFit = (sp, sk) => !!noFitWhy(sp, sk);
 
   const castsForMinions = (sp, sk) => !!sp && lc(sp.Id) === 'faster_casting' && !!sk && isSummon(sk) && (sk.Tags || []).includes('Projectile');
-  const minionCounts = (sp, sk) => castsForMinions(sp, sk) || (!!sp && MINION_ENGINE_COUNTED.has(lc(sp.Id)) && minionSummon(sk)) || forMinions(sp) &&(sp.Mods || []).some(m => (m.Stat === 'Damage' && m.Mode === 'More') || m.Stat === 'DamageAsExtra' || m.Stat === 'MinionStrikes' || m.Stat === 'RuthlessBlow' || ((m.Stat === 'MinionSpeed' || m.Stat === 'AttackSpeed') && m.Mode === 'More'));
+  const minionCounts = (sp, sk) => castsForMinions(sp, sk) || (!!sp && MINION_ENGINE_COUNTED.has(lc(sp.Id)) && minionSummon(sk)) || forMinions(sp) &&(sp.Mods || []).some(m => (m.Stat === 'Damage' && m.Mode === 'More') || m.Stat === 'DamageAsExtra' || m.Stat === 'MinionStrikes' || m.Stat === 'RuthlessBlow' || m.Stat === 'CritChance' || m.Stat === 'CritMulti' || ((m.Stat === 'MinionSpeed' || m.Stat === 'AttackSpeed') && m.Mode === 'More'));
   const SHAPES = ['orbit', 'skyfall', 'rain_support', 'trap_support', 'totem_support', 'arrow_totem'];
 
 

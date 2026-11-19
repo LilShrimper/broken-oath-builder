@@ -8684,8 +8684,9 @@ window.BOFaq = function (ctx) {
       '<b>Hunter\'s Marks</b> and the <b>War Banner</b> are separate again and add on top of curses. Marks fall off 3 s after your last hit, so any skill that hits more often keeps them at the cap.',
     ].concat(+GD.apiBuild >= 84 ? [
 
-      '<b>Every "takes more damage" effect counts</b>, on every monster, Guardians included (since Patch 84). Effects of the same kind add together and different kinds multiply: Woes, Sentences and Unravel are one kind (curses); Hunter\'s Marks and the War Banner are another; vulnerability (Maim, the venom golem, hallowed ground) a third. Example: Death Sentence +25% with a Woe +20% is ×1.45; add Marks +10% and it is ×1.45 × 1.10.',
-      'Shock is counted apart and multiplies on top. Which kind each source belongs to is our reading of the patch notes, not checked in the game yet.',
+
+      '<b>Every "takes more damage" effect counts</b>, on every monster, Guardians included (since Patch 84). Effects of the same kind add together and different kinds multiply. The game names five kinds: Woes; Sentences; Hunter\'s Marks with the War Banner; the shock family; vulnerability (we count Maim, the venom golem and hallowed ground here). Example: Death Sentence +25% with a Woe +20% is ×1.25 × 1.20 = ×1.50; add Marks +10% and it is ×1.50 × 1.10.',
+      'The five kinds are from the game\'s own log. Where Maim, the golem, hallowed ground and Unravel belong is our reading, not checked in the game yet.',
     ] : +GD.apiBuild >= 82 ? [
 
       '<b>All "takes more damage" effects add together</b>, on every monster, Guardians included (since Patch 82): Woes, Sentences, Marks, the War Banner, typed lines like "more Physical damage", the venom golem and hallowed ground make one bonus. Example: +25% and +20% give ×1.45, not ×1.5.',
@@ -10793,7 +10794,13 @@ window.BOCharacter = function (ctx) {
 
     const fixed = (rl % 10 === 0 && rl <= 80) || rl === 130;
     const p79 = !is079(GD) || fixed ? 1 : rl >= 41 && rl <= 79 ? 1.3 : rl >= 81 && rl <= 129 ? 1.85 : 1;
+
+
+
+
+    const low84 = [[22, 214416], [24, 302440], [26, 420057]];
     const raw = (() => {
+      if (is084(GD) && rl <= 30) { const g = Math.pow(low84[2][1] / low84[0][1], 1 / 4); return low84[0][1] * Math.pow(g, rl - 22); }
       if (rl <= 62) return pts[0][1] * Math.pow(1.1315, rl - 62);
       if (rl >= 150) return pts[pts.length - 1][1] * Math.pow(D.LadderLifePerLevel || 1.03, rl - 150);
       const last = pts.length - 1; let k = 0; while (k < last - 1 && rl > pts[k + 1][0]) k++;
@@ -10882,10 +10889,18 @@ window.BOCharacter = function (ctx) {
     const typedOf = r => (d ? r.elem[d] || 0 : 0) + (dot ? r.dot || 0 : 0);
     if (one === 'kinds') {
 
-      let cur = 0, mk = 0, vu = 0;
-      for (const r of rows) (r.kind === 'Banner' || r.kind === 'Mark' ? (mk += (r.taken || 0) + typedOf(r)) : (cur += (r.taken || 0) + typedOf(r)));
-      for (const x of extras || []) { if (x && typeof x === 'object') { if (x.k === 'curse') cur += x.v || 0; else mk += x.v || 0; } else vu += x || 0; }
-      return (1 + cur / 100) * (1 + mk / 100) * (1 + vu / 100);
+
+
+
+
+
+      let woe = 0, sen = 0, mk = 0, vu = 0;
+      for (const r of rows) {
+        const v = (r.taken || 0) + typedOf(r);
+        if (r.kind === 'Banner' || r.kind === 'Mark') mk += v; else if (r.kind === 'Sentence') sen += v; else woe += v;
+      }
+      for (const x of extras || []) { if (x && typeof x === 'object') { if (x.k === 'curse') woe += x.v || 0; else mk += x.v || 0; } else vu += x || 0; }
+      return (1 + woe / 100) * (1 + sen / 100) * (1 + mk / 100) * (1 + vu / 100);
     }
     if (one === 'add') return 1 + (rows.reduce((a, r) => a + (r.taken || 0) + typedOf(r), 0) + (extras || []).reduce((a, x) => a + (x || 0), 0)) / 100;
     if (!one) return rows.reduce((p, r) => p * (1 + (r.taken + typedOf(r)) / 100), 1) * (extras || []).reduce((p, x) => p * (1 + (x || 0) / 100), 1);
@@ -11006,7 +11021,10 @@ window.BOCharacter = function (ctx) {
 
 
 
-  const CLIP_FLOOR = { ranger: { split_shot: 0.35 }, samurai: { viper_fang: 0.163 } };
+
+
+
+  const CLIP_FLOOR = { ranger: { split_shot: 0.35 }, samurai: { viper_fang: 0.163 }, necromancer: { orbiting_hammers: 0.3733 } };
 
 
 
@@ -11229,6 +11247,23 @@ window.BOCharacter = function (ctx) {
 
 
   const idolRound = (x, k) => k === 1 || !x || typeof x !== 'number' ? x : Number.isInteger(x) ? (Math.round(x * Math.fround(k)) || Math.sign(x)) : Math.round(x * Math.fround(k) * 10) / 10;
+
+
+
+
+
+
+
+  const AFFIX_SCALE = { riven95_area: 0.83, riven95_attack_speed_local: 0.89, riven95_cast_speed: 0.85, riven95_cast_speed_2h: 0.86, riven95_cold_added_local: 0.83, riven95_cold_dmg_inc: 0.83, riven95_cold_dmg_inc_2h: 0.83, riven95_cold_spell_added: 0.84, riven95_cold_spell_added_2h: 0.84, riven95_cooldown_recovery: 0.77, riven95_crit_global: 0.87, riven95_crit_local: 0.87, riven95_crit_multi: 0.87, riven95_dot_multi: 0.78, riven95_fire_added_local: 0.83, riven95_fire_dmg_inc: 0.83, riven95_fire_dmg_inc_2h: 0.83, riven95_fire_spell_added: 0.84, riven95_fire_spell_added_2h: 0.84, riven95_lightning_added_local: 0.83, riven95_lightning_dmg_inc: 0.83, riven95_lightning_dmg_inc_2h: 0.83, riven95_lightning_spell_added: 0.84, riven95_lightning_spell_added_2h: 0.84, riven95_minion_dmg: 0.84, riven95_minion_dmg_2h: 0.84, riven95_minion_dmg_jewel: 0.84, riven95_phys_added_local: 0.84, riven95_phys_inc_local: 0.84, riven95_poison_dmg_inc: 0.83, riven95_poison_dmg_inc_2h: 0.83, riven95_poison_spell_added: 0.84, riven95_poison_spell_added_2h: 0.84, riven95_skill_level: 0.66, riven95_skill_level_2h: 0.5, riven95_skill_level_bow: 0.66, riven95_spell_inc: 0.85, riven95_spell_inc_2h: 0.85 };
+  const AFFIX_SCALE_PREFIX = { skill_level: 0.75, mythic_breaker_world: 0.3 };
+  function affixLineScale(GD, id) {
+    if (!is082(GD)) return 1;
+    id = lc(id);
+    if (is084(GD) && /^riven95_skill_level/.test(id)) return 1;
+    if (AFFIX_SCALE[id] != null) return AFFIX_SCALE[id];
+    for (const p in AFFIX_SCALE_PREFIX) if (id.startsWith(p)) return AFFIX_SCALE_PREFIX[p];
+    return 1;
+  }
   function idolLineScale(GD, id, tier, itemLevel, lines) {
     if (!is082(GD)) return 1;
     id = lc(id); let k = IDOL_SCALE_EXACT[id];
@@ -11341,8 +11376,8 @@ window.BOCharacter = function (ctx) {
 
 
           const cnt = x => sh === 1 || !x ? x : boost && af.Mod && af.Mod.Stat === 'Resist' ? x * sh : Number.isInteger(x) ? (Math.round(x * sh) || (isVow ? Math.sign(x) : 0)) : Math.round(x * sh * 10) / 10;
-          const ik = it.slot === 'Idol' && af.Mod && af.Mod.Mode !== 'Flag' && !RARE_COUNT_STATS.has(af.Mod.Stat) ? idolLineScale(GD, a.id, a.tier, it.level || 0, it.affixes.length) : 1;
-          add(af.Mod, idolRound(cnt(a.v), ik), idolRound(cnt(a.v2), ik), label + (ik !== 1 ? ' (idol line x' + +ik.toFixed(2) + ')' : '') + (isVow ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
+          const ik = it.slot === 'Idol' ? (af.Mod && af.Mod.Mode !== 'Flag' && !RARE_COUNT_STATS.has(af.Mod.Stat) ? idolLineScale(GD, a.id, a.tier, it.level || 0, it.affixes.length) : 1) : af.Mod && af.Mod.Mode !== 'Flag' ? affixLineScale(GD, a.id) : 1;
+          add(af.Mod, idolRound(cnt(a.v), ik), idolRound(cnt(a.v2), ik), label + (ik !== 1 ? (it.slot === 'Idol' ? ' (idol line x' : ' (line x') + +ik.toFixed(2) + ')' : '') + (isVow ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
         }
       }
       const weaponSlot = it.slot === 'MainHand' || it.slot === 'OffHand';
@@ -13587,7 +13622,7 @@ window.BOCharacter = function (ctx) {
       return curseTakenK(activeCurses, d, dot, strongestTaken, extras) * golemTaken;
     };
     if (rule === 'kinds') {
-      res.notes.push('"Takes more damage" effects (patch 84): the same kind adds, different kinds multiply. Curses (Woes, Sentences, Unravel) add together, Marks and the War Banner add together, vulnerability (Maim, the venom golem, hallowed ground) adds together, and shock stays apart. Which kind each source belongs to is our reading of the patch notes, not checked in game yet.');
+      res.notes.push('"Takes more damage" effects (patch 84): the same kind adds, different kinds multiply. The game names five kinds: Woes, Sentences, Marks with the War Banner, the shock family, and vulnerability (game log, build 84). We count Maim, the venom golem and hallowed ground as vulnerability and Unravel with the Woes: not checked in game yet.');
     }
     if (rule === 'add') {
       const n = activeCurses.filter(r => r.taken > 0 || r.dot > 0 || Object.values(r.elem).some(v => v > 0)).length + (o.extraTakenPct > 0) + (markPct > 0) + (maimPct > 0) + (golemTaken > 1) + (groundPct > 0);
@@ -14046,6 +14081,9 @@ window.BOCharacter = function (ctx) {
         if (m.stat !== 'Trigger' || !(m.key === 'passives' || String(m.key || '').startsWith('item:'))) continue;
         const t = trigParse(m);
         if (!['Hit', 'Crit', 'SkillUse'].includes(t.when) || !t.pct) continue;
+
+
+        if (+GD.apiBuild >= 83 && sk.Delivery === 'Aura' && (t.when === 'Hit' || t.when === 'Crit')) { if (!res._auraNoProc) { res._auraNoProc = true; res.notes.push(sk.Name + ': its pulses fire no on-hit effects (patch 83), so the hit bursts from your tree and items are left out.'); } continue; }
 
 
 

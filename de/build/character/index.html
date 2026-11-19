@@ -50,7 +50,7 @@
   var b = new URL("../../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/de.json'), langCode: 'de' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=385">
+<link rel="stylesheet" href="../../../style.css?v=386">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -303,9 +303,7 @@
     <div class="support-col-title support-col-config">Configuration</div>
     <div class="config-tabs" role="tablist" aria-label="Build settings">
       <button class="config-tab active" id="configTabSkill" type="button" role="tab" aria-selected="true" aria-controls="configSkill" tabindex="0" data-config-tab="skill">Skill</button>
-      <button class="config-tab" id="configTabEnemy" type="button" role="tab" aria-selected="false" aria-controls="configEnemy" tabindex="-1" data-config-tab="enemy">Enemy</button>
       <button class="config-tab" id="configTabSupports" type="button" role="tab" aria-selected="false" aria-controls="configSupports" tabindex="-1" data-config-tab="supports">Supports</button>
-      <button class="config-tab" id="configTabCharacter" type="button" role="tab" aria-selected="false" aria-controls="configCharacter" tabindex="-1" data-config-tab="character">Vows/Heralds</button>
     </div>
     <div class="config-panel" id="configSkill" role="tabpanel" aria-labelledby="configTabSkill" data-config-panel="skill">
     <section class="card">
@@ -316,8 +314,6 @@
         <label class="field"><span>Gem level</span><input type="number" id="gemLevel" min="1" max="40"></label>
         <div class="field"><span>From gear</span><output id="gemBonus" class="readout">+0</output></div>
       </div>
-      <label class="check-row" id="conduitRow" hidden><input type="checkbox" id="conduitToggle"><span id="conduitLabel">Cast by Channel Conduit</span></label>
-      <label class="field" id="cocRow" hidden><span>Cast on Crit <span class="meta" id="cocInfo"></span></span><select id="cocSelect"></select></label>
       <p class="skill-desc" id="skillDesc"></p>
     </section>
     </div>
@@ -344,77 +340,9 @@
     </section>
     </div>
 
-    <div class="config-panel" id="configCharacter" role="tabpanel" aria-labelledby="configTabCharacter" data-config-panel="character" hidden>
-    <section class="card">
-      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5 1-8.5z"/></svg></span>Vows, Heralds &amp; charges</h2>
-      <ul class="checklist" id="vowList"></ul>
-      <div id="barShockBox" hidden>
-        <h3>Shock from your other skills <span class="meta">on the enemy: counts for all your damage</span></h3>
-        <ul class="checklist" id="barShockList"></ul>
-      </div>
-      <div id="echoBox" hidden>
-        <h3>Elemental Echo: echoes up <span class="meta">12% more damage of that element, from your own kills</span></h3>
-        <ul class="checklist" id="echoList"></ul>
-      </div>
-      <h3>Try a Herald <span class="meta">not on your bar: compare without and with</span></h3>
-      <ul class="checklist" id="heraldTryList"></ul>
-      <div class="row3">
-        <label class="field"><span>Fury</span><input type="number" min="0" max="10" value="0" data-charge="fury"></label>
-        <label class="field"><span>Insight</span><input type="number" min="0" max="10" value="0" data-charge="insight"></label>
-        <label class="field"><span>Resolve</span><input type="number" min="0" max="10" value="0" data-charge="resolve"></label>
-      </div>
-      <label class="field" title="0.5% increased melee damage, 0.2% melee attack speed a stack (0.6% more damage before patch 0.56.8), at most 50 + your maximum Bloodlust lines. Gained on kills (and boss crits with The Wolf's Due), each lasting 5 seconds."><span>Bloodlust stacks <span class="meta">0.5% increased melee damage each, up to 50 + gear and tree</span></span><input type="number" min="0" max="200" value="0" data-charge="bloodlust"></label>
-      <label class="field" title="Kindling support (patch 0.56.8): each kill with the linked spell gives a stack, 0.5% increased spell damage and 0.2% cast speed each, up to 50, each lasting 5 seconds."><span>Kindling stacks <span class="meta">0.5% increased spell damage each, up to 50</span></span><input type="number" min="0" max="50" value="0" data-charge="kindling"></label>
-    </section>
-
-    </div>
-
-    <div class="config-panel" id="configEnemy" role="tabpanel" aria-labelledby="configTabEnemy" data-config-panel="enemy" hidden>
-    <section class="card">
-      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9.5 11.5h.01M14.5 11.5h.01M10 19v2M14 19v2"/></svg></span>Enemy</h2>
-      <div class="row2">
-        <label class="field"><span>Monster level</span><input type="number" id="enemyLevel" min="1" max="300"></label>
-        <label class="field"><span>Rarity</span>
-          <select id="enemyRarity">
-            <option value="normal">Normal</option><option value="magic">Magic</option>
-            <option value="rare">Rare</option><option value="boss" selected>Guardian / Boss</option>
-          </select></label>
-      </div>
-      <label class="field" id="guardianRow" hidden><span>Guardian's element <span class="meta">its colour: resists that element 30-50% more, plus Ward +25% from Rupture 60, +35% from 80</span></span>
-        <select id="guardianElement">
-          <option value="">Not set</option><option value="Fire">Fire</option><option value="Cold">Cold</option>
-          <option value="Lightning">Lightning</option><option value="Poison">Poison</option>
-        </select></label>
-      <div id="guardianIdRow" hidden>
-        <label class="field"><span>Which Guardian <span class="meta">fills its strong and weak element from the game data</span></span>
-          <select id="guardianWho"><option value="">Pick one (or set below)</option></select></label>
-        <div class="row2">
-          <label class="field"><span>Strong element <span class="meta">+20% resistance</span></span>
-            <select id="guardianStrong"><option value="">Not set</option><option value="Fire">Fire</option><option value="Cold">Cold</option><option value="Lightning">Lightning</option><option value="Poison">Poison</option></select></label>
-          <label class="field"><span>Weak element <span class="meta">−20% resistance</span></span>
-            <select id="guardianWeak"><option value="">Not set</option><option value="Fire">Fire</option><option value="Cold">Cold</option><option value="Lightning">Lightning</option><option value="Poison">Poison</option></select></label>
-        </div>
-      </div>
-      <div class="res-grid" id="resGrid"></div>
-      <p class="hint">Blank = the game's own curve (level × 0.36, at most 25%).</p>
-      <label class="check"><input type="checkbox" id="potionsOn" checked><span>Enable your Brewmaw potions <span class="meta">Counts the potions from your Brewery belt, or your save's, in every damage number and optimizer.</span></span></label>
-      <h3>Curses on the enemy</h3>
-      <ul class="checklist" id="curseList"></ul>
-      <div class="enemy-fields">
-        <label class="field"><span>Other % more dmg taken</span><input type="number" id="extraTaken" value="0" step="5"></label>
-        <label class="field"><span>Enemy life</span><input type="number" id="enemyLife" min="1" step="1000" placeholder="auto"></label>
-        <label class="field"><span>Projectiles hitting it</span><input type="number" id="projOnTarget" min="1" max="20" placeholder="auto"></label>
-        <label class="field" title="Spell totems max 10, Ballistas max 6"><span>Totems out</span><input type="number" id="totemCount" min="1" max="10" step="1" placeholder="auto"></label>
-        <label class="field"><span>Hits per second</span><input type="number" id="hpsOverride" min="0" step="0.1" placeholder="auto"></label>
-        <label class="field" id="rowLeech" title="Only matters for skills with the Life Leech support: 15% more damage only while you leech, and leech needs you below full life. Default: 40% of the fight (the sim cannot see your life). Raise it to sim higher, 100 = always on."><span>Time spent leeching (%)</span><input type="number" id="leechUptime" min="0" max="100" step="5" placeholder="40"></label>
-        <label class="field" id="rowWindburst" title="Windburst: every third movement skill bursts for 200% of your last Bow hit. How many movement skills you use a second in the fight (0.5 = one every 2 s). Blank = not counted." hidden><span>Movement skills a second</span><input type="number" id="windburstMoves" min="0" step="0.1" placeholder="0"></label>
-        <p class="hint enemy-life-note">Enemy life sets the size of Shock: lower life means a bigger Shock. Blank = the sim's estimate.</p>
-      </div>
-      <div class="enemy-toggles">
-        <label class="check" id="rowFlashfire" title="Flashfire: Fire hits in the 2 s after a Flame Dash deal 40% more. Counts it as always up." hidden><input type="checkbox" id="flashfire"><span>Flame Dash just used</span></label>
-        <label class="check" id="rowGraveCall" title="Minions: 30% more damage and 20% faster for 4 s after each cast. The game's panel leaves it out." hidden><input type="checkbox" id="graveCall"><span>Grave Call active</span></label>
-      </div>
-    </section>
+    <!-- The enemy settings live in the Configure Enemy dialog (one panel for every page); this row opens it -->
+    <div class="support-enemy" id="supportEnemy">
+    <section class="card" id="supportEnemyRow"></section>
     </div>
 
       </div>
@@ -546,8 +474,80 @@
       <h2 id="enemyDialogTitle">Configure Enemy</h2>
       <button class="btn ghost" id="enemyDialogClose" type="button">Close</button>
     </div>
-    <p class="hint">The same enemy on every page: Damage Analysis, Passive tree, Skills, Character, Item Simulator and Support Gem Simulator. On the Damage tab the skill, Vows and Heralds settings are here too.</p>
-    <div id="enemyDialogBody"></div>
+    <p class="hint">The same enemy on every page: Damage Analysis, Passive tree, Skills, Character, Item Simulator and Support Gem Simulator.</p>
+    <div id="enemyDialogBody">
+    <section class="card">
+      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9.5 11.5h.01M14.5 11.5h.01M10 19v2M14 19v2"/></svg></span>Enemy</h2>
+      <div class="row2">
+        <label class="field"><span>Monster level</span><input type="number" id="enemyLevel" min="1" max="300"></label>
+        <label class="field"><span>Rarity</span>
+          <select id="enemyRarity">
+            <option value="normal">Normal</option><option value="magic">Magic</option>
+            <option value="rare">Rare</option><option value="boss" selected>Guardian / Boss</option>
+          </select></label>
+      </div>
+      <label class="field" id="guardianRow" hidden><span>Guardian's element <span class="meta">its colour: resists that element 30-50% more, plus Ward +25% from Rupture 60, +35% from 80</span></span>
+        <select id="guardianElement">
+          <option value="">Not set</option><option value="Fire">Fire</option><option value="Cold">Cold</option>
+          <option value="Lightning">Lightning</option><option value="Poison">Poison</option>
+        </select></label>
+      <div id="guardianIdRow" hidden>
+        <label class="field"><span>Which Guardian <span class="meta">fills its strong and weak element from the game data</span></span>
+          <select id="guardianWho"><option value="">Pick one (or set below)</option></select></label>
+        <div class="row2">
+          <label class="field"><span>Strong element <span class="meta">+20% resistance</span></span>
+            <select id="guardianStrong"><option value="">Not set</option><option value="Fire">Fire</option><option value="Cold">Cold</option><option value="Lightning">Lightning</option><option value="Poison">Poison</option></select></label>
+          <label class="field"><span>Weak element <span class="meta">−20% resistance</span></span>
+            <select id="guardianWeak"><option value="">Not set</option><option value="Fire">Fire</option><option value="Cold">Cold</option><option value="Lightning">Lightning</option><option value="Poison">Poison</option></select></label>
+        </div>
+      </div>
+      <div class="res-grid" id="resGrid"></div>
+      <p class="hint">Blank = the game's own curve (level × 0.36, at most 25%).</p>
+      <label class="check"><input type="checkbox" id="potionsOn" checked><span>Enable your Brewmaw potions <span class="meta">Counts the potions from your Brewery belt, or your save's, in every damage number and optimizer.</span></span></label>
+      <h3>Curses on the enemy</h3>
+      <ul class="checklist" id="curseList"></ul>
+      <div class="enemy-fields">
+        <label class="field"><span>Other % more dmg taken</span><input type="number" id="extraTaken" value="0" step="5"></label>
+        <label class="field"><span>Enemy life</span><input type="number" id="enemyLife" min="1" step="1000" placeholder="auto"></label>
+        <label class="field"><span>Projectiles hitting it</span><input type="number" id="projOnTarget" min="1" max="20" placeholder="auto"></label>
+        <label class="field" title="Spell totems max 10, Ballistas max 6"><span>Totems out</span><input type="number" id="totemCount" min="1" max="10" step="1" placeholder="auto"></label>
+        <label class="field"><span>Hits per second</span><input type="number" id="hpsOverride" min="0" step="0.1" placeholder="auto"></label>
+        <label class="field" id="rowLeech" title="Only matters for skills with the Life Leech support: 15% more damage only while you leech, and leech needs you below full life. Default: 40% of the fight (the sim cannot see your life). Raise it to sim higher, 100 = always on."><span>Time spent leeching (%)</span><input type="number" id="leechUptime" min="0" max="100" step="5" placeholder="40"></label>
+        <label class="field" id="rowWindburst" title="Windburst: every third movement skill bursts for 200% of your last Bow hit. How many movement skills you use a second in the fight (0.5 = one every 2 s). Blank = not counted." hidden><span>Movement skills a second</span><input type="number" id="windburstMoves" min="0" step="0.1" placeholder="0"></label>
+        <p class="hint enemy-life-note">Enemy life sets the size of Shock: lower life means a bigger Shock. Blank = the sim's estimate.</p>
+      </div>
+      <div class="enemy-toggles">
+        <label class="check" id="rowFlashfire" title="Flashfire: Fire hits in the 2 s after a Flame Dash deal 40% more. Counts it as always up." hidden><input type="checkbox" id="flashfire"><span>Flame Dash just used</span></label>
+        <label class="check" id="rowGraveCall" title="Minions: 30% more damage and 20% faster for 4 s after each cast. The game's panel leaves it out." hidden><input type="checkbox" id="graveCall"><span>Grave Call active</span></label>
+      </div>
+      <!-- How the selected skill is cast (owner, 19 Nov 2026: everything that configures DPS is in this pop-up); shown only for skills they apply to -->
+      <div class="enemy-casts">
+        <label class="field" id="cocRow" hidden><span>Cast on Crit <span class="meta" id="cocInfo"></span></span><select id="cocSelect"></select></label>
+        <label class="check-row" id="conduitRow" hidden><input type="checkbox" id="conduitToggle"><span id="conduitLabel">Cast by Channel Conduit</span></label>
+      </div>
+    </section>
+    <section class="card">
+      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5 1-8.5z"/></svg></span>Vows, Heralds &amp; charges</h2>
+      <ul class="checklist" id="vowList"></ul>
+      <div id="barShockBox" hidden>
+        <h3>Shock from your other skills <span class="meta">on the enemy: counts for all your damage</span></h3>
+        <ul class="checklist" id="barShockList"></ul>
+      </div>
+      <div id="echoBox" hidden>
+        <h3>Elemental Echo: echoes up <span class="meta">12% more damage of that element, from your own kills</span></h3>
+        <ul class="checklist" id="echoList"></ul>
+      </div>
+      <h3>Try a Herald <span class="meta">not on your bar: compare without and with</span></h3>
+      <ul class="checklist" id="heraldTryList"></ul>
+      <div class="row3">
+        <label class="field"><span>Fury</span><input type="number" min="0" max="10" value="0" data-charge="fury"></label>
+        <label class="field"><span>Insight</span><input type="number" min="0" max="10" value="0" data-charge="insight"></label>
+        <label class="field"><span>Resolve</span><input type="number" min="0" max="10" value="0" data-charge="resolve"></label>
+      </div>
+      <label class="field" title="0.5% increased melee damage, 0.2% melee attack speed a stack (0.6% more damage before patch 0.56.8), at most 50 + your maximum Bloodlust lines. Gained on kills (and boss crits with The Wolf's Due), each lasting 5 seconds."><span>Bloodlust stacks <span class="meta">0.5% increased melee damage each, up to 50 + gear and tree</span></span><input type="number" min="0" max="200" value="0" data-charge="bloodlust"></label>
+      <label class="field" title="Kindling support (patch 0.56.8): each kill with the linked spell gives a stack, 0.5% increased spell damage and 0.2% cast speed each, up to 50, each lasting 5 seconds."><span>Kindling stacks <span class="meta">0.5% increased spell damage each, up to 50</span></span><input type="number" min="0" max="50" value="0" data-charge="kindling"></label>
+    </section>
+    </div>
   </div>
 </dialog>
 
@@ -632,7 +632,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":385,"at":"2026-11-19T05:33:14.241Z"};
+window.SITE_VERSION = {"v":386,"at":"2026-11-19T15:30:09.533Z"};
 window.SITE_LANG = 'de';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -641,6 +641,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=4e9487f7","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../../app.js?v=385"></script>
+<script src="../../../app.js?v=386"></script>
 </body>
 </html>

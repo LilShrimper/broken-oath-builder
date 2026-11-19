@@ -1065,42 +1065,21 @@ body.support-page .support-simulator-heading { display: block; margin: 2px 0 14p
 body.support-page .controls, body.support-page .build-settings { background: none; border: 0; box-shadow: none; padding: 0; }
 body.support-page .build-settings-content { padding: 0; }
 body.support-page .config-panel[data-config-panel="skill"] { display: none; }
-/* Vows, Heralds & charges sit under the gem setup and the enemy, so Heralds can be switched on and off while comparing supports */
-body.support-page #configCharacter { display: block; grid-column: 2; grid-row: 5; margin-top: -16px; }
-body.support-page #configEnemy > .card { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: 0; background: color(srgb 0.072 0.0985 0.175373); box-shadow: none; }
-body.support-page #configCharacter > .card { border-top-left-radius: 0; border-top-right-radius: 0; border-top: 0; padding-top: 0; background: color(srgb 0.072 0.0985 0.175373); box-shadow: none; }
-/* The Vowbreak box keeps its own width; the Herald name gets the rest (both labels used to split the row evenly) */
-body.support-page #configCharacter .checklist label:not(:first-child) { flex: none; }
-/* Its heading reads like the Curses heading in the same box */
-body.support-page #configCharacter > .card > h2 { font-size: 11.5px; margin: 0 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
-body.support-page #configCharacter > .card > h2 .h-ic { display: none; }
-body.support-page #configCharacter .checklist { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px; }
-/* Two columns up top: gem setup on the left, the enemy (target) on the right; search and results run full width below */
+/* One column: the search on top, then Configuration (the row that opens Configure Enemy: enemy, Vows, Heralds and charges
+   are all in that dialog) and the gem setup, each full width */
 .support-col-title { display: none; }
-body.support-page .build-settings-content { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 16px 20px; align-items: start; }
+body.support-page .build-settings-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px 20px; align-items: start; }
 body.support-page .build-settings-content > * { min-width: 0; }
-body.support-page .support-simulator-heading { grid-column: 1 / -1; grid-row: 1; margin-bottom: 0; }
-body.support-page .support-col-title { display: block; grid-row: 3; color: var(--dashboard-gold); font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; margin-bottom: -8px; }
-body.support-page .support-col-gems { grid-column: 1; }
-body.support-page .support-col-config { grid-column: 2; }
-body.support-page #configSupports { display: contents; }
-body.support-page #configSupports > .card:not(.support-search) { grid-column: 1; grid-row: 4 / span 2; }
-body.support-page #configEnemy { display: block; grid-column: 2; grid-row: 4; }
-body.support-page #configEnemy > .card > h2 { display: none; }
-body.support-page .support-search { grid-column: 1 / -1; grid-row: 2; }
+body.support-page .support-simulator-heading { grid-row: 1; margin-bottom: 0; }
+body.support-page .support-search { grid-row: 2; }
 body.support-page .support-search .opt { border-top: 0; margin-top: 0; padding-top: 0; }
-@media (max-width: 900px) {
-  body.support-page .build-settings-content { grid-template-columns: minmax(0, 1fr); }
-  body.support-page .support-col-gems, body.support-page .support-col-config,
-  body.support-page #configSupports > .card:not(.support-search), body.support-page #configEnemy, body.support-page #configCharacter, body.support-page .support-search { grid-column: 1; grid-row: auto; }
-  body.support-page .support-col-title { margin-bottom: 0; }
-  body.support-page .support-col-gems { order: 1; }
-  body.support-page #configSupports > .card:not(.support-search) { order: 2; }
-  body.support-page .support-col-config { order: 3; }
-  body.support-page #configEnemy { order: 4; }
-  body.support-page #configCharacter { order: 5; margin-top: -16px; }
-  body.support-page .support-search { order: 0; }
-}
+body.support-page .support-col-title { display: block; color: var(--dashboard-gold); font-size: 10px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; margin-bottom: -8px; }
+body.support-page .support-col-config { grid-row: 3; }
+body.support-page #supportEnemy { display: block; grid-row: 4; }
+body.support-page #supportEnemy .enemy-cfg-row { justify-content: space-between; }
+body.support-page .support-col-gems { grid-row: 5; }
+body.support-page #configSupports { display: contents; }
+body.support-page #configSupports > .card:not(.support-search) { grid-row: 6; }
 body.dashboard-view .layout { grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 20px; }
 body.dashboard-view #controls { display: none; } /* its settings are in the Configure Enemy dialog */
 body.dashboard-view .results-wrap, body.dashboard-view #results { display: contents; }
@@ -1910,6 +1889,10 @@ body.io-open { overflow: hidden; }
 .io-aff { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 5px 4px; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
 .io-afftext { flex: 1 1 220px; min-width: 0; }
 .io-afftext .bad { color: var(--bad); }
+.io-weight { white-space: nowrap; font-size: 11.5px; margin-left: 4px; color: var(--faint); }
+.io-weight b { font-weight: 600; color: var(--muted, var(--faint)); }
+.io-weight .meta { color: var(--faint); font-size: inherit; }
+.io-weight-k { text-transform: uppercase; letter-spacing: 0.06em; font-size: 9.5px; font-weight: 600; margin-right: 5px; }
 .io-aff select { max-width: 210px; }
 .io-aff .mini { width: 74px; }
 .io-rm { width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--muted); cursor: pointer; line-height: 1; }
@@ -2160,10 +2143,9 @@ input.io-add::placeholder { color: var(--faint); }
 .enemy-toggles { display: flex; flex-wrap: wrap; gap: 0 18px; }
 .enemy-toggles .check { margin: 2px 0 6px; }
 .enemy-toggles .check[hidden] { display: none; }
-body.support-page #curseList { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0 8px; }
-body.support-page #curseList li { padding: 3px 5px; }
-body.support-page #configEnemy .card h3 { margin: 8px 0 4px; }
-body.support-page #configEnemy .hint { margin: 2px 0 6px; }
+/* Cast on Crit and Cast by Channel Conduit under the fight toggles */
+.enemy-casts .field { margin: 6px 0; }
+.enemy-casts .check-row { margin: 6px 0 2px; }
 
 /* Best support setups: their own window over the page */
 #supportSearchResults.support-modal { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; }
@@ -2338,24 +2320,28 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 .faq-item:focus-visible { outline: 2px solid var(--dashboard-gold); outline-offset: 2px; border-radius: 2px; }
 .pl-tip-flavour { margin-top: 6px; color: var(--faint); font-style: italic; }
 
-/* Configure Enemy: the Enemy card in a dialog, opened from every page that runs the sim */
+/* Configure Enemy: the Enemy card and the Vows, Heralds & charges card in a dialog, opened from every page that runs the
+   sim. One look everywhere: style it under .enemy-dialog only, never under a page class (body.support-page ...). */
 .enemy-cfg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .enemy-cfg svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 .results-heading { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 16px; }
 .cmp-intro.results-heading { flex-wrap: nowrap; } .cmp-intro.results-heading > div { min-width: 0; }
 @media (max-width: 640px) { .cmp-intro.results-heading { flex-wrap: wrap; } }
-.build-stats .enemy-cfg-row {grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 12px; }
-.build-stats .enemy-cfg-row .hint { margin: 0; }
+.enemy-cfg-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 12px; }
+.enemy-cfg-row .hint { margin: 0; }
 .enemy-dialog { width: min(640px, calc(100% - 24px)); max-height: calc(100dvh - 24px); overflow: auto; }
 .enemy-dialog-content { padding: 20px; }
 .enemy-dialog-content > .hint { margin: 0 0 12px; }
 .enemy-dialog .card { background: none; border: 0; box-shadow: none; padding: 0; }
 .enemy-dialog .card > h2 { display: none; }
+/* The second card (Vows, Heralds & charges) under a rule, with its heading */
 .enemy-dialog .card + .card { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
 .enemy-dialog .card + .card > h2 { display: flex; }
 .enemy-dialog .card h3 { font-size: 13px; margin: 12px 0 4px; }
 .enemy-dialog .card p.hint { margin: 4px 0 8px; }
-.enemy-dialog #curseList { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0 8px; }
+.enemy-dialog #curseList, .enemy-dialog .card + .card .checklist { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0 8px; }
+/* The Vowbreak box keeps its own width; the Vow or Herald name gets the rest */
+.enemy-dialog .card + .card .checklist label:not(:first-child) { flex: none; }
 @media (max-width: 540px) { .enemy-dialog-content { padding: 14px; } }
 .ch-skills-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; } .ch-skills-head h2 { margin: 0; }
 .ch-skills-head { position: relative; }

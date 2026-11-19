@@ -2733,7 +2733,7 @@ window.BOPlanner = function (ctx) {
 
   function gradeChange(it, f, t) {
     const v = t.value;
-    if (f === 'truesworn') { it.grade = t.checked ? Math.max(TRUESWORN, it.grade || 0) : Math.min(TRUESWORN - 1, it.grade || 0); return true; }
+    if (f === 'truesworn') { it.grade = t.checked ? 100 : Math.min(TRUESWORN - 1, it.grade || 0); return true; }
     if (f === 'grade') { const ts = (it.grade || 0) >= TRUESWORN, n = Math.round(+v) || 0; it.grade = ts ? Math.max(TRUESWORN, Math.min(100, n)) : Math.max(0, Math.min(TRUESWORN - 1, n)); return true; }
 
     if (f === 'gradepct') {
@@ -7395,7 +7395,8 @@ window.BOItemSearch = function (ctx) {
       bonusPoints: b.bonus_passive_points || 0, gems, gemLevels, sockets, hotbar, weaponId: '',
       dragonNodes: (asc.nodes || []).filter(x => x && !isHidden(x)), dragonAspect: asc.aspect && asc.aspect !== 'None' ? asc.aspect : '',
       mainSkill: mainSkillOf(h), supportGems: [], fromCode: true, fromLadder: true,
-      codeWarnings: ['From the ' + (h.league || '') + ' ladder (Data: Broken Oath public API). Undiscovered items, nodes and supports are left out.'],
+      codeWarnings: ['From the ' + (h.league || '') + ' ladder (Data: Broken Oath public API). Undiscovered items, nodes and supports are left out.']
+        .concat(h.kept_build ? ['The game publishes this hero\'s build empty at the moment: this is the last full build the site read' + (h.kept_build.updated_at ? ' (' + String(h.kept_build.updated_at).slice(0, 16).replace('T', ' ') + ' UTC)' : '') + ', so the hero may have changed since.'] : []),
       savedAt: h.updated_at || new Date().toISOString(),
     };
   }
@@ -7510,6 +7511,11 @@ window.BOItemSearch = function (ctx) {
 
     const emptyBuild = b => !b || (!(b.items || []).length && !(b.skills || []).length && !(b.passive_nodes || []).length);
 
+
+
+    const keptNote = h => h && h.kept_build ? 'The game publishes this build empty at the moment' + (ago(h.kept_build.emptied_at) ? ' (since ' + ago(h.kept_build.emptied_at).replace(/ ago$/, '') + ')' : '') +
+      '. Shown here: the last full build this site read' + (ago(h.kept_build.updated_at) ? ', from ' + ago(h.kept_build.updated_at) : '') + '. The hero may have changed gear, skills or passives since.' : '';
+
     const needRoster = () => true; // Sim DPS, Life / ES / EHP and item search all read the published builds
     const rosterLoaded = new Set(); // "<league>/<Class>": read without errors
 
@@ -7561,7 +7567,7 @@ window.BOItemSearch = function (ctx) {
             try { sim = ctx.simDps ? ctx.simDps(ch, h.rupture_level || 0) : null; } catch (e) { sim = null; }
             if (sim > 0) { simSkill = id; break; }
           }
-          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), sim, simSkill, items, gems, find: items.join('\n').toLowerCase() };
+          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), sim, simSkill, items, gems, find: items.join('\n').toLowerCase(), kept: !!h.kept_build };
         } catch (e) { roster(league)[h.hero] = { life: null, es: null, ehp: null, sim: null, items, gems, find: items.join('\n').toLowerCase() }; }
         if (++n % 15 === 0) { S.rosterBusy = 'Running the sim on the builds… ' + n; paint(); await new Promise(r => setTimeout(r, 0)); }
       }
@@ -7585,7 +7591,7 @@ window.BOItemSearch = function (ctx) {
       if (!x) return '<span class="meta" title="Build not read yet (build files refresh hourly)">' + (S.rosterBusy ? '…' : '–') + '</span>';
       if (x.empty) return '<span class="meta" title="The game published this build without gear, skills or passives">–</span>';
       if (!(x.sim > 0)) return '<span class="meta" title="The sim does not cover this skill or build yet">–</span>';
-      return '<span title="' + esc(skillName(x.simSkill)) + ' (the skill this hero has dealt the most damage with), sim estimate">' + short(x.sim) + '</span>' +
+      return '<span title="' + esc(skillName(x.simSkill)) + ' (the skill this hero has dealt the most damage with), sim estimate' + (x.kept ? '. On the hero\'s last full build: the game publishes it empty at the moment' : '') + '">' + short(x.sim) + '</span>' +
         (x.simSkill && x.simSkill !== r.main_skill ? '<br><small class="meta">' + esc(skillName(x.simSkill)) + '</small>' : '');
     };
 
@@ -7783,7 +7789,7 @@ window.BOItemSearch = function (ctx) {
         '<div class="lad-hero-head"><div><div class="eyebrow">' + esc(h.league || '') + ' · hero ' + esc(String(h.hero).slice(0, 8)) + '</div><h3 class="lad-hero-title">' + esc(h.class) + (h.ascendancy && h.ascendancy !== 'None' ? ' · ' + esc(h.ascendancy) : '') + ' · level ' + (h.level || '?') + ' · Rupture ' + (h.rupture_level || 0) + '</h3>' +
         '<small class="meta">Class rank ' + (h.class_rank || '?') + (h.dead ? ' · dead' : '') + (h.updated_at ? ' · build updated ' + esc(ago(h.updated_at)) : '') + '</small></div>' +
         '<div class="lad-actions"><button type="button" class="btn" id="ladOpen">Open in Build Planner</button><button type="button" class="btn ghost" id="ladLink">Copy link</button><button type="button" class="btn ghost" id="ladClose" aria-label="Close hero">Close</button></div></div>' +
-        measuredAll +
+        measuredAll + (keptNote(h) && !emptyBuild(b) ? '<p class="warn">' + esc(keptNote(h)) + '</p>' : '') +
         (emptyBuild(b) ? '<p class="hint">The game published this build without gear, skills or passives, so there is nothing to show or sim. It may fill in at the next hourly build refresh.</p></div>' :
         '<h3>Skills</h3><ul class="lad-skills">' + (skills || '<li class="meta">None listed</li>') + '</ul>' +
         '<h3>Passives</h3><p>' + nodes.length + ' points' + (b.bonus_passive_points ? ' (' + b.bonus_passive_points + ' bonus)' : '') + (hiddenNodes ? ', ' + hiddenNodes + ' undiscovered' : '') + '.' +
@@ -10127,8 +10133,9 @@ window.BOCharacter = function (ctx) {
   function pickify(sel) {
     const items = [];
     for (const n of sel.children) {
-      if (n.tagName === 'OPTGROUP') { items.push({ head: n.label }); for (const o of n.children) items.push({ v: o.value, t: o.textContent }); }
-      else if (n.value) items.push({ v: n.value, t: n.textContent });
+      const opt = o => ({ v: o.value, t: o.textContent, c: o.dataset.c ? o.dataset.c.split('|') : null });
+      if (n.tagName === 'OPTGROUP') { items.push({ head: n.label }); for (const o of n.children) items.push(opt(o)); }
+      else if (n.value) items.push(opt(n));
     }
     const label = sel.getAttribute('aria-label') || 'Add';
     const wrap = document.createElement('div'); wrap.className = 'io-pick';
@@ -10145,7 +10152,7 @@ window.BOCharacter = function (ctx) {
         const low = x.t.toLowerCase();
         if (!words.every(w => low.includes(w))) continue;
         if (head) { h += '<div class="io-pick-head">' + esc(head) + '</div>'; head = null; }
-        h += '<div class="io-pick-opt' + (hits.length === at ? ' on' : '') + '" role="option" data-i="' + hits.length + '">' + esc(x.t) + '</div>';
+        h += '<div class="io-pick-opt' + (hits.length === at ? ' on' : '') + '" role="option" data-i="' + hits.length + '">' + esc(x.t) + (x.c ? ' <span class="io-weight"><span class="io-weight-k">Weight</span><b>' + esc(x.c[0]) + '</b> <span class="meta">' + esc(x.c[1]) + '</span></span>' : '') + '</div>';
         hits.push(x);
       }
       list.innerHTML = h || '<div class="io-pick-none">No line matches</div>';
@@ -10220,14 +10227,21 @@ window.BOCharacter = function (ctx) {
     return (M.msg ? '<p class="hint bad" role="status">' + esc(M.msg) + '</p>' : '') + '<div class="io-search"><input id="ioSearch" type="search" value="' + esc(M.q) + '" placeholder="Search everything" aria-label="Search items" autocomplete="off"></div>' +
       '<div class="io-sel' + (side ? '' : ' nosel') + '">' + side + '<div class="io-main" id="ioMain"></div></div>';
   }
-  function baseLines(b) {
-    const out = [];
+
+
+  function baseLines(b, it) {
+    const out = [], gm = it && window.BOSim.gradeMult ? window.BOSim.gradeMult(it.grade || 0) : 1, q = it && !b.DamageMin ? Math.max(0, Math.min(30, +it.quality || 0)) : 0;
+    const def = v => {
+      if (gm === 1 && !q) return String(v);
+      const why = [gm !== 1 ? 'grade ' + Math.round(gm * 100) + '%' : '', q ? 'quality +' + q + '%' : ''].filter(Boolean).join(', ');
+      return Math.round(v * gm * (1 + q / 100)) + ' (base ' + v + ', ' + why + ')';
+    };
     if (b.DamageMin) {
       const avg = (b.DamageMin + b.DamageMax) / 2;
       out.push('Damage ' + b.DamageMin + '-' + b.DamageMax); if (b.AttacksPerSecond) out.push('Base attack rate ' + b.AttacksPerSecond); if (b.Crit) out.push('Base crit ' + b.Crit + '%');
       out.push('Average hit ' + Math.round(avg) + (b.AttacksPerSecond ? ' · DPS ' + Math.round(avg * b.AttacksPerSecond) : ''));
     }
-    for (const [k, n] of [['Armour', 'Armour'], ['Evasion', 'Evasion'], ['EnergyShield', 'Energy Shield']]) if (b[k]) out.push(n + ' ' + b[k]);
+    for (const [k, n] of [['Armour', 'Armour'], ['Evasion', 'Evasion'], ['EnergyShield', 'Energy Shield']]) if (b[k]) out.push(n + ' ' + def(b[k]));
     if (b.Block) out.push('Block ' + b.Block + '%');
     for (const m of (b.Implicits || []).concat(b.FamilyLine ? [b.FamilyLine] : [])) { const t = safe(() => G.modLine(m)); if (t) out.push(t); }
     return out;
@@ -10308,6 +10322,23 @@ window.BOCharacter = function (ctx) {
   }
 
 
+
+
+
+  const tagsOf = b => [b.Class, b.Slot, ...(b.Tags || [])].filter(Boolean);
+  const fits = (a, t) => (a.BaseTags || []).some(y => t.includes(y)) && !(a.ExcludeTags || []).some(y => t.includes(y));
+  let poolMemo = { gd: null, m: {} };
+  function rollChance(af, base) {
+    if (!af || !base || af.Kind || !(af.Weight > 0)) return null;
+    const gd = GD(), t = tagsOf(base); if (!fits(af, t)) return null;
+    if (poolMemo.gd !== gd) poolMemo = { gd, m: {} };
+    const k = af.Type + '|' + base.Id;
+    if (poolMemo.m[k] == null) poolMemo.m[k] = Object.values(gd.affixes).filter(x => !x.Kind && x.Type === af.Type && x.Weight > 0 && fits(x, t)).reduce((s, x) => s + x.Weight, 0);
+    const tot = poolMemo.m[k]; if (!tot) return null;
+    const p = af.Weight / tot * 100, n = v => v.toLocaleString('en-US');
+    return { pct: (p >= 10 ? p.toFixed(0) : p >= 1 ? p.toFixed(1) : p.toFixed(2)) + '%', of: '(' + n(af.Weight) + '/' + n(tot) + ')' };
+  }
+  const chanceHtml = c => c ? ' <span class="io-weight" title="Roll chance on this base: the line\'s weight over the weights of every line of its kind this base can roll"><span class="io-weight-k">Weight</span><b>' + c.pct + '</b> <span class="meta">' + c.of + '</span></span>' : '';
   function affixRow(it, a, ai, tag, after, note, mv) {
     const af = GD().affixes[lc(a.id)];
     if (!af) return '<div class="io-aff" data-ai="' + ai + '">' + (mv || '') + '<span class="meta bad">Unknown affix ' + esc(a.id) + '</span><button class="io-rm" type="button" data-io="rmaffix" data-ai="' + ai + '" title="Remove">×</button></div>';
@@ -10317,7 +10348,8 @@ window.BOCharacter = function (ctx) {
     const lim = (lo, hi) => lo == null || hi == null ? '' : ' min="' + Math.min(lo, hi) + '" max="' + Math.max(lo, hi) + '" title="Rolls ' + lo + ' to ' + hi + '"';
     const out = (x, lo, hi) => lo != null && hi != null && (x < Math.min(lo, hi) || x > Math.max(lo, hi));
     const off = t && (out(a.v, t.Min, t.Max) || (two && out(a.v2, t.Min2, t.Max2)));
-    return '<div class="io-aff" data-ai="' + ai + '">' + (mv || '') + '<span class="io-afftext">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(safe(() => G.modLine(af.Mod, a.v, a.v2))) + (af.Kind ? ' <span class="meta">(' + esc(af.Kind) + ')</span>' : '') + (after ? ' <span class="io-extra">(' + esc(after) + ')</span>' : '') +
+    return '<div class="io-aff" data-ai="' + ai + '">' + (mv || '') + '<span class="io-afftext">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(safe(() => G.modLine(af.Mod, a.v, a.v2))) + (af.Kind ? ' <span class="meta">(' + esc(af.Kind) + ')</span>' : '') +
+      chanceHtml(rollChance(af, GD().bases[lc(it.base)])) + (after ? ' <span class="io-extra">(' + esc(after) + ')</span>' : '') +
       (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') +
       (off ? ' <span class="bad">outside this tier\'s range (' + t.Min + ' to ' + t.Max + (two ? ' / ' + t.Min2 + ' to ' + t.Max2 : '') + ')</span>' : '') + (note || '') + '</span>' +
       '<select data-f="tier" aria-label="Tier">' + af.Tiers.map((y, ti) => '<option value="' + ti + '"' + (ti === a.tier ? ' selected' : '') + '>T' + (ti + 1) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')</option>').join('') + '</select>' +
@@ -10329,8 +10361,9 @@ window.BOCharacter = function (ctx) {
     const gd = GD(), used = new Set(it.affixes.map(a => (gd.affixes[lc(a.id)] || {}).Group));
 
     const all = vow ? G.vowAffixes(M.slot, base) : isIdol ? Object.values(gd.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length) : G.affixesFor(base);
-    const opts = T => all.filter(a => a.Type === T && !used.has(a.Group)).map(a => ({ id: a.Id, t: safe(() => G.modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2)) + (a.Kind ? ' (' + a.Kind + ')' : '') })).sort((x, y) => x.t.localeCompare(y.t))
-      .map(o => '<option value="' + esc(o.id) + '">' + esc(o.t) + '</option>').join('');
+
+    const opts = T => all.filter(a => a.Type === T && !used.has(a.Group)).map(a => ({ id: a.Id, t: safe(() => G.modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2)) + (a.Kind ? ' (' + a.Kind + ')' : ''), c: rollChance(a, base) })).sort((x, y) => x.t.localeCompare(y.t))
+      .map(o => '<option value="' + esc(o.id) + '"' + (o.c ? ' data-c="' + esc(o.c.pct + '|' + o.c.of) + '"' : '') + '>' + esc(o.t) + '</option>').join('');
     return '<select class="io-add" data-f="addaffix"' + (flag ? ' data-x="' + flag + '"' : '') + ' aria-label="' + esc(label) + '"><option value="">&lt;' + esc(label) + '&gt;</option>' +
       (type ? opts(type) : '<optgroup label="Prefixes">' + opts('Prefix') + '</optgroup><optgroup label="Suffixes">' + opts('Suffix') + '</optgroup>') + '</select>';
   }
@@ -10362,7 +10395,7 @@ window.BOCharacter = function (ctx) {
         ws.filter(x => x.key !== 'base|dps' && x.key !== 'base|avg').map(x => '<div class="io-imp">' + esc(G.baseLine(x)) + '</div>').join('') +
         '<p class="hint">This weapon on its own: its damage with its local lines, before your passives, gems and other gear. DPS = average hit x attacks per second.</p>');
     }
-    const imp = base ? (ws.length ? (base.Implicits || []).concat(base.FamilyLine ? [base.FamilyLine] : []).map(m => safe(() => G.modLine(m))).filter(Boolean) : baseLines(base)) : [];
+    const imp = base ? (ws.length ? (base.Implicits || []).concat(base.FamilyLine ? [base.FamilyLine] : []).map(m => safe(() => G.modLine(m))).filter(Boolean) : baseLines(base, it)) : [];
     h += section('Implicits', imp.length ? imp.map(l => '<div class="io-imp">' + esc(l) + '</div>').join('') : '<div class="io-imp meta">None</div>');
     const isIdol = M.slot === 'Idol';
     if (isU) {
@@ -16335,8 +16368,6 @@ window.BOStartApp = function () {
     document.querySelectorAll('[data-config-panel]').forEach(panel => {
       panel.hidden = panel.dataset.configPanel !== name;
     });
-
-    if (name === 'supports') for (const id of ['configEnemy', 'configCharacter']) { const el = document.getElementById(id); if (el) el.hidden = false; }
     if (focus) selected.focus();
   }
   document.querySelector('.config-tabs').addEventListener('click', e => {
@@ -16723,6 +16754,8 @@ window.BOStartApp = function () {
       skillSelect.disabled = !skills.length;
       if (st.skill) skillSelect.value = st.skill;
     }
+
+    const row = $('#supportEnemyRow'); if (row) row.innerHTML = st.ch ? enemyRow() : '';
   }
   function renderSupportPicker(r) {
     const box = $('#supportChips'); if (!box) return;
@@ -16897,7 +16930,7 @@ window.BOStartApp = function () {
         : stat('Total DPS', num(r.totalDps), '', 'main', name + (r.minion ? ': all its minions, before the enemy' : ' vs the enemy set on the Damage tab'))) +
       stat('Tooltip DPS', num(r.panelDps), '', '', 'The number the game\'s skill panel shows') +
       stat('Average hit', num(r.hitAvg), '', '', 'With crits ' + num(r.hitAvgCrit)) +
-      '<div class="enemy-cfg-row"><span class="hint">Against a ' + esc(enemyLabel()) + '</span>' + enemyBtn() + '</div>';
+      enemyRow();
     el.hidden = false;
   }
 
@@ -17042,6 +17075,7 @@ window.BOStartApp = function () {
 
 
   const enemyLabel = () => 'level ' + (st.enemyLevel || (st.ch ? st.ch.level : '')) + ' ' + ({ normal: 'Normal monster', magic: 'Magic monster', rare: 'Rare', boss: 'Guardian' + (st.gElem ? ' (' + st.gElem + ')' : '') }[st.rarity] || 'enemy');
+  const enemyRow = () => '<div class="enemy-cfg-row"><span class="hint">Against a ' + esc(enemyLabel()) + '</span>' + enemyBtn() + '</div>';
   const enemyBtn = cls => '<button class="btn small enemy-cfg' + (cls ? ' ' + cls : '') + '" type="button" data-enemy-cfg title="Now: ' + esc(enemyLabel()) + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9.5 11.5h.01M14.5 11.5h.01M10 19v2M14 19v2"/></svg>Configure Enemy</button>';
   function resultsHeading(r) {
     return '<div class="results-heading"><div><div class="eyebrow">BUILD RESULTS</div><h2>Damage Analysis</h2>' +
@@ -17975,19 +18009,19 @@ window.BOStartApp = function () {
   $('#controls').addEventListener('change', controlsChange);
 
 
+
+
+
+
+
+
+
   const enemyDialog = $('#enemyDialog');
   enemyDialog.addEventListener('change', controlsChange);
   function openEnemyDialog() {
     if (!st.ch || enemyDialog.open) return;
-
-
-    for (const [panel, only] of [['configEnemy', false], ['configSkill', true], ['configCharacter', true]]) {
-      if (only && !document.body.classList.contains('dashboard-view')) continue;
-      const card = document.querySelector('#' + panel + ' > .card'); if (card) { card.dataset.fromPanel = panel; $('#enemyDialogBody').appendChild(card); }
-    }
     enemyDialog.showModal();
   }
-  enemyDialog.addEventListener('close', () => { for (const card of Array.from($('#enemyDialogBody').children)) { const p = card.dataset.fromPanel && document.getElementById(card.dataset.fromPanel); if (p) p.appendChild(card); } });
   enemyDialog.addEventListener('click', e => { if (e.target === enemyDialog) enemyDialog.close(); }); // a click on the backdrop
   $('#enemyDialogClose').addEventListener('click', () => enemyDialog.close());
   document.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-enemy-cfg]')) openEnemyDialog(); });

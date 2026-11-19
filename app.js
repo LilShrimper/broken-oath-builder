@@ -18855,7 +18855,7 @@ window.BOStartApp = function () {
     const have = allocSet(), s0 = startNode(), adj = treeAdj();
     const next = new Set(); for (const id of [s0, ...have]) for (const v of adj[id] || []) if (!have.has(v) && !blocked(v) && !banned(v)) next.add(v);
     const q = ($('#treeSearch').value || '').trim().toLowerCase();
-    const heat = $('#treeHeat').checked;
+    const heat = $('#treeHeat').checked, foundIds = new Set();
     let best = 0; for (const [id, s] of T.scores) if (!have.has(id) && perPt(s) > best) best = perPt(s);
     const top = new Set(bestRows(have, 8).map(([id]) => id));
 
@@ -18868,7 +18868,7 @@ window.BOStartApp = function () {
       c.classList.toggle('opt-add', oa.has(id)); c.classList.toggle('opt-rem', orm.has(id));
       let found = false;
       if (q) { const txt = (n.Name + ' ' + (n.Text || '') + ' ' + (n.Mods || []).map(modLine).join(' ')).toLowerCase(); found = txt.includes(q); }
-      c.classList.toggle('found', found);
+      c.classList.toggle('found', found); if (found) foundIds.add(id);
       c.classList.toggle('sel', id === T.sel);
       const s = T.scores.get(id);
       if (heat && !on && !oa.has(id) && s && s.d > 0.0005 && best > 0) {
@@ -18884,7 +18884,7 @@ window.BOStartApp = function () {
       ln.classList.toggle('opt-add', inNew(a) && inNew(b) && (oa.has(a) || oa.has(b)));
       ln.classList.toggle('opt-rem', inOld(a) && inOld(b) && (orm.has(a) || orm.has(b)));
     }
-    for (const t of $('#treeSvg').querySelectorAll('text.tlabel')) { const id = t.dataset.id; t.classList.toggle('alloc', have.has(id)); t.classList.toggle('top', top.has(id)); t.classList.toggle('opt', oa.has(id) || orm.has(id)); }
+    for (const t of $('#treeSvg').querySelectorAll('text.tlabel')) { const id = t.dataset.id; t.classList.toggle('alloc', have.has(id)); t.classList.toggle('top', top.has(id)); t.classList.toggle('opt', oa.has(id) || orm.has(id)); t.classList.toggle('found', foundIds.has(id)); }
     T.og = new Map(); // Oath DPS values, worked out again when a card or tip asks
     const sw = swornNow();
 
@@ -18926,7 +18926,17 @@ window.BOStartApp = function () {
 
       const c = $('#treeSvg').querySelector('circle.tn[data-id="' + id + '"]'); if (!c) return '';
       return '<circle class="tkeep' + (have.has(id) ? '' : ' want') + '" cx="' + c.getAttribute('cx') + '" cy="' + c.getAttribute('cy') + '" r="' + ((+c.getAttribute('r') || 20) * 1.45) + '"/>';
-    }).join('');
+    }).join('') + (q ? [...$('#treeSvg').querySelectorAll('circle.tn.found')].map(c =>
+
+      '<circle class="tfound" cx="' + c.getAttribute('cx') + '" cy="' + c.getAttribute('cy') + '" r="' + Math.max(85, (+c.getAttribute('r') || 20) * 2.2) + '"/>').join('') +
+      [...$('#treeSvg').querySelectorAll('polygon.tm.found')].map(p => {
+        const m = GD.masteries[p.dataset.mid]; return m ? '<circle class="tfound" cx="' + m.X + '" cy="' + m.Y + '" r="90"/>' : '';
+      }).join('') : '');
+    const fc = $('#treeFoundCount');
+    if (fc) {
+      const n = q ? $('#treeSvg').querySelectorAll('circle.tn.found, polygon.tm.found').length : 0;
+      fc.hidden = !q; fc.textContent = n === 1 ? '1 match' : n + ' matches'; fc.classList.toggle('none', !!q && !n);
+    }
     const saved = (st.chOrig.passives || []).filter(x => !/^om103_/.test(x)).length;
     const free = S.freePoints(GD, st.chOrig || st.ch);
     const nHave = [...have].filter(x => !/^om103_/.test(x)).length; // Oath seats cost no point (patch notes 17 Nov 2026)

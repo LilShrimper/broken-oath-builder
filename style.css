@@ -1840,7 +1840,7 @@ body.ch-dragging, body.ch-dragging * { cursor: grabbing !important; user-select:
 body.io-open { overflow: hidden; }
 .io-back { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; padding: 16px; background: rgba(4, 6, 14, .72); }
 .io-back[hidden] { display: none; }
-.io-win { display: flex; flex-direction: column; width: min(1000px, 100%); height: min(760px, 100%); border: 1px solid color-mix(in srgb, var(--dashboard-gold) 35%, var(--line)); border-radius: 12px; background: var(--bg-2); box-shadow: 0 12px 40px #000a; overflow: hidden; }
+.io-win { display: flex; flex-direction: column; width: min(1240px, 100%); height: min(860px, 100%); border: 1px solid color-mix(in srgb, var(--dashboard-gold) 35%, var(--line)); border-radius: 12px; background: var(--bg-2); box-shadow: 0 12px 40px #000a; overflow: hidden; }
 .io-head { display: flex; align-items: stretch; gap: 0; border-bottom: 1px solid var(--line); background: var(--bg); }
 .io-tab { padding: 14px 22px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: inherit; font-size: 15px; cursor: pointer; }
 .io-tab.on { color: var(--text); border-bottom-color: var(--dashboard-gold); background: var(--bg-2); }
@@ -1889,6 +1889,15 @@ body.io-open { overflow: hidden; }
 .io-aff { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 5px 4px; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
 .io-afftext { flex: 1 1 220px; min-width: 0; }
 .io-afftext .bad { color: var(--bad); }
+/* DPS effect of a line (character.js fxFill) */
+.io-fx { flex: none; min-width: 60px; text-align: right; white-space: nowrap; font-size: 12.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.io-fx:empty { min-width: 0; }
+.io-fx.good { color: var(--good); } .io-fx.bad { color: var(--bad); } .io-fx.zero { color: var(--faint); font-weight: 400; }
+.io-pick-opt { display: flex; align-items: baseline; gap: 8px; }
+.io-edit .io-afftext { flex: 1 1 170px; }
+.io-edit .io-aff select { max-width: 180px; }
+.io-edit .io-aff .mini { width: 66px; }
+.io-pick-opt .io-fx { order: 2; margin-left: auto; }
 .io-weight { white-space: nowrap; font-size: 11.5px; margin-left: 4px; color: var(--faint); }
 .io-weight b { font-weight: 600; color: var(--muted, var(--faint)); }
 .io-weight .meta { color: var(--faint); font-size: inherit; }
@@ -1908,6 +1917,24 @@ input.io-add::placeholder { color: var(--faint); }
 .io-pick-opt:hover, .io-pick-opt.on { background: color-mix(in srgb, var(--dashboard-gold) 16%, transparent); }
 .io-pick-none { padding: 6px 10px; color: var(--faint); }
 .io-foot { margin-top: 18px; }
+/* The Edit tab in two columns (character.js editHtml): the item's own numbers left, its lines right, so it fits without scrolling. */
+.io-edit { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 0 26px; align-items: start; }
+.io-edit > .io-col { min-width: 0; }
+.io-edit > .io-col > .io-sec:first-child { margin-top: 6px; }
+.io-edit > .io-col:empty { display: none; }
+.io-edit .io-wstats + .io-imp { margin-top: 4px; }
+.io-edit .io-imp { padding: 2px 4px; }
+.io-edit .io-sec { margin-top: 9px; }
+.io-edit .io-aff { padding: 3px 4px; }
+.io-edit .io-row { margin: 4px 0; }
+.io-edit .io-wstats ~ .io-imp { display: inline-block; margin-right: 12px; }
+.io-edit .io-sec .hint { margin: 4px 0 0; }
+.io-edit .io-row select[data-f="rune"] { flex: 1 1 0; min-width: 0; }
+.io-edit + .io-foot { margin-top: 8px; }
+.io-body:has(.io-edit) { padding-top: 10px; padding-bottom: 10px; }
+.io-body:has(.io-edit) .io-read { margin-bottom: 6px; padding: 6px 12px; }
+.io-body:has(.io-edit) .io-top { padding-bottom: 4px; }
+@media (max-width: 980px) { .io-edit { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 760px) {
   .io-back { padding: 0; }
   .io-win { height: 100%; border-radius: 0; border: 0; }
@@ -2578,6 +2605,9 @@ details.sw-sub > summary small { color: var(--faint); margin-left: 4px; }
 details.sw-sub[open] { padding-bottom: 8px; }
 details.sw-sub.sw-sup { background: var(--panel); }
 
+/* The bar shown while the open saved build has unsaved changes (app.js syncUnsaved): stays in view while the page scrolls. */
+.unsaved-bar { position: sticky; top: 8px; z-index: 60; box-shadow: 0 6px 18px #0006; }
+.sb-unsaved { color: var(--dashboard-gold); }
 /* Saved Builds tab (app.js renderSavedBuilds) */
 .builds-pane .sb-tools { align-items: center; gap: 10px; flex-wrap: wrap; }
 .builds-pane .sb-search { flex: 1 1 280px; max-width: 460px; min-width: 0; box-sizing: border-box; height: 40px; padding: 8px 12px; border: 1px solid var(--dashboard-gold); border-radius: 9px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 15px; }

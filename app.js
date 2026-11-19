@@ -412,6 +412,17 @@ window.PAGE_LANGS = {
     extraAffixes('Items/affixes_riven95.json', 'affixes', 'Riven');
     extraAffixes('Items/mythic_lines.json', 'lines', 'Mythic');
 
+
+
+
+
+
+
+
+
+    if (!affixes.vow_effect98) affixes.vow_effect98 = { Id: 'vow_effect98', Type: 'Suffix', Group: 'VowEffect', Mod: { Stat: 'VowEffect', Mode: 'Inc', Tags: [], Value: 0 }, BaseTags: ['Amulet'], ExcludeTags: [], Weight: 0,
+      Tiers: [{ ILvl: 56, Min: 17, Max: 20 }, { ILvl: 44, Min: 13, Max: 16 }, { ILvl: 32, Min: 9, Max: 12 }, { ILvl: 20, Min: 5, Max: 8 }] };
+
     const uniques = {};
     for (const u of J('Items/uniques.json').uniques) uniques[u.Id.toLowerCase()] = Object.assign({ Id: u.Id, Name: u.Name, BaseId: u.BaseId, Mods: u.Mods.map(m => pick(m, ['Mod', 'Text', 'Min', 'Max', 'Min2', 'Max2'])) },
       pick(u, ['Level', 'Flavour', 'DropWeight', 'Chase', 'Primal', 'Signature', 'Limited', 'Core', 'DwarvenSockets', 'Forged'])); // Level .. DwarvenSockets: Item Search and Grail tabs only (DwarvenSockets marks the Deep-forged)
@@ -2875,7 +2886,7 @@ window.BOPlanner = function (ctx) {
         '<button class="btn small" type="button" data-act="code">Copy plan code</button>' +
         '<button class="btn small ghost" type="button" data-act="dup">Duplicate</button>' +
         '<button class="btn small ghost" type="button" data-act="del">Delete plan</button>' +
-        '<span class="hint">Edits save in this browser as you go. The passive tree and the Dragonling (the dragon button) are on the Skill tree tab; the Damage tab shows what it does.</span></div>';
+        '<span class="hint">Edits stay as unsaved changes until you press Save (the bar at the top). The passive tree and the Dragonling (the dragon button) are on the Skill tree tab; the Damage tab shows what it does.</span></div>';
     }
     if (status && !fold) h += '<p class="hint pl-status">' + esc(status) + '</p>';
 
@@ -5755,6 +5766,8 @@ window.BOBrewery = function (ctx) {
   function setBelt(id, b) { const c = cleanBelt(b); if (!id || !c) return; write(id, c); if (id === Bid) { B = c; Bstored = true; } }
   const copyBelt = (from, to) => { const b = belt(from); if (b) setBelt(to, b); };
 
+  function clearBelt(id) { if (!id) return; try { localStorage.removeItem(KEY(id)); } catch (e) { /* storage off */ } if (id === Bid) Bid = null; }
+
 
 
   function beltCard() {
@@ -5773,7 +5786,7 @@ window.BOBrewery = function (ctx) {
     return h + '</div><button class="btn small ghost" type="button" data-goto-brewery="1">Edit potions in the Brewery</button></div>';
   }
 
-  return { render: () => { bind(); render(); }, simPotions, belt, ownBelt, setBelt, copyBelt, beltCard, openSlot };
+  return { render: () => { bind(); render(); }, simPotions, belt, ownBelt, setBelt, copyBelt, clearBelt, beltCard, openSlot };
 };
 
 ;
@@ -10136,7 +10149,7 @@ window.BOCharacter = function (ctx) {
     back.innerHTML = h + '</div>';
     const body = back.querySelector('#ioBody'); body.dataset.tab = M.tab; if (keep) body.scrollTop = keep; // an edit redraws in place, not back at the top
     back.querySelectorAll('select.io-add').forEach(pickify);
-    if (M.tab === 'select') renderList();
+    if (M.tab === 'select') renderList(); else fxFill(back);
   }
 
   function pickify(sel) {
@@ -10161,11 +10174,12 @@ window.BOCharacter = function (ctx) {
         const low = x.t.toLowerCase();
         if (!words.every(w => low.includes(w))) continue;
         if (head) { h += '<div class="io-pick-head">' + esc(head) + '</div>'; head = null; }
-        h += '<div class="io-pick-opt' + (hits.length === at ? ' on' : '') + '" role="option" data-i="' + hits.length + '">' + esc(x.t) + (x.c ? ' <span class="io-weight"><span class="io-weight-k">Weight</span><b>' + esc(x.c[0]) + '</b> <span class="meta">' + esc(x.c[1]) + '</span></span>' : '') + '</div>';
+        h += '<div class="io-pick-opt' + (hits.length === at ? ' on' : '') + '" role="option" data-i="' + hits.length + '">' + (sel.dataset.f === 'addaffix' ? fxSpan('add:' + (sel.dataset.x || '') + ':' + x.v) : '') + esc(x.t) + (x.c ? ' <span class="io-weight"><span class="io-weight-k">Weight</span><b>' + esc(x.c[0]) + '</b> <span class="meta">' + esc(x.c[1]) + '</span></span>' : '') + '</div>';
         hits.push(x);
       }
       list.innerHTML = h || '<div class="io-pick-none">No line matches</div>';
       list.hidden = false;
+      fxFill(list, true);
       const on = list.querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
     };
     const pick = x => { if (!x) return; sel.value = x.v; sel.dispatchEvent(new Event('change', { bubbles: true })); };
@@ -10348,6 +10362,65 @@ window.BOCharacter = function (ctx) {
     return { pct: (p >= 10 ? p.toFixed(0) : p >= 1 ? p.toFixed(1) : p.toFixed(2)) + '%', of: '(' + n(af.Weight) + '/' + n(tot) + ')' };
   }
   const chanceHtml = c => c ? ' <span class="io-weight" title="Roll chance on this base: the line\'s weight over the weights of every line of its kind this base can roll"><span class="io-weight-k">Weight</span><b>' + c.pct + '</b> <span class="meta">' + c.of + '</span></span>' : '';
+
+
+
+
+
+  let FX = { key: '', ch: null, it: null, base: null, memo: new Map() }, fxQueue = [], fxTimer = 0;
+  const fxDps = ch => { try { return (ctx.dps && ctx.dps(ch)) || 0; } catch (e) { return 0; } };
+  const fxSpan = k => '<span class="io-fx" data-fx="' + esc(k) + '"></span>';
+  function fxPaint(k, root) {
+    const v = FX.memo.get(k); if (v === undefined) return;
+    const pct = v == null ? null : Math.round(v * 10000) / 100, add = k.startsWith('add:');
+    for (const el of (root || back).querySelectorAll('.io-fx[data-fx="' + k + '"]')) {
+      el.className = 'io-fx ' + (pct == null ? '' : pct > 0 ? 'good' : pct < 0 ? 'bad' : 'zero');
+      el.textContent = pct == null || (add && !pct) ? '' : !pct ? '0%' : (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
+      if (pct != null) el.title = add ? 'Total DPS of the Damage tab skill with this line added, against now' : 'Total DPS of the Damage tab skill with this line, against without it';
+    }
+  }
+  function fxPump() {
+    if (fxTimer || !fxQueue.length) return;
+    fxTimer = setTimeout(() => {
+      fxTimer = 0;
+      const t0 = performance.now();
+      while (fxQueue.length && performance.now() - t0 < 14) {
+        const q = fxQueue.shift(); if (q.F !== FX || !M || !back) continue;
+        if (!FX.memo.has(q.k)) FX.memo.set(q.k, q.run());
+        fxPaint(q.k);
+      }
+      fxPump();
+    }, 0);
+  }
+
+  function fxFill(root, addsOnly) {
+    if (!M || !back || !ctx.dps) return;
+    const ch = ctx.current(), it = ch && itemNow(ch); if (!it || M.shelf) return; // a spare idol counts for nothing
+    const key = ch.id + '|' + M.slot + '|' + JSON.stringify(it);
+    if (FX.key !== key) { FX = { key, ch, it, base: null, memo: new Map() }; fxQueue = []; }
+    const F = FX, gd = GD();
+    const base = () => F.base == null ? (F.base = fxDps(ch)) : F.base;
+    const swap = it2 => Object.assign({}, ch, { items: ch.items.map(x => x === it ? it2 : x) });
+    if (addsOnly) fxQueue = fxQueue.filter(q => !q.add); // the list was drawn again: only what it shows now
+    for (const el of root.querySelectorAll('.io-fx[data-fx]')) {
+      const k = el.dataset.fx;
+      if (F.memo.has(k)) { fxPaint(k, root); continue; }
+      if (fxQueue.some(q => q.k === k && q.F === F)) continue;
+      if (k.startsWith('rm:')) {
+        const ai = +k.slice(3);
+        fxQueue.push({ F, k, run: () => { const b = base(); if (!(b > 0)) return null; const w = fxDps(swap(Object.assign({}, it, { affixes: it.affixes.filter((_, i) => i !== ai) }))); return w > 0 ? b / w - 1 : null; } });
+      } else if (k.startsWith('add:')) {
+        const [, flag, id] = k.split(':'), af = gd.affixes[lc(id)]; if (!af) continue;
+        fxQueue.push({ F, k, add: true, run: () => {
+          const b = base(); if (!(b > 0)) return null;
+          const ti = G.topTier(af, it.level || ch.level), tt = af.Tiers[ti]; // as onIoChange 'addaffix' adds it
+          const line = Object.assign({ id: af.Id, tier: ti, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }, flag === 'oath' ? { oath: true } : flag === 'scar' ? { scar: true } : {});
+          return fxDps(swap(Object.assign({}, it, { affixes: it.affixes.concat([line]) }))) / b - 1;
+        } });
+      }
+    }
+    fxPump();
+  }
   function affixRow(it, a, ai, tag, after, note, mv) {
     const af = GD().affixes[lc(a.id)];
     if (!af) return '<div class="io-aff" data-ai="' + ai + '">' + (mv || '') + '<span class="meta bad">Unknown affix ' + esc(a.id) + '</span><button class="io-rm" type="button" data-io="rmaffix" data-ai="' + ai + '" title="Remove">×</button></div>';
@@ -10360,7 +10433,7 @@ window.BOCharacter = function (ctx) {
     return '<div class="io-aff" data-ai="' + ai + '">' + (mv || '') + '<span class="io-afftext">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(safe(() => G.modLine(af.Mod, a.v, a.v2))) + (af.Kind ? ' <span class="meta">(' + esc(af.Kind) + ')</span>' : '') +
       chanceHtml(rollChance(af, GD().bases[lc(it.base)])) + (after ? ' <span class="io-extra">(' + esc(after) + ')</span>' : '') +
       (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') +
-      (off ? ' <span class="bad">outside this tier\'s range (' + t.Min + ' to ' + t.Max + (two ? ' / ' + t.Min2 + ' to ' + t.Max2 : '') + ')</span>' : '') + (note || '') + '</span>' +
+      (off ? ' <span class="bad">outside this tier\'s range (' + t.Min + ' to ' + t.Max + (two ? ' / ' + t.Min2 + ' to ' + t.Max2 : '') + ')</span>' : '') + (note || '') + '</span>' + fxSpan('rm:' + ai) +
       '<select data-f="tier" aria-label="Tier">' + af.Tiers.map((y, ti) => '<option value="' + ti + '"' + (ti === a.tier ? ' selected' : '') + '>T' + (ti + 1) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')</option>').join('') + '</select>' +
       '<input class="mini" type="number" step="any" data-f="v" value="' + a.v + '" aria-label="Value"' + (t ? lim(t.Min, t.Max) : '') + '>' + (two ? '<input class="mini" type="number" step="any" data-f="v2" value="' + a.v2 + '" aria-label="Second value"' + lim(t.Min2, t.Max2) + '>' : '') +
       '<button class="io-rm" type="button" data-io="rmaffix" data-ai="' + ai + '" title="Remove">×</button></div>';
@@ -10385,12 +10458,15 @@ window.BOCharacter = function (ctx) {
       '<div class="io-acts"><button class="btn small ghost" type="button" data-io="saveitem" title="Keeps this item in this browser. Put it on again from Select, under Saved, on any character or plan.">Save item</button>' + (M.slot === 'Idol' ? '<button class="btn small ghost" type="button" data-io="dupidol" title="' + (M.shelf ? 'Adds a copy of this idol to the spare idols.' : 'Puts a copy of this idol in the first free room of the Fossil.') + ' Holding Ctrl while dragging an idol copies it too.">Duplicate</button>' +
         (M.shelf ? '<button class="btn small ghost" type="button" data-io="wearidol" title="Puts this idol in the first free room of the Fossil, where it counts">Put in Fossil</button>' : '<button class="btn small ghost" type="button" data-io="spareidol" title="Takes this idol out of the Fossil to the spare idols (not counted)">Move to spares</button>') : '') + '<button class="btn small ghost" type="button" data-io="change">⟳ Change item</button><button class="btn small ghost" type="button" data-io="unequip">✕ ' + (M.slot === 'Idol' ? 'Remove' : 'Unequip') + '</button></div></div>';
     if (M.msg) h += '<p class="hint pl-status" role="status">' + esc(M.msg) + '</p>';
-    if (!isU) h += '<div class="io-row"><label class="field inline"><span>Rarity</span><select data-f="rarity">' + RAR.map(r => '<option' + (it.rarity === r ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></label>' +
+
+
+    let l = '', r = '';
+    if (!isU) l += '<div class="io-row"><label class="field inline"><span>Rarity</span><select data-f="rarity">' + RAR.map(r => '<option' + (it.rarity === r ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></label>' +
       '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label>' + G.gradeField(it, base) + '</div>';
     else {
 
       const mb = u ? G.markBases(u, M.slot, ch) : [], opt = (id, t, on) => '<option value="' + esc(id) + '"' + (on ? ' selected' : '') + '>' + esc(t) + '</option>';
-      h += '<div class="io-row"><label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label>' + G.gradeField(it, base, '', true) +
+      l += '<div class="io-row"><label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label>' + G.gradeField(it, base, '', true) +
         (mb.length > 1 ? '<label class="field inline"><span>Base <span class="meta">its own, or Core Touched (Vowbinding: the Mark)</span></span><select data-f="ubase">' +
           (mb.some(b => lc(b.Id) === lc(it.base)) ? '' : opt(it.base, base ? base.Name : it.base, true)) +
           mb.map(b => opt(b.Id, b.Name + (b.Level ? ' (level ' + b.Level + ')' : ''), lc(b.Id) === lc(it.base))).join('') + '</select></label>' : '') + '</div>';
@@ -10400,12 +10476,12 @@ window.BOCharacter = function (ctx) {
     const ws = base && base.DamageMin ? safe(() => G.baseStats(it, M.slot)) || [] : [];
     if (ws.length) {
       const pick = k => ws.find(x => x.key === k), big = (x, label) => x ? '<div><span>' + label + '</span><b>' + x.v + '</b></div>' : '';
-      h += section('Weapon', '<div class="sw-stats io-wstats">' + big(pick('base|dps'), 'Weapon DPS') + big(pick('base|avg'), 'Average hit') + '</div>' +
+      l += section('Weapon', '<div class="sw-stats io-wstats">' + big(pick('base|dps'), 'Weapon DPS') + big(pick('base|avg'), 'Average hit') + '</div>' +
         ws.filter(x => x.key !== 'base|dps' && x.key !== 'base|avg').map(x => '<div class="io-imp">' + esc(G.baseLine(x)) + '</div>').join('') +
         '<p class="hint">This weapon on its own: its damage with its local lines, before your passives, gems and other gear. DPS = average hit x attacks per second.</p>');
     }
     const imp = base ? (ws.length ? (base.Implicits || []).concat(base.FamilyLine ? [base.FamilyLine] : []).map(m => safe(() => G.modLine(m))).filter(Boolean) : baseLines(base, it)) : [];
-    h += section('Implicits', imp.length ? imp.map(l => '<div class="io-imp">' + esc(l) + '</div>').join('') : '<div class="io-imp meta">None</div>');
+    l += section('Implicits', imp.length ? imp.map(l => '<div class="io-imp">' + esc(l) + '</div>').join('') : '<div class="io-imp meta">None</div>');
     const isIdol = M.slot === 'Idol';
     if (isU) {
       let un = '';
@@ -10418,11 +10494,11 @@ window.BOCharacter = function (ctx) {
         const text = esc((um.Text ? um.Text.replace(/\{(0|v)\}/g, gv).replace(/\{1\}/g, gv2) : safe(() => G.modLine(um.Mod, gv, gv2))).replace(/\+-/g, '-')) + scNote;
         const rolls = (lo, hi) => lo != null && hi != null && lo !== hi, r1 = rolls(um.Min, um.Max), r2 = rolls(um.Min2, um.Max2);
         const box = (f, x, lo, hi) => '<input class="mini" type="number" step="any" data-f="' + f + '" value="' + x + '" min="' + Math.min(lo, hi) + '" max="' + Math.max(lo, hi) + '" title="Rolls ' + lo + ' to ' + hi + '">';
-        if (!r1 && !r2) return '<div class="io-aff"><span class="io-afftext">' + text + '</span></div>';
+        if (!r1 && !r2) return '<div class="io-aff"><span class="io-afftext">' + text + '</span>' + fxSpan('rm:' + ai) + '</div>';
         const range = (r1 ? gm.Min + ' to ' + gm.Max : '') + (r1 && r2 ? ' / ' : '') + (r2 ? gm.Min2 + ' to ' + gm.Max2 : '');
-        return '<div class="io-aff" data-ai="' + ai + '"><span class="io-afftext">' + text + ' <span class="meta">[' + range + ']</span></span>' + (r1 ? box('v', a.v, um.Min, um.Max) : '') + (r2 ? box('v2', a.v2, um.Min2, um.Max2) : '') + '</div>';
+        return '<div class="io-aff" data-ai="' + ai + '"><span class="io-afftext">' + text + ' <span class="meta">[' + range + ']</span></span>' + fxSpan('rm:' + ai) + (r1 ? box('v', a.v, um.Min, um.Max) : '') + (r2 ? box('v2', a.v2, um.Min2, um.Max2) : '') + '</div>';
       }).join('');
-      h += section('Unique lines', un || '<div class="io-imp meta">None</div>');
+      r += section('Unique lines', un || '<div class="io-imp meta">None</div>');
       const nV = it.affixes.filter(a => !a.id.startsWith('unique:')).length;
       let vi = 0, vows = '';
       const pool = G.vowPool(M.slot, base); // a Vow its base can't roll is marked (planner.js vowMisfit)
@@ -10431,7 +10507,7 @@ window.BOCharacter = function (ctx) {
       if (vix.length) vows += '<div class="vow-list" data-mv="io">' + vix.map((ai, n) => affixRow(it, it.affixes[ai], ai, 'Vow ' + (++vi), '', G.vowMisfit(pool, it.affixes[ai], M.slot, base),
         vix.length > 1 ? G.vowMove('io', ai, n ? vix[n - 1] : null, n < vix.length - 1 ? vix[n + 1] : null) : '')).join('') + '</div>';
       if (u && nV < G.VOW_MAX) vows += addSelect(it, base, 'Prefix', 'Add Vow (prefix)', isIdol, '', true) + addSelect(it, base, 'Suffix', 'Add Vow (suffix)', isIdol, '', true);
-      h += section('Vows <small>' + nV + ' / ' + G.VOW_MAX + '</small>', vows || '<div class="io-imp meta">None</div>');
+      r += section('Vows <small>' + nV + ' / ' + G.VOW_MAX + '</small>', vows || '<div class="io-imp meta">None</div>');
     } else {
       const lim = G.LIMIT[it.rarity] || 0, type = a => (gd.affixes[lc(a.id)] || {}).Type;
       for (const T of ['Prefix', 'Suffix']) {
@@ -10440,7 +10516,7 @@ window.BOCharacter = function (ctx) {
         if (mine.length < lim) body += addSelect(it, base, T, 'Add ' + T);
         else if (!lim) body += '<div class="io-imp meta">Normal items have no affixes. Set the rarity to Magic or Rare.</div>';
         if (mine.length > lim) body += '<p class="hint bad">' + it.rarity + ' items hold ' + lim + ' ' + T.toLowerCase() + (lim === 1 ? '' : 'es') + '.</p>';
-        h += section(T + 'es', body);
+        r += section(T + 'es', body);
       }
 
 
@@ -10457,16 +10533,16 @@ window.BOCharacter = function (ctx) {
           if (!extra.some(x => x.a.oath)) body += addSelect(it, base, '', 'Add the Oathsworn line (Cube recipe: a 7th line)', false, 'oath');
           if (!extra.some(x => x.a.scar)) body += addSelect(it, base, '', 'Add a Scarred line (from Unswearing at the Forge)', false, 'scar');
         }
-        h += section('Extra lines', body);
+        r += section('Extra lines', body);
       }
     }
     const rs = G.runeSockets(base, it); // at most 2 on a magic or rare (planner.js RARE_MAX_SOCKETS)
     if (rs && !isU && !word) {
       let rb = '<div class="io-row">';
       for (let i = 0; i < rs; i++) rb += '<select data-f="rune" data-ri="' + i + '" aria-label="Rune ' + (i + 1) + '"><option value="">(no rune)</option>' + G.runeList.map(r => '<option value="' + esc(r.Id) + '"' + (lc(it.runes[i]) === lc(r.Id) ? ' selected' : '') + '>' + esc(r.Name) + '</option>').join('') + '</select>';
-      h += section('Runes <small>' + rs + ' sockets</small>', rb + '</div>');
-    } else if (word) h += section('Oathword', '<div class="io-imp">' + esc(word.Name) + ': ' + esc(it.runes.map(r => (gd.runes[lc(r)] || { Name: r }).Name).join(' · ')) + '</div>');
-    return h + '<p class="hint io-foot">Changes show on the Damage tab straight away. Your save file is never changed.</p>';
+      l += section('Runes <small>' + rs + ' sockets</small>', rb + '</div>');
+    } else if (word) l += section('Oathword', '<div class="io-imp">' + esc(word.Name) + ': ' + esc(it.runes.map(r => (gd.runes[lc(r)] || { Name: r }).Name).join(' · ')) + '</div>');
+    return h + '<div class="io-edit"><div class="io-col">' + l + '</div><div class="io-col">' + r + '</div></div><p class="hint io-foot">Changes show on the Damage tab straight away. Your save file is never changed.</p>';
   }
 
 
@@ -14721,6 +14797,9 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
     const treeExtra = m => is078(GD) && (m.key === 'passives' || m.key === 'dragon') && !!fit(m);
 
 
@@ -16119,12 +16198,13 @@ window.BOCloud = function (ctx) {
     for (const id of S.dirty.slice()) {
       const p = find(id);
       if (!p || S.localOnly.includes(id)) { clearDirty(id); continue; }
-      let r = await call('PUT', '/me/builds/' + encodeURIComponent(id), { name: p.name || 'Plan', code: await ctx.code(p), baseRev: S.revs[id] || 0 });
+      const name = (ctx.name ? ctx.name(p) : p.name) || 'Plan'; // the saved name (app.js SNAPS), not an unsaved rename
+      let r = await call('PUT', '/me/builds/' + encodeURIComponent(id), { name, code: await ctx.code(p), baseRev: S.revs[id] || 0 });
       if (r.s === 409 && r.j && r.j.build) {
 
         if (!r.j.build.deleted) await keepCopy(r.j.build, 'other device');
         S.revs[id] = r.j.build.rev;
-        r = await call('PUT', '/me/builds/' + encodeURIComponent(id), { name: p.name || 'Plan', code: await ctx.code(p), baseRev: S.revs[id] });
+        r = await call('PUT', '/me/builds/' + encodeURIComponent(id), { name, code: await ctx.code(p), baseRev: S.revs[id] });
       }
       if (r.s === 200 && r.j) { S.revs[id] = r.j.rev; clearDirty(id); continue; }
       if (r.s === 400) { clearDirty(id); S.localOnly.push(id); err = '"' + p.name + '" could not be saved to your account (' + ((r.j && r.j.error) || 'refused') + '). It stays in this browser.'; continue; }
@@ -16871,7 +16951,7 @@ window.BOStartApp = function () {
   $('#supportChips').addEventListener('mouseleave', () => { st.supMsg = ''; if (st.last) renderSupportPicker(st.last); });
 
 
-  function render() { renderSupportSkillSelect(); renderMain(); renderSupportSearchResults(); treeAfterRender(); renderCompare(); renderBuildStats(); }
+  function render() { renderSupportSkillSelect(); renderMain(); renderSupportSearchResults(); treeAfterRender(); renderCompare(); renderBuildStats(); syncUnsaved(); }
 
 
 
@@ -17880,9 +17960,87 @@ window.BOStartApp = function () {
 
   let buildsFilter = '';
   const isSaved = c => !!c.plan && !c.auto;
+
+
+
+
+
+
+
+  let SNAPS = store.get('snaps', {}) || {}, snapsReady = false, discarding = false;
+  for (const id of Object.keys(SNAPS)) if (!SNAPS[id] || !SNAPS[id].code) delete SNAPS[id]; // the page closed before its code was packed
+  const snapPending = new Map(); // id -> the code still being packed
+  const snapMemo = new WeakMap(); // plans not on screen do not change: their hash is worked out once
+  const keepSnaps = () => store.set('snaps', SNAPS);
+
+  const planNotes = ch => { const n = store.get('notes:' + ch.id, ''); return n && String(n).trim() ? String(n).slice(0, NOTES_MAX) : ''; };
+  const planCode = ch => { const c = planWithTabs(ch), notes = planNotes(ch); return planner.toCode(notes ? Object.assign({}, c, { notes }) : c); };
+  function snapHash(ch) {
+    const open = ch === st.chOrig, m = open ? null : snapMemo.get(ch);
+    if (m && m.at === ch.savedAt) return m.h;
+    const s = JSON.stringify(planWithTabs(ch), (k, v) => k === 'savedAt' || k === 'from' || k === 'id' ? undefined : v) + '|' + planNotes(ch);
+    let a = 0x811c9dc5, b = 0x1b873593;
+    for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); a = Math.imul(a ^ c, 16777619); b = Math.imul(b + c, 2654435761) ^ (b >>> 13); }
+    const h = (a >>> 0).toString(36) + '.' + (b >>> 0).toString(36) + '.' + s.length.toString(36);
+    if (!open) snapMemo.set(ch, { at: ch.savedAt, h });
+    return h;
+  }
+
+  function snapTake(ch, at) {
+    const s = SNAPS[ch.id] = { h: snapHash(ch), at: at || new Date().toISOString(), name: ch.name, code: '' };
+    const p = planCode(ch).then(code => { if (SNAPS[ch.id] === s) { s.code = code; keepSnaps(); } if (snapPending.get(ch.id) === p) snapPending.delete(ch.id); return code; });
+    snapPending.set(ch.id, p);
+  }
+  const snapSet = (ch, code) => { snapPending.delete(ch.id); SNAPS[ch.id] = { h: snapHash(ch), at: ch.savedAt || new Date().toISOString(), name: ch.name, code }; keepSnaps(); };
+  const snapCode = async ch => { const s = SNAPS[ch.id]; return (s && (s.code || await snapPending.get(ch.id))) || planCode(ch); };
+  const snapDirty = ch => !!ch && isSaved(ch) && !!SNAPS[ch.id] && SNAPS[ch.id].h !== snapHash(ch);
+  const savedDate = c => (isSaved(c) && SNAPS[c.id] && SNAPS[c.id].at) || c.savedAt || '';
+
+  function snapSync() {
+    if (!snapsReady) return;
+    for (const c of CHARS) if (isSaved(c) && !c.file && !SNAPS[c.id]) snapTake(c, c.savedAt);
+    for (const id of Object.keys(SNAPS)) if (!CHARS.some(c => c.id === id && isSaved(c))) { delete SNAPS[id]; snapPending.delete(id); }
+    keepSnaps();
+  }
+
+  function syncUnsaved() {
+    const bar = $('#unsavedBar'); if (!bar || discarding) return;
+    const ch = st.chOrig, on = snapDirty(ch);
+    if (on) $('#unsavedText').textContent = 'Unsaved changes to "' + ch.name + '". The saved build stays as it was until you press Save.';
+    if (bar.hidden !== !on) { bar.hidden = !on; if (!$('#savedBuildsPane').hidden) renderSavedBuilds(); }
+  }
+  function saveOpenBuild() {
+    const ch = st.chOrig; if (!ch || !isSaved(ch)) return;
+    ch.savedAt = new Date().toISOString(); snapTake(ch, ch.savedAt);
+    keepChars(); syncUnsaved();
+    saveTip('Saved "' + ch.name + '".');
+  }
+  async function discardChanges() {
+    const ch = st.chOrig, s = ch && SNAPS[ch.id]; if (!ch || !s || !isSaved(ch)) return;
+    if (!await confirmInPage('Discard unsaved changes?', 'Everything changed on "' + ch.name + '" since it was last saved is dropped, and the saved build comes back. This cannot be undone.', 'Discard changes', true)) return;
+    const id = ch.id, btns = [$('#unsavedSave'), $('#unsavedDiscard')];
+
+    discarding = true; btns.forEach(b => { b.disabled = true; }); $('#unsavedText').textContent = 'Opening the saved build…';
+    await new Promise(r => setTimeout(r, 30));
+    let p; try { p = await planner.fromCode(await snapCode(ch)); } catch (e) { saveTip('Could not open the saved build again: ' + e.message); p = null; }
+    discarding = false; btns.forEach(b => { b.disabled = false; });
+    if (!p || !CHARS.includes(ch)) return syncUnsaved();
+
+    store.set('trees:' + id, null); store.set('notes:' + id, ''); if (brewery) brewery.clearBelt(id);
+    p.id = id; p.name = s.name || ch.name; p = keepSharedTabs(p); p.from = 'plan'; p.savedAt = s.at;
+    CHARS[CHARS.indexOf(ch)] = p;
+    if (st.chOrig === ch) { TT = null; fillChars(id); selectChar(id); }
+    s.h = snapHash(p); keepSnaps(); keepChars(); syncUnsaved();
+    if (planner) planner.render();
+    saveTip('Back to the saved build "' + p.name + '".');
+  }
+  $('#unsavedSave').addEventListener('click', saveOpenBuild);
+  $('#unsavedDiscard').addEventListener('click', discardChanges);
+
+  document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && String(e.key).toLowerCase() === 's' && snapDirty(st.chOrig)) { e.preventDefault(); saveOpenBuild(); } });
   function renderSavedBuilds() {
     const pane = $('#savedBuildsPane'); if (!pane || pane.hidden) return;
-    const plans = CHARS.filter(c => c.plan).sort((x, y) => String(y.savedAt || '').localeCompare(String(x.savedAt || '')));
+    const plans = CHARS.filter(c => c.plan).sort((x, y) => String(savedDate(y)).localeCompare(String(savedDate(x))));
     const all = plans.filter(isSaved), opened = plans.filter(c => c.auto);
     const q = buildsFilter.trim().toLowerCase();
     const match = l => q ? l.filter(c => (c.name + ' ' + c.classId).toLowerCase().includes(q)) : l;
@@ -17890,10 +18048,10 @@ window.BOStartApp = function () {
     const cur = st.chOrig && st.chOrig.id;
     const day = s => { const d = s && new Date(s); return d && !isNaN(d) ? d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : ''; };
     const row = c => '<div class="sb-row' + (c.id === cur ? ' on' : '') + '" data-id="' + esc(c.id) + '">' +
-      '<div class="sb-main"><b class="notranslate">' + esc(c.name) + '</b>' + (c.auto ? '' : cloudMark(c)) + '<span class="meta">' + esc(c.classId) + ' · level ' + c.level + (day(c.savedAt) ? (c.auto ? ' · opened ' : ' · saved ') + esc(day(c.savedAt)) : '') + (c.id === cur ? ' · open now' : '') + '</span></div>' +
+      '<div class="sb-main"><b class="notranslate">' + esc(c.name) + '</b>' + (c.auto ? '' : cloudMark(c)) + '<span class="meta">' + esc(c.classId) + ' · level ' + c.level + (day(savedDate(c)) ? (c.auto ? ' · opened ' : ' · saved ') + esc(day(savedDate(c))) : '') + (c.id === cur ? ' · open now' : '') + (snapDirty(c) ? ' · <span class="sb-unsaved">unsaved changes</span>' : '') + '</span></div>' +
       '<div class="sb-acts"><button class="btn small" type="button" data-sb="open">Open</button>' + (c.auto ? '<button class="btn small ghost" type="button" data-sb="keep">Save</button>' : '<button class="btn small ghost" type="button" data-sb="dup">Duplicate</button>') + '<button class="btn small ghost" type="button" data-sb="del">Delete</button></div></div>';
     pane.innerHTML = '<div class="card"><h2>Saved Builds <small>' + all.length + '</small></h2>' +
-      '<p class="hint">Only builds you saved yourself: Save as new build, Start a New Plan or Duplicate. They stay in this browser, and in your account when you are signed in. Open one to change it: edits save as you go. Save as new build under a name you already used saves over that build. Loaded characters are in the Character list on the left.</p>' +
+      '<p class="hint">Only builds you saved yourself: Save as new build, Start a New Plan or Duplicate. They stay in this browser, and in your account when you are signed in. Open one to change it: a saved build stays as it was until you press Save, and Discard changes drops your edits. Save as new build under a name you already used saves over that build. Loaded characters are in the Character list on the left.</p>' +
       '<div class="pl-row sb-tools"><input type="search" class="sb-search" id="sbSearch" placeholder="Search by name or class" aria-label="Search saved builds" value="' + esc(buildsFilter) + '" autocomplete="off" spellcheck="false"><button class="btn small" type="button" data-sb="new">Start a New Plan</button></div>' +
       (list.length ? '<div class="sb-list">' + list.map(row).join('') + '</div>' : '<p class="hint">' + (all.length ? 'No saved build matches.' : 'No saved builds yet. Use Save as new build on a character, or Start a New Plan.') + '</p>') + '</div>' +
       (opened.length ? '<div class="card"><h2>Opened, not saved <small>' + opened.length + '</small></h2>' +
@@ -18150,6 +18308,7 @@ window.BOStartApp = function () {
 
     const mine = CHARS.filter(c => !c.file), list = mine.filter(isSaved).concat(mine.filter(c => c.plan && c.auto)).slice(0, 200).concat(mine.filter(c => !c.plan).slice(0, 60));
     const kept = (() => { try { localStorage.setItem('bods:chars', JSON.stringify(list)); return true; } catch (e) { return false; } })();
+    snapSync(); syncUnsaved();
     if (cloud) cloud.check();
     if (!$('#savedBuildsPane').hidden) renderSavedBuilds();
     return kept;
@@ -18385,7 +18544,7 @@ window.BOStartApp = function () {
     if (!st.ch || st.ch.plan) return;
     const p = keepSharedTabs(planner.planFrom(liveCopy()));
     addChars([p], 'plan', p.id); showTab('build');
-    planner.setStatus('Saved as the plan "' + p.name + '" (in the Saved Builds tab). Edits to it now save in this browser as you go.');
+    planner.setStatus('Saved as the plan "' + p.name + '" (in the Saved Builds tab). Later edits stay unsaved until you press Save.');
   }
 
 
@@ -18419,7 +18578,8 @@ window.BOStartApp = function () {
     } else if (unsaved) p.id = src.id;
     keepSharedTabs(p);
     addChars([p], 'plan', p.id);
-    saveTip(target ? 'Saved over the build "' + p.name + '". Edits to it save in this browser as you go.' : 'Saved as the plan "' + p.name + '" (in the Saved Builds tab). Edits to it save in this browser as you go.');
+    snapTake(p, p.savedAt); keepSnaps(); syncUnsaved(); // saved over: this is the build's saved state now
+    saveTip(target ? 'Saved over the build "' + p.name + '". Later edits stay unsaved until you press Save.' : 'Saved as the plan "' + p.name + '" (in the Saved Builds tab). Later edits stay unsaved until you press Save.');
   });
   $('#shareLinkBtn').addEventListener('click', async () => {
     if (!st.ch) { alert('Load a character or start a plan first.'); return; }
@@ -20735,6 +20895,8 @@ window.BOStartApp = function () {
     skillSheet: id => { if (!st.ch) return null; const o = comboOpts(); o.gemLevel = st.ch.gemLevels[id] || undefined; return S.calcSkill(GD, st.ch, id, o); },
     patches: () => patches, showTab: t => showTab(t),
 
+    dps: ch => { if (!st.skill) return 0; const r = S.calcSkill(GD, ch, st.skill, opts()); return r && !r.error && !r.unsupported ? (r.totalDps || 0) + (r.risen ? r.risen.dps || 0 : 0) : 0; },
+
     editable: buildEditable, commit: (ch, what) => { if (ch.plan) planChanged(ch, what || {}); else buildEdited(ch, what || {}); planner.render(); }, // the caller redraws the Character tab
     sheet: () => st.ch && st.skill ? S.calcSkill(GD, st.ch, st.skill, opts()) : null,
     passives: () => [...allocSet()].map(id => GD.nodes[id]),
@@ -20785,13 +20947,23 @@ window.BOStartApp = function () {
     $, esc, api: SHARE_API, confirm: confirmInPage, tip: saveTip,
     plans: () => CHARS.filter(c => c.plan && !c.file && !c.auto), // opened, unsaved builds stay out of the account
 
-    sig: ch => JSON.stringify(ch) + '|' + JSON.stringify(store.get('trees:' + ch.id, null)) + '|' + (store.get('notes:' + ch.id, '') || '') + '|' + JSON.stringify(brewery ? brewery.belt(ch.id) || null : null),
-    code: ch => { const c = planWithTabs(ch), notes = store.get('notes:' + ch.id, ''); return planner.toCode(notes && String(notes).trim() ? Object.assign({}, c, { notes: String(notes).slice(0, NOTES_MAX) }) : c); },
-    add: async (code, id, name) => { const p = await cloudPlan(code, id, name); if (!p) return null; CHARS = CHARS.filter(c => c.id !== p.id); CHARS.push(p); keepChars(); cloudShow(); return p; },
+
+
+    sig: ch => 'v2:' + (SNAPS[ch.id] ? SNAPS[ch.id].at : snapHash(ch)),
+    code: ch => snapCode(ch),
+    name: ch => (SNAPS[ch.id] && SNAPS[ch.id].name) || ch.name,
+    add: async (code, id, name) => { const p = await cloudPlan(code, id, name); if (!p) return null; CHARS = CHARS.filter(c => c.id !== p.id); CHARS.push(p); snapSet(p, code); keepChars(); cloudShow(); return p; },
     replace: async (id, code, name) => {
+
+
+      const mine = CHARS.find(c => c.id === id);
+      if (mine && snapDirty(mine)) { snapPending.delete(id); SNAPS[id] = { h: 'account', at: new Date().toISOString(), name: name || mine.name, code }; keepSnaps(); syncUnsaved(); return mine; }
       const p = await cloudPlan(code, id, name); if (!p) return null;
       const at = CHARS.findIndex(c => c.id === id); if (at < 0) CHARS.push(p); else CHARS[at] = p;
-      keepChars(); cloudShow(st.chOrig && st.chOrig.id === id ? id : null); return p;
+      const open = !!st.chOrig && st.chOrig.id === id; if (open) TT = null; // its tree tabs are read again
+      snapSet(p, code); keepChars(); cloudShow(open ? id : null);
+      SNAPS[id].h = snapHash(CHARS.find(c => c.id === id) || p); keepSnaps(); syncUnsaved();
+      return p;
     },
     remove: id => { CHARS = CHARS.filter(c => c.id !== id); keepChars(); cloudShow(); },
     changed: () => { if (charPick) charPick.box.innerHTML = charPickHtml(); },
@@ -20811,6 +20983,8 @@ window.BOStartApp = function () {
   const startId = store.get('char', null);
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();
+  snapsReady = true; snapSync(); syncUnsaved();
+  setInterval(syncUnsaved, 3000); // notes, tree tabs and potions change without a redraw of the page
   cloud.start(); // back from Discord sign-in (#login=), or a sync of the account's plans
 
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins

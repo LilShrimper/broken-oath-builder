@@ -11817,6 +11817,21 @@ window.BOCharacter = function (ctx) {
     const hostSk = host && GD.skills[lc(host.skill)];
     const hostTags = hostSk ? new Set([...(hostSk.Tags || []), hostSk.Delivery].map(lc)) : null;
     const supportList = (o.supportsOverride || (host ? host.supports : (socket ? socket.supports : []))).slice();
+
+
+
+
+
+
+    if (!o.supportsOverride && !host && is084(GD) && o.coc !== false) {
+      const isCocS = y => lc(String(y).replace('@granted', '')) === 'cast_on_crit';
+      const hs = ch.sockets.find(x => lc(x.skill) !== lc(skillId) && x.conduit && lc(x.conduit) === lc(skillId) && x.supports.some(isCocS));
+      if (hs) for (const y of hs.supports) {
+        const id = lc(String(y).replace('@granted', ''));
+        if (id === 'cast_on_crit' || id === 'spell_echo' || !GD.supports[id] || supportList.some(z => lc(z.replace('@granted', '')) === id)) continue;
+        supportList.push(id + '@granted');
+      }
+    }
     for (const m of mods) if (m.stat === 'GrantSupport') {
       const sid = (m.tags || []).find(t => GD.supports[lc(t)]);
 
@@ -12200,7 +12215,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-      if (is084(GD)) {
+      if (is084(GD) && o.coc !== false) {
         const hostSock = ch.sockets.find(x => lc(x.skill) !== lc(skillId) && x.conduit && lc(x.conduit) === lc(skillId) && x.supports.some(y => lc(String(y).replace('@granted', '')) === 'cast_on_crit'));
         if (hostSock) {
           const have = new Set(res.supports.map(x => lc(x.id)));
@@ -14367,8 +14382,16 @@ window.BOCharacter = function (ctx) {
 
 
     if (res.coc && !o._panelPass) {
-      const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { coc: false, _col: col, _panelPass: true, barShock: false }));
+      const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { coc: false, _col: col, _panelPass: true, barShock: false, convergence: false }));
       if (p && isFinite(p.panelDps)) { res.cocPanel = { triggered: res.panelDps }; res.panelDps = p.panelDps; }
+    }
+
+
+
+
+    else if (res.convergence && !o._panelPass && o.convergence !== false) {
+      const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { _col: col, _panelPass: true, convergence: false }));
+      if (p && isFinite(p.panelDps)) res.panelDps = p.panelDps;
     }
 
 

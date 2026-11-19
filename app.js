@@ -6973,7 +6973,13 @@ window.BOItemSearch = function (ctx) {
           ? desc('Lowers this item\'s own requirements. It does nothing for your other items.')
           : def ? desc('Adds to this item\'s own ' + (m.Stat === 'Defences' ? 'armour, evasion and energy shield' : m.Stat === 'EnergyShield' ? 'energy shield' : m.Stat.toLowerCase()) + '. The item\'s own % increased lines raise it, and the item\'s total is what your character gets.') +
               desc('Only rolls on bases that already have that defence (and shields).')
-          : desc('Changes this weapon\'s own numbers (its damage, attack speed or crit chance as shown on the weapon). It helps skills that use the weapon, not spells or minions that don\'t.'))
+
+
+
+          : m.Stat === 'CritChance'
+            ? desc('Raises this weapon\'s own crit chance. Attacks with the weapon use it.') +
+              desc('Spells use it too when the weapon is a staff or a wand: the weapon\'s crit takes the place of the ' + ((GD.scaling && GD.scaling.Hero && GD.scaling.Hero.SpellCritBase) || 6) + '% spell base. With any other weapon, spells ignore it. Minions use a staff\'s crit (not checked for wands).')
+            : desc('Changes this weapon\'s own ' + (m.Stat === 'AttackSpeed' ? 'attack speed' : 'damage') + '. It helps attacks made with the weapon. Spells and minions get nothing from it' + (m.Stat === 'AttackSpeed' ? ', and it does not raise cast speed (checked in game with a dagger; not yet on a staff or wand).' : ' (checked in game).')))
       : head('Global', 'Counts for your whole character') + (def
           ? desc('Adds straight to your character\'s total, next to every other source. Your character-wide increases (tree, other gear) raise it; this item\'s own % lines do not.') +
             desc('Can roll on slots with no defence of their own, like rings, amulets and belts.')
@@ -12719,14 +12725,17 @@ window.BOCharacter = function (ctx) {
       }
       addPart(d, (sk.SpellMin + spellLife) * spellGrowth * eff, (sk.SpellMax + spellLife) * spellGrowth * eff);
       res.base = { kind: 'spell', min: sk.SpellMin, max: sk.SpellMax, growth: spellGrowth, effectiveness: eff };
-      if (mainBase && lc(mainBase.Class) === 'staff') {
+
+
+
+      if (mainBase && (lc(mainBase.Class) === 'staff' || lc(mainBase.Class) === 'wand')) {
 
 
 
 
         let ci = 0;
         if (mainItem) for (const m of mods) if (m.local && m.key === 'item:' + mainItem.slot && m.stat === 'CritChance' && m.mode === 'Inc') { ci += m.v; use(m, 'local'); }
-        weapon = { crit: (mainBase.Crit || 0) * (1 + ci / 100), isStaff: true };
+        weapon = { crit: (mainBase.Crit || 0) * (1 + ci / 100), spellCrit: true };
       }
     }
 
@@ -12945,7 +12954,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-    let baseCrit = isAttack ? (weapon ? weapon.crit : H.CritBase) : (weapon && weapon.isStaff ? weapon.crit : H.SpellCritBase);
+    let baseCrit = isAttack ? (weapon ? weapon.crit : H.CritBase) : (weapon && weapon.spellCrit ? weapon.crit : H.SpellCritBase);
     let critFlat = 0, critInc = 0, critMore = 1, multi = H.CritMultiBase;
     for (const m of pickMods(mods, 'CritChance')) if (applies(ctx, m)) {
       if (m.mode === 'Flat') critFlat += m.v; else if (m.mode === 'Inc') critInc += m.v; else if (m.mode === 'More') critMore *= 1 + m.v / 100; use(m);
@@ -19447,7 +19456,7 @@ window.BOStartApp = function () {
       gL.appendChild(ln);
     }
     const R = { Start: 70, Keystone: 62, Notable: 44, Choice: 36, Socket: 34, Small: 26, Attribute: 18 };
-    T.icons = new Map();
+    T.icons = new Map(); T.labels = [];
     const I = window.TREE_ICONS;
     for (const n of nodes) {
       const r = R[n.Kind] || 22, key = treeIconKey(n);
@@ -19470,11 +19479,12 @@ window.BOStartApp = function () {
         b.style.fontSize = Math.round(r * 1.1) + 'px';
         gB.appendChild(b);
       }
-      if (n.Kind === 'Notable' || n.Kind === 'Keystone' || n.Kind === 'Start') {
+
+      if ((n.Kind === 'Notable' || n.Kind === 'Keystone' || n.Kind === 'Start') && !/^om103_/.test(n.Id)) {
         const t = document.createElementNS(NS, 'text');
-        t.setAttribute('x', n.X); t.setAttribute('y', n.Y - (R[n.Kind] || 22) - 18); t.setAttribute('class', 'tlabel'); t.dataset.id = n.Id;
+        t.setAttribute('x', n.X); t.setAttribute('y', n.Y - (R[n.Kind] || 22) - 18); t.setAttribute('class', 'tlabel tk-' + n.Kind); t.dataset.id = n.Id;
         t.textContent = n.Kind === 'Start' ? (n.ClassStart || n.Name) : n.Name;
-        gT.appendChild(t);
+        gT.appendChild(t); T.labels.push({ el: t, x: n.X, y: n.Y, r: R[n.Kind] || 22, kind: n.Kind });
       }
     }
 
@@ -19487,7 +19497,7 @@ window.BOStartApp = function () {
       gM.appendChild(p);
       const t = document.createElementNS(NS, 'text');
       t.setAttribute('x', m.X); t.setAttribute('y', m.Y + r + 50); t.setAttribute('class', 'tmlabel'); t.dataset.mid = m.Id;
-      gT.appendChild(t);
+      gT.appendChild(t); T.labels.push({ el: t, x: m.X, y: m.Y, r, kind: 'Mastery' });
     }
     svg.append(gL, gN, gM, gT, gB);
     T.built = true;
@@ -19496,6 +19506,68 @@ window.BOStartApp = function () {
   function setVB(vb) {
     T.vb = vb; $('#treeSvg').setAttribute('viewBox', vb.join(' '));
     $('#treeView').classList.toggle('zoomed', vb[2] < 5200);
+    labelsSoon();
+  }
+
+
+
+
+  const LABEL_PX = { Keystone: 14, Start: 14, Notable: 12.5, Mastery: 12 };
+  let labelTimer = 0, labelCanvas = null;
+  const labelW = new Map(); // text -> width of its 100 px rendering
+  function labelsSoon() { clearTimeout(labelTimer); labelTimer = setTimeout(layoutLabels, 60); }
+  T.labelsSoon = labelsSoon;
+  function textWidth100(txt, font) {
+    const key = font + '|' + txt; let w = labelW.get(key); if (w != null) return w;
+    labelCanvas = labelCanvas || document.createElement('canvas').getContext('2d');
+    labelCanvas.font = font; w = labelCanvas.measureText(txt).width; labelW.set(key, w); return w;
+  }
+  function layoutLabels() {
+    const view = $('#treeView'), svg = $('#treeSvg');
+    if (!T.built || !T.labels || !T.vb) return;
+    const box = view.getBoundingClientRect(); if (!box.width) return;
+    const [vx, vy, vw, vh] = T.vb, k = Math.max(vw / box.width, vh / box.height); // tree units per screen pixel
+    svg.style.setProperty('--lk', k + 'px');
+    const zoomed = view.classList.contains('zoomed'), names = !view.classList.contains('no-names');
+    const fam = getComputedStyle(svg).fontFamily || 'sans-serif', font = '600 100px ' + fam;
+    const rank = L => { const c = L.el.classList;
+      if (c.contains('found')) return 0;
+      if (L.kind === 'Mastery') return c.contains('sworn') ? 3 : 6;
+      if (c.contains('alloc') || c.contains('opt')) return 1;
+      if (c.contains('top')) return 2;
+      return L.kind === 'Notable' ? 5 : 4; };
+    const wants = L => { const c = L.el.classList;
+      if (c.contains('found')) return true;
+      if (!names) return false;
+      if (L.kind === 'Mastery') return c.contains('sworn') || (zoomed && c.contains('open'));
+      return zoomed || c.contains('alloc') || c.contains('top') || c.contains('opt'); };
+    const m = 200 * k, inView = L => L.x > vx - m && L.x < vx + vw + m && L.y > vy - m && L.y < vy + vh + m;
+    const list = [];
+    for (const L of T.labels) { if (inView(L) && wants(L)) list.push(L); else L.el.style.display = 'none'; }
+    list.sort((a, b) => rank(a) - rank(b));
+
+    const boxes = [];
+    for (const L of T.labels) if (inView(L)) boxes.push([L.x - L.r, L.y - L.r, L.x + L.r, L.y + L.r, L]);
+    const hit = (b, own) => boxes.some(o => o[4] !== own && b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
+    const gap = 4 * k;
+    for (const L of list) {
+      const px = LABEL_PX[L.kind] || 12.5, size = px * k, w = textWidth100(L.el.textContent, font) / 100 * size, h = size * 1.1;
+      const r = L.r, cands = [
+        ['middle', L.x, L.y - r - gap - size * 0.25], // above (baseline)
+        ['middle', L.x, L.y + r + gap + size * 0.85], // below
+        ['start', L.x + r + gap, L.y + size * 0.35],  // right
+        ['end', L.x - r - gap, L.y + size * 0.35],    // left
+      ];
+      if (L.kind === 'Mastery') cands.unshift(cands.splice(1, 1)[0]); // Oath names sit under their diamond first
+      let done = false;
+      for (const [a, x, y] of cands) {
+        const x0 = a === 'middle' ? x - w / 2 : a === 'start' ? x : x - w, b = [x0 - gap / 2, y - size * 0.85, x0 + w + gap / 2, y - size * 0.85 + h];
+        if (hit(b, L) && rank(L) > 0) continue; // search hits always show
+        L.el.setAttribute('x', x); L.el.setAttribute('y', y); L.el.setAttribute('text-anchor', a); L.el.style.display = 'block';
+        b.push(null); boxes.push(b); done = true; break;
+      }
+      if (!done) L.el.style.display = 'none';
+    }
   }
   function fitTree() {
 
@@ -19603,6 +19675,7 @@ window.BOStartApp = function () {
       t.classList.toggle('sworn', !!o); t.classList.toggle('open', masteryOpen(m, have));
     }
     heatLegend(heat, vals, nLoss, nDead, nUnc);
+    labelsSoon();
     const order = pickOrder();
     for (const b of $('#treeSvg').querySelectorAll('text.tnum')) { const k = order.get(b.dataset.id); b.textContent = k || ''; b.style.display = k ? 'block' : 'none'; }
     const bc = $('#treeBanClear'), nb = st.ban ? st.ban.size : 0; bc.hidden = !nb; bc.textContent = 'Never take: ' + nb + ' · clear';
@@ -21144,6 +21217,12 @@ window.BOStartApp = function () {
     btn.textContent = on ? 'Exit full screen' : 'Full screen'; btn.setAttribute('aria-pressed', String(on));
     tip.hidden = true;
     if (T.full) setVB(T.full.slice());
+  }
+
+  for (const [btnId, key, cls] of [['#treeNames', 'treeNames', 'no-names'], ['#treeWays', 'treeWays', 'no-ways']]) {
+    const btn = $(btnId), set = on => { $('#treeView').classList.toggle(cls, !on); btn.setAttribute('aria-pressed', String(on)); };
+    set(store.get(key, true) !== false);
+    btn.onclick = () => { const on = btn.getAttribute('aria-pressed') !== 'true'; store.set(key, on); set(on); T.labelsSoon(); };
   }
   $('#treeFull').onclick = () => treeFullScreen(!$('#treeView').classList.contains('full'));
 

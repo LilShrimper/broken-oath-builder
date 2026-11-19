@@ -479,8 +479,16 @@ details.report pre { white-space: pre-wrap; word-break: break-word; font-size: 1
 .tree-view.dragging { cursor: grabbing; }
 .tree-view svg { width: 100%; height: 100%; display: block; }
 .tl { stroke: var(--line); stroke-width: 9; }
-.tl.alloc { stroke: var(--accent); stroke-width: 18; }
+.tl.alloc { stroke: #f0cf7a; stroke-width: 11; stroke-linecap: round; }
+:root[data-theme="light"] .tl.alloc { stroke: #a8760f; }
 .tl.way { stroke-dasharray: 30 30; opacity: .5; }
+.tl.way.alloc { opacity: 1; }
+/* Toggles in the tree's corner (owner, 19 Nov 2026): names and the dotted gateway lines can be hidden; search hits keep their name.
+   Gateways off hides taken gateway links too (owner, 19 Nov 2026: the long taken link was the clutter).
+   Which names show, where, and their size on screen are set by layoutLabels in app.js (--lk = tree units per screen pixel). */
+.tree-view.no-ways .tl.way { display: none; }
+@media (max-width: 560px) { .tree-zoom { left: 10px; flex-wrap: wrap; justify-content: flex-end; pointer-events: none; } .tree-zoom button { pointer-events: auto; } }
+#treeNames[aria-pressed="false"], #treeWays[aria-pressed="false"] { color: var(--faint); text-decoration: line-through; }
 .tn { fill: var(--panel-2); stroke: var(--faint); stroke-width: 5; cursor: pointer; }
 .tn.k-Notable { stroke: var(--muted); stroke-width: 8; }
 .tn.k-Keystone { stroke: #d9b45b; stroke-width: 10; }
@@ -489,9 +497,10 @@ details.report pre { white-space: pre-wrap; word-break: break-word; font-size: 1
 .tn.alloc { fill: var(--accent); stroke: var(--text); }
 .tn.found { stroke: #fff; stroke-width: 16; }
 .tn:hover { stroke: var(--text); stroke-width: 14; }
-.tlabel { fill: var(--text); font-size: 58px; font-weight: 600; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 14px; display: none; }
-.tree-view.zoomed .tlabel { display: block; }
-.tlabel.alloc, .tlabel.top, .tlabel.opt { display: block; }
+.tlabel { fill: var(--text); font-size: calc(var(--lk, 4.6px) * 12.5); font-weight: 600; pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: calc(var(--lk, 4.6px) * 3.5); stroke-linejoin: round; display: none; }
+:root[data-theme="light"] .tmlabel { fill: #85600f; }
+.tlabel.tk-Keystone, .tlabel.tk-Start { font-size: calc(var(--lk, 4.6px) * 14); }
+.tlabel:not(.alloc):not(.found):not(.opt) { fill: color-mix(in srgb, var(--text) 82%, var(--panel)); }
 .tree-tip { position: absolute; z-index: 3; max-width: 300px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-size: 12.5px; pointer-events: none; box-shadow: var(--shadow); }
 .tree-tip b { color: var(--accent); }
 .tree-tip .tk { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
@@ -525,8 +534,7 @@ body.tree-full-open { overflow: hidden; }
 .tree-oath-warn { margin: 10px 0 0; }
 .tm.found { stroke: #fff; stroke-width: 16; opacity: 1; }
 .tm:hover, .tm.sel { stroke: var(--text); stroke-width: 14; opacity: 1; }
-.tmlabel { fill: var(--dashboard-gold, #d9b45b); font-size: 46px; font-weight: 600; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 12px; display: none; }
-.tmlabel.sworn, .tree-view.zoomed .tmlabel.open { display: block; }
+.tmlabel { fill: var(--dashboard-gold, #d9b45b); font-size: calc(var(--lk, 4.6px) * 12); font-weight: 600; pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: calc(var(--lk, 4.6px) * 3.5); stroke-linejoin: round; display: none; }
 .oath-list { display: grid; gap: 5px; margin: 6px 0 2px; padding: 0; list-style: none; }
 .oath-row { display: grid; gap: 1px; text-align: left; font: inherit; color: var(--text); }
 button.oath-row { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); cursor: pointer; }

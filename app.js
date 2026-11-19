@@ -6908,7 +6908,7 @@ window.BOItemSearch = function (ctx) {
       const a = e.a, on = tierIdx(e);
       ico = icon('mod', lc(a.Type));
       sub = a.Kind === 'Riven' ? 'Riven ' + lc(a.Type) : a.Kind === 'Mythic' ? 'Mythic line' : a.Type;
-      body = '<p class="is-into">' + (a.Kind === 'Mythic' ? 'A Mythic line. The game data does not say which items it rolls on.' : 'Rolls on: ' + esc(e.slots.join(', ') || 'nothing') + (a.Kind === 'Riven' ? '. A Riven mod: one tier above the normal mod of the same kind.' : '')) + '</p>' +
+      body = (scopeChip(a) ? '<p class="is-into is-chips">' + scopeChip(a) + '</p>' : '') + '<p class="is-into">' + (a.Kind === 'Mythic' ? 'A Mythic line. The game data does not say which items it rolls on.' : 'Rolls on: ' + esc(e.slots.join(', ') || 'nothing') + (a.Kind === 'Riven' ? '. A Riven mod: one tier above the normal mod of the same kind.' : '')) + '</p>' +
         '<table class="is-tiers"><thead><tr><th>Tier</th><th>Name</th><th>Item level</th><th>Roll</th></tr></thead><tbody>' +
         a.Tiers.map((t, i) => '<tr' + (i === on ? ' class="on"' : '') + '><td>' + (a.Kind || 'T' + (i + 1)) + '</td><td>' + esc(t.Name || '') + '</td><td>' + (t.ILvl || 1) + '</td><td>' + rng(t.Min, t.Max) + (t.Min2 != null ? ' / ' + rng(t.Min2, t.Max2) : '') + '</td></tr>').join('') + '</tbody></table>';
       badges.push(a.Kind ? badge(a.Kind, 'tier ' + lc(a.Kind)) : badge(a.Tiers.length + ' tiers', 'muted'));
@@ -6956,6 +6956,30 @@ window.BOItemSearch = function (ctx) {
 
 
   const TAG_CLS = { physical: 'phys', fire: 'fire', cold: 'cold', lightning: 'light', chaos: 'chaos', elemental: 'elem' };
+
+
+
+  let localKeys = null, localGD = null;
+  const DEF_STATS = { Armour: 1, Evasion: 1, EnergyShield: 1, Defences: 1 };
+  function scopeChip(a) {
+    const GD = ctx.gd(), m = a.Mod || {};
+    if (localGD !== GD) { localGD = GD; localKeys = new Set(Object.values(GD.affixes || {}).filter(x => x.Mod && x.Mod.bLocal).map(x => x.Mod.Stat + '|' + x.Mod.Mode)); }
+    const local = !!m.bLocal;
+    if (!local && !localKeys.has(m.Stat + '|' + m.Mode)) return '';
+    const def = DEF_STATS[m.Stat], head = (n, sub) => '<b>' + n + '</b><span class="pl-tip-sub">' + sub + '</span>';
+    const desc = t => '<span class="pl-tip-desc">' + t + '</span>';
+    const html = local
+      ? head('Local', 'Counts on this item only') + (m.Stat === 'ReqReduce'
+          ? desc('Lowers this item\'s own requirements. It does nothing for your other items.')
+          : def ? desc('Adds to this item\'s own ' + (m.Stat === 'Defences' ? 'armour, evasion and energy shield' : m.Stat === 'EnergyShield' ? 'energy shield' : m.Stat.toLowerCase()) + '. The item\'s own % increased lines raise it, and the item\'s total is what your character gets.') +
+              desc('Only rolls on bases that already have that defence (and shields).')
+          : desc('Changes this weapon\'s own numbers (its damage, attack speed or crit chance as shown on the weapon). It helps skills that use the weapon, not spells or minions that don\'t.'))
+      : head('Global', 'Counts for your whole character') + (def
+          ? desc('Adds straight to your character\'s total, next to every other source. Your character-wide increases (tree, other gear) raise it; this item\'s own % lines do not.') +
+            desc('Can roll on slots with no defence of their own, like rings, amulets and belts.')
+          : desc('Adds to your character\'s total for that stat, together with the tree and your other gear. It is not part of a weapon\'s own numbers.'));
+    return '<span class="is-scope ' + (local ? 'local' : 'global') + '" tabindex="0" data-tiphtml="' + esc(html) + '">' + (local ? 'Local' : 'Global') + '</span>';
+  }
   function modRow(e) {
     const GD = ctx.gd(), a = e.a, on = tierIdx(e), t = on >= 0 ? a.Tiers[on] : null;
     const text = t ? rangeText(GD, a.Mod, t.Min, t.Max, t.Min2, t.Max2) : e.name;
@@ -6978,7 +7002,7 @@ window.BOItemSearch = function (ctx) {
     const wLine = rc && many ? '<p class="is-into">Line weight: ' + pctRange(rc.w / rc.hi, rc.w / rc.lo) + ' (' + num(rc.w) + '/' + den + ' ' + kind + ' weight)</p>' : '';
     return '<details class="is-mrow ' + lc(a.Type) + '"><summary>' +
       '<span class="is-aff ' + lc(a.Type) + '">' + esc(a.Type) + '</span>' +
-      '<span class="is-mtext"><span class="is-mline">' + esc(text) + '</span>' + addedBadge(e, true) + tags + '<small class="is-mslots">' + esc(e.slots.join(', ')) + '</small></span>' +
+      '<span class="is-mtext"><span class="is-mline">' + esc(text) + '</span>' + scopeChip(a) + addedBadge(e, true) + tags + '<small class="is-mslots">' + esc(e.slots.join(', ')) + '</small></span>' +
       '<span class="is-nums"><span class="n tiers" title="' + (t ? 'Tier ' + (on + 1) + ' of ' + a.Tiers.length : a.Tiers.length + ' tiers') + '">' + (t ? 'T' + (on + 1) : a.Tiers.length) + '</span>' +
       '<span class="n ilvl" title="Item level ' + (t ? 'tier ' + (on + 1) + ' needs' : 'the lowest and highest tiers need') + '">' + (t ? t.ILvl || 1 : lo === hi ? lo : lo + '–' + hi) + '</span></span>' +
       '</summary><div class="is-mbody"><p class="is-into">Rolls on: ' + esc(e.slots.join(', ') || 'nothing') + (e.types.length ? ' (' + esc(e.types.join(', ')) + ')' : '') + '</p>' + wLine +
@@ -7040,7 +7064,7 @@ window.BOItemSearch = function (ctx) {
   function render() {
     const el = $('#itemSearchPane'); if (!el || el.hidden) return;
     const GD = ctx.gd();
-    let h = sprite() + '<div class="cmp-intro"><div class="eyebrow">GAME DATA</div><h2>Item Search</h2><p>Every unique, Oathword, item base, item mod, rune, jewel, skill gem and support gem in the current game data.</p></div>';
+    let h = sprite() + '<div class="cmp-intro"><div class="eyebrow">GAME DATA</div><h2>Database</h2><p>Every unique, Oathword, item base, item mod, rune, jewel, skill gem and support gem in the current game data.</p></div>';
     if (!GD || !GD.bases) { el.innerHTML = h + '<div class="card"><p class="hint">Game data is still loading.</p></div>'; return; }
     entries();
     h += '<div class="card is-top" id="isControls">' + controls() + '</div><div id="isResults">' + results() + '</div>';
@@ -8995,7 +9019,7 @@ window.BOFaq = function (ctx) {
 
 
         +GD.apiBuild >= 85 ? 'The game counts most Riven damage lines a little under the number on the item: ×0.85 to ×0.96 of the roll, but never under the best normal tier\'s top × 1.05. Skill level lines count in full (+3 is +3). Life, resistance, defence and attribute lines count in full. From the game\'s own log, build 85.' : '',
-        'The full list is in <b>Item Search</b>: choose Item mods and search for "riven". The Build Planner offers them on every item their normal mod can roll on.',
+        'The full list is in the <b>Database</b> tab: choose Item mods and search for "riven". The Build Planner offers them on every item their normal mod can roll on.',
       ]) + hint('Where they roll is worked out, not written in the game data: each Riven mod matches one normal mod, and top ladder builds wear them on the same item types.'));
     }
     if (mythic.length) h += card('Mythic lines', hint('The game data lists these ' + mythic.length + ' lines but not which items carry them. The sim counts one when a build has it.') +
@@ -20898,7 +20922,7 @@ window.BOStartApp = function () {
     compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', patch: 'patch', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', lootfilter: 'lootfilter', faq: 'faq',
     skillscaling: 'skills', minions: 'skills/minions', creator: 'creator', plan: 'plan', code: 'code', builds: 'savedbuilds' };
   const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', 'build:skills': 'Skills', damage: 'Damage Analysis',
-    compare: 'Item Simulator', items: 'Item Search', grail: 'Grail', ladder: 'Ladder', patch: 'Recent Patch', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery", lootfilter: 'Loot Filter',
+    compare: 'Item Simulator', items: 'Database', grail: 'Grail', ladder: 'Ladder', patch: 'Recent Patch', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery", lootfilter: 'Loot Filter',
     faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code', builds: 'Saved Builds' };
 
   let skillsView = 'scaling';

@@ -2061,6 +2061,13 @@ input.io-add::placeholder { color: var(--faint); }
 :root[data-theme="light"] .is-lines.unique, :root[data-theme="light"] .is-lines.oathword { color: #2f5fb0; }
 .is-lines .none { color: var(--faint); }
 .is-flavour { margin: 8px 0 0; color: var(--faint); font-style: italic; font-size: 12px; }
+/* Local / Global chip on item mods (hover box from data-tiphtml) */
+.is-scope { display: inline-block; margin: 0 4px 0 6px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 18px; vertical-align: 1px; cursor: help; border: 1px solid var(--line); }
+.is-scope.local { color: #7fd6a8; border-color: color-mix(in srgb, #7fd6a8 45%, var(--line)); background: color-mix(in srgb, #7fd6a8 10%, var(--panel-2)); }
+.is-scope.global { color: var(--dashboard-gold); border-color: color-mix(in srgb, var(--dashboard-gold) 45%, var(--line)); background: color-mix(in srgb, var(--dashboard-gold) 10%, var(--panel-2)); }
+:root[data-theme="light"] .is-scope.local { color: #1f7a4c; background: color-mix(in srgb, #1f7a4c 8%, var(--panel)); }
+:root[data-theme="light"] .is-scope.global { color: #7a5a14; background: color-mix(in srgb, #c9a24a 14%, var(--panel)); }
+.is-scope:focus-visible { outline: 2px solid var(--dashboard-gold); outline-offset: 1px; }
 /* Skill and support gems (Item Search) */
 .is-ico.gem { display: block; width: 44px; height: 44px; border: 0; background: none; }
 .is-ico.gem .gem-ico { display: block; width: 44px; height: 44px; margin: 0; border-radius: 8px; }

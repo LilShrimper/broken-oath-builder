@@ -37,12 +37,12 @@
   localStorage.setItem("bods:movedIn", new Date().toISOString());
 } catch (e) { /* storage off or bad data: the page starts as it is */ } })();</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>アイテム検索 · Broken Oath Builder</title>
-<meta name="description" content="『Broken Oath』の全アイテム（ユニークアイテムおよび基本タイプ）を、最新のアイテムから順に検索します。">
+<title>データベース · Broken Oath Builder</title>
+<meta name="description" content="Broken Oath database: every item, unique, base type, item mod, rune and gem, with the newest first.">
 <link rel="canonical" href="https://builder.lilshrimper.dev/ja/itemsearch/">
 <link rel="alternate" hreflang="en" href="https://builder.lilshrimper.dev/itemsearch/"><link rel="alternate" hreflang="zh-Hans" href="https://builder.lilshrimper.dev/zh/itemsearch/"><link rel="alternate" hreflang="es" href="https://builder.lilshrimper.dev/es/itemsearch/"><link rel="alternate" hreflang="ru" href="https://builder.lilshrimper.dev/ru/itemsearch/"><link rel="alternate" hreflang="de" href="https://builder.lilshrimper.dev/de/itemsearch/"><link rel="alternate" hreflang="fr" href="https://builder.lilshrimper.dev/fr/itemsearch/"><link rel="alternate" hreflang="ja" href="https://builder.lilshrimper.dev/ja/itemsearch/"><link rel="alternate" hreflang="ko" href="https://builder.lilshrimper.dev/ko/itemsearch/"><link rel="alternate" hreflang="pl" href="https://builder.lilshrimper.dev/pl/itemsearch/"><link rel="alternate" hreflang="pt-BR" href="https://builder.lilshrimper.dev/pt/itemsearch/"><link rel="alternate" hreflang="uk" href="https://builder.lilshrimper.dev/uk/itemsearch/">
 <meta property="og:type" content="website"><meta property="og:site_name" content="Broken Oath Builder">
-<meta property="og:title" content="アイテム検索 · Broken Oath Builder"><meta property="og:description" content="『Broken Oath』の全アイテム（ユニークアイテムおよび基本タイプ）を、最新のアイテムから順に検索します。">
+<meta property="og:title" content="データベース · Broken Oath Builder"><meta property="og:description" content="Broken Oath database: every item, unique, base type, item mod, rune and gem, with the newest first.">
 <meta property="og:url" content="https://builder.lilshrimper.dev/ja/itemsearch/"><meta property="og:image" content="https://builder.lilshrimper.dev/assets/lilshrimper-sigil.png">
 <meta name="twitter:card" content="summary">
 <script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
@@ -50,7 +50,7 @@
   var b = new URL("../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/ja.json'), langCode: 'ja' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../../style.css?v=401">
+<link rel="stylesheet" href="../../style.css?v=402">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -125,8 +125,8 @@
       <button class="tab" type="button" role="tab" data-tab="compare" aria-selected="false" aria-label="Item Simulator">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4"/></svg><span>Item Simulator</span>
       </button>
-      <button class="tab" type="button" role="tab" data-tab="items" aria-selected="false" aria-label="Item Search">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13M15.2 15.2 21 21"/></svg><span>Item Search</span>
+      <button class="tab" type="button" role="tab" data-tab="items" aria-selected="false" aria-label="Database">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13M15.2 15.2 21 21"/></svg><span>Database</span>
       </button>
       <button class="tab" type="button" role="tab" data-tab="grail" aria-selected="false" aria-label="Grail">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v4a5 5 0 0 1-10 0zM7 5H4v1a3 3 0 0 0 3 3M17 5h3v1a3 3 0 0 1-3 3M12 12v5M8 21h8M9.5 17h5l.5 4h-6z"/></svg><span>Grail</span>
@@ -646,7 +646,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":401,"at":"2026-11-19T22:20:46.080Z"};
+window.SITE_VERSION = {"v":402,"at":"2026-11-19T22:31:08.876Z"};
 window.SITE_LANG = 'ja';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -655,6 +655,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=4e9487f7","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../app.js?v=401"></script>
+<script src="../../app.js?v=402"></script>
 </body>
 </html>

@@ -14477,6 +14477,13 @@ window.BOCharacter = function (ctx) {
 
 
 
+    for (const m of mods) if (m.stat === 'Damage' && m.mode === 'More' && m.key === 'passives' && (m.tags || []).includes('Minion')) { const t = fit(m); if (!t) continue; minionMore *= 1 + m.v / 100; use(m, 'minion'); }
+
+
+
+
+
+
     if (lc(sk.Id) === 'summon_bone_golem' && modsOf(mods, 'Dragonling').some(m => m.stat === 'Dragonling' && (m.tags || []).includes('Asc71_Abomination'))) {
       const ab = (((GD.dragon || {}).rules || {}).Abomination) || {};
       const feeds = (ch.hotbar || []).some(id => ['summon_skeletons', 'summon_zombie'].includes(lc(id)));
@@ -14659,11 +14666,16 @@ window.BOCharacter = function (ctx) {
       const rows = curseRows.filter(r => kindOf(r) === kind).sort((a, b) => worth(b) - worth(a));
       activeCurses.push(...(LIMIT[kind] ? rows.slice(0, LIMIT[kind]) : rows));
     }
+
+
+
+
+    const gExtra = golem && golem.stat === 'EnemyTaken' ? [golem.v] : [];
     let curseK = 1;
-    if (activeCurses.length && avg > 0) {
+    if ((activeCurses.length || gExtra.length) && avg > 0) {
 
       const one = takenRule(GD, isBoss);
-      curseK = Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTot * curseTakenK(activeCurses, d, false, one), 0);
+      curseK = Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTot * curseTakenK(activeCurses, d, false, one, gExtra), 0);
       res.notes.push('Curses on minion blows: ' + activeCurses.map(r => r.name).join(' + ') + ' make the enemy take x' + curseK.toFixed(3) + ' on these hits. Counted in the vs-enemy DPS only (not the game\'s panel number, which comes before curses, nor the enemy\'s resistances). Checked only in direction against a Guardian fight on 11 Nov 2026.');
     }
     res.enemy = { level: o.enemyLevel || ch.level, rarity, curses: curseRows, activeCurses: activeCurses.map(r => r.id), curseEffInc: curseInc };
@@ -14694,7 +14706,7 @@ window.BOCharacter = function (ctx) {
       const size = avg * critFactor * t.pct / 100 * armyK;
       const el = t.element && DT.includes(t.element) ? t.element : null;
       const one = takenRule(GD, isBoss);
-      const cK = el ? curseTakenK(activeCurses, el, false, one) : curseK;
+      const cK = el ? curseTakenK(activeCurses, el, false, one, gExtra) : curseK;
       const pDps = alive * size / every * cK;
       res.pulses.push({ src: m.src, pct: t.pct, element: el, every, size, dps: pDps });
       res.hitDps += pDps; res.totalDps += pDps;
@@ -14768,7 +14780,7 @@ window.BOCharacter = function (ctx) {
         const stacks = cap - left;
         const remain = R * dur > cap ? dur - cap / R / 2 : dur / 2;
         const one = takenRule(GD, isBoss);
-        const taken = A.bPoisonTakesDamageTaken ? curseTakenK(activeCurses, 'Poison', false, one) : 1;
+        const taken = A.bPoisonTakesDamageTaken ? curseTakenK(activeCurses, 'Poison', false, one, gExtra) : 1;
         const poisonDps = mine * taken;
         let burstPct = 0; for (const m of pickMods(mods, 'PoisonBurst76', 'Flat')) { burstPct += m.v; use(m, 'minion poison burst'); }
         const every = Math.max(1, ruleNum(GD, 'r76.UNIQUES.Every', 12));

@@ -8544,7 +8544,13 @@ window.BOFaq = function (ctx) {
         ['<b>Crit</b>', 'Crit chance and crit multiplier.', ADD + '<span class="faq-note">chance lines add, multiplier lines add</span>', MUL + '<span class="faq-note">× (1 + chance × (multiplier − 1))</span>', st('tooltip checks.')],
         ['<b>Speed</b>', 'Attack speed and cast speed.', ADD + '<span class="faq-note">increased speed; a support\'s "more" speed multiplies by itself</span>', MUL + ' the DPS', st('tooltip checks.')],
         ['<b>Count</b>', 'Projectiles, totems, traps, Sparks, minions standing.', ADD, MUL + ' the DPS', st()],
-        ['<b>Damage over time</b>', 'For poison: "increased Poison damage over time" is one group, "Damage over Time Multiplier" is another.', ADD + '<span class="faq-note">inside each of the two</span>', MUL + '<span class="faq-note">the two groups multiply each other and the hit</span>', st('game log, 11 Nov 2026 (exact on four cases).')],
+
+
+
+
+
+        ['<b>Increased ailment damage</b>', '"X% increased Poison damage over time", "increased Burning damage" (Ignite), "increased Bleeding damage". Each counts for its own ailment only.', ADD + '<span class="faq-note">with the other lines for the same ailment</span>', MUL + '<span class="faq-note">also multiplies the Damage over Time Multiplier below. "X% more Bleeding (Burning) damage" lines each multiply by themselves</span>', st('for Poison, game log, 11 Nov 2026 (exact on four cases). Ignite and Bleed are not checked in the game yet.')],
+        ['<b>Damage over Time Multiplier</b>', '"+X% to Damage over Time Multiplier". One number for all three: Poison, Ignite and Bleed.', ADD, MUL + '<span class="faq-note">a group of its own: it multiplies the increased ailment damage above and the hit that started the ailment</span>', st('for Poison, game log, 11 Nov 2026. Ignite and Bleed are not checked in the game yet.')],
       ], 'faq-stack') +
       hint('The groups and their rules are the game developer\'s own, from the stacking table in the Broken Oath public API (build 85). Where the last column adds "also seen in the game", the rule was checked there too. Numbers and rules can change with any patch.'));
     h += card('The same in numbers', list([

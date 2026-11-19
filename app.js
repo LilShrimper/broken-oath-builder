@@ -14272,10 +14272,38 @@ window.BOCharacter = function (ctx) {
 
 
 
-        bleedDps = (dpsKept * uptime + wound) * dotTakenFor('Physical') * woeWeaveK;
+        let tear = 0;
+        if (is079(GD) && uptime > 0) {
+          const tearPct = p80(GD, 'r103.AILMENTS.TearPct103', 50) / 100, tearCd = p80(GD, 'r103.AILMENTS.TearCd103', 1), TEAR_KEEP = 0.4;
+          const landing = hitsPerSec * perHitFactor / arrowShare * hitFactor; // hits a second that can roll a bleed
+          const slam = ctx.tags.has('slam'), x = landing * (slam ? 1 : clamp(critChance, 0, 100) / 100);
+          if (x > 0) {
+            const perSecUp = x / (1 + x * tearCd), gap = 1 / perSecUp;
+            const comingSec = dur / 2 * (0.5 + 0.5 * Math.min(1, gap / dur));
+            const coming = (dpsKept + wound / uptime) * comingSec;
+            tear = uptime * perSecUp * tearPct * TEAR_KEEP * coming;
+            res.notes.push('Tear: ' + (slam ? 'every Slam hit' : 'crits (' + Math.round(critChance) + '%)') + ' on the bleeding enemy cash ' + Math.round(tearPct * 100) + '% of the bleed still coming, at most once every ' + tearCd + ' s: ' + (uptime * perSecUp).toFixed(2) + ' tears a second, each about ' + Math.round(coming).toLocaleString('en-US') + ' still coming. The game keeps ' + Math.round(TEAR_KEEP * 100) + '% of the cashed part and takes the rest back from later ticks (game log, 19 Nov 2026): +' + Math.round(tear).toLocaleString('en-US') + '/s.');
+          }
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        bleedDps = (dpsKept * uptime + wound + tear) * dotTakenFor('Physical') * woeWeaveK;
         if (woeWeaveK > 1) res.notes.push('Bleeding: Woeweaver raises the bleed too, x' + woeWeaveK.toFixed(2) + ': the bleed is laid from the bigger hit (game log, 16 Nov 2026).');
-        if (wound > 0) res.notes.push('Deep Wound (patch 79): bleeds on a bleeding enemy deepen it by ' + p80(GD, 'r103.AILMENTS.WoundPct103', 6) + '% of their own bleed, +' + Math.round(wound).toLocaleString('en-US') + '/s on top of the strongest (the game log shows the same rule). Tear (Slams and crits cash 50% of the bleed left) only makes it land sooner.');
-        ail.bleed = { chance: bleedChance, dps1, dpsKept, keptX: dpsKept / dps1, rollsPerLife: rollsPerSec * dur, uptime, duration: dur, dps: bleedDps, more: bMore, inc: bInc };
+        if (wound > 0) res.notes.push('Deep Wound (patch 79): bleeds on a bleeding enemy deepen it by ' + p80(GD, 'r103.AILMENTS.WoundPct103', 6) + '% of their own bleed, +' + Math.round(wound).toLocaleString('en-US') + '/s on top of the strongest (the game log shows the same rule).');
+        ail.bleed = { chance: bleedChance, dps1, dpsKept, keptX: dpsKept / dps1, rollsPerLife: rollsPerSec * dur, uptime, duration: dur, dps: bleedDps, more: bMore, inc: bInc, wound, tear };
         res.notes.push('Bleeding: ' + Math.round(bleedChance) + '% chance, ' + (rollsPerSec * dur).toFixed(1) + ' bleeds rolled in one ' + dur + ' s bleed life; the strongest holds: ' + Math.round(dpsKept) + '/s (x' + (dpsKept / dps1).toFixed(2) + ' a bleed from the average hit), up ' + Math.round(uptime * 100) + '% of the time. Counted on a standing enemy: bleeds deal 50% more while it moves.');
       }
     }

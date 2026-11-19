@@ -2936,7 +2936,14 @@ window.BOPlanner = function (ctx) {
 
   const dSeal80 = () => +GD.apiBuild >= 79 ? 1 : 0;
   const dExtraMax = () => { const R = dRules(); return Math.max(0, DGATE_TOP - (R.minGate || 4) + 1) * (R.perGate || 1) + (R.pinnacle != null ? R.pinnacle : 1) + dSeal80(); };
-  const dExtra = ch => Math.min(dExtraMax(), ch.dragonExtra != null ? ch.dragonExtra : Math.max(0, (ch.dragonNodes || []).length - dBase(ch)));
+
+
+  const dExtra = ch => Math.min(dExtraMax(), Math.max(+ch.dragonExtra || 0, (ch.dragonNodes || []).length - dBase(ch)));
+
+  function dLevelNeed(count) {
+    const R = dRules(), need = count - dExtraMax() - (R.hatch || 0), ms = (R.milestones || []).slice().sort((x, y) => x - y);
+    return need <= 0 ? 1 : ms[Math.min(need, ms.length) - 1] || 1;
+  }
   function dPoints(ch) { return dBase(ch) + dExtra(ch); }
   function dAdj(T) {
     const adj = {}; for (const id in T) adj[id] = adj[id] || new Set();
@@ -2997,20 +3004,22 @@ window.BOPlanner = function (ctx) {
         (n.Kind === 'Core' && !ic ? '<text x="' + n.X + '" y="' + (n.Y + 4) + '">' + esc((ch.dragonAspect || 'Aspect').slice(0, 9)) + '</text>' : '') + (window.BOTreeTips ? '' : '<title>' + esc(tip) + '</title>') + '</g>';
     }
     const list = [...taken].map(id => T[id]).sort((a, b) => (a.Path || 'zz').localeCompare(b.Path || 'zz') || a.Y - b.Y)
-      .map(n => { const lab = dLabel(ch, n); return '<li><b>' + esc(lab.name) + '</b> <span class="hint">' + esc(lab.text) + '</span></li>'; }).join('');
+      .map(n => { const lab = dLabel(ch, n); return '<li title="' + esc(lab.text) + '">' + esc(lab.name) + '</li>'; }).join('');
     const over = used > pts;
-    let h = '<div class="card"><h2>Dragonling <small>' + used + ' / ' + pts + ' points' + (paths.length ? ' · ' + esc(paths.join(' + ')) + (paths.length > 1 ? ' paths' : ' path') : '') + '</small></h2>';
+
+
+    let h = '<div class="card dl-card"><div class="dl-side"><h2>Dragonling <small>' + used + ' / ' + pts + ' points' + (paths.length ? ' · ' + esc(paths.join(' + ')) + (paths.length > 1 ? ' paths' : ' path') : '') + '</small></h2>';
     h += '<div class="pl-row">' + (aspects.length ? '<label class="field inline"><span>Aspect</span><select data-f="aspect"' + dis + '>' + opt('', 'None', !ch.dragonAspect) + aspects.map(a => opt(a, GD.dragon.aspects[a].Name || a, a === ch.dragonAspect)).join('') + '</select></label>' : '') +
-      '<label class="field inline" title="One point for each of Gates 4 to 7 killed and one for the Pinnacle"><span>Gate kills + Pinnacle</span><input type="number" min="0" max="' + dExtraMax() + '" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
+      '<label class="field inline" title="' + esc('Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, +1 each for Gates 4 to 7' + (dSeal80() ? ', the Seal of 80' : '') + ' and the Pinnacle (' + (dBase({ level: 100 }) + dExtraMax()) + ' at most). This box follows the nodes you take.') + '"><span>Gate kills + Pinnacle</span><input type="number" min="0" max="' + dExtraMax() + '" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
       (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') + '</div>';
 
     const asp = GD.dragon.aspects && GD.dragon.aspects[ch.dragonAspect];
     h += asp ? '<p class="dl-aspect"><b>' + esc(asp.Name || ch.dragonAspect) + ' Aspect:</b> ' + esc(asp.Text || '') + '</p>'
       : '<p class="hint">No Aspect chosen: each one gives its own bonuses (pick one above to see them).</p>';
     h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.' :
-      'Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, +1 each for Gates 4 to 7' + (dSeal80() ? ', the Seal of 80' : '') + ' and the Pinnacle (' + (dBase({ level: 100 }) + dExtraMax()) + ' at most). ' + (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + 'Paths can be mixed; one Keystone or Capstone at a time. Hover a node for its lines.') + '</p>';
-    h += '<svg class="dl-tree" viewBox="-560 -640 1120 1100" role="img" aria-label="Dragonling tree">' + '<g class="dl-links">' + lines + '</g>' + dots + '</svg>';
-    if (list) h += '<ul class="dl-list">' + list + '</ul>';
+      (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + 'Paths can be mixed; one Keystone or Capstone at a time.') + '</p>';
+    if (list) h += '<h3 class="dl-list-h">Taken</h3><ul class="dl-list">' + list + '</ul>';
+    h += '</div><svg class="dl-tree" viewBox="-545 -625 1090 1065" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Dragonling tree">' + '<g class="dl-links">' + lines + '</g>' + dots + '</svg>';
     return h + '</div>';
   }
 
@@ -3068,7 +3077,12 @@ window.BOPlanner = function (ctx) {
       let h = '';
       const sk = GD.skills[lc(r.skill)], lvl = ch.gemLevels[r.skill] || 1;
       const sups = r.sock ? r.sock.supports : [], slots = S.socketsFor(GD, ch, r.skill, lvl);
-      const link = sups.some(x => ['cast_on_crit', 'channel_conduit'].includes(lc(x)));
+
+
+      let granted = false;
+      if (sk && sk.Channel) try { granted = S.collectMods(GD, ch, {}).mods.some(m => m.stat === 'GrantSupport' && (m.tags || []).some(t => lc(t) === 'channel_conduit')); } catch (e) { /* no linked spell row */ }
+      const link = granted || sups.some(x => ['cast_on_crit', 'channel_conduit'].includes(lc(x)));
+      const linked = (r.sock && r.sock.conduit) || '';
       h += '<div class="pl-skill" data-skill="' + esc(r.skill) + '"><div class="pl-row">' +
         (ctx.execState && ctx.execState(r.skill) !== null ? '<label class="check-row pl-exec" title="Executioner: 35% more damage below half life. Default: if a skill on the bar has Executioner socketed, only that skill counts it; if none has, every on-bar skill except the main one does (it fights from full life, a side skill finishes better). On the main skill it counts as a fight average; on any other skill as a finisher, the full bonus on every hit. Sim Supports only picks Executioner for a skill while this is on."><input type="checkbox" data-f="execsim"' + (ctx.execState(r.skill) ? ' checked' : '') + '><span>Sim executioner in this slot</span></label>' : '') +
         ctx.skillDot(r.skill) + '<select data-f="skill"' + dis + '>' + skillOpts(r.skill) + '</select>' +
@@ -3080,8 +3094,8 @@ window.BOPlanner = function (ctx) {
         (sk ? '' : '<p class="hint bad">Unknown skill ' + esc(r.skill) + '</p>') +
         supChips(ch, r, sups, slots, lvl, edit) +
         (edit && sk && !S.dealsNoHits(sk) ? '<div class="pl-row pl-simbest"><button class="btn small" type="button" data-act="simbest" title="Tries the support combinations for this skill at its gem level, against the enemy set on the Damage tab, and sockets the best one">Sim best supports</button></div>' : '') +
-        (link ? '<label class="field inline"><span>Linked spell <span class="meta">Cast on Crit in an attack, or a Channel Conduit, casts this</span></span><select data-f="conduit"' + dis + '>' + opt('', 'None (Cast on Crit casts the spell it sits in)', !r.sock.conduit) +
-          rs.filter(x => x.skill !== r.skill && GD.skills[lc(x.skill)] && (GD.skills[lc(x.skill)].Tags || []).includes('Spell')).map(x => opt(x.skill, GD.skills[lc(x.skill)].Name, lc(x.skill) === lc(r.sock.conduit))).join('') + '</select></label>' : '') +
+        (link ? '<label class="field inline"><span>Linked spell <span class="meta">Cast on Crit in an attack, or a Channel Conduit, casts this</span></span><select data-f="conduit"' + dis + '>' + opt('', 'None (Cast on Crit casts the spell it sits in)', !linked) +
+          rs.filter(x => x.skill !== r.skill && GD.skills[lc(x.skill)] && (GD.skills[lc(x.skill)].Tags || []).includes('Spell')).map(x => opt(x.skill, GD.skills[lc(x.skill)].Name, lc(x.skill) === lc(linked))).join('') + '</select></label>' : '') +
         '</div>';
       return h;
   }
@@ -3929,7 +3943,7 @@ window.BOPlanner = function (ctx) {
     const aspect = n.Kind === 'Core' && GD.dragon.aspects && GD.dragon.aspects[ch.dragonAspect];
     return { id, kind: n.Kind, path: n.Path || '', name: lab.name, text: aspect ? (aspect.Name || ch.dragonAspect) + ' Aspect: ' + aspect.Text : lab.text, mods: aspect ? aspect.Mods || [] : mods, state: st.s, why: st.why || '' };
   }
-  const dragon = { html: ch => dragonCard(ch, true, ''), toggle: dToggle, info: dInfo, points: ch => ({ total: dPoints(ch), used: dTaken(ch).size }), extra: dExtra };
+  const dragon = { html: ch => dragonCard(ch, true, ''), toggle: dToggle, info: dInfo, points: ch => ({ total: dPoints(ch), used: dTaken(ch).size }), extra: dExtra, levelNeed: ch => dLevelNeed(dTaken(ch).size) };
 
 
 
@@ -18853,7 +18867,8 @@ window.BOStartApp = function () {
 
   function levelFor(ch, list) {
     const base = ch.levelBase != null ? ch.levelBase : ch.level, bonus = ch.bonusPoints != null ? ch.bonusPoints : QUARTZ;
-    const level = Math.max(base, Math.min(100, 1 + Math.ceil(Math.max(0, pointsIn(list) - bonus) / pointsPer())));
+
+    const level = Math.max(base, Math.min(100, 1 + Math.ceil(Math.max(0, pointsIn(list) - bonus) / pointsPer())), planner.dragon.levelNeed(ch));
     return { level, levelBase: level !== base ? base : undefined };
   }
   function setPassives(list, undo) {
@@ -18868,6 +18883,7 @@ window.BOStartApp = function () {
 
 
   function setDragon(fields) {
+    if (fields.dragonNodes) Object.assign(fields, levelFor(Object.assign({}, st.ch, fields), st.ch.passives));
     if (st.chOrig && st.chOrig.plan) { Object.assign(st.chOrig, fields); st.chOrig.savedAt = new Date().toISOString(); st.ch = st.chOrig; keepChars(); }
     else st.ch = Object.assign({}, st.ch, fields);
     st.pinned = null; stopSearch(); st.opt = null;
@@ -18996,7 +19012,7 @@ window.BOStartApp = function () {
     const r = planner.dragon.toggle(st.ch, b.dataset.id);
     if (!r.nodes) { const s = $('#dragonStatus'); if (s) s.textContent = r.msg; return; }
 
-    setDragon(Object.assign({ dragonNodes: r.nodes }, st.ch.dragonExtra == null ? { dragonExtra: planner.dragon.extra(st.ch) } : {}));
+    setDragon({ dragonNodes: r.nodes });
   });
 
 
@@ -20642,6 +20658,19 @@ window.BOStartApp = function () {
   $('#treeZoomIn').onclick = () => { const [x, y, w, h] = T.vb; zoomAt(1 / 1.4, x + w / 2, y + h / 2); };
   $('#treeZoomOut').onclick = () => { const [x, y, w, h] = T.vb; zoomAt(1.4, x + w / 2, y + h / 2); };
   $('#treeFit').onclick = () => { if (T.full) setVB(T.full.slice()); };
+
+  function treeFullScreen(on) {
+    const v = $('#treeView'), btn = $('#treeFull');
+    if (on === v.classList.contains('full')) return;
+    v.classList.toggle('full', on); document.body.classList.toggle('tree-full-open', on);
+    btn.textContent = on ? 'Exit full screen' : 'Full screen'; btn.setAttribute('aria-pressed', String(on));
+    tip.hidden = true;
+    if (T.full) setVB(T.full.slice());
+  }
+  $('#treeFull').onclick = () => treeFullScreen(!$('#treeView').classList.contains('full'));
+
+  new MutationObserver(() => { $('#treeFullPts').textContent = $('#treePoints').textContent; }).observe($('#treePoints'), { childList: true, characterData: true, subtree: true });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#treeView').classList.contains('full') && !e.defaultPrevented) treeFullScreen(false); });
   $('#treeSheetAct').onclick = () => { if (T.sel) clickNode(T.sel); }; // the repaint refreshes the panel
   $('#treeSheetClose').onclick = hideSheet;
   $('#treeSheetBan').onclick = () => { if (T.sel) toggleBan(T.sel); };

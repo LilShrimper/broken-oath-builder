@@ -10798,9 +10798,19 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const low84 = [[22, 214416], [24, 302440], [26, 420057]];
+
+
+    const low84 = [[22, 214416], [24, 302440], [26, 420057], [28, 587200], [32, 1092477], [34, 1315489], [37, 1652436], [39, 1723050]];
+    const gate84 = [[20, 50215], [30, 180780]];
+    const line = (p, q, x) => p[1] * Math.pow(q[1] / p[1], (x - p[0]) / (q[0] - p[0]));
     const raw = (() => {
-      if (is084(GD) && rl <= 30) { const g = Math.pow(low84[2][1] / low84[0][1], 1 / 4); return low84[0][1] * Math.pow(g, rl - 22); }
+      if (is084(GD) && rl <= 39) {
+        if (rl % 10 === 0) return line(gate84[0], gate84[1], rl);
+        if (rl <= low84[0][0]) return line(low84[0], low84[1], rl);
+        let k = 0; while (k < low84.length - 2 && rl > low84[k + 1][0]) k++;
+        return line(low84[k], low84[k + 1], rl);
+      }
+      if (is084(GD) && rl < 62) return line(low84[low84.length - 1], pts[0], rl);
       if (rl <= 62) return pts[0][1] * Math.pow(1.1315, rl - 62);
       if (rl >= 150) return pts[pts.length - 1][1] * Math.pow(D.LadderLifePerLevel || 1.03, rl - 150);
       const last = pts.length - 1; let k = 0; while (k < last - 1 && rl > pts[k + 1][0]) k++;

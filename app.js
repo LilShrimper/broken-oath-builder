@@ -8050,7 +8050,18 @@ window.BOPatches = function (ctx) {
 
 
       let body;
-      if (s[0] === 'nodes' && rows.some(c => c.kind === 'added')) {
+
+
+      if (s[0] === 'dragon') {
+        const clsOf = c => /^node:/.test(c.id) ? c.id.split(':')[1] : /^rule:/.test(c.id) ? 'keystone rules' : '';
+        const order = ['warrior', 'mage', 'ranger', 'samurai', 'paladin', 'necromancer', 'keystone rules'];
+        const classes = [...new Set(rows.map(clsOf).filter(Boolean))].sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99) || a.localeCompare(b));
+        body = rows.filter(c => !clsOf(c)).map(c => entryHtml(c, false)).join('') + classes.map(cl => {
+          const g = rows.filter(c => clsOf(c) === cl), n = k => g.filter(c => c.kind === k).length;
+          const parts = [['changed', 'changed'], ['added', 'new'], ['removed', 'removed']].filter(([k]) => n(k)).map(([k, w]) => n(k) + ' ' + w).join(', ');
+          return '<details class="pt-group"' + (q ? ' open' : '') + '><summary>' + esc(cl.charAt(0).toUpperCase() + cl.slice(1)) + ' <span class="count">' + esc(parts) + '</span></summary>' + g.map(c => entryHtml(c, false)).join('') + '</details>';
+        }).join('');
+      } else if (s[0] === 'nodes' && rows.some(c => c.kind === 'added')) {
         const add = rows.filter(c => c.kind === 'added'), rest = rows.filter(c => c.kind !== 'added');
         body = '<details class="pt-group"' + (q ? ' open' : '') + '><summary>' + add.length + ' new node' + (add.length === 1 ? '' : 's') + ' <span class="count">' + esc([...new Set(add.map(c => c.name))].slice(0, 6).join(', ')) + (new Set(add.map(c => c.name)).size > 6 ? ', …' : '') + '</span></summary>' +
           add.map(c => entryHtml(c, false, true)).join('') + '</details>' + rest.map(c => entryHtml(c, false)).join('');
@@ -17099,14 +17110,14 @@ window.BOStartApp = function () {
 
     const bsh = r.barShock || [];
     $('#barShockBox').hidden = !bsh.length;
-    $('#barShockList').innerHTML = bsh.map(b => '<li><label><input type="checkbox" data-src="' + esc(b.key) + '"' + (b.on ? ' checked' : '') + '><span class="name">' + skillDot(b.id) + esc(b.name) + '</span></label>' +
-      '<span class="meta">' + num(b.size, 1) + '% shock, up ' + Math.round(b.uptime * 100) + '% of the time' + (b.coc ? ' (Cast on Crit)' : '') + '</span></li>').join('');
+    $('#barShockList').innerHTML = bsh.map(b => '<li><label><input type="checkbox" data-src="' + esc(b.key) + '"' + (b.on ? ' checked' : '') + '><span class="name">' + skillDot(b.id) + esc(b.name) +
+      '<span class="meta">' + num(b.size, 1) + '% shock, up ' + Math.round(b.uptime * 100) + '% of the time' + (b.coc ? ' (Cast on Crit)' : '') + '</span></span></label></li>').join('');   // figures under the name: beside it, the 2-column pop-up squeezed the name to a letter a line (19 Nov 2026)
 
 
     const bfr = (r.freeze && r.freeze.helpers) || [];
     $('#barFreezeBox').hidden = !bfr.length;
-    $('#barFreezeList').innerHTML = bfr.map(b => '<li><label><input type="checkbox" data-src="' + esc(b.key) + '"' + (b.on ? ' checked' : '') + '><span class="name">' + skillDot(b.id) + esc(b.name) + '</span></label>' +
-      '<span class="meta">' + num(b.coldPerSec, 0) + ' cold a second on the bar</span></li>').join('');
+    $('#barFreezeList').innerHTML = bfr.map(b => '<li><label><input type="checkbox" data-src="' + esc(b.key) + '"' + (b.on ? ' checked' : '') + '><span class="name">' + skillDot(b.id) + esc(b.name) +
+      '<span class="meta">' + num(b.coldPerSec, 0) + ' cold a second on the bar</span></span></label></li>').join('');
 
     $('#heraldTryList').innerHTML = Object.values(GD.blessings).filter(b => /herald/i.test(b.Id) && b.Kind === 'Vow' && b.Skill && !ch.hotbar.includes(b.Skill)).map(b => {
       const lv = st.tryHeralds[b.Id] || 0;
@@ -21327,6 +21338,18 @@ window.BOStartApp = function () {
       const a = GD.affixes[lid] || GD.affixes[id]; if (!a || !a.Mod) return '';
       return head(modLine(Object.assign({}, a.Mod, { Value: (a.Tiers[0] || {}).Max })), 'Item mod · ' + (a.Type || '') + ((a.BaseTags || []).length ? ' · ' + a.BaseTags.join(', ') : '')) +
         list('pl-tip-base', (a.Tiers || []).map((t, i) => 'Tier ' + (i + 1) + (t.Name ? ' ' + t.Name : '') + ' (item level ' + t.ILvl + '): ' + t.Min + (t.Max !== t.Min ? '-' + t.Max : '')));
+    }
+
+    if (sec === 'dragon') {
+      const D = GD.dragon || {}, p = String(id).split(':');
+      if (p[0] === 'aspect') { const a = (D.aspects || {})[p[1]]; return a ? head((a.Name || p[1]) + ' Aspect', 'Dragonling Aspect') + (a.Text ? '<span class="pl-tip-desc">' + esc(a.Text) + '</span>' : '') : ''; }
+      if (p[0] === 'node') {
+        const n = ((D.classes || {})[p[1]] || {})[p.slice(2).join(':')]; if (!n) return '';
+        const cls = p[1].charAt(0).toUpperCase() + p[1].slice(1);
+        return head(n.Name, 'Dragonling · ' + cls + (n.Heart ? ' Heart' : '') + (n.Path ? ' · ' + n.Path : '') + (n.Kind ? ' · ' + n.Kind : '')) +
+          (n.Text ? '<span class="pl-tip-desc">' + esc(n.Text) + '</span>' : '') + (n.Ascend && n.Ascend.Text ? '<span class="pl-tip-desc">Ascended: ' + esc(n.Ascend.Text) + '</span>' : '');
+      }
+      return '';
     }
     if (sec === 'potions') { const p = byId('potions'); return p ? head(p.Name, 'Potion') + (p.Text || p.Description ? '<span class="pl-tip-desc">' + esc(p.Text || p.Description) + '</span>' : '') : ''; }
     return '';

@@ -50,7 +50,7 @@
   var b = new URL("../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/uk.json'), langCode: 'uk' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../style.css?v=403">
+<link rel="stylesheet" href="../style.css?v=404">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -190,6 +190,7 @@
     </nav>
 </div>
 <section class="hero" id="hero">
+  <div class="hero-top">
   <svg class="hero-art" viewBox="0 0 1200 420" preserveAspectRatio="xMaxYMid slice" aria-hidden="true">
     <defs>
       <linearGradient id="hSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="hs-1"/><stop offset=".65" class="hs-2"/><stop offset="1" class="hs-3"/></linearGradient>
@@ -217,39 +218,45 @@
   </svg>
   <div class="hero-main">
     <div class="hero-body">
-      
       <h2 class="hero-title">Broken Oath Builder</h2>
-      
-      <p class="hero-text">See the DPS your character really deals, find upgrades, and plan what's next. Load a save, paste a build code, or start a plan from scratch.</p>
+      <p class="hero-text">Damage simulator and build planner for the Broken Oath playtest. See the DPS your character really deals, find upgrades, and plan what's next.</p>
       <div class="hero-cta">
         <button class="btn big" type="button" data-hero="saves">Load a character</button>
         <button class="btn big ghost" type="button" data-hero="plan">Plan a new build</button>
       </div>
       <div class="hero-alternatives">
-        <button type="button" data-hero="code">Have a build code? <b>Load it</b></button>
+        <button type="button" data-hero="savehelp">First time? <b>See how to load your saves</b></button>
         <button type="button" data-hero="savepath">Need your save folder? <b>Copy its path</b></button>
       </div>
-      <p class="hero-small">Your save and game log are read in this browser tab only; nothing is uploaded.</p>
+      <p class="hero-small">Fan-made tool, not affiliated with the developers. Your save and game log are read in this browser tab only; nothing is uploaded.</p>
     </div>
-    <aside class="onboarding-card" aria-label="Getting started">
-      <div class="onboarding-heading">
-        <span class="eyebrow">GETTING STARTED</span>
-        
+    <aside class="onboarding-card" aria-label="Ways to start">
+      <div class="onboarding-heading"><span class="eyebrow">WAYS TO START</span></div>
+      <div class="land-ways">
+        <button class="land-way" type="button" data-hero="saves"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5 12 17l2.5-2.5"/></svg></span><span><b>Load your saves</b><small>Pick your SaveGames folder: every character is loaded, newest first.</small></span></button>
+        <button class="land-way" type="button" data-hero="plan"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2zM8 7h8M8 11h6"/></svg></span><span><b>Start a new plan</b><small>Pick a class and build it from scratch.</small></span></button>
+        <button class="land-way" type="button" data-hero="code"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8 4 12l4 4M16 8l4 4-4 4M14 5l-4 14"/></svg></span><span><b>Load a build code</b><small>A tree code, a saved plan, a share link or an ItemDatabase planner link.</small></span></button>
+        <button class="land-way" type="button" data-hero="ladder"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V13h5v8M9.5 21V8h5v13M15 21v-6h5v6M3 21h18"/></svg></span><span><b>Start from a ladder build</b><small>Open any top-50 build from the public ladder in the planner.</small></span></button>
       </div>
-      <ol class="onboarding-steps">
-        <li class="current"><span class="step-number">1</span><span><b>Load a character</b><small>Pick your SaveGames folder or one save file.</small></span></li>
-        <li><span class="step-number">2</span><span><b>Choose a skill</b><small>Your damage results appear automatically.</small></span></li>
-        <li><span class="step-number">3</span><span><b>Explore upgrades</b><small>Try supports, gear and enemy settings.</small></span></li>
-      </ol>
-      <div class="onboarding-note"><span class="onboarding-note-icon" aria-hidden="true">✓</span><span><b>Ready to go</b><small>Game data is included. No setup or upload needed.</small></span></div>
     </aside>
   </div>
-  <div class="hero-tiles">
-    <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M5 19 19 5M14 5h5v5M5 14l5 5"/></svg></span><b>Damage &amp; supports</b><small>See your damage mix and compare support setups.</small></div>
-    <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6z"/></svg></span><b>Gear &amp; passives</b><small>Find what each item and passive adds to your build.</small></div>
-    <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9.5 11.5h.01M14.5 11.5h.01M10 19v2M14 19v2"/></svg></span><b>Test the encounter</b><small>Set enemy defences, curses and fight conditions.</small></div>
-    <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><b>Check &amp; plan</b><small>Check the sim against your log and save build plans.</small></div>
   </div>
+  <div class="land-stats" id="landStats" aria-label="Game data on this page"></div>
+  <div class="land-block">
+    <div class="land-head"><h3>Tools</h3><p>Everything on the site. Each tool has its own address, so you can bookmark or share it.</p></div>
+    <div id="landTools"></div>
+  </div>
+  <div class="land-block">
+    <div class="land-head"><h3>How the numbers are checked</h3><p>A sim rule changes only when the game itself shows it.</p></div>
+    <div class="hero-tiles">
+      <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h10l4 4v14H5zM8 9h8M8 13h8M8 17h5"/></svg></span><b>The game log</b><small>Real fights, hit by hit: damage, casts, ailments and marks.</small></div>
+      <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4zM8 9h8M8 12h5"/></svg></span><b>In-game tooltips</b><small>Skill panels and the character sheet's Copy stats, next to the sim's numbers.</small></div>
+      <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9M12 7v5l3 2M21 3v5h-5"/></svg></span><b>Patch notes and rule files</b><small>The developer's notes and the formulas published with each game build.</small></div>
+      <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><b>Measured Guardian DPS</b><small>The sim against what ladder builds really deal, from the Broken Oath public API.</small></div>
+    </div>
+    <p class="land-note">Numbers, skills and the meta change with every patch, and the sim is an estimate. <button type="button" class="linkish" data-hero="log">Load your game log</button> to check it against your own fights, or <button type="button" class="linkish" data-hero="faq">read how the game's mechanics work</button>.</p>
+  </div>
+  <div class="land-block" id="landNews" hidden></div>
 </section>
 <section class="fight-check-banner" id="logCheckBanner" aria-live="polite" hidden></section>
 <div class="data-old" id="dataOld" role="status" hidden>
@@ -646,7 +653,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":403,"at":"2026-11-19T23:21:31.011Z"};
+window.SITE_VERSION = {"v":404,"at":"2026-11-20T00:02:52.872Z"};
 window.SITE_LANG = 'uk';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../", location.href).pathname.replace(/[^/]*$/, '');
@@ -655,6 +662,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=4e9487f7","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../app.js?v=403"></script>
+<script src="../app.js?v=404"></script>
 </body>
 </html>

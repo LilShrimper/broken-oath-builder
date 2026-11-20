@@ -7482,11 +7482,26 @@ window.BOItemSearch = function (ctx) {
 
 
 
-  function ehpOf(d, cap) {
+
+
+
+
+  function evadeOf(evasion, lvl, H) {
+    H = H || {};
+    const eff = (evasion || 0) * (H.EvasionScale || 0) / (1 + (lvl || 1) * (H.EvasionMlvlFactor || 0));
+    return H.EvasionBase && eff > 0 ? Math.min((H.EvasionMax || 75) / 100, 1 - H.EvasionBase / (H.EvasionBase + eff)) : 0;
+  }
+  function ehpOf(d, cap, H, lvl) {
     if (!d) return null;
     const rs = (d.resParts || []).map(x => Math.min(cap, x[1]));
     const avg = rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : 0;
-    return (d.life + d.es) / Math.max(0.05, 1 - avg / 100);
+    const evade = H ? evadeOf(d.evasion, lvl, H) : 0;
+    return (d.life + d.es) / Math.max(0.02, Math.max(0.05, 1 - avg / 100) * (1 - 0.5 * evade));
+  }
+
+  function monsterLevelAt(GD, rl) {
+    const D = GD.deep || {}, max = D.MapMaxLevel || 80, ml = D.LadderMonsterLevels || [];
+    return rl > 0 ? (rl <= max || !ml.length ? rl : ml[Math.min(rl - max, ml.length) - 1]) : 0;
   }
   const SOLO = 'Oathbound Solo'; // the game's name for solo self-found (SSF) leagues
   const SORTS = [['rank', 'Ladder rank'], ['rupture', 'Deepest Rupture'], ['sim', 'Sim DPS (est.)'], ['dps', 'Boss DPS (measured)'],['ehp', 'EHP'], ['lifees', 'Life + ES'], ['level', 'Level']];
@@ -7639,7 +7654,7 @@ window.BOItemSearch = function (ctx) {
             try { sim = ctx.simDps ? ctx.simDps(ch, h.rupture_level || 0) : null; } catch (e) { sim = null; }
             if (sim > 0) { simSkill = id; break; }
           }
-          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap()), sim, simSkill, items, gems, find: items.join('\n').toLowerCase(), kept: !!h.kept_build };
+          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap(), (GD().scaling || {}).Hero, monsterLevelAt(GD(), h.rupture_level || 0) || ch.level), sim, simSkill, items, gems, find: items.join('\n').toLowerCase(), kept: !!h.kept_build };
         } catch (e) { roster(league)[h.hero] = { life: null, es: null, ehp: null, sim: null, items, gems, find: items.join('\n').toLowerCase() }; }
         if (++n % 15 === 0) { S.rosterBusy = 'Running the sim on the builds… ' + n; paint(); await new Promise(r => setTimeout(r, 0)); }
       }
@@ -7808,7 +7823,7 @@ window.BOItemSearch = function (ctx) {
           '<td class="num lad-sim">' + simCell(r) + '</td>' + ex +
           '<td class="go" aria-hidden="true">' + (r.has_build && r.build ? '›' : '') + '</td></tr>';
       }).join('');
-      const note = extra ? (extra === 'EHP' ? ' EHP here: (life + energy shield) against elemental hits after the hero\'s resistances (capped at ' + cap() + '%); armour, evasion and block are not counted.' : ' Life and energy shield as the Build Planner adds them up from gear and tree.') + ' Only heroes with a published build have one.' : '';
+      const note = extra ? (extra === 'EHP' ? ' EHP here: (life + energy shield) against elemental hits after the hero\'s resistances (capped at ' + cap() + '%) and evasion (half the hits taken as attacks, monsters at the hero\'s Rupture Level); armour and block are not counted.' : ' Life and energy shield as the Build Planner adds them up from gear and tree.') + ' Only heroes with a published build have one.' : '';
       return '<div class="card lad-table-card"><div class="table-wrap"><table class="tbl lad-table"><thead><tr><th class="num">#</th><th title="Class, with its rank inside the class">Class</th><th>Main skill</th><th class="num">Level</th><th class="num" title="Best Rupture Level">Rupture</th><th class="num" title="The game\'s own median Guardian DPS over its real fights (heroes with a build file)">Boss DPS</th><th class="num" title="Our damage sim on the published build: the skill the hero has dealt the most damage with, against a Guardian at the hero\'s Rupture Level. An estimate">Sim DPS <small class="meta">est.</small></th>' + (extra ? '<th class="num">' + extra + '</th>' : '') + '<th aria-label="Build"></th></tr></thead><tbody>' + body + '</tbody></table></div>' +
         '<p class="hint">' + rows.length + ' heroes shown. Click a hero to see their build (published for the top 50 of each class). Ladder rank: best Rupture Level, then level, experience, fastest clear and who got there first. Boss DPS is the game\'s own median over its Guardian fights. Sim DPS is our damage sim run on the published build (the skill the hero has dealt the most damage with, named under the number when it is not the listed main skill, against a Guardian at that Rupture Level, curses on the hotbar counted): an estimate, which can be off for skills the sim has not been checked on.' + note + '</p></div>';
     }
@@ -7959,7 +7974,7 @@ window.BOItemSearch = function (ctx) {
     return { render, charFromApi, openFromHash };
   };
   root.BOLadderChar = charFromApi;
-  if (typeof module !== 'undefined') module.exports = { charFromApi, ehpOf };
+  if (typeof module !== 'undefined') module.exports = { charFromApi, ehpOf, evadeOf };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 ;
@@ -16776,6 +16791,7 @@ window.BOStartApp = function () {
   if (SV.v && /^https?:$/.test(location.protocol)) {
     const checkVersion = () => fetch((window.SITE_BASE || '') + 'version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(live => {
       if (!live || !live.v) return;
+      landNews(live.changes);
       if (live.v > SV.v) { $('#siteVersion').innerHTML = 'Version ' + SV.v + ' · <a href="" class="bad">version ' + live.v + ' is live: refresh</a>'; showUpdate(live.v, live.changes); }
       else if (live.v === SV.v) $('#siteVersion').textContent = 'Version ' + SV.v + ' · ' + svWhen + ' (latest)';
     }).catch(() => { /* offline: just the number */ });
@@ -21524,7 +21540,41 @@ window.BOStartApp = function () {
     else if (act === 'plan') { if (await planner.startNewPlan()) showTab('plan'); }
     else if (act === 'code') showTab('code');
     else if (act === 'savepath') $('#copySavePath').click();
+    else if (act === 'savehelp') $('#saveTutorialHelp').click();
+    else if (act === 'ladder' || act === 'faq') showTab(act);
+    else if (act === 'log') $('#logInput').click();
   }));
+
+
+  const LAND_TOOLS = [
+    ['Your build', { build: 'Gear, passive tree, skills and a full damage breakdown for one character.', compare: 'Try an item or a whole gear set and see what it does to your damage.',
+      supports: 'Find the strongest support gems for a skill.', builds: 'Your saved builds: open, copy, share or delete them.' }],
+    ['Game reference', { ladder: 'Public ladders and the top builds per class. Open any build in the planner.', items: 'Every item, unique, base type, item mod, rune and gem, newest first.',
+      skillscaling: 'How each skill and minion scales with level and quality.', patch: 'What the latest patch changed, with the history of each skill and item.',
+      faq: 'How damage, defences, ailments, minions and rewards work.', grail: 'Track which uniques you have found.' }],
+    ['Crafting and utilities', { lootfilter: 'Make a loot filter and copy its code into the game.', fossil: 'Plan your fossil crafting.',
+      brewery: "Potions and Brewmaw's recipes.", creator: 'Edit an offline character save in your browser.' }]];
+  (function landing() {
+    const num = v => Number(v).toLocaleString(), count = o => Object.keys(o || {}).length;
+    const stats = [[GD.apiBuild ? GD.apiBuild + (GD.apiHotfix ? '.' + GD.apiHotfix : '') : gdDay, GD.apiBuild ? 'Game build · data from ' + gdDay : 'Game data', 'build'],
+      [num(count(GD.skills)), 'Skills'], [num(count(GD.supports)), 'Support gems'], [num(count(GD.nodes)), 'Passive nodes'], [num(count(GD.oaths)), 'Oaths'],
+      [num(count(GD.uniques)), 'Uniques'], [num(count(GD.bases)), 'Item bases'], [num(count(GD.runes)), 'Runes']];
+    $('#landStats').innerHTML = stats.filter(s => s[0] && s[0] !== '0').map(s => '<div class="land-stat' + (s[2] ? ' ' + s[2] : '') + '"><b class="notranslate">' + esc(s[0]) + '</b><span>' + esc(s[1]) + '</span></div>').join('');
+    const tabs = {}; document.querySelectorAll('.main-tabs .tab[data-tab]').forEach(b => { if (!b.hidden) tabs[b.dataset.tab] = b; });
+    const card = (id, desc) => { const b = tabs[id]; if (!b) return ''; delete tabs[id]; const svg = b.querySelector('svg');
+      return '<button type="button" class="land-tool" data-land="' + esc(id) + '"><span class="tile-ic">' + (svg ? svg.outerHTML : '') + '</span><span><b>' + esc(b.querySelector('span').textContent) + '</b>' + (desc ? '<small>' + esc(desc) + '</small>' : '') + '</span></button>'; };
+    const groups = LAND_TOOLS.map(g => [g[0], Object.keys(g[1]).map(id => card(id, g[1][id])).join('')]);
+    groups[groups.length - 1][1] += Object.keys(tabs).map(id => card(id, '')).join(''); // a tab with no line here yet
+    $('#landTools').innerHTML = groups.filter(g => g[1]).map(g => '<div class="land-group">' + esc(g[0]) + '</div><div class="land-tools">' + g[1] + '</div>').join('');
+    $('#landTools').addEventListener('click', e => { const c = e.target.closest('[data-land]'), b = c && document.querySelector('.main-tabs .tab[data-tab="' + c.dataset.land + '"]'); if (b) { b.click(); window.scrollTo(0, 0); } });
+  })();
+
+  function landNews(changes) {
+    const c = (Array.isArray(changes) ? changes : []).filter(x => x && Array.isArray(x.lines) && x.lines.length).sort((x, y) => y.v - x.v)[0], box = $('#landNews');
+    if (!c || !box) return;
+    box.innerHTML = '<div class="land-head"><h3>Latest site update</h3><p class="notranslate">Version ' + esc(String(c.v)) + (c.date ? ' · ' + esc(c.date) : '') + '</p></div><ul class="land-news-list">' + c.lines.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>';
+    box.hidden = false;
+  }
   $('#homeLink').addEventListener('click', () => {
     showTab('damage');
     document.body.classList.add('landing-view');

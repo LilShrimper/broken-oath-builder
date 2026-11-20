@@ -16792,12 +16792,35 @@ window.BOStartApp = function () {
     const checkVersion = () => fetch((window.SITE_BASE || '') + 'version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(live => {
       if (!live || !live.v) return;
       landNews(live.changes);
-      if (live.v > SV.v) { $('#siteVersion').innerHTML = 'Version ' + SV.v + ' · <a href="" class="bad">version ' + live.v + ' is live: refresh</a>'; showUpdate(live.v, live.changes); }
+      if (live.v > SV.v) {
+        $('#siteVersion').innerHTML = 'Version ' + SV.v + ' · <a href="" class="bad">version ' + live.v + ' is live: refresh</a>';
+
+
+
+
+        if ((live.ask || live.v) > SV.v) { quietV = 0; showUpdate(live.v, live.changes); } else quietV = live.v;
+      }
       else if (live.v === SV.v) $('#siteVersion').textContent = 'Version ' + SV.v + ' · ' + svWhen + ' (latest)';
     }).catch(() => { /* offline: just the number */ });
     checkVersion();
     setInterval(checkVersion, 5 * 60 * 1000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
+  }
+
+
+
+
+
+  let quietV = 0;
+  function quietLoad(key) {
+    if (!quietV) return false;
+    const url = routeUrl(key); if (!url) return false;
+    try { if (+sessionStorage.getItem('bods:quietTried') >= quietV) return false; } catch (e) { return false; }
+    const typed = [...document.querySelectorAll('textarea')].some(t => t.value.trim());
+    if (st.log || (st.ch && st.ch !== st.chOrig) || document.querySelector('dialog[open], #creatorPane .cr-out') || typed) return false;
+    try { sessionStorage.setItem('bods:quietTried', String(quietV)); } catch (e) { return false; }
+    location.assign(url);
+    return true;
   }
 
 
@@ -21134,6 +21157,7 @@ window.BOStartApp = function () {
   }
 
   document.querySelectorAll('.tab[data-tab]').forEach(b => b.addEventListener('click', async () => {
+    if (b.dataset.tab !== 'plan' && quietLoad(b.dataset.tab === 'build' ? (st.ch && lastBuildView() !== 'build' ? lastBuildView() : 'build:' + planner.subTab()) : b.dataset.tab)) return;
     if (b.dataset.tab === 'plan') { if (await planner.startNewPlan()) showTab('plan'); }
     else if (b.dataset.tab === 'build' && st.ch) showTab(lastBuildView()); // back to the Build Planner view used last
     else showTab(b.dataset.tab);
@@ -21556,10 +21580,10 @@ window.BOStartApp = function () {
       brewery: "Potions and Brewmaw's recipes.", creator: 'Edit an offline character save in your browser.' }]];
   (function landing() {
     const num = v => Number(v).toLocaleString(), count = o => Object.keys(o || {}).length;
-    const stats = [[GD.apiBuild ? GD.apiBuild + (GD.apiHotfix ? '.' + GD.apiHotfix : '') : gdDay, GD.apiBuild ? 'Game build · data from ' + gdDay : 'Game data', 'build'],
+    const stats = [[GD.apiBuild ? GD.apiBuild + (GD.apiHotfix ? '.' + GD.apiHotfix : '') : gdDay, GD.apiBuild ? 'Game build' : 'Game data', 'build', GD.apiBuild ? gdDay : ''],
       [num(count(GD.skills)), 'Skills'], [num(count(GD.supports)), 'Support gems'], [num(count(GD.nodes)), 'Passive nodes'], [num(count(GD.oaths)), 'Oaths'],
       [num(count(GD.uniques)), 'Uniques'], [num(count(GD.bases)), 'Item bases'], [num(count(GD.runes)), 'Runes']];
-    $('#landStats').innerHTML = stats.filter(s => s[0] && s[0] !== '0').map(s => '<div class="land-stat' + (s[2] ? ' ' + s[2] : '') + '"><b class="notranslate">' + esc(s[0]) + '</b><span>' + esc(s[1]) + '</span></div>').join('');
+    $('#landStats').innerHTML = stats.filter(s => s[0] && s[0] !== '0').map(s => '<div class="land-stat' + (s[2] ? ' ' + s[2] : '') + '"><b class="notranslate">' + esc(s[0]) + '</b><span>' + esc(s[1]) + (s[3] ? '<span class="notranslate"> · ' + esc(s[3]) + '</span>' : '') + '</span></div>').join('');
     const tabs = {}; document.querySelectorAll('.main-tabs .tab[data-tab]').forEach(b => { if (!b.hidden) tabs[b.dataset.tab] = b; });
     const card = (id, desc) => { const b = tabs[id]; if (!b) return ''; delete tabs[id]; const svg = b.querySelector('svg');
       return '<button type="button" class="land-tool" data-land="' + esc(id) + '"><span class="tile-ic">' + (svg ? svg.outerHTML : '') + '</span><span><b>' + esc(b.querySelector('span').textContent) + '</b>' + (desc ? '<small>' + esc(desc) + '</small>' : '') + '</span></button>'; };
@@ -21572,7 +21596,7 @@ window.BOStartApp = function () {
   function landNews(changes) {
     const c = (Array.isArray(changes) ? changes : []).filter(x => x && Array.isArray(x.lines) && x.lines.length).sort((x, y) => y.v - x.v)[0], box = $('#landNews');
     if (!c || !box) return;
-    box.innerHTML = '<div class="land-head"><h3>Latest site update</h3><p class="notranslate">Version ' + esc(String(c.v)) + (c.date ? ' · ' + esc(c.date) : '') + '</p></div><ul class="land-news-list">' + c.lines.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>';
+    box.innerHTML = '<div class="land-head"><h3>Latest site update</h3><p class="notranslate">Version ' + esc(String(c.v)) + (c.date ? ' · ' + esc(c.date) : '') + '</p></div><ul class="land-news-list notranslate">' + c.lines.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>';
     box.hidden = false;
   }
   $('#homeLink').addEventListener('click', () => {

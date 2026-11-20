@@ -18332,7 +18332,32 @@ window.BOStartApp = function () {
 
     const manaFirst = +GD.apiBuild >= 79 ? Math.min(100, mods.filter(m => m.stat === 'ManaBeforeLife' && m.mode === 'Flat').reduce((a, m) => a + m.v, 0)) : 0;
     const mana = manaFirst > 0 ? S.heroMaxMana(GD.scaling.Hero || {}, ch, mods, attr) : 0;
-    return Object.assign(defenceCore(ch, mods, attr), { attr, armour: tot('Armour'), evasion: tot('Evasion'), block: tot('Block'), manaFirst, mana });
+    return Object.assign(defenceCore(ch, mods, attr), { attr, armour: tot('Armour'), evasion: tot('Evasion'), block: tot('Block'), manaFirst, mana }, defenceLess(ch, mods));
+  }
+
+
+
+
+
+
+
+
+
+
+  function defenceLess(ch, mods) {
+    const maxRes = { Fire: 0, Cold: 0, Lightning: 0, Poison: 0 }, TY = ['Physical', 'Fire', 'Cold', 'Lightning', 'Poison'], by = {};
+    let fortMax = 0, fortEff = 0;
+    const typesOf = (m, all) => { const t = S.splitTags(m.tags || []).types; return !t.length ? all : t.includes('Elemental') ? ['Fire', 'Cold', 'Lightning'] : t; };
+    for (const m of mods) {
+      if (m.stat === 'MaxResist' && m.mode === 'Flat') { for (const t of typesOf(m, Object.keys(maxRes))) if (t in maxRes) maxRes[t] += m.v; }
+      else if (m.stat === 'DamageTaken' && m.mode === 'Inc') { const o = by[m.key || m.src] || (by[m.key || m.src] = {}); for (const t of typesOf(m, TY)) o[t] = (o[t] || 0) + m.v; }
+      else if (m.stat === 'FortifyMax' && m.mode === 'Flat') fortMax += m.v;
+      else if (m.stat === 'FortifyEffect' && m.mode === 'Inc') fortEff += m.v;
+    }
+    const less = {}; for (const t of TY) less[t] = Object.values(by).reduce((a, o) => a * Math.max(0, 1 + (o[t] || 0) / 100), 1);
+
+    const melee = (ch.hotbar || []).some(id => ((GD.skills[String(id || '').toLowerCase()] || {}).Tags || []).includes('Melee'));
+    return { maxRes, less, fortify: melee && fortMax > 0 ? { stacks: fortMax, pct: Math.min(90, fortMax * (1 + fortEff / 100)) } : null };
   }
   function defenceCore(ch, mods, attr) {
     const life = Math.floor(S.heroMaxLife(GD, ch, mods, attr)); // the game rounds down: 467.5 shows as 467
@@ -21502,7 +21527,18 @@ window.BOStartApp = function () {
 
 
     const pen = Math.max(0, +GS.set.resPenalty || 0);
-    const avg = d.resParts.reduce((a, x) => a + Math.min(cap, x[1] - pen), 0) / d.resParts.length;
+
+    const H0 = GD.scaling.Hero || {}, capOf = k => Math.min(Math.max(cap, H0.ResistHardCap || 85), cap + ((d.maxRes || {})[k] || 0));
+
+
+
+
+    const fortOn = d.fortify && !(o && o.off && o.off.has('fortify')), fortF = fortOn ? 1 - d.fortify.pct / 100 : 1;
+    const fRow = ((st.last && st.last.enemy && st.last.enemy.curses) || []).find(r => r.id === 'woe_of_faltering'), fC = GD.curses.woe_of_faltering || {};
+    const falter = fRow ? Math.min(90, (fC.DealtLessPct || 0) * (fRow.eff || 0)) : 0;
+    const hitF = fortF * (1 - falter / 100), less = {}; for (const k of ['Physical', 'Fire', 'Cold', 'Lightning', 'Poison']) less[k] = ((d.less || {})[k] != null ? d.less[k] : 1) * hitF;
+
+    const eleTaken = d.resParts.reduce((a, x) => a + (1 - Math.min(capOf(x[0]), x[1] - pen) / 100) * less[x[0]], 0) / d.resParts.length;
     let miss = 0; for (const k of ['Fire', 'Cold', 'Lightning'].concat(GS.set.resPoison ? ['Poison'] : [])) miss += Math.max(0, target - (res[k] || 0));
     const H = GD.scaling.Hero || {}, L = GS.set.layers, R = GD.rules || {};
     const esArm = +(R['r85.DEFENCE59.EsAsArmourPct'] != null ? R['r85.DEFENCE59.EsAsArmourPct'] : 50) || 0;
@@ -21513,12 +21549,12 @@ window.BOStartApp = function () {
     const evade = H.EvasionBase && eff > 0 ? Math.min((H.EvasionMax || 75) / 100, 1 - H.EvasionBase / (H.EvasionBase + eff)) : 0;
     const block = Math.min(H.BlockMax || 75, d.block) / 100, blockCut = (H.BlockReduction || 0) / 100;
 
-    const taken = (0.5 * (1 - (L.armour ? armDR : 0)) + 0.5 * (1 - avg / 100)) * (1 - 0.5 * (L.evasion ? evade : 0)) * (1 - (L.block ? block * blockCut : 0));
+    const taken = (0.5 * (1 - (L.armour ? armDR : 0)) * less.Physical + 0.5 * eleTaken) * (1 - 0.5 * (L.evasion ? evade : 0)) * (1 - (L.block ? block * blockCut : 0));
 
     const s = (d.manaFirst || 0) / 100, lifePool = s > 0 ? Math.min(s < 1 ? d.life / (1 - s) : Infinity, d.life + (d.mana || 0)) : d.life;
-    const resCapped = {}; for (const [k, v] of d.resParts) resCapped[k] = Math.min(cap, v - pen);
+    const resCapped = {}; for (const [k, v] of d.resParts) resCapped[k] = Math.min(capOf(k), v - pen);
     const gl = R['r80.BIGHIT.fEvasionGlance'], glance = L.evasion ? Math.min(0.95, evade * (gl != null && isFinite(+gl) ? +gl : 1)) : 0;
-    return { life: d.life, es: d.es, res, resCapped, pen, pool: lifePool + d.es, armHit, armour: d.armour, armDR, evasion: d.evasion, evade, glance, block, manaFirst: d.manaFirst || 0, ehp:Math.max(1, (L.life ? lifePool : 0) + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
+    return { life: d.life, es: d.es, res, resCapped, pen, pool: lifePool + d.es, armHit, armour: d.armour, armDR, evasion: d.evasion, evade, glance, block, manaFirst: d.manaFirst || 0, less, caps: Object.fromEntries(d.resParts.map(x => [x[0], capOf(x[0])])), fortify: fortOn ? d.fortify : null, falter, ehp:Math.max(1, (L.life ? lifePool : 0) + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
   }
 
 
@@ -21529,9 +21565,9 @@ window.BOStartApp = function () {
 
   function maxHits(D, probe) {
     const H = GD.scaling.Hero || {}, ref = H.ArmourBigHitRef || 1000, af = H.ArmourFactor75 || H.ArmourFactor || 5, mx = (H.ArmourMaxReduction || 80) / 100;
-    const taken = (type, hit) => type === 'Physical'
+    const taken = (type, hit) => (type === 'Physical'
       ? hit * (1 - (D.armHit > 0 ? Math.min(mx, D.armHit / (D.armHit + af * Math.min(hit, ref))) : 0))
-      : hit * (1 - (D.resCapped[type] || 0) / 100);
+      : hit * (1 - (D.resCapped[type] || 0) / 100)) * (D.less && D.less[type] != null ? D.less[type] : 1);
     const max = (type, f) => {
       if (!(D.pool > 0)) return 0;
       const tk = h => taken(type, h) * (f || 1);
@@ -21542,14 +21578,31 @@ window.BOStartApp = function () {
     return { pool: D.pool, rows: ['Physical', 'Fire', 'Cold', 'Lightning', 'Poison'].map(t => [t, max(t), taken(t, probe)]), glancePhys: D.glance > 0 ? max('Physical', 1 - D.glance) : 0 };
   }
 
+  function ehpCapText(D) {
+    const c = D.caps || {}, v = Object.values(c), base = gsResCap();
+    return !v.length || v.every(x => x === base) ? base + '%' : v.every(x => x === v[0]) ? v[0] + '% with your maximum resistance lines' : Object.entries(c).map(([k, x]) => k + ' ' + x + '%').join(', ') + ' with your maximum resistance lines';
+  }
+  function ehpLessList(D) {
+    const out = [], p = x => +(x).toFixed(1) + '%';
+    if (D.fortify) out.push('Fortified x' + D.fortify.stacks + ': ' + p(D.fortify.pct) + ' less from hits (full stacks)');
+    if (D.falter) out.push('Woe of Faltering: enemy hits deal ' + p(D.falter) + ' less');
+    const hitF = (D.fortify ? 1 - D.fortify.pct / 100 : 1) * (1 - (D.falter || 0) / 100), own = k => (D.less[k] / hitF - 1) * 100;
+    const ks = Object.keys(D.less || {}), all = ks.length && ks.every(k => Math.abs(own(k) - own(ks[0])) < 0.05);
+    const word = v => p(Math.abs(v)) + (v < 0 ? ' less' : ' more');
+    if (all) { if (Math.abs(own(ks[0])) >= 0.05) out.push('Damage taken lines (charges, potions, tree): ' + word(own(ks[0]))); }
+    else for (const k of ks) if (Math.abs(own(k)) >= 0.05) out.push(k + ' taken: ' + word(own(k)));
+    return out;
+  }
+
   function ehpTipHtml(D) {
     const probe = 5000, M = maxHits(D, probe);
     return '<b>EHP (est.) ' + num(D.ehp) + '</b><span class="pl-tip-sub">An estimate, not a number from the game</span>' +
       '<span class="pl-tip-desc">Life + energy shield against a boss hit of ' + num((GD.scaling.Hero || {}).ArmourBigHitRef || 1000) + ' or more: half physical, half elemental, half of the hits attacks. Counted: ' + esc(gsLayerNames().join(', ')) + '.</span>' +
+      (ehpLessList(D).length ? '<span class="pl-tip-head">Less damage taken</span><span class="pl-tip-desc">' + ehpLessList(D).map(esc).join(' · ') + '. Each one multiplies.</span>' : '') +
       '<span class="pl-tip-head">Max hit you survive</span>' +
       '<table class="pl-tip-hits"><tr><th>Damage type</th><th>Max hit</th><th>Taken of a ' + num(probe) + ' hit</th></tr>' +
       M.rows.map(([t, mh, tk]) => '<tr><td style="color:' + typeColor(t) + '">' + t + '</td><td><b>' + num(Math.floor(mh)) + '</b></td><td' + (tk >= M.pool ? ' class="bad"' : '') + '>' + num(Math.round(tk)) + ' <small>(' + (M.pool > 0 ? Math.round(tk / M.pool * 100) : 0) + '% of pool)</small></td></tr>').join('') + '</table>' +
-      '<span class="pl-tip-desc">The biggest single hit your pool of ' + num(Math.floor(M.pool)) + ' (life + energy shield) takes, after armour (physical) or that resistance (capped at ' + gsResCap() + '%' + (D.pen ? ', with the ' + D.pen + '% penalty' : ', no penalty') + '). A hit that lands: not evaded, not blocked.' +
+      '<span class="pl-tip-desc">The biggest single hit your pool of ' + num(Math.floor(M.pool)) + ' (life + energy shield) takes, after armour (physical) or that resistance (capped at ' + ehpCapText(D) + (D.pen ? ', with the ' + D.pen + '% penalty' : ', no penalty') + ')' + (ehpLessList(D).length ? ' and your less damage taken' : '') + '. A hit that lands: not evaded, not blocked.' +
       (D.glance > 0 ? ' You evade ' + Math.round(D.evade * 100) + '% of attacks. An attack you cannot evade glances for ' + Math.round(D.glance * 100) + '% less: up to ' + num(Math.floor(M.glancePhys)) + ' physical.' : '') + '</span>';
   }
 

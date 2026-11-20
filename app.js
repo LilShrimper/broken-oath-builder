@@ -7228,9 +7228,14 @@ window.BOItemSearch = function (ctx) {
       return true;
     });
   }
+
+
+
+  const weightOf = e => { const w = e.cat === 'unique' ? e.u.DropWeight : e.cat === 'base' ? e.b.DropWeight : e.cat === 'mod' && !e.a.Kind ? e.a.Weight : null; return w > 0 ? w : null; };
+  const byWeight = dir => (a, b) => { const x = weightOf(a), y = weightOf(b); return (x == null) - (y == null) || (x != null && y != null ? dir * (x - y) : 0); };
   function sorted(list) {
     const path = e => (e.jewel ? 1000 : 0) + (e.r && e.r.Index != null ? e.r.Index : e.level);
-    const by = { path: (a, b) => path(a) - path(b), affix: (a, b) => (a.affixType === 'Suffix') - (b.affixType === 'Suffix') || levelOf(a) - levelOf(b), level: (a, b) => levelOf(a) - levelOf(b), leveldesc: (a, b) => levelOf(b) - levelOf(a), name: () => 0,
+    const by = { path: (a, b) => path(a) - path(b), affix: (a, b) => (a.affixType === 'Suffix') - (b.affixType === 'Suffix') || levelOf(a) - levelOf(b), level: (a, b) => levelOf(a) - levelOf(b), leveldesc: (a, b) => levelOf(b) - levelOf(a), name: () => 0, rare: byWeight(1), common: byWeight(-1),
       cat: (a, b) => CATS.findIndex(c => c[0] === a.cat) - CATS.findIndex(c => c[0] === b.cat) || levelOf(a) - levelOf(b) }[F.sort] || (() => 0);
 
     const lead = F.newFirst && NEWEST ? (a, b) => (b.added === NEWEST) - (a.added === NEWEST) : () => 0;
@@ -7306,6 +7311,8 @@ window.BOItemSearch = function (ctx) {
     const fill = () => { body.innerHTML = P.historyHtml([[k.slice(0, i), k.slice(i + 1)]], 50); };
     if (P.ready()) fill(); else { body.innerHTML = '<p class="hint">Loading the patch history…</p>'; P.load().then(fill); }
   }
+
+  const weightBadge = e => (F.sort === 'rare' || F.sort === 'common') && weightOf(e) ? '<span class="is-badge muted" title="Drop weight from the public API: higher drops more often">Weight ' + num(weightOf(e)) + '</span>' : '';
   function card(e) {
     const GD = ctx.gd();
     let ico, sub = '', body = '', badges = [], nameTag = '';
@@ -7316,6 +7323,7 @@ window.BOItemSearch = function (ctx) {
       body = baseStats(GD, b) + implicits(GD, b);
       badges.push(badge(e.tiers[0], 'tier'));
       if (b.DropWeight === 0) badges.push(badge('Does not drop', 'muted'));
+      badges.push(weightBadge(e));
     } else if (e.cat === 'unique') {
       const u = e.u, b = e.b;
       ico = art('uniq', u.Id, 'unique', ICON_NAMES[e.icon]) || icon(e.icon, 'unique');
@@ -7338,6 +7346,7 @@ window.BOItemSearch = function (ctx) {
 
       const sourced = from.length && !/not in the game files/.test(from[0]);
       if (u.DropWeight === 0) badges.push(badge(sourced ? 'No random drops' : 'Does not drop', 'muted'));
+      badges.push(weightBadge(e));
     } else if (e.cat === 'oathword') {
       const w = e.w, hide = e.secret && !F.secrets;
       ico = icon('oathword', 'oathword');
@@ -7409,7 +7418,7 @@ window.BOItemSearch = function (ctx) {
     const nb = addedBadge(e); if (nb) badges.unshift(nb);
     return '<article class="is-card cat-' + e.cat + '"><header>' + ico + '<div class="is-head"><b class="is-name">' + esc(e.name) + (nameTag ? ' ' + nameTag : '') + '</b><small>' + (GEM_CATS[e.cat] ? [e.cat === 'skill' ? skillKind(e.sk) : CAT_NAME[e.cat]].concat(sub ? sub.split(' · ') : []).map(t => '<span>' + esc(t) + '</span>').join(' · ') : esc((e.cat === 'rune' ? (e.jewel ? 'Jewel' : 'Rune') : CAT_NAME[e.cat]) + (sub ? ' · ' + sub : ''))) + '</small></div>' +
       (GEM_CATS[e.cat] ? '' : '<span class="is-lvl" title="' + (e.cat === 'mod' ? 'Item level the ' + (tierIdx(e) >= 0 ? F.tier : 'lowest') + ' tier needs' : 'Level') + '">' + (e.cat === 'mod' ? 'iLvl ' : 'Lvl ') + levelOf(e) + '</span>') + '</header>' +
-      body + histBox(e) + (badges.length ? '<footer>' + badges.join('') + '</footer>' : '') + '</article>';
+      body + histBox(e) + ((badges = badges.filter(Boolean)).length ? '<footer>' + badges.join('') + '</footer>' : '') + '</article>';
   }
 
 
@@ -7495,7 +7504,7 @@ window.BOItemSearch = function (ctx) {
     if (!tierOk || (F.tier && !tiers.includes(F.tier))) F.tier = '';
     const mods = F.cat === 'mod';
     if (!mods) F.affix = '';
-    const sorts = (F.cat === 'rune' ? [['path', 'Upgrade path']] : []).concat(GEM_CATS[F.cat] ? [['name', 'Name, A to Z']] : [['level', 'Level, low to high'], ['leveldesc', 'Level, high to low'], ['name', 'Name, A to Z']], mods ? [['affix', 'Prefixes, then suffixes']] : F.cat === 'all' ? [['cat', 'Category']] : []);
+    const sorts = (F.cat === 'rune' ? [['path', 'Upgrade path']] : []).concat(GEM_CATS[F.cat] ? [['name', 'Name, A to Z']] : [['level', 'Level, low to high'], ['leveldesc', 'Level, high to low'], ['name', 'Name, A to Z']].concat(['unique', 'base', 'mod', 'all'].includes(F.cat) ? [['rare', 'Drop weight, rarest first'], ['common', 'Drop weight, commonest first']] : []), mods ? [['affix', 'Prefixes, then suffixes']] : F.cat === 'all' ? [['cat', 'Category']] : []);
     if (!sorts.some(s => s[0] === F.sort)) F.sort = sorts[0][0];
 
     const newBtn = '<button type="button" id="isNew" class="is-cat is-newfirst' + (F.newFirst ? ' active' : '') + '" aria-pressed="' + !!F.newFirst + '" title="Items new this patch on top; the sort orders the rest">New first</button>';

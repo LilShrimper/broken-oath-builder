@@ -1204,7 +1204,7 @@ body.dashboard-view .configure-heading { display: flex; }
   .view-bar .tab.active { box-shadow: inset 0 -2px 0 var(--dashboard-gold); }
 }
 /* Build tab: Gear / Skills sub-tabs (top bar), skills and gear in columns */
-body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page) .build-subtabs { display: none !important; }
+body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page):not(.atlas-page) .build-subtabs { display: none !important; }
 /* Current Build Setup: total DPS, tooltip DPS and average hit on top */
 .build-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .build-stats[hidden] { display: none; }

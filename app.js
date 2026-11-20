@@ -3395,7 +3395,7 @@ window.BOPlanner = function (ctx) {
       const power = band < 0 || !word.PowerBandMods ? word.PowerMods || [] : word.PowerBandMods.slice(from, from + cnt[band]);
       h += '<ul>' + word.Mods.map(mm => li(mm.Text || modLine(mm.Mod))).join('') + power.map(mm => li(modLine(mm.Mod, (mm.Mod.Value || 0) * pm, (mm.Mod.Value2 || 0) * pm))).join('') + '</ul>';
     }
-    const weaponSlot = slot === 'MainHand' || slot === 'OffHand';
+    const weaponSlot = (slot === 'MainHand' || slot === 'OffHand') && !!base && (base.Tags || []).includes('Weapon'); // shields/tomes: armour side (as in sim.js)
     const runes = it.runes.map(r => GD.runes[lc(r)]).filter(Boolean);
     if (runes.length) h += '<ul class="pl-tip-runes">' + runes.map(rd => li('Rune ' + rd.Name + ': ' + (((weaponSlot ? rd.Weapon : rd.Armour) || []).map(m => modLine(m)).join(', ') || 'no effect here'))).join('') + '</ul>';
     return h;
@@ -8963,6 +8963,7 @@ window.BOAtlas = function (ctx) {
     });
   });
   const kids = id => LIST.filter(n => n.parent === id);
+  const path = (id, taken) => { const out = []; for (let n = NODES[id]; n && !taken.has(n.id); n = NODES[n.parent]) out.push(n.id); return out; }; // the node and every untaken node before it
 
   const WORKS_ON = 'every endgame map: Riven maps (Rupture Level 80+), the Core, the Catacombs, the Gnome Realms, the Pinnacle';
   const ownMaps = n => / on (Riven|Gate Warden)|at the Pinnacle| in the (Core|Catacombs|Gnome)/.test(n.text) && n.kind !== 'keystone' && !/^(Abyss Calls|Regicide|Unbound Ascent)$/.test(n.name);
@@ -8972,6 +8973,7 @@ window.BOAtlas = function (ctx) {
   const lordTiers = done => done >= 80 ? Math.floor((done - 80) / 50) + 1 : 0; // Lords stand at 80 and every 50 after (riven_atlas.json LordLevel 80, LordEvery 50)
   const tierPoints = rt => rt > 0 ? Math.floor(Math.min(rt, 100) / 5) + (rt > 100 ? Math.floor((rt - 100) / 10) : 0) : 0;
   const nextRl = rl => rl < 80 ? 80 : rl >= 200 ? null : 80 + (Math.floor((rl - 80) / 5) + 1) * 5;
+  const nextRt = rt => rt < 100 ? Math.floor(rt / 5) * 5 + 5 : 100 + (Math.floor((rt - 100) / 10) + 1) * 10;
 
 
   const KEY = 'bods:atlas';
@@ -8998,17 +9000,27 @@ window.BOAtlas = function (ctx) {
   }
 
 
-  let tip = null, hover = null;
+  let tip = null, hover = null, query = '', raised = '';
+
+  const matches = n => { const q = query.trim().toLowerCase(); return !!q && (n.name + ' ' + n.text + ' ' + n.cname).toLowerCase().includes(q); };
+  const foundText = () => { if (!query.trim()) return ''; const k = LIST.filter(matches).length; return k ? k + ' node' + (k === 1 ? '' : 's') + ' found' : 'No node matches'; };
+  const searchHtml = () => '<div class="at-search"><input type="search" id="atSearch" placeholder="Search nodes: name or effect (rarity, Dust, Pinnacle ...)" aria-label="Search Atlas nodes" value="' + esc(query) + '"><span class="hint" id="atFound">' + foundText() + '</span></div>';
+  function applySearch(pane) { // in place, so the box keeps focus while typing
+    pane.querySelectorAll('.at-node[data-n]').forEach(g => g.classList.toggle('found', matches(NODES[g.dataset.n])));
+    const svg = pane.querySelector('.at-svg'); if (svg) svg.classList.toggle('searching', !!query.trim());
+    const f = pane.querySelector('#atFound'); if (f) f.textContent = foundText();
+  }
     function nodeSvg(n, S) {
     const on = S.taken.has(n.id), canTake = !on && (!n.parent || S.taken.has(n.parent));
-    const cls = 'at-node at-' + n.kind + (on ? ' on' : canTake ? ' open' : '');
+    const cls = 'at-node at-' + n.kind + (on ? ' on' : canTake ? ' open' : '') + (matches(n) ? ' found' : '');
     const x = (n.x).toFixed(1), y = (n.y).toFixed(1);
-    if (n.kind === 'keystone') return '<g class="' + cls + '" data-n="' + n.id + '" tabindex="0" role="button" aria-pressed="' + on + '" aria-label="' + esc(n.name) + '"><circle cx="' + x + '" cy="' + y + '" r="17"/><circle class="at-ring" cx="' + x + '" cy="' + y + '" r="22"/></g>';
+    const ring = '<circle class="at-find" cx="' + x + '" cy="' + y + '" r="' + (n.kind === 'keystone' ? 29 : n.kind === 'notable' ? 21 : 14) + '"/>';
+    if (n.kind === 'keystone') return '<g class="' + cls + '" data-n="' + n.id + '" tabindex="0" role="button" aria-pressed="' + on + '" aria-label="' + esc(n.name) + '">' + ring + '<circle cx="' + x + '" cy="' + y + '" r="17"/><circle class="at-ring" cx="' + x + '" cy="' + y + '" r="22"/></g>';
     const r = n.kind === 'notable' ? 13 : 7;
-    return '<g class="' + cls + '" data-n="' + n.id + '" tabindex="0" role="button" aria-pressed="' + on + '" aria-label="' + esc(n.name) + '"><circle class="at-hit" cx="' + x + '" cy="' + y + '" r="15"/><rect x="' + (x - r) + '" y="' + (y - r) + '" width="' + 2 * r + '" height="' + 2 * r + '" rx="' + (r / 4) + '" transform="rotate(45 ' + x + ' ' + y + ')"/></g>';
+    return '<g class="' + cls + '" data-n="' + n.id + '" tabindex="0" role="button" aria-pressed="' + on + '" aria-label="' + esc(n.name) + '">' + ring + '<circle class="at-hit" cx="' + x + '" cy="' + y + '" r="15"/><rect x="' + (x - r) + '" y="' + (y - r) + '" width="' + 2 * r + '" height="' + 2 * r + '" rx="' + (r / 4) + '" transform="rotate(45 ' + x + ' ' + y + ')"/></g>';
   }
   function draw(S) {
-    let h = '<svg class="at-svg" viewBox="-390 -335 780 670" role="group" aria-label="Riven Atlas tree">';
+    let h = '<svg class="at-svg' + (query.trim() ? ' searching' : '') + '" viewBox="-390 -335 780 670" role="group" aria-label="Riven Atlas tree">';
     h += '<circle class="at-ring-bg" r="210"/>';
     for (const n of LIST) {
       const p = n.parent ? NODES[n.parent] : null, px = p ? p.x : n.x * 0.32, py = p ? p.y : n.y * 0.32; // the stem starts at the centre circle
@@ -9029,6 +9041,7 @@ window.BOAtlas = function (ctx) {
     const num = (id, label, v, max, note) => '<label class="field"><span>' + label + '</span><input type="number" id="' + id + '" min="0" max="' + max + '" value="' + esc(v) + '"></label>' + (note ? '<p class="hint at-note">' + note + '</p>' : '');
     const ch = ctx.current && ctx.current();
     let h = '<div class="card at-card"><h2>Points <small>' + (tot - sp) + ' of ' + tot + ' free · ' + S.taken.size + ' of 110 nodes</small></h2>' +
+      (raised ? '<p class="hint at-raised">' + esc(raised) + '</p>' : '') +
       (sp > tot ? '<p class="warn">' + (sp - tot) + ' point' + (sp - tot === 1 ? '' : 's') + ' more than you have.</p>' : '') +
       '<div class="at-fields">' +
       num('atRl', 'Best Rupture Level cleared', S.rl, 9999, rlPoints(S.rl) + ' point' + (rlPoints(S.rl) === 1 ? '' : 's') + (nx ? ' · next at Rupture Level ' + nx : ' · all 25')) +
@@ -9037,14 +9050,14 @@ window.BOAtlas = function (ctx) {
       '</div>' +
       (ch && ch.deepBest ? '<p class="hint">Filled in from ' + esc(ch.name || 'this character') + '\'s save' + (S.own.rl != null || S.own.lords != null || S.own.rt != null ? ' (changed here) <button type="button" class="btn ghost at-small" id="atFromSave">use the save</button>' : '') + '.</p>' : '') +
       '<div class="at-btns"><button type="button" class="btn ghost" id="atReset"' + (S.taken.size ? '' : ' disabled') + '>Reset all</button></div>' +
-      '<p class="hint">Click a node to take it (the node before it first). Click a taken end node to refund it. Kept in this browser' + (ch ? ', for this character' : '') + '.</p></div>';
+      '<p class="hint">Click a node to take it (the nodes before it come too). Out of points, the Rupture Level, then the Riven Tier, goes up to pay for it. Click a taken end node to refund it. Kept in this browser' + (ch ? ', for this character' : '') + '.</p></div>';
     h += '<div class="card at-card"><h2>Your Atlas now</h2>' + (list.length ? '<ul class="faq-list at-sum">' + list.map(l => '<li>' + esc(l.text) + '</li>').join('') + '</ul>' : '<p class="hint">Nothing taken yet.</p>') +
       '<p class="hint">Lines with the same wording added up. Works on ' + esc(WORKS_ON) + ', unless the line names its own maps.</p></div>';
     return h;
   }
   function tipHtml(n, S) {
     const on = S.taken.has(n.id), canTake = !n.parent || S.taken.has(n.parent), end = !kids(n.id).some(k => S.taken.has(k.id));
-    const state = on ? (end ? 'taken · click to refund ' + n.cost + ' point' + (n.cost > 1 ? 's' : '') : 'taken · refund the nodes past it first') : canTake ? n.cost + ' point' + (n.cost > 1 ? 's' : '') + ' · click to take' : n.cost + ' point' + (n.cost > 1 ? 's' : '') + ' · take the node before it first';
+    const state = on ? (end ? 'taken · click to refund ' + n.cost + ' point' + (n.cost > 1 ? 's' : '') : 'taken · refund the nodes past it first') : canTake ? n.cost + ' point' + (n.cost > 1 ? 's' : '') + ' · click to take' : (() => { const p = path(n.id, S.taken), c = p.reduce((a, id) => a + NODES[id].cost, 0); return c + ' points with the ' + (p.length - 1) + ' node' + (p.length > 2 ? 's' : '') + ' before it · click to take them'; })();
     return '<b>' + esc(n.name) + '</b><span class="pl-tip-sub">' + esc(n.cname) + ' · ' + KIND[n.kind] + '</span><span class="pl-tip-desc">' + n.text.split(' · ').map(esc).join('<br>') + '</span>' +
       (ownMaps(n) ? '' : '<span class="pl-tip-desc at-tip-where">Works on ' + esc(WORKS_ON) + '</span>') + '<span class="pl-tip-desc at-tip-state">' + esc(state) + '</span>';
   }
@@ -9060,27 +9073,39 @@ window.BOAtlas = function (ctx) {
   function toggle(id) {
     const S = state(), n = NODES[id]; if (!n) return;
     if (S.taken.has(id)) { if (kids(id).some(k => S.taken.has(k.id))) return; S.taken.delete(id); }
-    else { if (n.parent && !S.taken.has(n.parent)) return; S.taken.add(id); }
-    store({ taken: [...S.taken] }); render(id);
+    else path(id, S.taken).forEach(t => S.taken.add(t));
+
+
+    const patch = { taken: [...S.taken] }; raised = '';
+    if (spent(S) > total(S)) {
+      const was = { rl: S.rl, rt: S.rt }, said = [];
+      while (spent(S) > total(S) && nextRl(S.rl) != null) S.rl = nextRl(S.rl);
+      while (spent(S) > total(S)) S.rt = nextRt(S.rt);
+      if (S.rl !== was.rl) { patch.rl = S.rl; said.push('best Rupture Level ' + was.rl + ' → ' + S.rl); }
+      if (S.rt !== was.rt) { patch.rt = S.rt; said.push('Riven Tier ' + was.rt + ' → ' + S.rt); }
+      raised = 'Raised to pay for ' + n.name + ': ' + said.join(', ') + '.';
+    }
+    store(patch); render(id);
   }
   function render(keepHover) {
     const pane = $('#atlasPane'); if (!pane) return;
     const S = state();
     pane.innerHTML = '<div class="cmp-intro"><div class="eyebrow">BUILD PLANNER</div><h2>Riven Atlas</h2><p>Plan your Atlas points: 10 clusters of 11 nodes around the centre. Drops, experience and monsters only; nothing here changes your damage. How the points work is in the FAQ (Riven Atlas).</p></div>' +
-      '<div class="at-wrap"><div class="card at-tree">' + draw(S) + '</div><div class="at-side">' + side(S) + '</div></div>' +
+      '<div class="at-wrap"><div class="card at-tree">' + searchHtml() + draw(S) + '</div><div class="at-side">' + side(S) + '</div></div>' +
       '<p class="hint">Node texts copied from the game\'s tooltips (build 85, 20 Nov 2026). Numbers may change with any patch.</p>';
     if (!pane.dataset.wired) {
       pane.dataset.wired = '1';
       pane.addEventListener('click', e => {
         const g = e.target.closest('[data-n]'); if (g) { toggle(g.dataset.n); return; }
-        if (e.target.closest('#atReset')) { if (confirm('Refund every Atlas node?')) { store({ taken: [] }); render(); } return; }
-        if (e.target.closest('#atFromSave')) { const all = load(), k = chKey(); if (all[k]) { delete all[k].rl; delete all[k].lords; delete all[k].rt; save(all); } render(); }
+        if (e.target.closest('#atReset')) { if (confirm('Refund every Atlas node?')) { raised = ''; store({ taken: [] }); render(); } return; }
+        if (e.target.closest('#atFromSave')) { const all = load(), k = chKey(); if (all[k]) { delete all[k].rl; delete all[k].lords; delete all[k].rt; save(all); } raised = ''; render(); }
       });
       pane.addEventListener('keydown', e => { const g = e.target.closest && e.target.closest('[data-n]'); if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(g.dataset.n); } });
       pane.addEventListener('change', e => {
         const f = { atRl: 'rl', atLords: 'lords', atRt: 'rt' }[e.target.id]; if (!f) return;
-        store({ [f]: Math.max(0, Math.floor(+e.target.value || 0)) }); render();
+        raised = ''; store({ [f]: Math.max(0, Math.floor(+e.target.value || 0)) }); render();
       });
+      pane.addEventListener('input', e => { if (e.target.id === 'atSearch') { query = e.target.value; applySearch(pane); } });
       const over = e => { const g = e.target.closest && e.target.closest('[data-n]'); if (!g) return hideTip(); hover = g.dataset.n; showTip(g, state()); };
       pane.addEventListener('mouseover', over); pane.addEventListener('focusin', over);
       pane.addEventListener('mouseleave', hideTip); pane.addEventListener('focusout', hideTip);
@@ -12498,7 +12523,11 @@ window.BOCharacter = function (ctx) {
           add(af.Mod, lineV(a.v, rf && rf[0]), lineV(a.v2, rf && rf[1]), label + (ik !== 1 ? (it.slot === 'Idol' ? ' (idol line x' : ' (line x') + +ik.toFixed(2) + ')' : '') + (isVow ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
         }
       }
-      const weaponSlot = it.slot === 'MainHand' || it.slot === 'OffHand';
+
+
+
+
+      const weaponSlot = (it.slot === 'MainHand' || it.slot === 'OffHand') && !!base && (base.Tags || []).includes('Weapon');
       const halfLevels = {};
       for (const r of it.runes) {
         const rd = GD.runes[lc(r)]; if (!rd) { notes.push('Unknown rune ' + r); continue; }
@@ -21530,6 +21559,18 @@ window.BOStartApp = function () {
     return s.length + ':' + h;
   }
   const gsSlotName = key => key === 'DwarvenRune2' ? 'Dwarven rune 2' : planner.slotName[key] || key;
+
+
+
+  function bareItemsNote() {
+    const bare = (st.ch.items || []).filter(i => (i.rarity === 'Rare' || i.rarity === 'Magic') && !(i.affixes || []).length);
+    if (!bare.length) return '';
+    const idols = bare.filter(i => i.slot === 'Idol').length, names = bare.filter(i => i.slot !== 'Idol').map(i => gsSlotName(i.slot));
+    if (idols) names.push(idols + ' idol' + (idols > 1 ? 's' : ''));
+    return '<div class="warn" style="margin-bottom:12px"><b>' + bare.length + ' of your rare and magic items have no stat lines:</b> ' + names.map(n => '<span>' + esc(n) + '</span>').join(', ') + '<br>' +
+      'This happens with gear from the game\'s build code, which has no rolled stats. Those items count as bare bases here, so your own gear scores low and every result looks better than it is. ' +
+      'To use your real items, load the character from its save file, or add their lines on the Build tab.</div>';
+  }
   function gsItemLabel(it, rec) {
     if (!it) return '<span class="meta">empty</span>';
     const b = GD.bases[lc(it.base)], bn = b ? b.Name : it.base, word = planner.oathwordForItem(it, it.slot);
@@ -21648,7 +21689,7 @@ window.BOStartApp = function () {
     const chk = (f, label, tip) => '<label class="check-row" title="' + esc(tip) + '"><input type="checkbox" data-gs-set="' + f + '"' + (S_[f] ? ' checked' : '') + (GS.running ? ' disabled' : '') + '><span>' + label + '</span></label>';
     const gsIntro = '<p class="hint">Finds the best gear for the selected skill' + (optExtra().length ? ' and the ' + optExtra().length + ' ticked under Also count (weighted)' : '') + ': every unique (with Vows), every Oathword, and rare items with the best prefixes and suffixes. Your passive tree, skills and supports stay as they are' + (S_.idolAffixes ? '; so do your red idols' : ', and so do your idols unless you pick idol lines below') + '.</p>';
     let h = '<div class="card gs-card"><div class="cmp-pick-head"><div class="gs-head-text"><h2>Gear Set Sim</h2>' + gsIntro + '</div><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + (GS.running ? ' disabled' : '') + '>' + cmpSkillOptions() + '</select></label>' + (GS.running ? '' : cmpMultiHtml() + enemyBtn()) + '</span></div>' +
-      gsTopHtml(GS.running, true) +
+      bareItemsNote() + gsTopHtml(GS.running, true) +
       '<div class="gs-controls"><label class="field inline" title="The most sockets a rare item is planned with. Rares roll at most 2 sockets; Oathwords keep their own number of sockets"><span>Sockets on rares</span><select id="gsRareSock"' + (GS.running || !S_.runes ? ' disabled' : '') + '>' +
         [[2, 'Up to 2 (default)'], [1, 'Up to 1'], [0, 'None']].map(([n, l]) => '<option value="' + n + '"' + (+S_.rareSockets === n ? ' selected' : '') + '>' + l + '</option>').join('') + '</select></label>' +
         '<label class="field inline" title="Also choose the idols: how many lines each idol carries. Keep my idols leaves the idols as they are"><span>Optimize idols with</span><select id="gsIdol"' + (GS.running ? ' disabled' : '') + '><option value=""' + (S_.idolAffixes === '' || S_.idolAffixes == null ? ' selected' : '') + '>Keep my idols</option>' +
@@ -21735,7 +21776,7 @@ window.BOStartApp = function () {
     if (SBS.res && SBS.res.key !== key) SBS.res = null;
     const off = SBS.running;
     let h = '<div class="card gs-card"><div class="cmp-pick-head"><div class="gs-head-text"><h2>Sim by Slot</h2><p class="hint">Pick a slot: every unique, Oathword and rare that fits it is simmed with the rest of your gear as it is, best first. The settings are the same as the Gear Set Sim\'s.</p></div><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + (off ? ' disabled' : '') + '>' + cmpSkillOptions() + '</select></label>' + (off ? '' : cmpMultiHtml() + enemyBtn()) + '</span></div>' +
-      gsTopHtml(off, false) +
+      bareItemsNote() + gsTopHtml(off, false) +
       cmpSlotButtons(true) +
       '<div class="gs-controls gs-goal">' + gsPrioHtml(off) + gsLayersHtml(off) + '</div>' +
       '<div class="cmp-actions">' + (off ? '<button class="btn ghost" type="button" data-sbs="cancel">Stop</button>' :

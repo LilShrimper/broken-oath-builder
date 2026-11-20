@@ -2825,6 +2825,20 @@ details.sw-sub.sw-sup { background: var(--panel); }
 .at-sum li { margin: 2px 0; }
 .at-tip-where { color: var(--faint); font-size: 11px; margin-top: 5px; }
 .at-tip-state { color: var(--muted); font-size: 11px; margin-top: 4px; }
+.at-search { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 4px 4px 8px; }
+.at-search input { flex: 1 1 260px; max-width: 460px; min-width: 0; box-sizing: border-box; height: 40px; padding: 8px 12px; border: 1px solid var(--dashboard-gold); border-radius: 9px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 15px; }
+.at-search input::placeholder { color: var(--muted); }
+.at-search input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+:root[data-theme="light"] .at-search input { border-color: #8a6a1e; }
+.at-search .hint { margin: 0; }
+/* !important: the .on / .open / :hover node rules above are more specific and would fill or restroke the ring. */
+.at-node circle.at-find { display: none; fill: none !important; stroke: #ff3b3b !important; stroke-width: 3 !important; pointer-events: none; animation: at-find-pulse 1.4s ease-in-out infinite; }
+.at-node.found circle.at-find { display: inline; }
+@keyframes at-find-pulse { 50% { stroke-opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .at-node circle.at-find { animation: none; } }
+:root[data-theme="light"] .at-node circle.at-find { stroke: #d01818 !important; }
+.at-svg.searching .at-node:not(.found) { opacity: .45; }
+.at-raised { color: var(--dashboard-gold); }
 .at-faq-c { margin: 6px 0; }
 .at-faq-c summary { cursor: pointer; color: var(--dashboard-gold); font-weight: 650; padding: 4px 0; }
 @media (max-width: 1100px) { .at-wrap { grid-template-columns: 1fr; } }

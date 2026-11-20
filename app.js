@@ -20168,8 +20168,8 @@ window.BOStartApp = function () {
   function saveAsPlan() {
     if (!st.ch || st.ch.plan) return;
     const p = keepSharedTabs(planner.planFrom(liveCopy()));
-    addChars([p], 'plan', p.id); showTab('build');
-    planner.setStatus('Saved as the plan "' + p.name + '" (in the Saved Builds tab). Later edits stay unsaved until you press Save.');
+    addChars([p], 'plan', p.id); showTab('character');
+    saveTip('Saved as the plan "' + p.name + '" (in the Saved Builds tab). Later edits stay unsaved until you press Save.');
   }
 
 
@@ -22360,7 +22360,7 @@ window.BOStartApp = function () {
     if (!ROUTING) return null;
     let p = location.pathname; try { p = decodeURIComponent(p); } catch (e) { /* keep as is */ }
     const rel = p.slice(siteRoot().length).toLowerCase().replace(/\/+$/, '').replace(new RegExp('^(' + Object.keys(window.PAGE_LANGS || {}).join('|') + ')(/|$)'), ''); // zh/, es/, de/...: the translated pages (src/i18n.js PAGE_LANGS)
-    if (rel === 'build/gear') return 'character'; // the old Gear sub-tab: gear is edited on the Character tab now
+    if (rel === 'build/gear' || rel === 'build/skills') return 'character'; // the old Gear and Skills sub-tabs: gear and skills are edited on the Character tab now (Skills sub-tab removed, owner, 20 Nov 2026: the Character tab's skill list and Add skill cover it)
     return Object.keys(ROUTES).find(k => ROUTES[k] === rel) || null;
   }
 
@@ -22413,8 +22413,9 @@ window.BOStartApp = function () {
   $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && document.body.classList.contains('build-page')) setTimeout(() => syncUrl('build'), 0); });
 
 
-  const lastBuildView = () => { const v = store.get('buildView', 'character'); return ['character', 'tree', 'atlas', 'damage', 'build'].includes(v) ? v : 'character'; };
+  const lastBuildView = () => { const v = store.get('buildView', 'character'); return ['character', 'tree', 'atlas', 'damage'].includes(v) ? v : 'character'; };
   function showTab(tab) {
+    if (tab === 'build' && st.ch) tab = 'character'; // the Skills view is gone (20 Nov 2026): skills are edited on the Character tab
     T.visible = tab === 'tree';
     document.body.classList.remove('landing-view');
     $('#homeTab').classList.remove('active'); $('#homeTab').setAttribute('aria-current', 'false');
@@ -22462,7 +22463,7 @@ window.BOStartApp = function () {
     if (tab === 'atlas') atlas.render();
     if (tab === 'damage' && (breweryDirty || mainStale) && st.ch) { breweryDirty = false; render(); }
     store.set('tab', tab);
-    if (['character', 'tree', 'atlas', 'damage', 'build'].includes(tab)) store.set('buildView', tab);
+    if (['character', 'tree', 'atlas', 'damage'].includes(tab)) store.set('buildView', tab);
     syncUrl(tab);
     if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } syncTreeTab(); renderTreeTabs(); if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
   }

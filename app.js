@@ -20893,6 +20893,25 @@ window.BOStartApp = function () {
     const o = opts();
     const base = S.calcSkill(GD, st.ch, st.skill, o);
     const skillName = optLabel();
+
+
+    const cocLink = (base.notes || []).map(n => /^Cast on Crit: this skill's crits cast (.+?) \(its link\)/.exec(n)).find(Boolean);
+
+    const cocOwn = cocLink && (st.ch.sockets || []).find(x => String(x.skill).toLowerCase() === String(st.skill).toLowerCase());
+    const cocIn = !!(cocOwn && cocOwn.conduit && optExtra().some(g => g.id === cocOwn.conduit));
+    const cocSrcAtk = base.coc && ((GD.skills[String(base.coc.source).toLowerCase()] || {}).Tags || []).includes('Attack');
+    const cocNote = base.coc && base.coc.sourceName
+      ? ' Cast on Crit: ' + sName(st.skill) + (base.coc.attack ? ' strikes' : ' is cast') + ' when ' + base.coc.sourceName + ' lands a critical hit, so ' + base.coc.sourceName + '\'s crit chance and ' + (cocSrcAtk ? 'attack' : 'cast') + ' speed raise its DPS and those nodes score here too.'
+      : cocLink && cocIn ? ' Cast on Crit: ' + cocLink[1] + ', cast by this skill\'s crits, counts through Also count.'
+      : cocLink ? ' Cast on Crit: ' + cocLink[1] + ', cast by this skill\'s crits, is not counted. Pick ' + cocLink[1] + ' as the skill, or add it under Also count.' : '';
+    const cocAdd = cocOwn && cocOwn.conduit && !cocIn && (st.pickable || []).some(s => s.id === cocOwn.conduit) ? cocOwn.conduit : null;
+    const cocBtn = () => {
+      if (!cocAdd) return;
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ghost small tree-coc-add';
+      b.textContent = 'Count ' + sName(cocAdd) + ' too';
+      b.onclick = () => setOptWeight(cocAdd, 1);
+      $('#treeStatus').append(' ', b);
+    };
     if (base.error || base.unsupported || !(base.totalDps > 0)) { $('#treeStatus').textContent = 'Node DPS values need a damage skill: pick one in the Skill box.'; paintTree(); bestList(); return; }
 
     const co = comboOpts(), more = optExtra().map(g => ({ id: g.id, w: g.w, b: S.calcSkill(GD, st.ch, g.id, co).totalDps })).filter(g => g.b > 0);
@@ -20954,7 +20973,7 @@ window.BOStartApp = function () {
       }
       while (i >= ids.length && j < mids.length && performance.now() - t0 < 25) oathScore(GD.masteries[mids[j++]]);
       if (i < ids.length || j < mids.length) { $('#treeStatus').textContent = 'Scoring nodes for ' + skillName + '… ' + Math.round(i / ids.length * 100) + '%'; if (i < ids.length && i % 200 < 30) paintTree(); soon(step); }
-      else { $('#treeStatus').textContent = 'Node values: ' + skillName + ' vs a ' + (st.rarity || 'rare') + ' (level ' + (st.enemyLevel || st.ch.level) + '), with the supports and settings on the left. Base ' + num(b) + ' DPS' + (more.length ? ' (' + sName(st.skill) + '); values are the weighted mean % of ' + (more.length + 1) + ' skills' : '') + '.' + (dw > 0 ? ' Defence is weighed in (' + gsPrioText(GS.set.prio) + ', the Prioritize slider).' : ''); paintTree(); bestList(); }
+      else { $('#treeStatus').textContent = 'Node values: ' + skillName + ' vs a ' + (st.rarity || 'rare') + ' (level ' + (st.enemyLevel || st.ch.level) + '), with the supports and settings on the left. Base ' + num(b) + ' DPS' + (more.length ? ' (' + sName(st.skill) + '); values are the weighted mean % of ' + (more.length + 1) + ' skills' : '') + '.' + (dw > 0 ? ' Defence is weighed in (' + gsPrioText(GS.set.prio) + ', the Prioritize slider).' : '') + cocNote; cocBtn(); paintTree(); bestList(); }
     };
     step();
   }

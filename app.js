@@ -20241,7 +20241,8 @@ window.BOStartApp = function () {
       const p = keepSharedTabs(await planner.fromCode(id ? await codeForId(id) : code));
       p.auto = true; // opened, not saved by hand: listed under "Opened, not saved" (renderSavedBuilds)
       if (!await leaveOk(p.id)) return;
-      addChars([p], 'plan', p.id); showTab('build');
+
+      addChars([p], 'plan', p.id); showTab('character');
     } catch (err) { alert('Could not open that share link:\n' + err.message); }
   }
   window.addEventListener('hashchange', () => {

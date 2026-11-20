@@ -6647,8 +6647,8 @@ window.BOLootFilter = function (ctx) {
 
   function affixLabel(a, gs) {
     const gd = ctx.gd && ctx.gd(), raw = gd && gd.statText && gd.statText[a.Mod.Stat + '.' + a.Mod.Mode];
-    if (raw) return raw.replace(/\{v\d?\}/g, '#').replace(/\{tags\}/g, (a.Mod.Tags || []).join(' '))
-      .replace(/(?:\{n\}|#)?\|plural\(one=[^,)]*,other=([^)]*)\)/g, '$1').replace(/\s+/g, ' ').trim(); // "{n}|plural(one=Woe,other=Woes)" -> "Woes"
+    if (raw) return raw.replace(/\{v\d?\}/g, '#').replace(/\{tags\}/g, (a.Mod.Tags || []).join(' ')).replace(/\{tag(\d)\}/g, (m, i) => (a.Mod.Tags || [])[+i] || '')
+      .replace(/(?:\{n\}|#)?\|plural\(one=[^,)]*,other=([^)]*)\)/g, '$1').replace(/\s+/g, ' ').replace(/\b(\w+) \1\b/g, '$1').trim(); // "{n}|plural(one=Woe,other=Woes)" -> "Woes"; "Attack Attack Speed" -> "Attack Speed"
     return gs.length ? label('line', gs[gs.length - 1]) : String(a.Group).replace(/\d+$/, '');
   }
   let poolFor = null, POOL = null;
@@ -6720,7 +6720,7 @@ window.BOLootFilter = function (ctx) {
     h += '<div class="lf-counts"><span><b>' + st.n + '</b> drops</span><span class="a1"><b>' + st.shown + '</b> shown</span><span class="a2"><b>' + st.lit + '</b> highlighted</span><span class="a0"><b>' + st.hidden + '</b> hidden (' + pct(st.hidden) + '%)</span></div>';
     h += '<ul class="lf-drops">' + S.map((it, i) => [it, i]).reverse().slice(0, 60).map(([it, i]) => {
       const o = st.out[i], r = o.d.rule;
-      return '<li class="lf-drop a' + o.act + '"><div class="lf-drop-main"><b class="lf-r' + it.rarity + '">' + esc((it.rarity === 'U' ? '' : RARITY_NAME[it.rarity] + ' ') + (it.name || kind(it.kind)[1])) + '</b>' +
+      return '<li class="lf-drop a' + o.act + '"><div class="lf-drop-main"><b class="lf-r' + it.rarity + '">' + (it.rarity === 'U' ? '' : '<span>' + RARITY_NAME[it.rarity] + '</span> ') + '<span>' + esc(it.name || kind(it.kind)[1]) + '</span></b>' + // two pieces, so each can be translated
         '<small>' + esc(itemLine(it)) + '</small></div>' +
         '<div class="lf-drop-side">' + (r && !o.forced ? actionChip(r) : '<span class="lf-act a1">Show</span>') +
         '<small>' + (r ? 'Rule ' + (o.d.i + 1) + (o.forced ? ', never hidden' : '') + (o.d.unsure ? ' (unsure)' : '') : 'No rule') + '</small>' +

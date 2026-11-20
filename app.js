@@ -20685,14 +20685,19 @@ window.BOStartApp = function () {
     return s.length + ':' + h;
   }
   const gsSlotName = key => key === 'DwarvenRune2' ? 'Dwarven rune 2' : planner.slotName[key] || key;
-  function gsItemLabel(it) {
+  function gsItemLabel(it, rec) {
     if (!it) return '<span class="meta">empty</span>';
     const b = GD.bases[lc(it.base)], bn = b ? b.Name : it.base, word = planner.oathwordForItem(it, it.slot);
     if (it.rarity === 'Unique') {
       const u = GD.uniques[lc(it.unique)], v = it.affixes.filter(a => !a.id.startsWith('unique:')).length;
       return '<b class="gs-unique">' + esc(u ? u.Name : it.name) + '</b> <span class="meta">' + esc(bn) + (it.forged ? ' · forged' : '') + (v ? ' · ' + v + ' Vow' + (v > 1 ? 's' : '') : '') + '</span>';
     }
-    if (word) return '<b>' + esc(word.Name) + '</b>' + planner.wordRunes(it) + ' <span class="meta">Oathword · ' + esc(bn) + '</span>';
+    if (word) {
+
+      let craft = '';
+      if (rec && grail) { try { const inv = grail.inventory(), s = inv && inv.loaded ? grail.wordStatus(word, inv) : null; if (s && !s.held.length && s.craftable) craft = ' <span class="is-badge craft">Craftable' + (s.bases.length ? ' · ' + s.bases.length + ' empty base' + (s.bases.length > 1 ? 's' : '') + ' fit' : '') + '</span>'; } catch (e) { /* no saves loaded */ } }
+      return '<b>' + esc(word.Name) + '</b>' + planner.wordRunes(it) + ' <span class="meta">Oathword · ' + esc(bn) + '</span>' + craft;
+    }
     const n = it.affixes.length;
     return '<b>' + esc(it.rarity + ' ' + bn) + '</b> <span class="meta">' + (n ? n + ' line' + (n > 1 ? 's' : '') : 'no lines') + (it.runes.length ? ' · ' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') : '') + '</span>';
   }
@@ -20769,7 +20774,7 @@ window.BOStartApp = function () {
 
         const sh = s.needs;
         const req = sh ? '<div class="hint bad gs-req">Needs ' + sh.need + ' ' + ATTR_NAME[sh.attr] + ': you have ' + sh.have + ' now, ' + sh.withSet + ' with the rest of this set on. Equip the other new items first.</div>' : '';
-        return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(s.label || gsSlotName(s.slot)) + '</td><td' + (s.was ? ' class="gs-hov" data-gs-tip="was:' + si + '"' : '') + '>' + gsItemLabel(s.was) + '</td><td' + (s.item ? ' class="gs-hov" data-gs-tip="item:' + si + '"' : '') + '>' + (s.changed ? '' : '<span class="meta">kept: </span>') + gsItemLabel(s.item) + tip + req + '</td><td>' +
+        return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(s.label || gsSlotName(s.slot)) + '</td><td' + (s.was ? ' class="gs-hov" data-gs-tip="was:' + si + '"' : '') + '>' + gsItemLabel(s.was) + '</td><td' + (s.item ? ' class="gs-hov" data-gs-tip="item:' + si + '"' : '') + '>' + (s.changed ? '' : '<span class="meta">kept: </span>') + gsItemLabel(s.item, s.changed) + tip + req + '</td><td>' +
           (s.changed ? '<span class="' + (s.gain >= 0 ? 'up' : 'down') + '">' + pct(s.gain) + '</span>' : '<span class="meta">–</span>') + '</td>' +
           (r.scored ? '<td>' + (s.changed && s.dpsGain != null ? '<span class="' + (s.dpsGain >= 0 ? 'up' : 'down') + '">' + pct(s.dpsGain) + '</span>' : '<span class="meta">–</span>') + '</td>' : '') +
           '<td>' + (s.item ? num(s.worth * 100, 1) + '%' : '–') + '</td></tr>';
@@ -20871,7 +20876,7 @@ window.BOStartApp = function () {
       stat('Best found', num(top.dps), '<div class="delta ' + (top.gain >= 0 ? 'up' : 'down') + '">' + pct(top.gain) + (score ? ' score' : '') + '</div>', 'main', 'found in ' + (r.ms / 1000).toFixed(1) + ' s' + (r.timedOut ? ' (stopped at the time limit)' : '')) +
       stat('Slot worth now', r.worn && r.base > 0 ? num((1 - r.empty / r.base) * 100, 1) + '%' : '–', '', '', (score ? 'score' : 'DPS') + ' lost if the slot were left empty') + '</div>';
     h += '<div class="table-wrap"><table class="tbl gs-table sbs-table"><thead><tr><th>#</th><th>Item</th><th>Kind</th><th>DPS</th><th title="' + (score ? 'Score (DPS and defence as the slider weighs them' + (r.multi ? ', over the skills under Also count' : '') + ')' : 'DPS') + ' against the item you wear now">Change</th><th></th></tr></thead><tbody>' +
-      r.rows.map((x, i) => '<tr class="' + (x.gain > 0.0005 ? 'gs-changed' : '') + '"><td>' + (i + 1) + '</td><td class="gs-hov" data-sbs-tip="' + i + '">' + gsItemLabel(x.item) +
+      r.rows.map((x, i) => '<tr class="' + (x.gain > 0.0005 ? 'gs-changed' : '') + '"><td>' + (i + 1) + '</td><td class="gs-hov" data-sbs-tip="' + i + '">' + gsItemLabel(x.item, true) +
         '<details class="gs-lines"><summary>Lines</summary><div class="cmp-tip pl-tip">' + planner.gear.tip(x.item, x.item.slot) + '</div></details>' + (x.dropsOff ? '<div class="hint">Two-handed: your off hand comes off.</div>' : '') + '</td><td>' + kind[x.kind] + '</td><td>' + num(x.dps) + '</td><td><span class="' + (x.gain >= 0 ? 'up' : 'down') + '">' + pct(x.gain) + '</span></td>' +
         '<td class="sbs-acts"><button class="btn small" type="button" data-sbs-equip="' + i + '">Equip</button> <button class="btn small ghost" type="button" data-sbs-cmp="' + i + '">Compare</button></td></tr>').join('') + '</tbody></table></div>';
     h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the lines that add the most and the best runes; ' + (r.vowMax < 1 ? 'uniques get no Vows' : 'the best few uniques get Vows' + (r.vowMax < 6 ? ' (at most ' + r.vowMax + ')' : '')) + '. The rest of your gear, the tree and the supports stay as they are' + (r.reqChecked ? ', and every item listed fits your Strength, Dexterity and Intelligence with it on' : '; attribute requirements are ignored, as set') + '. Compare opens the item in Item Compare, where you can set its lines to what dropped.' + (r.scored ? ' ' + gsDefNote() : '') + '</p>';

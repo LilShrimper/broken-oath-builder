@@ -14328,7 +14328,7 @@ window.BOCharacter = function (ctx) {
     }
     if (host) {
       const hostSup = supportList.map(s => s.replace('@granted', '')).filter(s => lc(s) !== 'channel_conduit');
-      const hr = calcSkill(GD, ch, host.skill, { _col: col, _gfHeld: gfHeld, off: o.off, supportsOverride: hostSup, conduit: false, barShock: false, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyHallowedGround: o.enemyHallowedGround, flashfire: o.flashfire });
+      const hr = calcSkill(GD, ch, host.skill, { _col: col, _gfHeld: gfHeld, off: o.off, supportsOverride: hostSup, conduit: false, barShock: false, _noBrittle: true, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyHallowedGround: o.enemyHallowedGround, flashfire: o.flashfire });
       const interval = conduitInterval(GD, col.mods);
       if (hr.speed && hr.speed.usesPerSec > 0) {
         const tick = 1 / hr.speed.usesPerSec, ticks = Math.max(1, Math.ceil(interval / tick - 1e-9));
@@ -14350,7 +14350,7 @@ window.BOCharacter = function (ctx) {
           : coc.skill ? 'Cast on Crit: ' + coc.name + ' has no hit of its own to crit with, so no triggered casts are counted.'
           : 'Cast on Crit in this spell\'s own sockets is cast by your attacks\' crits, and there is no attack on your bar. If it is linked to another skill in game (build codes do not carry links), pick that skill in the Cast on Crit box.');
       } else {
-        const hr = calcSkill(GD, ch, coc.skill, { _col: col, _gfHeld: gfHeld, off: o.off, coc: false, conduit: false, barShock: false, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyRes: o.enemyRes, curses: o.curses, enemyHallowedGround: o.enemyHallowedGround, flashfire: o.flashfire });
+        const hr = calcSkill(GD, ch, coc.skill, { _col: col, _gfHeld: gfHeld, off: o.off, coc: false, conduit: false, barShock: false, _noBrittle: true, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyRes: o.enemyRes, curses: o.curses, enemyHallowedGround: o.enemyHallowedGround, flashfire: o.flashfire });
         if (hr.speed && hr.hits && hr.crit) {
           const cs = GD.supports.cast_on_crit || {};
           const cdLine = modsOf(mods, 'TrigCooldown').find(m => m.stat === 'TrigCooldown') || (cs.Mods || []).map(m => ({ v: m.Stat === 'TrigCooldown' ? m.Value : 0 })).find(m => m.v > 0);
@@ -15087,18 +15087,34 @@ window.BOCharacter = function (ctx) {
 
     if (is079(GD) && A.bEnabled && byType.Cold > 0) {
       let ce = 0; for (const m of pickMods(mods, 'ChillEffect', 'Inc')) if (applies(ctx, m)) { ce += m.v; use(m, 'chill size'); }
-      const chill = Math.min(30, 10 * Math.max(0, 1 + ce / 100));
+
+
+
+
+
+      const CM = (GD.scaling && GD.scaling.Meta) || {};
+      const cMin = CM.ChillMinPct > 0 ? CM.ChillMinPct : 10, cMax = CM.ChillMaxPct > 0 ? CM.ChillMaxPct : 30, cFull = CM.ChillFullAtPct > 0 ? CM.ChillFullAtPct : 10;
+      const cLife = o.enemyLife || (isBoss ? guardianLifeAt(GD, guardianRL(GD, o, lvl)) : (() => { const ML = M.Life || { Base: 20, K: 0.225, P: 0.7 }, rar = (M.Rarity || {})[{ normal: 0, magic: 1, rare: 2 }[rarity]] || {}; return 30 * ML.Base * Math.exp(ML.K * Math.pow(lvl, ML.P)) * (rar.Life || 1); })());
+      const coldHit = hit.Cold && mitig.Cold ? hit.Cold.avg * critFactor * mitig.Cold.k * mitig.Cold.taken : 0;
+      const coldPctLife = cLife > 0 ? 100 * Math.max(0, coldHit) / cLife : 0;
+      const chill = Math.min(cMax, (cMin + (cMax - cMin) * Math.min(1, coldPctLife / cFull)) * Math.max(0, 1 + ce / 100));
       const coldRate = hitsPerSec * perHitFactor * hitFactor;
       const up = 1 - Math.exp(-coldRate * 2);
       const chillF = 1 + ruleNum(GD, 'r103.AILMENTS.ChillTakenPer103', 0.5) * chill * up / 100;
-      ail.chill = { size: chill, uptime: up, taken: (chillF - 1) * 100, counted: chillF > shockF };
-      if (chillF > shockF) {
-        const k = chillF / shockF;
+      ail.chill = { size: chill, uptime: up, taken: (chillF - 1) * 100, counted: chillF > shockF, coldPctLife, life: cLife };
+
+
+
+
+
+      {
+        const chillPct = (chillF - 1) * 100, k = (shockF + chillPct / 100) / shockF;
+        ail.chill.counted = true; ail.chill.addedTo = (shockF - 1) * 100;
         for (const d of Object.keys(byType)) byType[d] *= k;
-        hitDpsVs *= k; res.hitDps = hitDpsVs; shockF = chillF;
-        res.notes.push('Chill (patch 79): ' + Math.round(chill) + '% chill makes the enemy take ' + ((chillF - 1) * 100).toFixed(1) + '% more damage, more than your shock, so it counts instead (only the strongest of chill, shock or brittle counts). Chill size is an estimate (the game\'s 10% floor on a big enemy).');
-      } else res.notes.push('Chill (patch 79): ' + ((chillF - 1) * 100).toFixed(1) + '% more damage taken from your chill, less than your shock, so the shock counts (only the strongest counts).');
-      if (rarity === 'rare' || isBoss) {
+        hitDpsVs *= k; res.hitDps = hitDpsVs; shockF += chillPct / 100;
+        res.notes.push('Chill: ' + Math.round(chill) + '% chill makes the enemy take ' + chillPct.toFixed(1) + '% more damage, added to your shock (shock, chill and Brittle add together: developer stacking table, game tooltip 20 Nov 2026). Chill is ' + cMin + '% for a small cold hit up to ' + cMax + '% at a hit worth ' + cFull + '% of the enemy\'s life (game log 19 Nov 2026); yours is about ' + (coldPctLife < 0.1 ? 'under 0.1' : coldPctLife.toFixed(1)) + '% of its ~' + Math.round(cLife).toLocaleString('en-US') + ' life' + (isBoss || o.enemyLife ? '.' : ' (a typical rare of this level: an estimate).'));
+      }
+      if (rarity === 'rare' || rarity === 'unique' || isBoss) { // text: "a rare, unique or Guardian stores 25% of the cold damage it takes"
         let fd = 0; for (const m of pickMods(mods, 'FreezeDuration', 'Inc')) if (applies(ctx, m)) { fd += m.v; use(m, 'Crack'); }
         const crack = byType.Cold * p80(GD, 'r103.AILMENTS.CrackPct103', 25) / 100 * Math.max(0, 1 + (dotMulti + fd) / 100);
         byType.Cold += crack; hitDpsVs += crack; res.hitDps = hitDpsVs;
@@ -15113,9 +15129,17 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
+
+
+
     {
       const takenK = (mitig.Cold ? mitig.Cold.taken : 1) * groundTaken * shockF;
-      res.freeze = { coldPerSec: takenK > 0 ? Math.max(0, (byType.Cold || 0) - (ail.crack ? ail.crack.dps : 0)) / takenK : 0 };
+      let fdBar = 0; for (const m of pickMods(mods, 'FreezeDuration', 'Inc')) if (applies(ctx, m)) { fdBar += m.v; use(m, 'freeze bar'); }
+      res.freeze = { buildUp: Math.max(0, 1 + fdBar / 100), coldPerSec: takenK > 0 ? Math.max(0, 1 + fdBar / 100) * Math.max(0, (byType.Cold || 0) - (ail.crack ? ail.crack.dps : 0)) / takenK : 0, coldHitsPerSec: byType.Cold > 0 ? hitsPerSec * perHitFactor * hitFactor : 0 };
     }
 
     let frzHelpers = null;
@@ -15127,7 +15151,7 @@ window.BOCharacter = function (ctx) {
         const c = r && !r.error && !r.unsupported && r.freeze ? r.freeze.coldPerSec : 0;
         if (!(c > 0)) continue;
         const key = 'barfreeze:' + lid;
-        frzHelpers.push({ id, key, name: (GD.skills[lid] || {}).Name || id, coldPerSec: c, dps: r.totalDps || 0, on: !(o.off && o.off.has(key)) });
+        frzHelpers.push({ id, key, name: (GD.skills[lid] || {}).Name || id, coldPerSec: c, coldHitsPerSec: r.freeze.coldHitsPerSec || 0, dps: r.totalDps || 0, on: !(o.off && o.off.has(key)) });
       }
       return frzHelpers;
     };
@@ -15674,11 +15698,19 @@ window.BOCharacter = function (ctx) {
 
 
 
-    if (res.freeze && !o._barProbe && is079(GD) && res.supports.some(x => x.ok && lc(x.id) === 'frostbreak' && !(o.off && o.off.has(x.key)))) {
+
+
+
+
+
+
+    const hasFrostbreak = !!res.freeze && res.supports.some(x => x.ok && lc(x.id) === 'frostbreak' && !(o.off && o.off.has(x.key)));
+    if (res.freeze && !o._barProbe && is079(GD) && (hasFrostbreak || (isBoss && !o._noBrittle && res.freeze.coldPerSec > 0))) { // _noBrittle: nested sheets (Cast on Crit, Conduit) skip it, which would otherwise call each other for ever
       const META = (GD.scaling && GD.scaling.Meta) || {};
       const barPct = META.FreezeMeterPct > 0 ? META.FreezeMeterPct : 12, grow = META.FreezeMeterGrowth > 1 ? META.FreezeMeterGrowth : 1.5;
       const win = (META.FreezeMeterSeconds != null ? META.FreezeMeterSeconds : 1.5) + (META.BrittleSeconds != null ? META.BrittleSeconds : 4);
-      const more = ((((GD.supports.frostbreak || {}).Mods || []).find(m => m.Stat === 'FreezeBreak103') || {}).Value) || 50;
+      const more = hasFrostbreak ? ((((GD.supports.frostbreak || {}).Mods || []).find(m => m.Stat === 'FreezeBreak103') || {}).Value) || 50 : 0;
+      const brittlePct = META.BrittlePct > 0 ? META.BrittlePct : 10;
       if (!isBoss) res.notes.push('Frostbreak: its ' + more + '% more only counts on a Brittle Guardian or boss (after its freeze bar fills). Set the enemy to Guardian to see it.');
       else {
         const helpers = freezeHelpers();
@@ -15686,17 +15718,26 @@ window.BOCharacter = function (ctx) {
         let cold = res.freeze.coldPerSec, dmg = ownD;
         for (const h of helpers) if (h.on) { cold += h.coldPerSec; dmg += h.dps; }
         const life = o.enemyLife || guardianLifeAt(GD, guardianRL(GD, o, lvl));
-        const share = dmg > 0 ? Math.min(1, cold / dmg) : 0;
+        const share = dmg > 0 ? cold / dmg : 0; // can pass 1: increased freeze duration counts the cold for more (20 Nov 2026)
 
-        const bars = share > 0 ? Math.max(0, Math.floor(Math.log(1 + share * 100 * (grow - 1) / barPct) / Math.log(grow) + 1e-9)) : 0;
+        let bars = share > 0 ? Math.max(0, Math.floor(Math.log(1 + share * 100 * (grow - 1) / barPct) / Math.log(grow) + 1e-9)) : 0;
+
+
+        const decay = META.FreezeMeterDecaySeconds > 0 ? META.FreezeMeterDecaySeconds : 6;
+        let coldHits = res.freeze.coldHitsPerSec || 0; for (const h of helpers) if (h.on) coldHits += h.coldHitsPerSec || 0;
+        const decayed = bars > 0 && coldHits > 0 && 1 / coldHits > decay;
+        if (decayed) { bars = 0; res.notes.push('Freeze bar: your cold hits land about every ' + (1 / coldHits).toFixed(1) + ' s, and the Guardian\'s bar empties after ' + decay + ' s without one, so it never fills (no Brittle).'); }
         const fightSec = dmg > 0 ? life / dmg : 0;
         const uptime = fightSec > 0 ? Math.min(1, bars * win / fightSec) : 0;
+        const bAdd = brittlePct / 100 * uptime, kB = 1 + bAdd / shockF; // adds to shock + chill (hits only)
         const k = 1 + more / 100 * uptime;
-        Object.assign(res.freeze, { frostbreak: true, helpers, bars, uptime, fightSec, life, share, firstFillSec: cold > 0 ? barPct / 100 * life / cold : 0, more: (k - 1) * 100 });
-        if (k !== 1) { for (const d of Object.keys(byType)) byType[d] *= k; hitDpsVs *= k; res.hitDps = hitDpsVs; }
+        Object.assign(res.freeze, { frostbreak: hasFrostbreak, helpers, bars, uptime, fightSec, life, share, firstFillSec: cold > 0 ? barPct / 100 * life / cold : 0, more: (k - 1) * 100, brittleTaken: bAdd * 100 });
+        const kAll = k * kB;
+        if (kAll !== 1) { for (const d of Object.keys(byType)) byType[d] *= kAll; hitDpsVs *= kAll; res.hitDps = hitDpsVs; }
+        if (bAdd > 0) res.notes.push('Brittle: the Guardian is Brittle ' + Math.round(uptime * 100) + '% of the fight (' + bars + ' freeze bar' + (bars === 1 ? '' : 's') + ' x ' + win + ' s in about ' + Math.round(fightSec) + ' s), ' + (res.freeze.buildUp > 1 ? 'your increased freeze duration fills the bar x' + res.freeze.buildUp.toFixed(2) + ' faster, game log 20 Nov 2026; ' : '') + 'taking ' + brittlePct + '% more then, added to shock and chill (hits only: poison, ignite and bleed ticks do not take it) = +' + (bAdd * 100).toFixed(1) + '% on average. Developer stacking table + game tooltip 20 Nov 2026; not seen in a game sheet yet.');
         const who = helpers.filter(h => h.on).map(h => h.name);
-        res.notes.push(cold > 0
-          ? 'Frostbreak: ' + Math.round(share * 100) + '% of the damage on the Guardian is cold that fills its freeze bar' + (who.length ? ' (this skill with ' + who.join(', ') + ', taken as kept up; untick them under Vows, Heralds & charges)' : '') +
+        if (hasFrostbreak) res.notes.push(cold > 0
+          ? 'Frostbreak: ' + Math.round(Math.min(1, share) * 100) + '% of the damage on the Guardian is cold that fills its freeze bar' + (who.length ? ' (this skill with ' + who.join(', ') + ', taken as kept up; untick them under Vows, Heralds & charges)' : '') +
             '. The first bar (' + barPct + '% of its ~' + Math.round(life).toLocaleString('en-US') + ' life) fills after about ' + Math.round(barPct / 100 * life / cold) + ' s, each next one is ' + grow + ' times bigger: ' +
             bars + ' bar' + (bars === 1 ? '' : 's') + ' in a fight of about ' + Math.round(fightSec) + ' s, ' + win + ' s Brittle each = ' + Math.round(uptime * 100) + '% of the fight -> hits ' + ((k - 1) * 100).toFixed(1) + '% more on average (' + more + '% while it is Brittle). Game log 19 Nov 2026.' +
             (bars ? '' : ' Under ' + barPct + '% cold, the bar never fills before the Guardian dies.')

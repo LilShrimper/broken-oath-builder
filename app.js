@@ -9161,23 +9161,26 @@ window.BOFaq = function (ctx) {
 
 
 
+
+
+
   function forge() {
     let h = intro('Forge & Crafting', 'Edda\'s Forge: what each material pays for, when a craft can reach the best tier, and what Gloomsilver and Core Embers are for.');
-    h += '<div class="card faq-card">' + hint('The Forge file is not in the public API. The materials, recipes, costs, drop sources and Forge levels on this page are from the game files of 12 Nov 2026 and may have changed since. Two things are current (the API\'s game switches, build 79): Lightless Anneal reaching Tier 1 from Rupture 160, and Oathsteel and Gloomsilver Add crafts rolling one tier under the best.') + '</div>';
+    h += '<div class="card faq-card">' + hint('The Forge file is not in the public API. The materials, recipes, costs, drop sources and Forge levels on this page are from the game files of 12 Nov 2026 and may have changed since. The Gloomsilver source, the Lightless Anneal cost (3) and the Oath Broker line are from the developer\'s patch notes up to patch 85. Two things are current (the API\'s game switches, build 79): Lightless Anneal reaching Tier 1 from Rupture 160, and Oathsteel and Gloomsilver Add crafts rolling one tier under the best.') + '</div>';
     h += card('Materials, by tier', table(['Material', 'Tier', 'Where it comes from', 'What it pays'], [
       ['<b>Ember</b>', 'I', 'Any kill, more from rares and Guardians', 'Basic crafts and the Echo crafts (Add, Temper up, Reroll value)'],
       ['<b>Glyph Shard</b>', 'II', 'Rares and Guardians', 'Tier II crafts: Unmake, Chisel, Recast, Reforge'],
       ['<b>Oathsteel</b>', 'III', 'Guardians and Gates, from monster level 30', 'Tier III crafts: Anneal, Oathsteel Temper, Deep Quench, Oathsteel Hone'],
       ['<b>Core Ember</b>', 'IV', 'A Core Rupture\'s Lord', 'The Skyforge (Skyforged Temper, Anneal and Hone), and the Cube\'s Oathsworn recipe'],
       ['<b>Land materials</b>', 'I-II', 'Monsters in Myrh Forest, the Desolated Plains, the Harmoniyan Lands, the Massadian Fire Lands and the Kabarian Swamp', 'The recipes from a Forge Tablet found in that land'],
-      ['<b>Gloomsilver</b>', 'III', 'Rupture Guardians from Rupture 150 (more the higher you go) and every Catacomb Depth Cache', 'Lightless Anneal and the four Gloomsilver crafts below'],
+      ['<b>Gloomsilver</b>', 'III', 'The Oath Broker in the Forge sells 5 a day for gold. Rare drop from Rupture Guardians from Rupture 150 and from Catacomb Depth Caches (a rare find since patch 84; the rates are not published)', 'Lightless Anneal and the four Gloomsilver crafts below'],
       ['<b>Oathcinder</b>', '–', 'Rare drop from Rupture 30', 'Unswear (a rare, a red or a finished Oathword)'],
     ], 'faq-wrap'));
     h += card('Anneal: one mod, one tier better', list([
       '<b>Anneal</b> (Oathsteel; Edda teaches it at Forge level 2) takes one chosen mod a tier up, but never to the best tier: that stays for drops.',
       '<b>Skyforged Anneal</b> (a Core Ember) can take it to the best tier. <b>Skyforged Temper</b> does the same for a crafted mod.',
-      '<b>Lightless Anneal</b> (<b>2 Gloomsilver</b>, known from the start) does what Anneal does and stops one tier short of the best as well, until <b>Rupture 160</b>: from there it reaches <b>Tier 1</b> (the game\'s switch <i>GloomTopRL97</i> is 160).',
-      'Gloomsilver starts dropping at Rupture 150, so for Rupture 150 to 159 it only buys the second best tier.',
+      '<b>Lightless Anneal</b> (<b>3 Gloomsilver</b> since patch 82, no Forge Potential since patch 84, known from the start) does what Anneal does and stops one tier short of the best as well, until <b>Rupture 160</b>: from there it reaches <b>Tier 1</b> (the game\'s switch <i>GloomTopRL97</i> is 160).',
+      'Gloomsilver Guardian drops start at Rupture 150, so for Rupture 150 to 159 a dropped one only buys the second best tier. The Oath Broker\'s 5 a day (gold) is the steady source.',
     ]));
     h += card('What else Gloomsilver buys', table(['Craft', 'Gloomsilver', 'What it adds'], [
       ['<b>Gloomsight</b>', '6', '+1 to level of all skill gems (amulet, helm, tome, wand, staff or melee weapon), a prefix'],

@@ -9138,6 +9138,20 @@ window.BOFaq = function (ctx) {
   const table = (head, rows, cls) => '<div class="table-wrap"><table class="tbl faq-tbl' + (cls ? ' ' + cls : '') + '"><thead><tr>' + head.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>' +
     rows.map(r => '<tr' + (r.off ? ' class="faq-off"' : '') + '>' + (r.cells || r).map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>';
   const hint = t => '<p class="hint">' + t + '</p>';
+
+  const ADD = '<b class="faq-add">ADD</b>', MUL = '<b class="faq-mul">MULTIPLY</b>';
+
+
+  const ST = 'The developer\'s stacking table (public API, build 85)', st = also => ST + '.' + (also ? '<span class="faq-note">Also seen in the game: ' + also + '</span>' : '');
+  const AIL_ROWS = () => [
+
+
+
+
+
+        ['<b>Increased ailment damage</b>', '"X% increased Poison damage over time", "increased Burning damage" (Ignite), "increased Bleeding damage". Each counts for its own ailment only.', ADD + '<span class="faq-note">with the other lines for the same ailment</span>', MUL + '<span class="faq-note">also multiplies the Damage over Time Multiplier below. "X% more Bleeding (Burning) damage" lines each multiply by themselves</span>', st('for Poison, game log, 11 Nov 2026 (exact on four cases). Ignite and Bleed are not checked in the game yet.')],
+        ['<b>Damage over Time Multiplier</b>', '"+X% to Damage over Time Multiplier". One number for all three: Poison, Ignite and Bleed.', ADD, MUL + '<span class="faq-note">a group of its own: it multiplies the increased ailment damage above and the hit that started the ailment</span>', st('for Poison, game log, 11 Nov 2026. Ignite and Bleed are not checked in the game yet.')],
+  ];
   const needData = h => h + '<div class="card"><p class="hint">Load the game data first (this section needs a newer copy of it).</p></div>';
 
 
@@ -9266,6 +9280,10 @@ window.BOFaq = function (ctx) {
         A.bPoisonTakesDamageTaken ? 'Each tick is then raised by whatever makes the enemy take more damage (curses, Hunter\'s Marks, War Banner, shock).' : '',
         'Example from the game: a 72,737 hit with 154% increased and a 6% multiplier poisons for 72,737 × 20% × 2.54 × 1.06 = 39,168 a second per stack. Checked against the game log on 11 Nov 2026, with an amulet on and off (154% and 107% increased) and with and without a multiplier node: exact each time.',
       ]));
+    h += card('How ailment damage adds and multiplies', '<p class="faq-stats faq-formula"><b>Ailment damage</b> = the hit that started it × the ailment\'s share × (1 + increased damage for that ailment) × each "more" line for that ailment × (1 + Damage over Time Multiplier)</p>' +
+      table(['Group', 'What is in it', 'Lines inside the group', 'Against the other groups', 'How we know'], AIL_ROWS().concat(+GD.apiBuild >= 85 ? [
+        ['<b>Hit-only "more" lines</b>', 'Ruthless, Executioner and Life Leech "more damage".', '–', 'Neither: <b>hits only</b><span class="faq-note">the ailment a Ruthless blow starts is not raised</span>', 'The gems\' own texts, build 85.'],
+      ] : []), 'faq-stack') + hint('The same rows are on <b>Damage Multipliers</b>, with the other groups.'));
     h += card('Good to know', list([
       'Any Cold in a hit chills again since Patch 72 (see Chill above); the 25% Cold floor from 0.56.9 is gone. The sim\'s Stormfrost line follows this.',
       'Chances are per hit that carries the element. Ignite, shock and poison chance lines add to the base chance.',
@@ -9286,10 +9304,7 @@ window.BOFaq = function (ctx) {
 
   function multipliers(GD) {
     let h = intro('Damage Multipliers', 'What adds together and what multiplies. The rule in one line: lines of the same group add to each other, and the groups multiply each other.');
-    const ADD = '<b class="faq-add">ADD</b>', MUL = '<b class="faq-mul">MULTIPLY</b>', kinds = +GD.apiBuild >= 84;
-
-
-    const ST = 'The developer\'s stacking table (public API, build 85)', st = also => ST + '.' + (also ? '<span class="faq-note">Also seen in the game: ' + also + '</span>' : '');
+    const kinds = +GD.apiBuild >= 84;
 
 
 
@@ -9313,13 +9328,7 @@ window.BOFaq = function (ctx) {
         ['<b>Crit</b>', 'Crit chance and crit multiplier.', ADD + '<span class="faq-note">chance lines add, multiplier lines add</span>', MUL + '<span class="faq-note">× (1 + chance × (multiplier − 1))</span>', st('tooltip checks.')],
         ['<b>Speed</b>', 'Attack speed and cast speed.', ADD + '<span class="faq-note">increased speed; a support\'s "more" speed multiplies by itself</span>', MUL + ' the DPS', st('tooltip checks.')],
         ['<b>Count</b>', 'Projectiles, totems, traps, Sparks, minions standing.', ADD, MUL + ' the DPS', st()],
-
-
-
-
-
-        ['<b>Increased ailment damage</b>', '"X% increased Poison damage over time", "increased Burning damage" (Ignite), "increased Bleeding damage". Each counts for its own ailment only.', ADD + '<span class="faq-note">with the other lines for the same ailment</span>', MUL + '<span class="faq-note">also multiplies the Damage over Time Multiplier below. "X% more Bleeding (Burning) damage" lines each multiply by themselves</span>', st('for Poison, game log, 11 Nov 2026 (exact on four cases). Ignite and Bleed are not checked in the game yet.')],
-        ['<b>Damage over Time Multiplier</b>', '"+X% to Damage over Time Multiplier". One number for all three: Poison, Ignite and Bleed.', ADD, MUL + '<span class="faq-note">a group of its own: it multiplies the increased ailment damage above and the hit that started the ailment</span>', st('for Poison, game log, 11 Nov 2026. Ignite and Bleed are not checked in the game yet.')],
+        ...AIL_ROWS(),
       ], 'faq-stack') +
       hint('The groups and their rules are the game developer\'s own, from the stacking table in the Broken Oath public API (build 85). Where the last column adds "also seen in the game", the rule was checked there too. Numbers and rules can change with any patch.'));
     h += card('The same in numbers', list([
@@ -9373,6 +9382,10 @@ window.BOFaq = function (ctx) {
       '"Increased" lines are a third kind: all increased damage that fits the skill adds together and multiplies once.',
       'To test whether two lines share a group: note the panel damage with both off, each one on alone, and both on. If the second line gives the same gain with the first on and off, they multiply separately.',
     ]));
+
+    const HR = (GD.loot || {}).heralds || [];
+    if (HR.length) h += card('Herald kill effects', list(HR.map(x => '<b>' + esc(x.Name) + '</b>: a kill ' + esc(String(x.OnKill || '').toLowerCase()) + 's for ' + x.PctMaxLife + '% of the slain enemy\'s maximum life as ' + esc(x.Element || '') + (x.Count ? ', to ' + x.Count + ' enemies' : '') + ' within ' + r1((x.Radius || 0) / 100) + ' m.')) +
+      hint('A sworn Herald also gives extra damage of its element on your hits (see Vows, Heralds &amp; charges on the Damage tab). The kill effects above need a kill, so the sim (one enemy) leaves them out. Patch 79: a monster killed by a kill effect fires its own at half strength.'));
     return h;
   }
 
@@ -9386,7 +9399,7 @@ window.BOFaq = function (ctx) {
     h += card('Resistance and armour by monster level', table(['Monster level'].concat(lv.map(String)), [
       ['Elemental resistance'].concat(lv.map(L => r1(resAt(L)) + '%')),
       ['Armour'].concat(lv.map(L => Math.round(L * M.ArmourPerLevel))),
-    ]) + hint('Every monster gains ' + M.ResistPerLevel + '% resistance to Fire, Cold and Lightning per level (Poison: see below), up to ' + M.ResistMax + '% (reached at level ' + capAt + '). Physical damage has no resistance; armour works against it instead (' + M.ArmourPerLevel + ' armour per level).') +
+    ], 'faq-num') + hint('Every monster gains ' + M.ResistPerLevel + '% resistance to Fire, Cold and Lightning per level (Poison: see below), up to ' + M.ResistMax + '% (reached at level ' + capAt + '). Physical damage has no resistance; armour works against it instead (' + M.ArmourPerLevel + ' armour per level).') +
       hint('<b>Poison</b> is not settled: the game\'s keyword text says monsters resist Poison at half their elemental resistance, but test fights have not confirmed that yet. The sim currently gives Poison the full resistance.'));
 
 
@@ -9423,14 +9436,14 @@ window.BOFaq = function (ctx) {
     if (!M || !M.Rarity) return needData(h);
     const R = M.Rarity, NAMES = { 0: 'Normal', 1: 'Magic', 2: 'Rare', 3: 'Guardian' };
     h += card('Rarity', table(['Rarity', 'Life', 'Damage', 'XP', 'Item rolls', 'Item chance'], Object.keys(R).map(k => [
-      '<b>' + (NAMES[k] || k) + '</b>', '×' + R[k].Life, '×' + R[k].Damage, '×' + R[k].Xp, R[k].ItemRolls, pct(R[k].ItemChance) + '%'])) +
+      '<b>' + (NAMES[k] || k) + '</b>', '×' + R[k].Life, '×' + R[k].Damage, '×' + R[k].Xp, R[k].ItemRolls, pct(R[k].ItemChance) + '%']), 'faq-num') +
       hint('Guardians get their life and rewards from their own rules (see <b>Guardian Fights</b>), so their row here is ×1.'));
     const L = M.Life, Dm = M.Damage;
     if (L && L.K) {
       const lv = [1, 10, 20, 40, 60, 80], g = (c, x) => Math.exp(c.K * Math.pow(x, c.P)) / Math.exp(c.K);
       const rows = [['Life compared with level 1'].concat(lv.map(x => '×' + r1(g(L, x))))];
       if (Dm && Dm.K) rows.push(['Damage compared with level 1'].concat(lv.map(x => '×' + r1(g(Dm, x)))));
-      h += card('Growth by level', table(['Monster level'].concat(lv.map(String)), rows) +
+      h += card('Growth by level', table(['Monster level'].concat(lv.map(String)), rows, 'faq-num') +
         hint('Monster life and damage follow the game\'s curve Base × e<sup>K × level<sup>P</sup></sup> (life: K ' + L.K + ', P ' + L.P +
           (Dm && Dm.K ? '; damage: K ' + Dm.K + ', P ' + Dm.P : '') + '). Each monster type then has its own base. Past Rupture 80 the Deep adds more: see <b>Rupture &amp; the Deep</b>.'));
     }
@@ -9473,7 +9486,7 @@ window.BOFaq = function (ctx) {
     return t.join(', ') || '–';
   };
   const affixTable = rows => table(['Affix', 'Rolls on', 'From', 'What it does', '<span title="What the game changes on the monster to pay for the affix (its life and its damage)">Cost</span>'],
-    rows.map(a => ({ off: !LIVE(a), cells: ['<b>' + esc(a.Name) + '</b>', WHO(a), starts(a), esc(effect(a)) + (a.Note ? '<small class="faq-note">' + esc(a.Note) + '</small>' : ''), budget(a)] })));
+    rows.map(a => ({ off: !LIVE(a), cells: ['<b>' + esc(a.Name) + '</b>', WHO(a), starts(a), esc(effect(a)) + (a.Note ? '<small class="faq-note">' + esc(a.Note) + '</small>' : ''), budget(a)] })), 'faq-wide4');
   function affixes(GD) {
     let h = intro('Monster Affixes', 'The extra mods a Guardian or an elite monster can roll, read from the game\'s data files. Numbers are the game\'s; this page does not change the damage sim.');
     const all = GD.monsterAffixes || [];
@@ -9513,13 +9526,33 @@ window.BOFaq = function (ctx) {
       X.OneBelowRL ? 'Below Rupture ' + X.OneBelowRL + ' each break has one hazard. From Rupture ' + X.LateFromRL + ' it adds another, and from Rupture ' + X.Late2FromRL + ' another.' : '',
       'Time spent in breaks counts against your real DPS in the log check, but not on the sheet.',
     ]));
+
+
+    const SIM = window.BOSim || {}, GL = SIM.guardianLifeAt, DZ = SIM.deepZoneAt;
+    if (GL && DZ) {
+      const big = n => n >= 1e9 ? r1(n / 1e9) + 'B' : n >= 1e6 ? (n >= 1e8 ? Math.round(n / 1e6) : r1(n / 1e6)) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : Math.round(n).toLocaleString('en-US');
+      const LORDS = SIM.GUARDIAN_LORDS || new Set([80, 130]);
+      const rls = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 167, 180, 200];
+      h += card('Guardian life by Rupture level',
+        '<p class="faq-stats faq-formula"><b>Guardian life</b> = target fight time × the game\'s model DPS for that Rupture level × the Deep\'s monster life multiplier × the Guardian\'s own share</p>' +
+        table(['Rupture', 'Guardian', 'Gate or Lord', 'Deep life ×'], rls.map(x => [String(x), x <= 20 && x % 10 === 0 ? '–' : big(GL(GD, x, 'guardian')) + (x > 167 ? ' <span class="faq-note">trend</span>' : ''),
+          SIM.guardianIsGate(x) ? big(GL(GD, x, 'gate')) + (LORDS.has(x) ? ' <span class="faq-note">Lord</span>' : '') : '–', '×' + r1(DZ(x)[0]) + (x > 167 ? ' <span class="faq-note">trend</span>' : '')])) +
+        list([
+          'A Guardian\'s life does not follow the monster curve in <b>Monster Level &amp; Rarity</b>. The game sets a <b>target fight time</b> for each Rupture level (about 58 s up to Rupture 80, 83 s in the Deep, 35–42 s past Rupture 130; Gates and Lords their own) and multiplies it by its own <b>model DPS</b> for that level. The game log prints both: "Guardian: model at RL 66 - target 58 s x median boss DPS 499513 = life 29166418".',
+          'Past Rupture 80 the Deep\'s monster life multiplier goes on top (see <b>Rupture &amp; the Deep</b>). That is why life keeps climbing while the model number falls.',
+          'Each Guardian then has its own share: usually ×0.95 to ×1.10, sometimes ×0.6 or up to ×2.2 (colour variant and mods, not yet split apart). The table leaves it out.',
+          'Gates and Lords (Rupture 80 and 130) have their own target time, so their life does not sit on the line of the Guardians around them.',
+          'Checked on every Guardian in our game logs of 19 Nov 2026 (104 fights, Rupture 32 to 167): all fit this rule. Past 167 the table follows the trend; whether 170, 180 ... are Gates is not known yet. The numbers can change with any patch.',
+          'Not counted: Empowered and other bonus-life mods (see <b>Monster Affixes</b>), and Elder Guardians (below). The Damage tab uses these numbers for shock, the freeze bar and Kindling; you can type an exact life there.',
+        ]), 'from the game log');
+    }
     if (E.FromML) h += card('Enrage', list([
       'From monster level <b>' + E.FromML + '</b>, a Guardian enrages after <b>' + E.Rift + ' s</b> in a Rift, ' + E.Gate + ' s at a Gate and ' + E.Pinnacle + ' s at a Pinnacle.',
       'Enraged: <b>+' + E.DamagePct + '% damage</b> and <b>+' + E.SpeedPct + '% speed</b>' + (E.bStacking === false ? ', once (it does not stack)' : '') + '.',
       'The <b>Early Enrage</b> mod shortens the timer (see Monster Affixes).',
     ]));
     if ((F.tiers || []).length) h += card('Harder tiers by Rupture level', table(['Tier', 'From Rupture', 'Gates from', 'What happens'],
-      F.tiers.slice().sort((a, b) => a.FromRL - b.FromRL).map(t => ['<b>' + esc(t.Name) + '</b>', t.FromRL, t.GateFromRL != null ? t.GateFromRL : '–', esc(t.Text || '')])));
+      F.tiers.slice().sort((a, b) => a.FromRL - b.FromRL).map(t => ['<b>' + esc(t.Name) + '</b>', t.FromRL, t.GateFromRL != null ? t.GateFromRL : '–', esc(t.Text || '')]), 'faq-wide4'));
     const R = F.rally, El = F.elder;
     if (R || El) h += card('Gate rallies and Elder Guardians', list([
       R ? 'At <b>' + pct(R.AtLife) + '%</b> life a Gate Guardian (Gate band ' + (R.Bands || []).join(', ') + (R.Elder ? ', and every Elder' : '') + ') calls <b>' + R.Count + '</b> rare champions around it and takes only <b>' + pct(R.Taken) + '%</b> of every hit until they fall or ' + R.MaxSeconds + ' s pass. Then it reels for ' + R.Stagger + ' s.' : '',
@@ -9554,7 +9587,7 @@ window.BOFaq = function (ctx) {
       return t.join(', ') || (c.Text ? esc(c.Text.replace(/\{\d+\}%\s*/g, '')) : '–');
     };
     const boss = c => c.Kind === 'Mark' ? 'Up to ' + (c.Dread && c.Dread.BossCap || 20) + ' Marks (normal: ' + (c.Dread && c.Dread.Cap || 10) + ')' : c.BossEffect != null ? pct(c.BossEffect) + '% effect' : 'Full effect';
-    h += card('Curses in the game', table(['Curse', 'Kind', 'Effect', 'On Guardians'], C.map(c => ['<b>' + esc(c.Name) + '</b>', c.Kind, fx(c), boss(c)])));
+    h += card('Curses in the game', table(['Curse', 'Kind', 'Effect', 'On Guardians'], C.map(c => ['<b>' + esc(c.Name) + '</b>', c.Kind, fx(c), boss(c)]), 'faq-wide4'));
     const woe = C.find(c => c.Kind === 'Woe') || {}, D = woe.Dread || {}, T = woe.Tough || {};
     h += card('What stacks', list([
       '<b>Woes</b>: up to <b>2</b> per enemy (lines like "You can lay +1 more Woe" add more). A new Woe replaces the oldest.',
@@ -9666,18 +9699,22 @@ window.BOFaq = function (ctx) {
     const D = GD.deep;
     let h = intro('Rupture & the Deep', 'What a Rupture level means, and how the Deep past Rupture 80 keeps getting harder.');
     if (!D || !D.MapMaxLevel) return needData(h);
-    const lv = [D.MapMaxLevel + 10, D.MapMaxLevel + 20, D.MapMaxLevel + 40, D.MapMaxLevel + 70], up = L => L - D.MapMaxLevel;
     const ml = (D.LadderMonsterLevels || []);
     h += card('Rupture levels', list([
       'Rupture level <b>1–' + D.MapMaxLevel + '</b> is the monster level: Rupture 50 has level 50 monsters.',
       ml.length ? 'From Rupture ' + (D.MapMaxLevel + 1) + ' (the Deep) the monster level goes ' + ml.join(', ') + ' and stays at ' + ml[ml.length - 1] + '. After that, monsters get stronger by multipliers instead.' : '',
     ]));
-    h += card('The Deep', table(['Rupture', String(D.MapMaxLevel)].concat(lv.map(String)), [
-      ['Monster life', '×1'].concat(lv.map(L => '×' + r1(Math.pow(D.LadderLifePerLevel, up(L))))),
-      ['Monster damage', '×1'].concat(lv.map(L => '×' + r1(Math.pow(D.LadderDamagePerLevel, up(L))))),
-      ['XP', '+0%'].concat(lv.map(L => '+' + up(L) * D.LadderXpPctPerLevel + '%')),
-    ]) + list([
-      'Each Rupture level past ' + D.MapMaxLevel + ': monster life ×' + D.LadderLifePerLevel + ', damage ×' + D.LadderDamagePerLevel + ', XP +' + D.LadderXpPctPerLevel + '%.',
+
+
+    const DZ = (window.BOSim || {}).deepZoneAt;
+    const dl = [D.MapMaxLevel, 90, 100, 110, 120, 130, 133, 140, 150, 160, 167];
+    h += card('The Deep', (DZ ? table(['Rupture'].concat(dl.map(String)), [
+      ['Monster life'].concat(dl.map(L => '×' + r1(DZ(L)[0]))),
+      ['Monster damage'].concat(dl.map(L => '×' + r1(DZ(L)[1]))),
+    ], 'faq-num') : '') + list([
+      'Monster life: about ×1.05 a Rupture level from 81 to 130, a jump between 130 and 133 (×22.9 to ×57.8), then about ×1.08 a level. Damage grows far slower: ×1.8 at 100, ×4.7 at 150.',
+      'These are the game\'s own numbers from its log ("Zone rift: ... monster life x213.80 dmg x4.70" at Rupture 150, 19 Nov 2026). The game data in the public API lists ×' + D.LadderLifePerLevel + ' life and ×' + D.LadderDamagePerLevel + ' damage a level, which is far lower: the game does not use it that way.',
+      'XP: +' + D.LadderXpPctPerLevel + '% a level past ' + D.MapMaxLevel + ' in the game data; the log showed more on some runs (other XP bonuses).',
       (D.LadderUnlock || []).length ? 'A clear' + (D.LadderUnlockNeedsDeathless ? ' without dying' : '') + ' opens the next levels: +' + D.LadderUnlock[0].Step + ' if it took under ' + D.LadderUnlock[0].Seconds + ' s, otherwise +' + (D.LadderUnlock[1] || {}).Step + '.' : '',
       'Guardians in the Deep roll more mods (see Monster Affixes), and Elder Guardians can appear (see Guardian Fights).',
     ]));
@@ -9893,7 +9930,7 @@ window.BOFaq = function (ctx) {
       '<b>Skyforged Anneal</b> (a Core Ember) can take it to the best tier. <b>Skyforged Temper</b> does the same for a crafted mod.',
       '<b>Lightless Anneal</b> (<b>3 Gloomsilver</b> since patch 82, no Forge Potential since patch 84, known from the start) does what Anneal does and stops one tier short of the best as well, until <b>Rupture 160</b>: from there it reaches <b>Tier 1</b> (the game\'s switch <i>GloomTopRL97</i> is 160).',
       'Gloomsilver Guardian drops start at Rupture 150, so for Rupture 150 to 159 a dropped one only buys the second best tier. The Oath Broker\'s 5 a day (gold) is the steady source.',
-    ]));
+    ], 'faq-wide4'));
     h += card('What else Gloomsilver buys', table(['Craft', 'Gloomsilver', 'What it adds'], [
       ['<b>Gloomsight</b>', '6', '+1 to level of all skill gems (amulet, helm, tome, wand, staff or melee weapon), a prefix'],
       ['<b>Black Below Rot</b>', '4', 'Damage over time multiplier (weapon, amulet, quiver or tome), a prefix'],
@@ -9983,7 +10020,6 @@ window.BOFaq = function (ctx) {
       const by = {}; for (const x of L.lean) (by[x.Tag + ' x' + x.On + ' / x' + x.Off] = by[x.Tag + ' x' + x.On + ' / x' + x.Off] || []).push(x.Id.replace(/_/g, ' '));
       h += card('Item lines that lean', hint('These lines carry a lean in the affix file: they roll more often (the first number) or less often (the second) depending on a condition the file does not name, likely your class.') + list(Object.entries(by).map(([k, ids]) => '<b>' + esc(k) + '</b>: ' + esc(ids.join(', ')))));
     }
-    if ((L.heralds || []).length) h += card('Herald kill effects', list(L.heralds.map(x => '<b>' + esc(x.Name) + '</b>: a kill ' + esc(String(x.OnKill || '').toLowerCase()) + 's for ' + x.PctMaxLife + '% of the slain enemy\'s maximum life as ' + esc(x.Element || '') + (x.Count ? ', to ' + x.Count + ' enemies' : '') + ' within ' + r1((x.Radius || 0) / 100) + ' m.')) + hint('Kill effects only, so the sim (one enemy) leaves them out. Patch 79: a monster killed by a kill effect fires its own at half strength.'));
     return h;
   }
 
@@ -11789,40 +11825,59 @@ window.BOCharacter = function (ctx) {
     return +o.ruptureLevel > 0 ? +o.ruptureLevel : lvl > max ? max + Math.max(1, mls.indexOf(Math.min(lvl, deepLvl)) + 1) : lvl;
   };
 
-  const guardianLifeAt = (GD, rl) => {
-    const D = GD.deep || {};
-
-
-    const pts = [[62, 15.24e6], [66, 22437324], [130, 257153696], [150, 1755677184 / 1.4]];
-
-
-
-    const fixed = (rl % 10 === 0 && rl <= 80) || rl === 130;
-    const p79 = !is079(GD) || fixed ? 1 : rl >= 41 && rl <= 79 ? 1.3 : rl >= 81 && rl <= 129 ? 1.85 : 1;
 
 
 
 
 
 
-    const low84 = [[22, 214416], [24, 302440], [26, 420057], [28, 587200], [32, 1092477], [34, 1315489], [37, 1652436], [39, 1723050]];
-    const gate84 = [[20, 50215], [30, 180780]];
-    const line = (p, q, x) => p[1] * Math.pow(q[1] / p[1], (x - p[0]) / (q[0] - p[0]));
-    const raw = (() => {
-      if (is084(GD) && rl <= 39) {
-        if (rl % 10 === 0) return line(gate84[0], gate84[1], rl);
-        if (rl <= low84[0][0]) return line(low84[0], low84[1], rl);
-        let k = 0; while (k < low84.length - 2 && rl > low84[k + 1][0]) k++;
-        return line(low84[k], low84[k + 1], rl);
-      }
-      if (is084(GD) && rl < 62) return line(low84[low84.length - 1], pts[0], rl);
-      if (rl <= 62) return pts[0][1] * Math.pow(1.1315, rl - 62);
-      if (rl >= 150) return pts[pts.length - 1][1] * Math.pow(D.LadderLifePerLevel || 1.03, rl - 150);
-      const last = pts.length - 1; let k = 0; while (k < last - 1 && rl > pts[k + 1][0]) k++;
-      const [r0, l0] = pts[k], [r1, l1] = pts[k + 1];
-      return l0 * Math.pow(l1 / l0, (rl - r0) / (r1 - r0));
-    })();
-    return raw * p79;
+
+
+
+
+
+
+
+
+
+
+  const GUARDIAN_MODEL = { 22: 214416, 24: 302440, 26: 420057, 28: 587200, 32: 1092477, 34: 1315489, 36: 1540130, 38: 1690316, 42: 2888470, 44: 3355432,
+    47: 3543929, 49: 3656576, 52: 5311964, 54: 7262434, 56: 9636988, 58: 12480737, 62: 19810684, 64: 24360456, 66: 29166418, 68: 34120516,
+    72: 45430412, 74: 51580824, 77: 57152340, 79: 58777900, 83: 37584772, 86: 33444772, 89: 29760722, 93: 25472062, 96: 22666272, 99: 20169564,
+    103: 21406124, 106: 20738020, 109: 19478744, 113: 17490756, 116: 16032674, 119: 14683453, 123: 14072768, 126: 13554035, 133: 6174435,
+    136: 5994806, 139: 5816228, 140: 5759735, 143: 5397986, 146: 5029081, 149: 4676142, 151: 4357038, 152: 4195082, 153: 4037856, 154: 3885306,
+    155: 3737348, 156: 3593818, 157: 3481394, 158: 3371560, 159: 3264219, 161: 3053035, 162: 2949328, 163: 2881513, 164: 2815038, 165: 2644071,
+    166: 2479392, 167: 2320821 };
+  const GUARDIAN_GATE = { 20: 50215, 30: 180780, 40: 1859922, 50: 4765650, 60: 20298676, 70: 50760000, 80: 59345324, 90: 20122266, 100: 14464526,
+    110: 13417916, 120: 10282982, 129: 9644728, 130: 14774400, 150: 6932148, 160: 5099384, 162: 4811808 };
+  const GUARDIAN_LORDS = new Set([80, 130]);
+  const DEEP_ZONE = { 80: [1, 1], 83: [2.32, 1.32], 86: [2.68, 1.4], 89: [3.1, 1.48], 90: [3.26, 1.51], 93: [3.77, 1.6], 96: [4.37, 1.69], 99: [5.05, 1.79],
+    100: [5.31, 1.82], 103: [6.14, 1.93], 106: [7.11, 2.04], 109: [8.23, 2.16], 110: [8.64, 2.2], 113: [10.01, 2.33], 116: [11.58, 2.46],
+    119: [13.41, 2.6], 120: [14.08, 2.65], 123: [16.3, 2.81], 126: [18.87, 2.97], 129: [21.84, 3.14], 130: [22.93, 3.2], 133: [57.78, 4.1],
+    136: [72.79, 4.2], 139: [91.69, 4.3], 140: [99.03, 4.34], 143: [124.75, 4.44], 146: [157.15, 4.55], 149: [197.96, 4.66], 150: [213.8, 4.7],
+    151: [230.9, 4.73], 152: [249.37, 4.77], 153: [269.32, 4.81], 154: [290.87, 4.85], 155: [314.14, 4.89], 156: [339.27, 4.93], 157: [366.41, 4.97],
+    158: [395.72, 5.01], 159: [427.38, 5.05], 160: [461.57, 5.09], 161: [498.5, 5.13], 162: [538.37, 5.17], 163: [581.44, 5.21], 164: [627.96, 5.25],
+    165: [678.2, 5.29], 166: [732.45, 5.33], 167: [791.05, 5.38] };
+
+  const logLine = (pts, x) => {
+    let k = 0; while (k < pts.length - 2 && x > pts[k + 1][0]) k++;
+    const p = pts[k], q = pts[k + 1];
+    return p[1] * Math.pow(q[1] / p[1], (x - p[0]) / (q[0] - p[0]));
+  };
+  const tablePts = (t, f) => Object.keys(t).map(Number).sort((a, b) => a - b).map(k => [k, f(t[k])]);
+  const ZONE_LIFE_PTS = tablePts(DEEP_ZONE, v => v[0]), ZONE_DMG_PTS = tablePts(DEEP_ZONE, v => v[1]);
+
+  const deepZoneAt = rl => rl <= 80 ? [1, 1] : DEEP_ZONE[rl] ? DEEP_ZONE[rl].slice() : [logLine(ZONE_LIFE_PTS, rl), logLine(ZONE_DMG_PTS, rl)];
+  const MODEL_PTS = tablePts(GUARDIAN_MODEL, v => v);
+  const GATE_PTS = tablePts(GUARDIAN_GATE, v => v);
+
+
+  const guardianIsGate = rl => rl % 10 === 0 && rl <= 160 && !GUARDIAN_MODEL[rl] || rl === 129;
+  const guardianLifeAt = (GD, rl, kind) => {
+    rl = Math.max(1, Math.round(+rl || 1));
+    const gate = kind === 'gate' || (kind !== 'guardian' && guardianIsGate(rl));
+    const model = gate ? (GUARDIAN_GATE[rl] || logLine(rl <= 30 ? GATE_PTS : GATE_PTS.slice(2), rl)) : (GUARDIAN_MODEL[rl] || logLine(MODEL_PTS, rl));
+    return model * deepZoneAt(rl)[0];
   };
 
   const is081 = GD => apiBuildAtLeast(GD, 81, '2026-11-17T15');
@@ -17163,7 +17218,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
+  const api = { rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
 
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;

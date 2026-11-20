@@ -1777,7 +1777,12 @@ body.lootfilter-page #buildSummary { display: none !important; } /* the characte
 .faq-card h2 small { color: var(--faint); font-weight: 500; font-size: 12px; margin-left: 6px; }
 .faq-list { margin: 8px 0 10px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
 .faq-tbl td, .faq-tbl th { vertical-align: top; text-align: left; }
-.faq-tbl td:nth-child(4) { min-width: 260px; }
+/* Room for a wordy 4th column, only on the tables that have one (20 Nov 2026: on every table it pushed the number tables apart). */
+.faq-tbl.faq-wide4 td:nth-child(4) { min-width: 260px; }
+/* Number tables by level: a label column, then even columns. */
+.faq-tbl.faq-num { table-layout: fixed; min-width: 520px; }
+.faq-tbl.faq-num th:first-child, .faq-tbl.faq-num td:first-child { width: 190px; }
+.faq-card .table-wrap + .table-wrap { margin-top: 10px; }
 /* A FAQ table that wraps its text to the card's width instead of scrolling sideways (Ailments). */
 .faq-wrap { width: 100%; }
 .faq-wrap th, .faq-wrap td { white-space: normal; overflow-wrap: break-word; }

@@ -22680,7 +22680,9 @@ window.BOStartApp = function () {
   }
   planner = window.BOPlanner({
     beltCard: () => brewery ? brewery.beltCard() : '',
-    GD, S, $, esc, gemDot, skillDot, confirm: confirmInPage, importCode: text => importAnyCode(text), bestSupports: bestSupportsFor, supMarks: marksFor,
+    GD, S, $, esc, gemDot, skillDot, confirm: confirmInPage,
+
+    importCode: async text => { const ch = await importAnyCode(text); if (ch) { showTab('character'); window.scrollTo(0, 0); } return ch; }, bestSupports: bestSupportsFor, supMarks: marksFor,
 
     withTabs: ch => planWithTabs(ch),
     current: () => st.ch, workingCopy: () => st.ch, retree,

@@ -18619,7 +18619,10 @@ window.BOStartApp = function () {
     let r = null;
     if (st.ch && st.skill) { try { r = S.calcSkill(GD, st.ch, st.skill, opts()); } catch (e) { r = null; } }
     const ok = r && !r.error && !r.unsupported;
-    $('#bsClass').textContent = st.ch ? st.ch.name : '–';
+    { const b = $('#bsClass'), can = !!(st.chOrig && st.chOrig.plan);
+      b.textContent = st.ch ? st.ch.name : '–';
+      b.classList.toggle('bs-rename', can);
+      if (can) { b.tabIndex = 0; b.setAttribute('role', 'button'); b.title = 'Click to rename this plan'; } else { b.removeAttribute('tabindex'); b.removeAttribute('role'); b.removeAttribute('title'); } }
 
     const fromSave = st.ch && !st.ch.plan && (st.ch.file || st.ch.from === 'folder' || st.ch.from === 'file');
     $('#bsSpell').textContent = st.ch ? st.ch.classId + ' · level ' + st.ch.level + (fromSave && window.BOGrail ? ' · ' + window.BOGrail.leagueLabel(st.ch.league) : '') + (ok && r.skill ? ' · ' + r.skill.Name : '') : '';
@@ -19655,7 +19658,7 @@ window.BOStartApp = function () {
     const cur = st.chOrig && st.chOrig.id;
     const day = s => { const d = s && new Date(s); return d && !isNaN(d) ? d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : ''; };
     const row = c => '<div class="sb-row' + (c.id === cur ? ' on' : '') + '" data-id="' + esc(c.id) + '">' +
-      '<div class="sb-main"><b class="notranslate">' + esc(c.name) + '</b>' + (c.auto ? '' : cloudMark(c)) + '<span class="meta">' + esc(c.classId) + ' · level ' + c.level + (day(savedDate(c)) ? (c.auto ? ' · opened ' : ' · saved ') + esc(day(savedDate(c))) : '') + (c.id === cur ? ' · open now' : '') + (snapDirty(c) ? ' · <span class="sb-unsaved">unsaved changes</span>' : '') + '</span></div>' +
+      '<div class="sb-main"><b class="notranslate sb-name bs-rename" data-sb="rename" role="button" tabindex="0" title="Click to rename">' + esc(c.name) + '</b>' + (c.auto ? '' : cloudMark(c)) + '<span class="meta">' + esc(c.classId) + ' · level ' + c.level + (day(savedDate(c)) ? (c.auto ? ' · opened ' : ' · saved ') + esc(day(savedDate(c))) : '') + (c.id === cur ? ' · open now' : '') + (snapDirty(c) ? ' · <span class="sb-unsaved">unsaved changes</span>' : '') + '</span></div>' +
       '<div class="sb-acts"><button class="btn small" type="button" data-sb="open">Open</button>' + (c.auto ? '<button class="btn small ghost" type="button" data-sb="keep">Save</button>' : '<button class="btn small ghost" type="button" data-sb="dup">Duplicate</button>') + '<button class="btn small ghost" type="button" data-sb="del">Delete</button></div></div>';
     pane.innerHTML = '<div class="card"><h2>Saved Builds <small>' + all.length + '</small></h2>' +
       '<p class="hint">Only builds you saved yourself: Save as new build, Start a New Plan or Duplicate. They stay in this browser, and in your account when you are signed in. Open one to change it: a saved build stays as it was until you press Save, and Discard changes drops your edits. Save as new build under a name you already used saves over that build. Loaded characters are in the Character list on the left.</p>' +
@@ -19665,11 +19668,13 @@ window.BOStartApp = function () {
         '<p class="hint">Builds from share links and codes you opened. They are kept in this browser only. Save moves one to Saved Builds.</p>' +
         (olist.length ? '<div class="sb-list">' + olist.map(row).join('') + '</div>' : '<p class="hint">No opened build matches.</p>') + '</div>' : '');
   }
+  $('#savedBuildsPane').addEventListener('keydown', e => { const b = e.target.closest('[data-sb="rename"]'); if (b && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); b.click(); } });
   $('#savedBuildsPane').addEventListener('input', e => { if (e.target.id !== 'sbSearch') return; buildsFilter = e.target.value; const at = e.target.selectionStart; renderSavedBuilds(); const s = $('#sbSearch'); if (s) { s.focus(); s.setSelectionRange(at, at); } });
   $('#savedBuildsPane').addEventListener('click', async e => {
     const b = e.target.closest('[data-sb]'); if (!b) return;
     if (b.dataset.sb === 'new') { if (await planner.startNewPlan()) showTab('plan'); return; }
     const id = (b.closest('[data-id]') || {}).dataset.id; let ch = CHARS.find(c => c.id === id); if (!ch) return;
+    if (b.dataset.sb === 'rename') { nameEditor(b, ch); return; }
     if (b.dataset.sb === 'open') { if (!await leaveOk(id)) return; fillChars(id); selectChar(id); showTab('character'); syncUrl('character'); }
     else if (b.dataset.sb === 'dup') {
       if (!await leaveOk()) return; ch = CHARS.find(c => c.id === id); if (!ch) return; // a discard puts a new object in its place
@@ -20552,6 +20557,38 @@ window.BOStartApp = function () {
     const t = treeTabs(); if (!t) return; const j = t.active + d; if (j < 0 || j >= t.sets.length) return;
     [t.sets[t.active], t.sets[j]] = [t.sets[j], t.sets[t.active]]; t.active = j; keepTabs(); renderTreeTabs();
   }
+
+
+
+
+  function setPlanName(ch, v) {
+    if (!ch || !ch.plan || !v || v === ch.name || !CHARS.includes(ch)) return;
+    const clean = isSaved(ch) && !snapDirty(ch); // no other unsaved edits: the new name is saved at once
+    ch.name = v;
+    if (ch === st.chOrig) { planChanged(ch, { name: true }); if (planner) planner.render(); }
+    else { ch.savedAt = new Date().toISOString(); keepChars(); fillChars(st.chOrig && st.chOrig.id); } // savedAt moves so snapHash's memo is not stale
+    if (clean) { snapTake(ch, ch.savedAt); keepSnaps(); }
+    syncUnsaved(); renderSavedBuilds();
+  }
+
+  function nameEditor(b, ch) {
+    if (!ch || !ch.plan || b.hidden) return;
+    const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'bs-name-input'; inp.value = ch.name; inp.maxLength = 60;
+    inp.setAttribute('aria-label', 'Plan name');
+    let done = false;
+    const commit = ok => {
+      if (done) return; done = true;
+      const v = inp.value.trim(); inp.remove(); b.hidden = false;
+      if (ok) setPlanName(ch, v);
+      if (b.isConnected) b.focus();
+    };
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(true); } else if (e.key === 'Escape') commit(false); });
+    inp.addEventListener('blur', () => commit(true));
+    b.hidden = true; b.after(inp); inp.focus(); inp.select();
+  }
+  const renamePlan = () => nameEditor($('#bsClass'), st.chOrig);
+  $('#bsClass').addEventListener('click', renamePlan);
+  $('#bsClass').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && st.chOrig && st.chOrig.plan) { e.preventDefault(); renamePlan(); } });
   function renameTreeTab() {
     const t = treeTabs(); if (!t) return;
     const btn = $('#treeTabs').querySelector('.tree-tab.active'); if (!btn) return;
@@ -21260,7 +21297,7 @@ window.BOStartApp = function () {
     const ids = Object.keys(GD.nodes).filter(id => !blocked(id) && !banned(id) && GD.nodes[id].Kind !== 'Start');
     let i = 0;
     const step = () => {
-      if (job !== T.job) return;
+      if (job !== T.job || T.scores !== T.scoreMap) return; // an edit made a new scores map (no .oath): scoreTree starts again
       if (!T.visible) { T.resume = step; return; } // another tab is shown: go on when the tree is back (scoreTree)
       const t0 = performance.now();
       while (i < ids.length && performance.now() - t0 < 25) {

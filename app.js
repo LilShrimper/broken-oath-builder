@@ -10905,6 +10905,8 @@ window.BOCharacter = function (ctx) {
     'TrapChainRadius', 'OrbitMax',
 
     'BannerEffect',
+
+    'ManaOnKillPct', 'MoveSpeedOnKill',
     'DexLife']); // Wind Dancer: "+{v} to maximum Life for every 10 Dexterity" (statText)
 
   const HANDLED = new Set(['MinionOneKind', 'RepeatOwnDamage', 'StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'UnravelOnHit', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
@@ -14283,6 +14285,20 @@ window.BOCharacter = function (ctx) {
       const takenK = (mitig.Cold ? mitig.Cold.taken : 1) * groundTaken * shockF;
       res.freeze = { coldPerSec: takenK > 0 ? Math.max(0, (byType.Cold || 0) - (ail.crack ? ail.crack.dps : 0)) / takenK : 0 };
     }
+
+    let frzHelpers = null;
+    const freezeHelpers = () => {
+      if (frzHelpers) return frzHelpers;
+      frzHelpers = [];
+      for (const [lid, id] of barOthers()) {
+        const r = barSheet(lid, id);
+        const c = r && !r.error && !r.unsupported && r.freeze ? r.freeze.coldPerSec : 0;
+        if (!(c > 0)) continue;
+        const key = 'barfreeze:' + lid;
+        frzHelpers.push({ id, key, name: (GD.skills[lid] || {}).Name || id, coldPerSec: c, dps: r.totalDps || 0, on: !(o.off && o.off.has(key)) });
+      }
+      return frzHelpers;
+    };
     let poisonDps = 0, igniteDps = 0, bleedDps = 0;
     if (A.bEnabled) {
       const poisonChanceStat = sumMod('PoisonChance', 'Flat');
@@ -14601,6 +14617,38 @@ window.BOCharacter = function (ctx) {
         if (rr.Every > 0) dv.nth = rr.Every;
         let pct = rr.Pct > 0 ? rr.Pct * 100 : dv.pct;
         if (f === 'Asc71_DragonsBreath') pct *= 1 + ((rr.BurningMult || 1.3) - 1) * (ail.ignite ? ail.ignite.uptime : 0);
+
+
+
+
+
+
+
+
+
+        if (f === 'Asc71_HoarfrostDive' && isBoss && res.freeze && !o._barProbe && is079(GD)) {
+          const META = (GD.scaling && GD.scaling.Meta) || {};
+          const barPct = META.FreezeMeterPct > 0 ? META.FreezeMeterPct : 12, grow = META.FreezeMeterGrowth > 1 ? META.FreezeMeterGrowth : 1.5;
+          const win = (META.FreezeMeterSeconds != null ? META.FreezeMeterSeconds : 1.5) + (META.BrittleSeconds != null ? META.BrittleSeconds : 4);
+          const mult = rr.ColdMult > 1 ? rr.ColdMult : 1.5, at = rr.MeterAt > 0 && rr.MeterAt < 1 ? rr.MeterAt : 0.5;
+          const helpers = freezeHelpers();
+          let cold = res.freeze.coldPerSec, dmg = hitDpsVs + poisonDps + igniteDps + bleedDps;
+          for (const h of helpers) if (h.on) { cold += h.coldPerSec; dmg += h.dps; }
+          const life = o.enemyLife || guardianLifeAt(GD, guardianRL(GD, o, lvl));
+          const fightSec = dmg > 0 ? life / dmg : 0;
+          let covered = 0, end = 0, bars = 0;
+          const span = (a, b) => { const s = Math.max(a, end); if (b > s) { covered += b - s; end = b; } };
+          if (cold > 0 && fightSec > 0) for (let t0 = 0, size = barPct / 100 * life, i = 0; t0 < fightSec && i < 60; i++, size *= grow) {
+            const fill = size / cold;
+            span(t0 + at * fill, Math.min(t0 + fill, fightSec));
+            if (t0 + fill < fightSec) { bars++; span(t0 + fill, Math.min(t0 + fill + win, fightSec)); }
+            t0 += fill;
+          }
+          const up = fightSec > 0 ? Math.min(1, covered / fightSec) : 0;
+          pct *= 1 + (mult - 1) * up;
+          Object.assign(res.freeze, { helpers, dive: { uptime: up, bars, fightSec, more: (mult - 1) * 100 } });
+          res.notes.push('Hoarfrost Dive: ' + Math.round((mult - 1) * 100) + '% more while the Guardian is Frozen, Brittle or past ' + Math.round(at * 100) + '% of its freeze bar: ' + Math.round(up * 100) + '% of a fight of about ' + Math.round(fightSec) + ' s (' + bars + ' bar' + (bars === 1 ? '' : 's') + ' filled), so the dive counts at ' + +pct.toFixed(1) + '% of the hit. The freeze bar is from the game log (19 Nov 2026); the dive\'s bonus is from the node text and the game\'s rule file, not checked in game.');
+        }
         trig.push({ m: Object.assign({}, m, { src: 'Dragonling · ' + (m.src || '').replace(/^Dragonling · /, '') }), share: 1, // nth below from dv (rule file or text)
           t: { when: dv.need === 'Crit' ? 'Crit' : 'Hit', nth: dv.nth, pct, count: 1, element: dv.element === 'Main' ? main : dv.element, cooldown: 0, perTarget: 0, state: [], conds: [], types: [] } });
       }
@@ -14801,14 +14849,7 @@ window.BOCharacter = function (ctx) {
       const more = ((((GD.supports.frostbreak || {}).Mods || []).find(m => m.Stat === 'FreezeBreak103') || {}).Value) || 50;
       if (!isBoss) res.notes.push('Frostbreak: its ' + more + '% more only counts on a Brittle Guardian or boss (after its freeze bar fills). Set the enemy to Guardian to see it.');
       else {
-        const helpers = [];
-        for (const [lid, id] of barOthers()) {
-          const r = barSheet(lid, id);
-          const c = r && !r.error && !r.unsupported && r.freeze ? r.freeze.coldPerSec : 0;
-          if (!(c > 0)) continue;
-          const key = 'barfreeze:' + lid;
-          helpers.push({ id, key, name: (GD.skills[lid] || {}).Name || id, coldPerSec: c, dps: r.totalDps || 0, on: !(o.off && o.off.has(key)) });
-        }
+        const helpers = freezeHelpers();
         const ownD = hitDpsVs + poisonDps + igniteDps + bleedDps;
         let cold = res.freeze.coldPerSec, dmg = ownD;
         for (const h of helpers) if (h.on) { cold += h.coldPerSec; dmg += h.dps; }

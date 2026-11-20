@@ -1465,6 +1465,57 @@ body.compare-page #controls { display: none; }
 .cr-copied b { color: var(--dashboard-gold); }
 :root[data-theme="light"] .cr-copied b { color: #8a6a1c; }
 .cr-recopy { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.cr-mem { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
+.cr-mem > .hint { margin: 0; }
+.cr-mem-one { display: inline-flex; align-items: center; gap: 4px; }
+/* Save Creator: gear and idols as on the Character tab, the bag as the game's own window (12 x 5 and the pouch row). */
+.cr-panels { display: grid; gap: 14px; min-width: 0; }
+.creator-pane .cr-panels > .card { margin-bottom: 0; }
+.cr-gear .ch-slot.on, .cr-tile.on { border-color: var(--dashboard-gold); box-shadow: 0 0 0 2px color-mix(in srgb, var(--dashboard-gold) 40%, transparent); }
+.cr-bag { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: repeat(6, minmax(0, 1fr)); aspect-ratio: 2 / 1; width: min(100%, 640px); gap: 4px; padding: 8px; border: 1px solid color-mix(in srgb, var(--dashboard-gold) 30%, var(--line)); border-radius: 10px; background: color-mix(in srgb, var(--bg) 70%, var(--panel)); }
+.cr-bag.more { grid-template-rows: none; grid-auto-rows: auto; aspect-ratio: auto; width: min(100%, 390px); gap: 2px; padding: 5px; }
+/* The bag card (owner's mock-up, 19 Nov 2026): the bag on the left, the pouch count, the how-to and the stacks past the pouch beside it; one column when narrow. */
+.cr-bagrow { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 14px; }
+.cr-bagrow > .cr-bag { flex: 0 1 640px; width: auto; max-width: 640px; }
+.cr-bagside { flex: 1 1 320px; min-width: 0; }
+.cr-bagside .cr-pouch { margin-top: 2px; }
+.cr-bagside p.hint { margin: 4px 0; }
+.creator-pane .cr-bagside h3 { margin: 8px 0 2px; }
+.cr-bag.more .cr-tile { aspect-ratio: 1; }
+.cr-cell { position: relative; min-width: 0; min-height: 0; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: color-mix(in srgb, var(--panel-2) 85%, var(--dashboard-gold) 5%); }
+button.cr-cell { cursor: pointer; }
+button.cr-cell::after { content: "+"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--dashboard-gold); font: 700 16px/1 system-ui, sans-serif; opacity: 0; }
+button.cr-cell:hover, button.cr-cell:focus-visible { border-color: var(--dashboard-gold); outline: none; }
+button.cr-cell:hover::after, button.cr-cell:focus-visible::after { opacity: 1; }
+.cr-cell.pouch { border-style: dashed; background: color-mix(in srgb, var(--bg) 85%, var(--panel)); }
+.cr-cell.pouch.on { border-style: solid; border-color: var(--dashboard-gold); box-shadow: 0 0 0 2px color-mix(in srgb, var(--dashboard-gold) 40%, transparent); }
+.cr-cell.pouch.on::after { opacity: 1; }
+/* A jewel's drawn gem fills its tile like a picture. */
+.cr-tile > .is-ico.jewel { position: absolute; inset: 2px; width: auto; height: auto; border: 0; background: none; pointer-events: none; }
+.cr-tile > .is-ico.jewel svg { width: 78%; height: 78%; }
+.cr-tile { --c: var(--line); position: relative; z-index: 1; display: grid; place-items: center; min-width: 0; min-height: 0; overflow: hidden; padding: 2px; border: 1px solid color-mix(in srgb, var(--c) 70%, var(--line)); border-radius: 4px; background: color-mix(in srgb, var(--c) 12%, var(--panel)); text-align: center; }
+.cr-tile.magic { --c: #7c9cff; } .cr-tile.rare { --c: #f0d060; } .cr-tile.unique { --c: #e8893c; }
+:root[data-theme="light"] .cr-tile.magic { --c: #3f5fd0; } :root[data-theme="light"] .cr-tile.rare { --c: #a07a10; } :root[data-theme="light"] .cr-tile.unique { --c: #c0601c; }
+.cr-tile[data-cr] { cursor: pointer; }
+.cr-tile:hover, .cr-tile:focus-visible { border-color: var(--dashboard-gold); outline: none; z-index: 2; }
+.cr-tile > b { max-height: 100%; overflow: hidden; overflow-wrap: anywhere; font-size: 10px; font-weight: 600; line-height: 1.1; }
+.cr-tile.has-art > b { display: none; }
+.cr-tile > .is-ico.art { position: absolute; inset: 2px; width: auto; height: auto; pointer-events: none; }
+.cr-tile > i { position: absolute; right: 1px; bottom: 1px; padding: 0 2px; border-radius: 3px; background: color-mix(in srgb, var(--bg) 78%, transparent); color: var(--text); font: 700 10px/1.2 system-ui, sans-serif; font-style: normal; font-variant-numeric: tabular-nums; }
+.cr-tile .ch-item-x { top: 0; right: 0; z-index: 2; width: 16px; height: 16px; font-size: 12px; opacity: 0; pointer-events: none; }
+/* On a touch screen the × shows on the picked tile only: on every tile it would cover the bag. */
+.cr-tile:hover .ch-item-x, .cr-tile:focus-within .ch-item-x, .cr-tile.on .ch-item-x { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .cr-tile:not(.on):hover .ch-item-x, .cr-tile:not(.on):focus-within .ch-item-x { opacity: 0; pointer-events: none; } }
+.cr-pouch { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+/* The item window's type switch (shown for a new bag item in the Save Creator). */
+.io-slots { flex-wrap: wrap; margin: 0 0 10px; }
+/* An idol being dragged (Fossil or bag): the copy that follows the pointer, as the Character tab's. */
+.cr-ghost { position: fixed !important; z-index: 1000; margin: 0; box-sizing: border-box; pointer-events: none; cursor: grabbing; border-color: var(--dashboard-gold) !important; box-shadow: 0 8px 22px rgba(0,0,0,.45); opacity: .95; overflow: visible; }
+.cr-ghost.copy::after { content: "+ copy"; position: absolute; top: -9px; right: -9px; padding: 2px 6px; border-radius: 999px; background: var(--dashboard-gold); color: #14161f; font: 700 10px/1.2 system-ui, sans-serif; white-space: nowrap; }
+.cr-tile.dragging { opacity: .3; }
+.cr-ghost.cr-tile > b { font-size: 10px; }
+.cr-pouch b { color: var(--text); font-weight: 650; margin-right: 6px; }
+@media (max-width: 520px) { .cr-bag { gap: 2px; padding: 4px; } .cr-tile > i { font-size: 8px; } }
 .cr-load p.hint { margin: 8px 0 0; }
 .cr-lords { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .cr-more { margin-top: 12px; }
@@ -2509,16 +2560,16 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 
 /* Remove × (skills, items and idols, affixes, saved items, Save Creator bar slots, Fossil idols): the same purple as the close ×.
    Each keeps its own place; the selectors match the older rules' weight so these win. */
-.ch-item-x, .ch-skill-acts .ch-skill-x, .pl-skill > .pl-row > .x, .build-pane .x, .checklist .x, .fo-x, .io-rm, .cr-bar-slot .x {
+.ch-item-x, .ch-skill-acts .ch-skill-x, .pl-skill > .pl-row > .x, .build-pane .x, .checklist .x, .fo-x, .io-rm, .cr-bar-slot .x, .cr-mem .x {
   display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 1px solid transparent; border-radius: 6px;
   background: linear-gradient(135deg, var(--accent-strong), var(--accent-2)); color: var(--accent-ink); line-height: 1; cursor: pointer; }
-.ch-item-x:hover, .ch-skill-acts .ch-skill-x:hover, .pl-skill > .pl-row > .x:hover, .build-pane .x:hover, .checklist .x:hover, .fo-x:hover, .io-rm:hover, .cr-bar-slot .x:hover,
+.ch-item-x:hover, .ch-skill-acts .ch-skill-x:hover, .pl-skill > .pl-row > .x:hover, .build-pane .x:hover, .checklist .x:hover, .fo-x:hover, .io-rm:hover, .cr-bar-slot .x:hover, .cr-mem .x:hover,
 .ch-item-x:focus-visible, .ch-skill-acts .ch-skill-x:focus-visible, .pl-skill > .pl-row > .x:focus-visible, .build-pane .x:focus-visible, .checklist .x:focus-visible, .fo-x:focus-visible, .io-rm:focus-visible, .cr-bar-slot .x:focus-visible {
   filter: brightness(1.1); background: linear-gradient(135deg, var(--accent-strong), var(--accent-2)); color: var(--accent-ink); border-color: transparent; }
 .ch-item-x:focus-visible, .ch-skill-acts .ch-skill-x:focus-visible, .pl-skill > .pl-row > .x:focus-visible, .build-pane .x:focus-visible, .checklist .x:focus-visible, .fo-x:focus-visible, .io-rm:focus-visible, .cr-bar-slot .x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ch-item-x { width: 20px; height: 20px; font-size: 14px; border-radius: 50%; }
 .ch-skill-acts .ch-skill-x { width: 26px; height: 26px; font-size: 17px; }
-.build-pane .x, .checklist .x, .cr-bar-slot .x { width: 22px; height: 22px; font-size: 15px; }
+.build-pane .x, .checklist .x, .cr-bar-slot .x, .cr-mem .x { width: 22px; height: 22px; font-size: 15px; }
 .pl-skill > .pl-row > .x { width: 28px; height: 28px; font-size: 20px; }
 .fo-x { width: 24px; height: 24px; font-size: 12px; }
 .io-rm { width: 26px; height: 26px; font-size: 16px; }

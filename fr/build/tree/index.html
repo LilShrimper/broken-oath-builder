@@ -50,18 +50,23 @@
   var b = new URL("../../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/fr.json'), langCode: 'fr' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=424">
+<link rel="stylesheet" href="../../../style.css?v=425">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
 <header class="top">
   <div class="nav">
     <div class="brand">
-      <button class="logo-home" id="homeLink" type="button" aria-label="Go to Broken Oath landing page" title="Home">
+      <button class="logo-home" id="homeLink" type="button" aria-label="Open the Build Planner" title="Build Planner">
         <span class="logo-frame" aria-hidden="true"><img class="logo logo-full" src="../../../assets/lilshrimper-logo-full.webp?v=61a91900" alt="" width="384" height="384" decoding="async"><img class="logo logo-ring" src="../../../assets/lilshrimper-sigil.webp?v=534e80b5" alt="" width="256" height="256" decoding="async"></span>
       </button>
       <h1>Broken <span class="notranslate">Oath</span><small><span class="sub-builder notranslate">Builder</span><span class="sub-damage">Damage Simulator</span></small></h1>
     </div>
+    <nav class="tabs secondary-tabs home-nav" aria-label="Home">
+      <button class="tab" id="homeTab" type="button" aria-current="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg><span>Home</span>
+      </button>
+    </nav>
     <div class="toolbar">
       <div class="top-controls">
         <label class="field inline character-picker"><span>Character</span><select id="charSelect"></select></label>
@@ -655,7 +660,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":424,"at":"2026-11-20T20:46:17.687Z"};
+window.SITE_VERSION = {"v":425,"at":"2026-11-20T21:24:07.521Z"};
 window.SITE_LANG = 'fr';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -664,6 +669,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=4e9487f7","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../../app.js?v=424"></script>
+<script src="../../../app.js?v=425"></script>
 </body>
 </html>

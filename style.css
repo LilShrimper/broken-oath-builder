@@ -802,7 +802,7 @@ body.no-char.other-view .hero { display: none; }
 body.no-char .controls, body.no-char #results .empty, body.needs-data .hero { display: none; }
 body.no-char .layout { grid-template-columns: 1fr; }
 body.landing-view .hero { display: grid; }
-body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup, body.landing-view .layout { display: none; }
+body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup, body.landing-view .layout, body.landing-view #buildSubtabs { display: none; }
 .hero-art { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
 .hs-1 { stop-color: #1b1240; } .hs-2 { stop-color: #2a1d5c; } .hs-3 { stop-color: #120e2a; }
 .hm-1 { stop-color: #c9b8ff; stop-opacity: .55; } .hm-2 { stop-color: #8b5cf6; stop-opacity: .22; } .hm-3 { stop-color: #8b5cf6; stop-opacity: 0; }
@@ -1004,6 +1004,8 @@ body.landing-view .toolbar, body.landing-view #dataOld, body.landing-view .setup
   .nav > .tabs:not(.secondary-tabs) { order: 3; }
   .nav > .secondary-tabs { order: 5; border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); background: color-mix(in srgb, var(--accent) 4%, var(--panel)); }
   .nav-divider { order: 4; width: calc(100% - 24px); height: 1px; margin: -3px auto; }
+  .nav > .home-nav { order: 0; width: auto; flex: 0 0 auto; } /* a small button beside the title, not a row of its own */
+  .nav > .home-nav .tab { flex: 0 0 auto; min-height: 30px; padding: 4px 10px; }
   .itemdb-divider { order: 6; }
   .nav-external { order: 7; width: 100%; }
   .nav .tab { justify-content: center; flex: 1; width: auto; min-height: 36px; gap: 6px; padding: 6px 5px; font-size: 12px; }

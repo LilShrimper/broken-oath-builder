@@ -18094,7 +18094,11 @@ window.BOStartApp = function () {
   function selectChar(id) {
     const ch = CHARS.find(c => c.id === id) || CHARS[0];
     buildCopy = null;
-    document.body.classList.remove('landing-view');
+    if (document.body.classList.contains('landing-view')) { // leaving the landing page for the Damage view under it: Build Planner is the lit tab
+      document.body.classList.remove('landing-view');
+      $('#homeTab').classList.remove('active'); $('#homeTab').setAttribute('aria-current', 'false');
+      document.querySelectorAll('.tab[data-tab="build"]').forEach(b => { b.classList.add('active'); b.setAttribute('aria-selected', true); });
+    }
     st.ch = ch; st.chOrig = ch; st.pinned = null; stopSearch(); st.opt = null; treeReset();
     st.enemyHallowedGround = null; // back to "ticked when the build makes its own ground"
     TT = null;
@@ -22396,8 +22400,11 @@ window.BOStartApp = function () {
     const b = e.target.closest('.tab[data-tab], #buildSubtabs [data-sub]');
     if (b && newTabFor(b)) { e.preventDefault(); e.stopImmediatePropagation(); }
   }, true); // capture: runs before the tab's own click handler, which would switch this page's tab
+
+  const atRoot = () => ROUTING && location.pathname.slice(siteRoot().length).toLowerCase().replace(/\/+$/, '').replace(new RegExp('^(' + Object.keys(window.PAGE_LANGS || {}).join('|') + ')$'), '') === '';
+  let goHome = () => {};
   window.addEventListener('popstate', () => {
-    const key = routeFromPath(); if (!key) return;
+    const key = routeFromPath(); if (!key) { if (atRoot()) goHome(false); return; }
     noPush = true;
     try { showTab(openRoute(key)); } finally { noPush = false; }
   });
@@ -22409,6 +22416,7 @@ window.BOStartApp = function () {
   function showTab(tab) {
     T.visible = tab === 'tree';
     document.body.classList.remove('landing-view');
+    $('#homeTab').classList.remove('active'); $('#homeTab').setAttribute('aria-current', 'false');
     document.body.classList.toggle('other-view', tab !== 'damage');
     document.body.classList.toggle('dashboard-view', tab === 'damage');
     document.body.classList.toggle('tree-page', tab === 'tree');
@@ -22902,11 +22910,22 @@ window.BOStartApp = function () {
     box.innerHTML = '<div class="land-head"><h3>Latest site update</h3><p class="notranslate">Version ' + esc(String(c.v)) + (c.date ? ' · ' + esc(c.date) : '') + '</p></div><ul class="land-news-list notranslate">' + c.lines.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>';
     box.hidden = false;
   }
-  $('#homeLink').addEventListener('click', () => {
-    showTab('damage');
+
+
+
+  goHome = function (push = true) {
+    noPush = true; try { showTab('damage'); } finally { noPush = false; }
     document.body.classList.add('landing-view');
+    document.querySelectorAll('.tab[data-tab]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); });
+    $('#homeTab').classList.add('active'); $('#homeTab').setAttribute('aria-current', 'page');
+    store.set('tab', 'home');
+    document.title = 'Broken Oath Builder';
+    if (push && ROUTING && routingReady) { const url = siteRoot() + (window.SITE_LANG && window.PAGE_LANGS && window.PAGE_LANGS[window.SITE_LANG] ? window.SITE_LANG + '/' : ''); if (location.pathname !== url) history.pushState(null, '', url + location.search); }
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
+  };
+
+  $('#homeLink').addEventListener('click', () => { const b = document.querySelector('.main-tabs .tab[data-tab="build"]'); if (b) b.click(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  $('#homeTab').addEventListener('click', () => goHome());
 
 
 
@@ -22969,7 +22988,8 @@ window.BOStartApp = function () {
   cloud.start(); // back from Discord sign-in (#login=), or a sync of the account's plans
 
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
-  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'atlas', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'home'); if (['character', 'tree', 'atlas', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
+  else if (lastTab === 'home') goHome(false); // left on the landing page last time (the address stays as opened)
   routingReady = true; // from here on, switching tabs changes the address
 
   const bdbHash = /^#b=/.test(location.hash) && brokedCode(location.hash);

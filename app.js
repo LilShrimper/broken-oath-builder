@@ -6269,8 +6269,13 @@ window.BOBrewery = function (ctx) {
 window.BOLootFilter = function (ctx) {
   'use strict';
   const { $, esc } = ctx;
+
+
+
+
+  const GAME_MAX_RULES = 40;
   const DEFAULTS = {
-    maxRules: 12,
+    maxRules: GAME_MAX_RULES,
     neverHidden: ['uniques', 'runes', 'Dwarven Runes', 'idols', 'the Cube', 'gems', 'currency', 'gold', 'flasks'],
     prefix: 'BOFILTER:1',
     fields: ['on', 'type', 'rarity', 'level', 'line', 'action', 'colour', 'quality', 'count', 'sound'],
@@ -6281,7 +6286,9 @@ window.BOLootFilter = function (ctx) {
     colours: [[0, 'ember', [0.91, 0.56, 0.11], true], [1, 'jade', [0.30, 0.92, 0.52]], [2, 'frost', [0.36, 0.78, 1.0]], [3, 'bone', [1.0, 0.95, 0.84]],
       [4, 'gold', [1.0, 0.6, 0.05], true], [5, 'blood', [0.5, 0.01, 0.01], true], [6, 'ash', [0.3, 0.3, 0.3], true], [7, 'white', [1.0, 1.0, 1.0], true]],
     type: [[0, 'Any gear'], [1, 'Weapons'], [2, 'Armour'], [3, 'Jewellery'], [4, 'Rune bases'], [5, 'Helms'], [6, 'Body armour'], [7, 'Gloves'], [8, 'Boots'],
-      [9, 'Shields & foci'], [10, 'Rings'], [11, 'Amulets'], [12, 'Belts'], [13, 'Core-touched'], [14, 'Idols'], [15, '4+ sockets'], [16, 'Truesworn']],
+      [9, 'Shields & foci'], [10, 'Rings'], [11, 'Amulets'], [12, 'Belts'], [13, 'Core-touched'], [14, 'Idols'], [15, '4+ sockets'], [16, 'Truesworn'],
+      [17, 'Gems'], [18, 'Bows'], [19, 'Claws'], [20, 'Daggers'], [21, 'Dual blades'], [22, 'Fist weapons'], [23, '2H swords'], [24, '2H axes'], [25, '2H maces'], [26, 'Mace & shield'],
+      [27, '1H axes'], [28, '1H maces'], [29, '1H swords'], [30, 'Scythes'], [31, 'Staves'], [32, 'Wands']], // 17-32: loot_filter.md, build 85
     rarity: [[0, 'Any rarity'], [1, 'Normal'], [2, 'Magic'], [3, 'Normal & magic'], [4, 'Rare'], [5, 'Rare & unique']],
     level: [[0, 'Any level'], [1, 'Below 20'], [2, 'Below 40'], [3, 'Below 60'], [4, 'Below 75'], [5, '60+'], [6, '75+'], [7, '82+']],
     line: [[0, 'Any lines'], [1, 'Life'], [2, 'Resistance'], [3, 'Minion'], [4, 'Move speed'], [5, '+Skill levels'], [6, 'Spell'], [7, 'Critical'], [8, 'Attack speed'],
@@ -6298,6 +6305,7 @@ window.BOLootFilter = function (ctx) {
 
   const L = () => {
     const g = (ctx.gd && ctx.gd() && ctx.gd().lootFilter) || {}, out = Object.assign({}, DEFAULTS, g);
+    out.maxRules = Math.max(+g.maxRules || 0, GAME_MAX_RULES);
     for (const k of ['colours', 'sound']) if (g[k]) { const m = new Map(DEFAULTS[k].map(c => [c[0], c])); for (const c of g[k]) m.set(c[0], c); out[k] = [...m.values()].sort((a, b) => a[0] - b[0]); }
     return out;
   };
@@ -6354,6 +6362,10 @@ window.BOLootFilter = function (ctx) {
   }
   let F = (() => { try { return clean(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) { return null; } })() || blank();
   let sel = F.rules.length ? 0 : -1, msg = '', msgUndo = null, pasting = false, pasteText = '';
+
+  const hist = [];
+  const snap = was => { hist.push(was || JSON.stringify(F)); if (hist.length > 80) hist.shift(); };
+  let view = 'all'; // which rules the list shows: all, lit (highlights), show, hide
   const keep = () => { try { localStorage.setItem(KEY, JSON.stringify(F)); } catch (e) { /* storage off */ } };
 
 
@@ -6377,9 +6389,9 @@ window.BOLootFilter = function (ctx) {
     return true;
   }
   function load(got, what) {
-    const before = JSON.stringify(F);
-    F = got.filter; sel = F.rules.length ? 0 : -1; keep();
-    msgUndo = JSON.parse(before).rules.length ? before : null;
+    const had = F.rules.length;
+    snap(); F = got.filter; sel = F.rules.length ? 0 : -1; view = 'all'; keep();
+    msgUndo = had ? true : null;
     msg = what + (got.notes.length ? ' ' + got.notes.join(' ') : '');
   }
 
@@ -6389,8 +6401,14 @@ window.BOLootFilter = function (ctx) {
 
 
 
+
+  const wk = (id, nm, v, cls, tn) => [id, nm, [1, v], b => b.Slot === 'MainHand' && b.Class === cls && (!tn || b.TypeName === tn)];
   const KINDS = [
-    ['weapon', 'Weapon', [1], b => b.Slot === 'MainHand'],
+    wk('sword1', '1H sword', 29, 'OneHandSword'), wk('axe1', '1H axe', 27, 'OneHandAxe'), wk('mace1', '1H mace', 28, 'OneHandMace'),
+    wk('dagger', 'Dagger', 20, 'Dagger'), wk('claw', 'Claw', 19, 'Claw'), wk('fist', 'Fist weapon', 22, 'Fist'), wk('wand', 'Wand', 32, 'Wand'),
+    wk('dual', 'Dual blades', 21, 'DualBlades'), wk('maceshield', 'Mace & shield', 26, 'MaceShield'),
+    wk('sword2', '2H sword', 23, 'Greatsword', 'Two-Handed Sword'), wk('axe2', '2H axe', 24, 'Greatsword', 'Two-Handed Axe'), wk('mace2', '2H mace', 25, 'Greatsword', 'Two-Handed Mace'),
+    wk('bow', 'Bow', 18, 'Bow'), wk('scythe', 'Scythe', 30, 'Scythe'), wk('staff', 'Staff', 31, 'Staff'),
     ['shield', 'Shield', [9], b => b.Class === 'Shield'],
     ['tome', 'Tome (focus)', [9], b => b.Class === 'Tome'],
     ['quiver', 'Quiver', [], b => b.Class === 'Quiver'],
@@ -6403,10 +6421,16 @@ window.BOLootFilter = function (ctx) {
     ['belt', 'Belt', [3, 12], b => b.Slot === 'Belt'],
     ['idol', 'Idol', [14], b => b.Slot === 'Idol']];
   const kind = id => KINDS.find(k => k[0] === id) || KINDS[0];
+  const has = (tbl, v) => Object.prototype.hasOwnProperty.call(tbl, v);
 
-  const FLAG_TYPES = { rune: 4, core: 13, sockets: 15, truesworn: 16 };
 
-  const TYPE_HOLDS = { 2: [5, 6, 7, 8], 3: [10, 11, 12] };
+
+  const FLAG_TYPES = { rune: 4, core: 13 };
+  const SPECIAL = { 4: it => !!it.flags.rune, 13: it => !!it.flags.core, 15: it => it.sockets >= 4, 16: it => it.grade >= 90, 17: () => false };
+  const typeKnown = t => has(SPECIAL, t) || KINDS.some(k => k[2].includes(t));
+  const typeFits = (t, it) => has(SPECIAL, t) ? SPECIAL[t](it) : kind(it.kind)[2].includes(t);
+
+  const TYPE_HOLDS = { 1: [18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], 2: [5, 6, 7, 8], 3: [10, 11, 12] };
   const RARITY = { 0: 'NMRU', 1: 'N', 2: 'M', 3: 'NM', 4: 'R', 5: 'RU' };
   const RARITY_NAME = { N: 'Normal', M: 'Magic', R: 'Rare', U: 'Unique' };
   const LEVEL = { 0: [0, Infinity], 1: [0, 20], 2: [0, 40], 3: [0, 60], 4: [0, 75], 5: [60, Infinity], 6: [75, Infinity], 7: [82, Infinity] }; // [from, below)
@@ -6416,22 +6440,24 @@ window.BOLootFilter = function (ctx) {
 
   const ALSO = { 16: [2], 17: [2], 18: [2], 19: [2] };
   const groupsOf = g => new Set([g].concat(ALSO[g] || []));
+  const lineGroups = l => l.gs ? new Set(l.gs) : groupsOf(l.g); // a sample drop's line knows all its groups (affixGroups)
   const READING = [
     'A rule that is off is skipped. Only the first ' + DEFAULTS.maxRules + ' rules count.',
-    'Armour = helms, body armour, gloves and boots. Jewellery = rings, amulets and belts. A tome counts as a focus; a quiver only as "Any gear".',
+    'Weapons = every weapon kind. Armour = helms, body armour, gloves and boots. Jewellery = rings, amulets and belts. A tome counts as a focus; a quiver only as "Any gear".',
+    '"4+ sockets" takes an item with 4 or more sockets, "Truesworn" one with Base Grade 90 or higher. No gear is in "Gems".',
     '"Normal & magic" and "Rare & unique" take either rarity. "Below 40" means item level 39 or lower; "60+" means 60 or higher.',
     'The line conditions count the item\'s lines that are in the picked group (any group if "Any lines") and roll at least as well as picked ("Good roll" takes good and top rolls). The rule needs at least that many: 1, 2 or 3. With all three left on Any / 1 line, the lines are not tested at all.',
     'A fire, cold, lightning or poison res line also counts as a Resistance line.',
+    'More conditions: all of them must fit, together with the rest of the rule. Tier and Lines count every line of the item (not only the picked line group): "T3 or better" with "2+ lines" wants two lines at T1 to T3. Grade and Top grade read the Base Grade: "Under grade 70" wants it below 70. A named base or red fits when the item is one of those picked. Named lines cannot be tested here.',
     'Uniques and idols are never hidden: a Hide rule that catches one shows it anyway.'];
 
-  const has = (tbl, v) => Object.prototype.hasOwnProperty.call(tbl, v);
   const trivialLines = r => !r.line && !r.quality && !r.count;
 
   function miss(r, it) {
     if (r.type) {
-      const flag = Object.keys(FLAG_TYPES).find(f => FLAG_TYPES[f] === r.type), tn = '"' + label('type', r.type) + '"';
-      if (!flag && !KINDS.some(k => k[2].includes(r.type))) return 'the page does not know how item type ' + tn + ' tests an item';
-      if (flag ? !it.flags[flag] : !kind(it.kind)[2].includes(r.type)) return 'it is not in ' + tn;
+      const tn = '"' + label('type', r.type) + '"';
+      if (!typeKnown(r.type)) return 'the page does not know how item type ' + tn + ' tests an item';
+      if (!typeFits(r.type, it)) return 'it is not in ' + tn;
     }
     if (!has(RARITY, r.rarity)) return 'the page does not know rarity ' + r.rarity;
     if (!RARITY[r.rarity].includes(it.rarity)) return 'it is ' + RARITY_NAME[it.rarity].toLowerCase() + ', the rule wants ' + label('rarity', r.rarity).toLowerCase();
@@ -6440,7 +6466,7 @@ window.BOLootFilter = function (ctx) {
     if (!(it.ilvl >= lo && it.ilvl < hi)) return 'item level ' + it.ilvl + ', the rule wants ' + label('level', r.level).toLowerCase();
     if (trivialLines(r)) return null;
     if (!has(QUALITY, r.quality) || !has(COUNT, r.count)) return 'the page does not know a line value of this rule';
-    const n = it.lines.filter(l => (!r.line || groupsOf(l.g).has(r.line)) && l.roll >= QUALITY[r.quality]).length;
+    const n = it.lines.filter(l => (!r.line || lineGroups(l).has(r.line)) && l.roll >= QUALITY[r.quality]).length;
     if (n < COUNT[r.count]) {
       const what = (r.line ? label('line', r.line) + ' ' : '') + 'line' + (COUNT[r.count] > 1 ? 's' : '') + (r.quality ? ' with a ' + label('quality', r.quality).toLowerCase() + ' or better' : '');
       return 'it has ' + n + ' of the ' + COUNT[r.count] + '+ ' + what + ' the rule wants';
@@ -6468,14 +6494,19 @@ window.BOLootFilter = function (ctx) {
     return o;
   }
 
-  const MORE_ORDER = ['t', 'n', 's', 'i', 'q', 'g', 'r', 'u', 'rt', 'b', 'a', 'rn'];
+
+
+
+
+  const MORE_ORDER = ['t', 'n', 's', 'i', 'q', 'g', 'gx', 'r', 'u', 'rt', 'b', 'a', 'rn'];
   function setMore(r, o) {
     const keys = MORE_ORDER.filter(k => k in o).concat(Object.keys(o).filter(k => !MORE_ORDER.includes(k)));
     const parts = keys.filter(k => { const v = String(o[k]); return v !== '' && v !== '0' && v !== '0-0'; }).map(k => k + '=' + o[k]);
     r.extra = parts.length ? ['3:' + parts.join(';')] : [];
   }
   const TIER = ['Any tier', 'T1 lines', 'T2 or better', 'T3 or better', 'T4 or better', 'T5 or better'];
-  const GRADE = [[0, 'Any grade'], [50, 'Grade 50+'], [70, 'Grade 70+'], [90, 'Truesworn']]; // 70 and 90 seen; 50 by the same pattern
+  const TOPGRADE = [[0, 'Any top grade'], [50, 'Under grade 50'], [70, 'Under grade 70'], [90, 'Under grade 90']];
+  const GRADE = [[0, 'Any grade'], [50, 'Grade 50+'], [70, 'Grade 70+'], [90, 'Truesworn']]; // the game's list (owner's screenshot, 20 Nov 2026); codes g=70 and g=90 seen
   const LEVELS = [10, 20, 30, 40, 50, 60, 68, 70, 75, 80, 84, 90]; // the panel's full list (owner's screenshots, 15 Nov 2026; same for item and required level, both sides)
   const rangeOf = v => { const [a, b] = String(v || '0-0').split('-'); return [+a || 0, +b || 0]; };
   const range = (v, what) => { const [a, b] = rangeOf(v); return a && b ? what + ' ' + a + ' to ' + b : a ? what + ' ' + a + '+' : b ? what + ' ' + b + ' or lower' : what + ' any'; };
@@ -6490,7 +6521,7 @@ window.BOLootFilter = function (ctx) {
   const MORE_LABEL = {
     t: v => TIER[+v] || 'Tier ' + v, n: v => v + '+ lines', s: v => v + '+ sockets',
     i: v => range(v, 'Item level'), q: v => range(v, 'Requires level'),
-    g: v => (GRADE.find(x => x[0] === +v) || [0, 'Grade ' + v + '+'])[1],
+    g: v => (GRADE.find(x => x[0] === +v) || [0, 'Grade ' + v + '+'])[1], gx: v => 'Grade under ' + v,
     r: v => ({ 1: 'Reds only', 2: 'Chase reds' })[v] || 'Reds ' + v, u: v => ({ 1: 'Not unsworn', 2: 'Unsworn only' })[v] || 'Unsworn ' + v,
     rt: v => 'Runes up to T' + v,
     b: v => 'Base: ' + ids(v).map(id => gdName('bases', id)).join(' or '),
@@ -6500,6 +6531,28 @@ window.BOLootFilter = function (ctx) {
   const runeRow = r => { const o = more(r); return !!(o && +o.rt); };
 
 
+  function moreMiss(mo, it) {
+    const N = k => +mo[k] || 0, t = N('t'), n = N('n');
+    if (t || n) {
+      const need = Math.max(1, n), c = it.lines.filter(l => !t || (l.tier || 8) <= t).length;
+      if (c < need) return 'it has ' + c + ' of the ' + need + '+ ' + (t ? (t === 1 ? 'T1 ' : 'T' + t + ' or better ') : '') + 'line' + (need > 1 ? 's' : '') + ' its MORE wants';
+    }
+    if (N('s') && it.sockets < N('s')) return 'it has ' + it.sockets + ' socket' + (it.sockets === 1 ? '' : 's') + ', its MORE wants ' + N('s') + '+';
+    for (const [k, v, what] of [['i', it.ilvl, 'item level'], ['q', it.req, 'required level']]) if (mo[k]) {
+      const [a, b] = rangeOf(mo[k]);
+      if ((a && v < a) || (b && v > b)) return what + ' ' + v + ', its MORE wants ' + (a && b ? a + ' to ' + b : a ? a + '+' : b + ' or lower');
+    }
+    if (N('g') && it.grade < N('g')) return 'Base Grade ' + it.grade + ', its MORE wants ' + N('g') + '+';
+    if (N('gx') && it.grade >= N('gx')) return 'Base Grade ' + it.grade + ', its MORE wants under ' + N('gx');
+    if (N('r') === 1 && it.rarity !== 'U') return 'it is not a red (unique)';
+    if (N('r') === 2 && !(it.rarity === 'U' && it.flags.chase)) return 'it is not a chase red';
+    if (N('u') === 1 && it.flags.unsworn) return 'it is unsworn';
+    if (N('u') === 2 && !it.flags.unsworn) return 'it is not unsworn';
+    const bs = ids(mo.b), rs = ids(mo.rn);
+    if (bs.length && !bs.includes(it.base)) return it.base ? 'its base is not one of the named bases' : 'no base is picked for it (the rule names bases)';
+    if (rs.length && !(it.rarity === 'U' && rs.includes(it.red))) return it.rarity === 'U' && !it.red ? 'no red is picked for it (the rule names reds)' : 'it is not one of the named reds';
+    return null;
+  }
 
   function decide(it) {
     const lf = L(), trace = [];
@@ -6507,11 +6560,9 @@ window.BOLootFilter = function (ctx) {
       const r = F.rules[i];
       if (!r.on) { trace.push([i, 'the rule is off']); continue; }
       if (runeRow(r)) { trace.push([i, 'it is a rune rule (MORE: ' + moreChips(r).join(', ') + '), not for gear']); continue; }
-      let why = miss(r, it);
-      const mo = more(r);
-      if (!why && mo && mo.i) { const [a, b] = rangeOf(mo.i); if ((a && it.ilvl < a) || (b && it.ilvl > b)) why = 'item level ' + it.ilvl + ', its MORE wants ' + range(mo.i, 'item level').replace(/^item level /, ''); }
+      const mo = more(r), why = miss(r, it) || (mo ? moreMiss(mo, it) : null);
 
-      if (!why) return { i, rule: r, trace, unsure: !!(mo && Object.keys(mo).some(k => k !== 'i')) };
+      if (!why) return { i, rule: r, trace, unsure: !!(mo && Object.keys(mo).some(k => k === 'a' || !MORE_ORDER.includes(k))) };
       trace.push([i, why]);
     }
     return { i: -1, rule: null, trace };
@@ -6546,20 +6597,145 @@ window.BOLootFilter = function (ctx) {
 
 
   const TKEY = 'bods:lootfilter:test';
-  const blankItem = () => ({ kind: 'boots', base: '', rarity: 'M', ilvl: 30, flags: { rune: false, core: false, sockets: false, truesworn: false }, lines: [{ g: 1, roll: 0 }] });
+
+  const blankItem = () => ({ kind: 'boots', base: '', rarity: 'M', ilvl: 30, req: 1, sockets: 0, grade: 0, red: '', flags: { rune: false, core: false, unsworn: false, chase: false }, lines: [{ g: 1, roll: 0, tier: 4 }] });
+  const num = (v, lo, hi, d) => v != null && v !== '' && isFinite(+v) ? Math.max(lo, Math.min(hi, Math.round(+v))) : d;
   function cleanItem(x) {
     const it = blankItem(); if (!x || typeof x !== 'object') return it;
-    if (KINDS.some(k => k[0] === x.kind)) it.kind = x.kind;
+    if (x.kind === 'weapon') it.kind = 'sword1'; else if (KINDS.some(k => k[0] === x.kind)) it.kind = x.kind;
     if (typeof x.base === 'string') it.base = x.base.slice(0, 60);
     if (RARITY_NAME[x.rarity]) it.rarity = x.rarity;
-    if (isFinite(+x.ilvl)) it.ilvl = Math.max(1, Math.min(100, Math.round(+x.ilvl)));
-    if (x.flags && typeof x.flags === 'object') for (const f of Object.keys(it.flags)) it.flags[f] = !!x.flags[f];
-    if (Array.isArray(x.lines)) it.lines = x.lines.slice(0, 8).filter(l => l && isFinite(+l.g)).map(l => ({ g: +l.g, roll: [0, 1, 2].includes(+l.roll) ? +l.roll : 0 }));
+    it.ilvl = num(x.ilvl, 1, 100, it.ilvl); it.req = num(x.req, 1, 100, 1); it.sockets = num(x.sockets, 0, 6, 0); it.grade = num(x.grade, 0, 100, 0);
+    if (typeof x.red === 'string') it.red = x.red.slice(0, 80);
+    if (typeof x.name === 'string') it.name = x.name.slice(0, 80);
+    if (x.flags && typeof x.flags === 'object') {
+      for (const f of Object.keys(it.flags)) it.flags[f] = !!x.flags[f];
+
+      if (x.flags.sockets === true && it.sockets < 4) it.sockets = 4;
+      if (x.flags.truesworn === true && it.grade < 90) it.grade = 90;
+    }
+    if (Array.isArray(x.lines)) it.lines = x.lines.slice(0, 8).filter(l => l && isFinite(+l.g)).map(l => {
+      const o = { g: +l.g, roll: [0, 1, 2].includes(+l.roll) ? +l.roll : 0, tier: num(l.tier, 1, 8, 4) };
+      if (Array.isArray(l.gs)) { o.gs = l.gs.filter(g => isFinite(+g)).map(Number).slice(0, 8); o.label = String(l.label || '').slice(0, 80); }
+      return o;
+    });
     return it;
   }
   let T = (() => { try { return cleanItem(JSON.parse(localStorage.getItem(TKEY) || 'null')); } catch (e) { return blankItem(); } })();
   const keepT = () => { try { localStorage.setItem(TKEY, JSON.stringify(T)); } catch (e) { /* storage off */ } };
   const testOn = true; // whether the tester's result marks a rule in the list
+
+
+
+
+
+
+  const ELEM = { Fire: [11], Cold: [12], Lightning: [13], Physical: [14], Poison: [15], Elemental: [11, 12, 13] };
+  const RESG = { Fire: [16], Cold: [17], Lightning: [18], Poison: [19], Elemental: [16, 17, 18] };
+  const STAT_GROUP = { Life: 1, MinionDamage: 3, MinionLife: 3, MinionSpeed: 3, MinionCap: 3, MoveSpeed: 4, SkillLevel: 5, CritChance: 7, CritMulti: 7, AttackSpeed: 8, CastSpeed: 9,
+    Mana: 10, ManaRegen: 10, IgniteChance: 15, IgniteDamage: 15, PoisonDamage: 15, Str: 20, Dex: 20, Int: 20, Attributes: 20, Armour: 21, Evasion: 21, EnergyShield: 21, Defences: 21,
+    LifeLeech: 22, ManaLeech: 22, EnergyShieldLeech: 22, LifeRegen: 22, LifeOnKill: 22, ManaOnKill: 22, Area: 23, BleedChance: 24, BleedDamage: 24, DotMulti: 24,
+    CurseEffect: 25, CurseLimit: 25, CooldownRecovery: 26 };
+  function affixGroups(a) {
+    const m = a.Mod || {}, tags = m.Tags || [], out = new Set();
+    if (has(STAT_GROUP, m.Stat)) out.add(STAT_GROUP[m.Stat]);
+    if (tags.includes('Minion')) out.add(3);
+    if (m.Stat === 'Resist' || m.Stat === 'MaxResist') { out.add(2); for (const t of tags) (RESG[t] || []).forEach(g => out.add(g)); }
+    if (m.Stat === 'Damage' || m.Stat === 'AddedDamage' || m.Stat === 'Penetration') { for (const t of tags) (ELEM[t] || []).forEach(g => out.add(g)); if (tags.includes('Spell')) out.add(6); }
+    return [...out];
+  }
+
+  function affixLabel(a, gs) {
+    const gd = ctx.gd && ctx.gd(), raw = gd && gd.statText && gd.statText[a.Mod.Stat + '.' + a.Mod.Mode];
+    if (raw) return raw.replace(/\{v\d?\}/g, '#').replace(/\{tags\}/g, (a.Mod.Tags || []).join(' '))
+      .replace(/(?:\{n\}|#)?\|plural\(one=[^,)]*,other=([^)]*)\)/g, '$1').replace(/\s+/g, ' ').trim(); // "{n}|plural(one=Woe,other=Woes)" -> "Woes"
+    return gs.length ? label('line', gs[gs.length - 1]) : String(a.Group).replace(/\d+$/, '');
+  }
+  let poolFor = null, POOL = null;
+  function pool() {
+    const gd = ctx.gd && ctx.gd(); if (!gd || !gd.bases || !gd.affixes) return null;
+    if (poolFor === gd) return POOL;
+    const kindOf = b => KINDS.find(k => k[3](b)), all = Object.values(gd.bases), byId = {};
+    for (const b of all) byId[b.Id] = b;
+    poolFor = gd;
+    POOL = { kindOf, byId,
+      bases: all.filter(b => b.DropWeight !== 0 && Array.isArray(b.Tags) && kindOf(b)), // weight 0: core-touched, ashen, gnome-made (no random drop)
+      affixes: Object.values(gd.affixes).filter(a => !a.Kind && a.Tiers && a.Tiers.length && a.Mod), // no Riven or Mythic lines
+      uniques: (Array.isArray(gd.uniques) ? gd.uniques : Object.values(gd.uniques || {})).filter(u => u.DropWeight > 0 && byId[u.BaseId] && kindOf(byId[u.BaseId])) };
+    return POOL;
+  }
+  const rnd = n => Math.floor(Math.random() * n);
+  const wpick = (list, w) => { let t = 0; for (const x of list) t += w(x); let r = Math.random() * t; for (const x of list) { r -= w(x); if (r < 0) return x; } return list[list.length - 1]; };
+  function sampleDrop(lvl, rarity) {
+    const P = pool(); if (!P) return null;
+    const it = blankItem(), ilvl = Math.max(1, lvl - rnd(4));
+    let rar = rarity || wpick([['N', 40], ['M', 38], ['R', 20], ['U', 2]], x => x[1])[0], base = null;
+    if (rar === 'U') {
+      const us = P.uniques.filter(u => (u.Level || 1) <= ilvl);
+      if (us.length) { const u = wpick(us, x => x.DropWeight); base = P.byId[u.BaseId]; it.red = u.Id; it.name = u.Name; it.flags.chase = !!u.Chase; } else rar = 'R';
+    }
+    if (!base) { const bs = P.bases.filter(b => (b.Level || 1) <= ilvl); if (!bs.length) return null; base = bs[rnd(bs.length)]; }
+    it.kind = P.kindOf(base)[0]; it.base = base.Id; it.req = base.Level || 1; it.ilvl = ilvl;
+    if (it.kind === 'idol' && rar === 'N') rar = 'M';
+    it.rarity = rar; it.name = it.name || base.Name; it.lines = [];
+    const socketed = !['idol', 'ring', 'amulet', 'belt', 'quiver'].includes(it.kind) && rar !== 'U';
+
+    it.sockets = socketed ? Math.min(rar === 'R' ? 2 : 4, wpick([[0, 55], [1, 25], [2, 12], [3, 5], [4, 3]], x => x[1])[0]) : 0;
+    it.grade = rnd(101); it.flags.core = base.Tags.includes('CoreTouched');
+    it.flags.unsworn = (rar === 'M' || rar === 'R') && Math.random() < 0.05; it.flags.rune = rar === 'N' && socketed && Math.random() < 0.05;
+    const want = rar === 'M' ? 1 + rnd(2) : rar === 'R' ? 3 + rnd(4) : 0, used = new Set();
+    const fits = P.affixes.filter(a => (a.BaseTags || []).some(t => base.Tags.includes(t)) && !(a.ExcludeTags || []).some(t => base.Tags.includes(t)) && a.Tiers.some(t => t.ILvl <= ilvl));
+    for (let k = 0; k < want; k++) {
+      const cand = fits.filter(a => !used.has(a.Group)); if (!cand.length) break;
+      const a = wpick(cand, x => x.Weight || 1), ts = a.Tiers.map((t, i) => [t, i + 1]).filter(x => x[0].ILvl <= ilvl), tier = wpick(ts, x => x[0].Weight || 1)[1];
+      const gs = affixGroups(a), r = Math.random();
+      used.add(a.Group);
+      it.lines.push({ g: gs[0] || 0, gs, roll: r > 0.85 ? 2 : r > 0.5 ? 1 : 0, tier, label: affixLabel(a, gs) });
+    }
+    return it;
+  }
+  let S = [], SL = 80; // the sample drops (this visit only) and the item level they drop at
+
+  function outcome(it) {
+    const d = decide(it), r = d.rule, never = it.rarity === 'U' || it.kind === 'idol', forced = !!(r && isHide(r) && never);
+    return { d, forced, act: !r || forced ? 1 : r.action };
+  }
+  function sampleStats() {
+    const st = { n: S.length, by: {}, shown: 0, lit: 0, hidden: 0, out: [] };
+    for (const it of S) { const o = outcome(it); st.out.push(o); if (o.d.i >= 0) st.by[o.d.i] = (st.by[o.d.i] || 0) + 1; if (o.act === 0) st.hidden++; else if (o.act === 1) st.shown++; else st.lit++; }
+    return st;
+  }
+  let ST = null; // sampleStats() of this draw
+  const itemLine = it => 'Item level ' + it.ilvl + (it.lines.length ? ' · ' + it.lines.map(l => 'T' + l.tier + ' ' + (l.label || label('line', l.g)) + (l.roll ? ' (' + ROLLS[l.roll][1].toLowerCase() + ')' : '')).join(' · ') : it.rarity === 'U' ? '' : ' · no lines') +
+    (it.sockets ? ' · ' + it.sockets + ' socket' + (it.sockets > 1 ? 's' : '') : '') + ' · grade ' + it.grade + (it.flags.rune ? ' · rune base' : '') + (it.flags.unsworn ? ' · unsworn' : '') + (it.flags.chase ? ' · chase red' : '');
+  function samples() {
+    const st = ST;
+    let h = '<div class="card lf-drop-card"><h2>Sample drops</h2><p class="hint">Random gear from the game data, run through your rules. A rough look only: how the game rolls drops (rarity shares, number of lines, sockets, Base Grade, good and top rolls) is guessed here. Runes, gems and currency are left out.</p>';
+    h += '<div class="lf-row"><label class="field lf-inline"><span>Item level</span><input type="number" min="1" max="100" step="1" data-lfs-level value="' + SL + '"></label>' +
+      '<button class="btn small" type="button" data-lfs="any">Drop 25</button><button class="btn small ghost" type="button" data-lfs="R">25 rares</button><button class="btn small ghost" type="button" data-lfs="U">5 reds</button>' +
+      '<button class="btn small ghost" type="button" data-lfs="clear"' + (S.length ? '' : ' disabled') + '>Clear</button></div>';
+    if (!pool()) return h + '<p class="hint">The game data is not loaded yet.</p></div>';
+    if (!S.length) return h + '</div>';
+    const pct = n => Math.round(100 * n / st.n);
+    h += '<div class="lf-counts"><span><b>' + st.n + '</b> drops</span><span class="a1"><b>' + st.shown + '</b> shown</span><span class="a2"><b>' + st.lit + '</b> highlighted</span><span class="a0"><b>' + st.hidden + '</b> hidden (' + pct(st.hidden) + '%)</span></div>';
+    h += '<ul class="lf-drops">' + S.map((it, i) => [it, i]).reverse().slice(0, 60).map(([it, i]) => {
+      const o = st.out[i], r = o.d.rule;
+      return '<li class="lf-drop a' + o.act + '"><div class="lf-drop-main"><b class="lf-r' + it.rarity + '">' + esc((it.rarity === 'U' ? '' : RARITY_NAME[it.rarity] + ' ') + (it.name || kind(it.kind)[1])) + '</b>' +
+        '<small>' + esc(itemLine(it)) + '</small></div>' +
+        '<div class="lf-drop-side">' + (r && !o.forced ? actionChip(r) : '<span class="lf-act a1">Show</span>') +
+        '<small>' + (r ? 'Rule ' + (o.d.i + 1) + (o.forced ? ', never hidden' : '') + (o.d.unsure ? ' (unsure)' : '') : 'No rule') + '</small>' +
+        '<button type="button" class="btn small ghost" data-lfs-test="' + i + '">Test</button></div></li>';
+    }).join('') + '</ul>';
+    if (S.length > 60) h += '<p class="hint">The newest 60 of ' + S.length + ' are listed; the counts cover them all.</p>';
+    return h + '</div>';
+  }
+
+  function readable() {
+    return (F.title ? F.title + '\n' : '') + (F.rules.length ? F.rules.map((r, i) => {
+      const col = isLit(r) && colour(r.colour);
+      return (i + 1) + '. ' + label('action', r.action) + (col ? ' (' + col[1] + ')' : '') + (r.on ? '' : ' [off]') + ': ' + (r.name ? r.name + ' - ' : '') + chips(r).join(', ');
+    }).join('\n') : 'No rules: every item is shown.');
+  }
 
 
 
@@ -6593,8 +6769,15 @@ window.BOLootFilter = function (ctx) {
     const lf = L();
     if (!F.rules.length) return '<p class="hint lf-empty">No rules yet. With no rules every item is shown. Add a rule to start.</p>';
     const warn = warnings(), hit = testOn ? decide(T).i : -1;
-    return '<ol class="lf-rules">' + F.rules.map((r, i) => {
-      const over = i >= lf.maxRules;
+    const inView = r => view === 'all' || (view === 'lit' ? isLit(r) : view === 'hide' ? isHide(r) : r.action === 1);
+
+    const cnt = { all: F.rules.length, lit: F.rules.filter(isLit).length, show: F.rules.filter(r => r.action === 1).length, hide: F.rules.filter(isHide).length };
+    if (F.rules.length <= 6) view = 'all';
+    const seg = F.rules.length > 6 ? '<div class="lf-seg lf-view" role="radiogroup" aria-label="Rules shown">' + [['all', 'All'], ['lit', 'Highlights'], ['show', 'Show'], ['hide', 'Hide']].map(v =>
+      '<button type="button" role="radio" aria-checked="' + (view === v[0]) + '" class="' + (view === v[0] ? 'on' : '') + '" data-lf-view="' + v[0] + '">' + v[1] + ' <small>' + cnt[v[0]] + '</small></button>').join('') + '</div>' : '';
+    return seg + '<ol class="lf-rules">' + F.rules.map((r, i) => {
+      if (!inView(r)) return '';
+      const over = i >= lf.maxRules, caught = ST && ST.n && r.on && !over ? ST.by[i] || 0 : null;
       return '<li class="lf-rule' + (i === sel ? ' sel' : '') + (r.on ? '' : ' off') + (over ? ' over' : '') + (i === hit ? ' hit' : '') + '">' +
         '<span class="lf-num">' + (i + 1) + '</span>' +
         '<label class="lf-on"><input type="checkbox" data-lf-on="' + i + '"' + (r.on ? ' checked' : '') + ' aria-label="Rule ' + (i + 1) + ' on"></label>' +
@@ -6602,7 +6785,8 @@ window.BOLootFilter = function (ctx) {
         '<span class="lf-sum">' + (r.name ? '<b>' + esc(r.name) + '</b>' : '') + '<span class="lf-chips">' + chips(r).map(c => '<span class="lf-chip">' + esc(c) + '</span>').join('') + '</span>' +
         (over ? '<small class="lf-warn">Past the game\'s ' + lf.maxRules + '-rule limit</small>' : '') +
         (warn[i] || []).map(w => '<small class="lf-warn">' + esc(w) + '</small>').join('') +
-        (i === hit ? '<small class="lf-hitnote">Catches the test item</small>' : '') + '</span></button>' +
+        (i === hit ? '<small class="lf-hitnote">Catches the test item</small>' : '') +
+        (caught == null ? '' : '<small class="lf-samp' + (caught ? '' : ' none') + '">' + (caught ? 'Catches ' + caught + ' of ' + ST.n + ' sample drops' : 'Catches none of the ' + ST.n + ' sample drops') + '</small>') + '</span></button>' +
         '<span class="lf-tools">' +
         '<button type="button" class="lf-ic" data-lf-move="' + i + ':-1"' + (i ? '' : ' disabled') + ' aria-label="Move rule ' + (i + 1) + ' up" title="Move up">↑</button>' +
         '<button type="button" class="lf-ic" data-lf-move="' + i + ':1"' + (i < F.rules.length - 1 ? '' : ' disabled') + ' aria-label="Move rule ' + (i + 1) + ' down" title="Move down">↓</button>' +
@@ -6615,6 +6799,8 @@ window.BOLootFilter = function (ctx) {
 
   function tester() {
     const lf = L(), gd = ctx.gd && ctx.gd(), k = kind(T.kind);
+
+    const P_ = gd && gd.uniques ? { reds: (Array.isArray(gd.uniques) ? gd.uniques.slice() : Object.values(gd.uniques)).sort((a, b) => String(a.Name).localeCompare(String(b.Name))) } : null;
     const bases = gd && gd.bases ? Object.values(gd.bases).filter(k[3]).sort((a, b) => (a.Level || 0) - (b.Level || 0) || String(a.Name).localeCompare(String(b.Name))) : [];
     const opt = (v, t, on) => '<option value="' + esc(String(v)) + '"' + (on ? ' selected' : '') + '>' + esc(t) + '</option>';
     let h = '<div class="card lf-test-card"><h2>Test an item</h2><p class="hint">Describe an item and see which rule decides what happens to it. This follows the page\'s reading of the rules (below), not yet checked in game.</p>';
@@ -6622,12 +6808,18 @@ window.BOLootFilter = function (ctx) {
       '<label class="field"><span>Item type</span><select data-lft="kind">' + KINDS.map(x => opt(x[0], x[1], x[0] === T.kind)).join('') + '</select></label>' +
       '<label class="field"><span>Base (optional)</span><select data-lft="base">' + opt('', 'Any ' + k[1].toLowerCase(), !T.base) + bases.map(b => opt(b.Id, b.Name + (b.Level ? ' (level ' + b.Level + ')' : ''), b.Id === T.base)).join('') + '</select></label>' +
       '<label class="field"><span>Rarity</span><select data-lft="rarity">' + Object.keys(RARITY_NAME).map(r => opt(r, RARITY_NAME[r], r === T.rarity)).join('') + '</select></label>' +
-      '<label class="field"><span>Item level</span><input type="number" min="1" max="100" step="1" data-lft="ilvl" value="' + T.ilvl + '"></label></div>';
-    h += '<div class="lf-flags">' + Object.keys(FLAG_TYPES).map(f => '<label class="lf-flag"><input type="checkbox" data-lft-flag="' + f + '"' + (T.flags[f] ? ' checked' : '') + '> ' + esc(label('type', FLAG_TYPES[f])) + '</label>').join('') + '</div>';
+      '<label class="field"><span>Item level</span><input type="number" min="1" max="100" step="1" data-lft="ilvl" value="' + T.ilvl + '"></label>' +
+      '<label class="field"><span>Required level</span><input type="number" min="1" max="100" step="1" data-lft="req" value="' + T.req + '"></label>' +
+      '<label class="field"><span>Sockets</span><input type="number" min="0" max="6" step="1" data-lft="sockets" value="' + T.sockets + '"></label>' +
+      '<label class="field"><span>Base Grade</span><input type="number" min="0" max="100" step="1" data-lft="grade" value="' + T.grade + '"></label>' +
+      (T.rarity === 'U' && P_ ? '<label class="field"><span>Red (optional)</span><select data-lft="red">' + opt('', 'Any red', !T.red) + P_.reds.map(u => opt(u.Id, u.Name, u.Id === T.red)).join('') + '</select></label>' : '') + '</div>';
+    const flag = (f, t) => '<label class="lf-flag"><input type="checkbox" data-lft-flag="' + f + '"' + (T.flags[f] ? ' checked' : '') + '> ' + esc(t) + '</label>';
+    h += '<div class="lf-flags">' + Object.keys(FLAG_TYPES).map(f => flag(f, label('type', FLAG_TYPES[f]))).join('') + flag('unsworn', 'Unsworn') + (T.rarity === 'U' ? flag('chase', 'Chase red') : '') + '</div>';
     const groups = (lf.line || []).filter(o => o[0]);
     h += '<h3>Lines <span class="hint">' + T.lines.length + '</span></h3>';
     h += T.lines.length ? '<ul class="lf-tlines">' + T.lines.map((l, i) => '<li>' +
-      '<select data-lft-line="' + i + ':g" aria-label="Line ' + (i + 1) + ' group">' + (groups.some(o => o[0] === l.g) ? '' : opt(l.g, 'Value ' + l.g, true)) + groups.map(o => opt(o[0], o[1], o[0] === l.g)).join('') + '</select>' +
+      '<select data-lft-line="' + i + ':g" aria-label="Line ' + (i + 1) + ' group">' + (l.gs ? opt(l.g, l.label || 'Sample line', true) : groups.some(o => o[0] === l.g) ? '' : opt(l.g, 'Value ' + l.g, true)) + groups.map(o => opt(o[0], o[1], !l.gs && o[0] === l.g)).join('') + '</select>' +
+      '<select data-lft-line="' + i + ':tier" aria-label="Line ' + (i + 1) + ' tier">' + [1, 2, 3, 4, 5, 6, 7, 8].map(n => opt(n, 'T' + n, n === l.tier)).join('') + '</select>' +
       '<select data-lft-line="' + i + ':roll" aria-label="Line ' + (i + 1) + ' roll">' + ROLLS.map(o => opt(o[0], o[1], o[0] === l.roll)).join('') + '</select>' +
       '<button type="button" class="lf-ic lf-x" data-lft-del="' + i + '" aria-label="Remove line ' + (i + 1) + '">✕</button></li>').join('') + '</ul>' : '<p class="hint">No lines (a normal item).</p>';
     h += '<button class="btn small ghost" type="button" data-lft-add' + (T.lines.length < 8 ? '' : ' disabled') + '>+ Add line</button>';
@@ -6639,7 +6831,7 @@ window.BOLootFilter = function (ctx) {
     else {
       const col = isLit(r) && colour(r.colour);
       verdict = '<b>Rule ' + (d.i + 1) + (r.name ? ' (' + esc(r.name) + ')' : '') + '</b> catches it: ' + actionChip(r) + (col ? ' in ' + esc(col[1]) : '') +
-        (d.unsure ? ' <span class="hint">if its MORE conditions (' + esc(moreChips(r).join(', ')) + ') also fit; the page cannot test those</span>' : '');
+        (d.unsure ? ' <span class="hint">if its named lines (or a condition the page does not know) also fit; the page cannot test those</span>' : '');
     }
     h += '<div class="lf-verdict' + (r ? ' a' + r.action : '') + '">' + verdict + '</div>';
     if (d.trace.length) h += '<ul class="lf-trace">' + d.trace.map(([i, why]) => '<li><span>Rule ' + (i + 1) + '</span> skips it: ' + esc(why) + '.</li>').join('') + '</ul>';
@@ -6766,7 +6958,7 @@ window.BOLootFilter = function (ctx) {
       sel('t', 'Line tier', TIER.map((t, i) => [i, t])) + sel('n', 'Lines', upto('n')) + sel('s', 'Sockets', upto('s')) +
       lvl('i', 0, 'Item level from', 'Any item level', x => 'Item level ' + x + '+') + lvl('i', 1, 'Item level up to', 'No max item level', x => 'Item level ' + x + ' or lower') +
       lvl('q', 0, 'Required level from', 'Any required level', x => 'Requires level ' + x + '+') + lvl('q', 1, 'Required level up to', 'No max required level', x => 'Requires level ' + x + ' or lower') +
-      sel('g', 'Grade', GRADE) + sel('r', 'Reds', [[0, 'Red or not'], [1, 'Reds only'], [2, 'Chase reds']]) + sel('u', 'Unsworn', [[0, 'Unsworn or not'], [1, 'Not unsworn'], [2, 'Unsworn only']]) +
+      sel('g', 'Grade', GRADE) + sel('gx', 'Top grade', TOPGRADE) + sel('r', 'Reds', [[0, 'Red or not'], [1, 'Reds only'], [2, 'Chase reds']]) + sel('u', 'Unsworn', [[0, 'Unsworn or not'], [1, 'Not unsworn'], [2, 'Unsworn only']]) +
       '</div>';
     h += picks('b', 'Named bases', 'bases', 'Type a base name') + picks('rn', 'Named reds', 'uniques', 'Type a red name');
     h += '<div class="field"><span>Named lines</span>' + (m.a ? '<div class="lf-chips"><span class="lf-chip">' + esc(lineText(m.a)) + '</span></div>' : '') +
@@ -6811,33 +7003,36 @@ window.BOLootFilter = function (ctx) {
   function render() {
     const el = $('#lootFilterPane'); if (!el || el.hidden) return;
     const lf = L(), n = F.rules.length, code = encode(F);
+    ST = sampleStats();
     let h = '<div class="cmp-intro"><div class="eyebrow">LOOT</div><h2>Loot Filter</h2><p>Make a loot filter and paste its code into the game\'s filter panel. The game takes up to ' + lf.maxRules +
       ' rules. The top rule an item matches decides what happens to it; an item no rule matches is shown.</p></div>';
     h += '<div class="lf-wrap">';
 
     h += '<div class="card lf-rules-card"><h2>Rules <span class="hint">' + n + ' / ' + lf.maxRules + '</span><span class="cmp-side-acts">' +
+      '<button class="btn small ghost" type="button" data-lf="undo"' + (hist.length ? '' : ' disabled') + ' title="Undo the last change (Ctrl+Z)">Undo</button>' +
       '<button class="btn small ghost" type="button" data-lf="paste">Paste code</button>' +
       '<button class="btn small ghost" type="button" data-lf="new"' + (n || F.title ? '' : ' disabled') + '>New filter</button></span></h2>';
     h += '<label class="field"><span>Filter name (only on this page and in links)</span><input type="text" maxlength="80" data-lf-title value="' + esc(F.title) + '" placeholder="My filter"></label>';
     if (pasting) h += '<div class="lf-paste"><label class="field"><span>Paste a code from the game (BOFILTER:1,...) or a filter link</span><textarea rows="3" data-lf-pastebox spellcheck="false">' + esc(pasteText) + '</textarea></label>' +
       '<div class="lf-row"><button class="btn small" type="button" data-lf="load">Load</button><button class="btn small ghost" type="button" data-lf="cancel">Cancel</button><span class="hint">Replaces the rules here.</span></div></div>';
-    if (msg) h += '<p class="hint pl-status lf-msg">' + esc(msg) + (msgUndo ? ' <button class="btn small ghost" type="button" data-lf="undo">Undo</button>' : '') + '</p>';
+    if (msg) h += '<p class="hint pl-status lf-msg">' + esc(msg) + (msgUndo && hist.length ? ' <button class="btn small ghost" type="button" data-lf="undo">Undo</button>' : '') + '</p>';
     h += ruleList();
     h += '<button class="btn wide" type="button" data-lf="add"' + (n < lf.maxRules ? '' : ' disabled') + '>' + (n < lf.maxRules ? '+ Add rule' : 'The game takes ' + lf.maxRules + ' rules at most') + '</button>';
     h += '</div>';
     h += presetCard();
     h += tester();
+    h += samples();
 
     h += '<div class="card lf-code-card"><h2>Share code</h2><p class="hint">Copy it, then in the game open the loot filter panel and paste it there.</p>' +
       '<textarea class="lf-code" rows="3" readonly spellcheck="false" aria-label="Share code">' + esc(code) + '</textarea>' +
-      '<div class="lf-row"><button class="btn small" type="button" data-lf="copy">Copy code</button><button class="btn small ghost" type="button" data-lf="link">Copy link</button>' +
+      '<div class="lf-row"><button class="btn small" type="button" data-lf="copy">Copy code</button><button class="btn small ghost" type="button" data-lf="link">Copy link</button><button class="btn small ghost" type="button" data-lf="text">Copy as text</button>' +
       '<span class="hint lf-copied" aria-live="polite"></span></div></div>';
 
     h += '<div class="card lf-notes"><h2>Good to know</h2><ul>' +
       '<li>Never hidden, whatever the rules say: ' + esc((lf.neverHidden || []).join(', ')) + '. One exception: a rule set to "Runes up to T1" to "T6" in the game\'s MORE panel can hide low runes.</li>' +
       '<li>Each rule\'s "More conditions" match the game\'s MORE panel. Named lines can only be set in the game for now; a code that has them keeps them.</li>' +
       '<li>Each rule tests one line group. For two groups (say Life and Resistance), use two rules: the higher one wins.</li>' +
-      (lf.later ? '<li>' + esc(lf.later.title) + ': ' + esc(lf.later.text.replace(/\s*The share code will keep.*$/, '')) + '</li>' : '') +
+
       '<li>The options come from the developer\'s loot filter list in the Broken Oath public API' + (ctx.gd && ctx.gd() && ctx.gd().lootFilter ? '' : ' (build 73 copy)') + '.</li>' +
       '</ul><details class="lf-reading"' + (readingOpen ? ' open' : '') + '><summary>How the page reads the rules (not yet checked in game)</summary><p class="hint">The game\'s list names each value but not exactly how it tests an item. The tester and the "Never reached" warnings use this reading:</p><ul>' +
       READING.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul></details></div>';
@@ -6849,7 +7044,17 @@ window.BOLootFilter = function (ctx) {
   let readingOpen = false;
   function testChange() { keepT(); render(); }
 
-  function change(fn, keepMsg) { fn(); F.preset = CUSTOM; keep(); if (!keepMsg) { msg = ''; msgUndo = null; } render(); }
+  function change(fn, keepMsg) { const was = JSON.stringify(F); fn(); F.preset = CUSTOM; if (JSON.stringify(F) !== was) snap(was); keep(); if (!keepMsg) { msg = ''; msgUndo = null; } render(); }
+  function undo() {
+    if (!hist.length) return;
+    F = clean(JSON.parse(hist.pop())) || blank(); sel = F.rules.length ? Math.max(0, Math.min(sel, F.rules.length - 1)) : -1;
+    keep(); msg = 'Undone.'; msgUndo = null; render();
+  }
+  function drop(n, rarity) {
+    for (let i = 0; i < n; i++) { const it = sampleDrop(SL, rarity); if (it) S.push(it); }
+    if (S.length > 500) S = S.slice(-500);
+    render();
+  }
   function editMore(fn) { const r = F.rules[sel]; if (!r) return; change(() => { const o = more(r) || {}; fn(o); setMore(r, o); }); }
   async function copy(text, done) {
     const out = $('#lootFilterPane .lf-copied');
@@ -6861,6 +7066,9 @@ window.BOLootFilter = function (ctx) {
       const t = e.target.closest('button'); if (!t || t.disabled) return;
       const d = t.dataset, lf = L();
       if (d.lfSel != null) { sel = +d.lfSel; render(); return; }
+      if (d.lfView) { view = d.lfView; render(); return; }
+      if (d.lfs) { if (d.lfs === 'clear') { S = []; render(); } else drop(d.lfs === 'U' ? 5 : 25, d.lfs === 'any' ? null : d.lfs); return; }
+      if (d.lfsTest != null) { const it = S[+d.lfsTest]; if (it) { T = cleanItem(JSON.parse(JSON.stringify(it))); testChange(); const c = el.querySelector('.lf-test-card'); if (c && c.scrollIntoView) c.scrollIntoView({ block: 'nearest' }); } return; }
       if (d.lfMove) { const [i, s] = d.lfMove.split(':').map(Number), j = i + s; if (j < 0 || j >= F.rules.length) return; change(() => { const x = F.rules.splice(i, 1)[0]; F.rules.splice(j, 0, x); if (sel === i) sel = j; else if (sel === j) sel = i; }); return; }
       if (d.lfDup != null) { const i = +d.lfDup; if (F.rules.length >= lf.maxRules) return; change(() => { F.rules.splice(i + 1, 0, JSON.parse(JSON.stringify(F.rules[i]))); sel = i + 1; }); return; }
       if (d.lfDel != null) { const i = +d.lfDel; change(() => { F.rules.splice(i, 1); if (sel >= F.rules.length) sel = F.rules.length - 1; else if (sel > i) sel--; }); return; }
@@ -6870,13 +7078,14 @@ window.BOLootFilter = function (ctx) {
       if (d.lfGame != null) { const g = GAME_PRESETS.find(x => x[0] === +d.lfGame); if (g) { const got = decode(g[2]); load(got, 'Loaded the game\'s ' + g[1] + ' preset.'); render(); } return; }
       if (d.lfpStage) { P.stage = d.lfpStage; render(); return; }
       if (d.lfpWant) { const g = +d.lfpWant, i = P.wants.indexOf(g); if (i >= 0) P.wants.splice(i, 1); else P.wants.push(g); render(); return; }
-      if (d.lftAdd != null) { if (T.lines.length < 8) { const used = new Set(T.lines.map(l => l.g)), g = ((L().line || []).find(o => o[0] && !used.has(o[0])) || [1])[0]; T.lines.push({ g, roll: 0 }); testChange(); } return; }
+      if (d.lftAdd != null) { if (T.lines.length < 8) { const used = new Set(T.lines.map(l => l.g)), g = ((L().line || []).find(o => o[0] && !used.has(o[0])) || [1])[0]; T.lines.push({ g, roll: 0, tier: 4 }); testChange(); } return; }
       if (d.lftDel != null) { T.lines.splice(+d.lftDel, 1); testChange(); return; }
       switch (d.lf) {
         case 'preset': applyPreset(); render(); return;
         case 'add': if (F.rules.length < lf.maxRules) change(() => { F.rules.push(newRule()); sel = F.rules.length - 1; }); return;
-        case 'new': { const before = JSON.stringify(F); F = blank(); sel = -1; keep(); msg = 'Started a new filter.'; msgUndo = before; render(); return; }
-        case 'undo': if (msgUndo) { F = clean(JSON.parse(msgUndo)) || blank(); sel = F.rules.length ? 0 : -1; keep(); msg = 'Brought the earlier filter back.'; msgUndo = null; render(); } return;
+        case 'new': { snap(); F = blank(); sel = -1; view = 'all'; keep(); msg = 'Started a new filter.'; msgUndo = true; render(); return; }
+        case 'undo': undo(); return;
+        case 'text': copy(readable(), 'Text copied.'); return;
         case 'paste': pasting = true; pasteText = ''; render(); setTimeout(() => { const b = el.querySelector('[data-lf-pastebox]'); if (b) b.focus(); }, 0); return;
         case 'cancel': pasting = false; render(); return;
         case 'load': {
@@ -6906,14 +7115,27 @@ window.BOLootFilter = function (ctx) {
       }
 
       const v = t.dataset.lft;
-      if (v === 'kind') { T.kind = t.value; T.base = ''; if (T.kind === 'idol') T.flags.sockets = false; return testChange(); }
-      if (v === 'base') { T.base = t.value; return testChange(); }
-      if (v === 'rarity') { T.rarity = t.value; return testChange(); }
-      if (v === 'ilvl') { const n = Math.round(+t.value); T.ilvl = isFinite(n) ? Math.max(1, Math.min(100, n)) : T.ilvl; return testChange(); }
+      if (t.dataset.lfsLevel != null) { SL = num(t.value, 1, 100, SL); t.value = SL; return; }
+      if (v === 'kind') { T.kind = t.value; T.base = ''; T.name = ''; if (T.kind === 'idol') T.sockets = 0; return testChange(); }
+
+      if (v === 'base') { T.base = t.value; T.name = ''; const b = pool() && pool().byId[T.base]; if (b) { T.req = b.Level || 1; T.flags.core = (b.Tags || []).includes('CoreTouched'); } return testChange(); }
+      if (v === 'rarity') { T.rarity = t.value; T.name = ''; if (T.rarity !== 'U') { T.red = ''; T.flags.chase = false; } return testChange(); }
+      if (v === 'red') { T.red = t.value; T.name = ''; return testChange(); }
+      if (v === 'ilvl') { T.ilvl = num(t.value, 1, 100, T.ilvl); return testChange(); }
+      if (v === 'req') { T.req = num(t.value, 1, 100, T.req); return testChange(); }
+      if (v === 'sockets') { T.sockets = num(t.value, 0, 6, T.sockets); return testChange(); }
+      if (v === 'grade') { T.grade = num(t.value, 0, 100, T.grade); return testChange(); }
       if (t.dataset.lfpSsf != null) { P.ssf = t.checked; render(); return; }
       if (t.dataset.lfpAuto != null) { P.auto = t.checked; P.wants = null; render(); return; }
-      if (t.dataset.lftFlag) { T.flags[t.dataset.lftFlag] = t.checked; return testChange(); }
-      if (t.dataset.lftLine) { const [i, f] = t.dataset.lftLine.split(':'), l = T.lines[+i]; if (l) { l[f] = +t.value; testChange(); } return; }
+      if (t.dataset.lftFlag) { if (has(T.flags, t.dataset.lftFlag)) T.flags[t.dataset.lftFlag] = t.checked; return testChange(); }
+      if (t.dataset.lftLine) { const [i, f] = t.dataset.lftLine.split(':'), l = T.lines[+i]; if (l) { l[f] = +t.value; if (f === 'g') { delete l.gs; delete l.label; } testChange(); } return; }
+    });
+
+    document.addEventListener('keydown', e => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || String(e.key).toLowerCase() !== 'z' || el.hidden || !hist.length) return;
+      const a = document.activeElement;
+      if (a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && !/^(checkbox|radio|button)$/.test(a.type)) || a.isContentEditable)) return;
+      e.preventDefault(); undo();
     });
     el.addEventListener('toggle', e => { if (!e.target.classList) return; if (e.target.classList.contains('lf-reading')) readingOpen = e.target.open; if (e.target.classList.contains('lf-more')) moreOpen = e.target.open; }, true);
 

@@ -1567,13 +1567,13 @@ button.cr-cell:hover::after, button.cr-cell:focus-visible::after { opacity: 1; }
 /* Fossil Planner tab (fossil.js) */
 /* Loot Filter tab (lootfilter.js): rule list and code on the left, the picked rule on the right. */
 /* Desktop: rules, code and notes on the left, the rule on the right (its extra height goes to the last row). Narrow: one column, the rule right under the list. */
-.lf-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 360px); grid-template-rows: auto auto auto auto 1fr; grid-template-areas: "r s" "p s" "t s" "c s" "n s"; gap: 14px; align-items: start; }
-.lf-rules-card { grid-area: r; } .lf-test-card { grid-area: t; } .lf-preset-card { grid-area: p; } .lf-code-card { grid-area: c; } .lf-notes { grid-area: n; } .lf-side { grid-area: s; }
+.lf-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 360px); grid-template-rows: auto auto auto auto auto 1fr; grid-template-areas: "r s" "p s" "t s" "d s" "c s" "n s"; gap: 14px; align-items: start; }
+.lf-rules-card { grid-area: r; } .lf-test-card { grid-area: t; } .lf-drop-card { grid-area: d; } .lf-preset-card { grid-area: p; } .lf-code-card { grid-area: c; } .lf-notes { grid-area: n; } .lf-side { grid-area: s; }
 body.lootfilter-page #buildSummary { display: none !important; } /* the character strip has nothing to do with a loot filter */
 .lf-wrap .card h2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .lf-wrap h3 { margin: 14px 0 6px; font-size: 13px; color: var(--dashboard-gold); letter-spacing: .04em; }
 .lf-side { position: sticky; top: 12px; }
-@media (max-width: 1180px) { .lf-wrap { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "r" "s" "p" "t" "c" "n"; } .lf-side { position: static; } }
+@media (max-width: 1180px) { .lf-wrap { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "r" "s" "p" "t" "d" "c" "n"; } .lf-side { position: static; } }
 .lf-rules { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
 .lf-rule { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-2); min-width: 0; }
 .lf-rule.sel { border-color: var(--dashboard-gold); box-shadow: inset 3px 0 0 var(--dashboard-gold); }
@@ -1597,7 +1597,7 @@ body.lootfilter-page #buildSummary { display: none !important; } /* the characte
 .lf-flag { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; }
 .lf-flag input { width: 15px; height: 15px; accent-color: var(--dashboard-gold); }
 .lf-tlines { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
-.lf-tlines li { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 28px; gap: 6px; align-items: center; }
+.lf-tlines li { display: grid; grid-template-columns: minmax(0, 1.4fr) 64px minmax(0, 1fr) 28px; gap: 6px; align-items: center; }
 .lf-verdict { margin: 14px 0 6px; padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--good); border-radius: var(--radius-sm); background: var(--panel-2); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .lf-verdict.a0 { border-left-color: var(--bad); }
 .lf-verdict .lf-act { min-width: 0; }
@@ -1651,6 +1651,21 @@ body.lootfilter-page #buildSummary { display: none !important; } /* the characte
 .lf-msg { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .lf-notes ul { margin: 0; padding-left: 18px; color: var(--muted); display: grid; gap: 6px; }
 .lf-wrap .field small.hint { margin: 2px 0 0; }
+.lf-view { margin-bottom: 8px; } .lf-view small { font-weight: 400; color: var(--faint); }
+.lf-samp { color: var(--muted); font-size: 11.5px; } .lf-samp.none { color: var(--faint); }
+.lf-inline { display: inline-flex; align-items: center; gap: 8px; margin: 0; } .lf-inline input { width: 72px; }
+.lf-counts { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 0 8px; font-size: 13px; color: var(--muted); }
+.lf-counts b { color: var(--text); font-size: 15px; } .lf-counts .a0 b { color: var(--bad); } .lf-counts .a1 b { color: var(--good); } .lf-counts .a2 b { color: var(--dashboard-gold); }
+:root[data-theme="light"] .lf-counts .a2 b { color: #8a6a1c; }
+.lf-drops { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; max-height: 460px; overflow-y: auto; }
+.lf-drop { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-2); min-width: 0; }
+.lf-drop.a0 { border-style: dashed; } .lf-drop.a0 .lf-drop-main { opacity: .6; }
+.lf-drop-main { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
+.lf-drop-main b { font-size: 13px; } .lf-drop-main small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.lf-drop-side { display: flex; align-items: center; gap: 8px; flex: none; } .lf-drop-side small { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.lf-rN { color: var(--text); } .lf-rM { color: #7fb2ff; } .lf-rR { color: var(--dashboard-gold); } .lf-rU { color: #e0603f; }
+:root[data-theme="light"] .lf-rM { color: #2b62b8; } :root[data-theme="light"] .lf-rR { color: #8a6a1c; } :root[data-theme="light"] .lf-rU { color: #b3391c; }
+@media (max-width: 560px) { .lf-drop { flex-wrap: wrap; } .lf-drop-side { flex-basis: 100%; } .lf-tlines li { grid-template-columns: minmax(0, 1.2fr) 54px minmax(0, 1fr) 28px; } }
 .fo-wrap { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 14px; align-items: start; }
 @media (max-width: 860px) { .fo-wrap { grid-template-columns: minmax(0, 1fr); } .fo-main { order: -1; } }
 .fo-shapes { display: grid; gap: 6px; }

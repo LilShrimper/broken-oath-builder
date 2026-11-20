@@ -4221,7 +4221,11 @@ window.BOCreator = function (ctx) {
       const rec = W.get(save.props, 'Record'), sm = rec && W.get(rec.v.props, 'Summary');
       if (!sm) throw new Error('This is not a Broken Oath character save.');
       const S = W.toPlain(sm.v.props);
-      if (S.Realm === 'Online' || S.League) throw new Error((S.Name || 'This character') + ' is an online character (' + (S.League || S.Realm) + '). The Save Creator only changes offline characters.');
+
+
+
+      const onlineId = /[1-9a-f]/i.test(String(S.OnlineId || ''));
+      if (S.Realm === 'Online' || S.League || onlineId) throw new Error((S.Name || 'This character') + ' is an online character (' + (S.League || (S.Realm === 'Online' ? S.Realm : 'it has an online id')) + '). The Save Creator only changes offline characters.');
       if (!W.same(W.serialize(save), bytes)) throw new Error('This save has something the Save Creator cannot write back exactly, so it will not change it.');
       Object.assign(C, { file: name, orig: bytes, save, log: [], edit: null, editIdx: -1, runeSnap: null, fillSnaps: {}, riven: null, rivenSnap: null, manual: { gold: false, gems: {} }, fill: { ...DEFAULT_FILL }, copied: null, copyMode: '', at: null, runeSel: -1, pouchAt: null }); // a build imported first stays picked
       C.msg = 'Loaded ' + S.Name + ' (' + S.ClassId + ' ' + (S.Level || 1) + ', offline).';
@@ -5234,7 +5238,12 @@ window.BOCreator = function (ctx) {
   function render() {
     const el = $('#creatorPane'); if (!el || el.hidden) return;
     tipHide();
-    let h = '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Save Creator</h2><p>Change an offline character: level, gold, gem levels, items, passive tree and Rupture map. You get a new save file to put in place of the old one. Online characters are refused.</p></div>';
+    let h = '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Save Creator</h2><p>Change an offline character: level, gold, gem levels, items, passive tree and Rupture map. You get a new save file to put in place of the old one. Online characters are refused.</p>' +
+
+
+
+
+      '<p class="cr-warn" role="note"><b>Offline characters only.</b> Editing an online character is cheating. The developer has said that anyone who cheats deliberately will be banned from online play. This tool is fan-made. You’re responsible for how you use it.</p></div>';
     h += '<div class="card cr-load"><div class="cr-loadrow"><label class="btn"><input type="file" id="crFile" accept=".sav" hidden>' + (C.save ? 'Load another save' : 'Load an offline save') + '</label>' +
       '<span class="hint">Pick a <code>BO_Char_….sav</code> from <code>' + esc(ctx.savePath) + '</code>. It is read in this tab and never uploaded.</span></div>' +
       (C.mem.length ? '<div class="cr-mem"><span class="hint">Remembered saves</span>' + C.mem.map(m => '<span class="cr-mem-one"><button class="btn small' + (C.save && C.file === m.file && lc(summary().ClassId) === lc(m.cls) ? '' : ' ghost') + '" type="button" data-cr="usemem" data-cls="' + esc(m.cls) + '">' + esc(m.cls) + ': <span class="notranslate">' + esc(m.name) + '</span></button>' +

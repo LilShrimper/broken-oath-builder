@@ -1507,6 +1507,8 @@ button.cr-cell:hover::after, button.cr-cell:focus-visible::after { opacity: 1; }
 .cr-tile:hover .ch-item-x, .cr-tile:focus-within .ch-item-x, .cr-tile.on .ch-item-x { opacity: 1; pointer-events: auto; }
 @media (hover: none) { .cr-tile:not(.on):hover .ch-item-x, .cr-tile:not(.on):focus-within .ch-item-x { opacity: 0; pointer-events: none; } }
 .cr-pouch { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.cr-warn { margin: 10px 0 0; padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--bad) 55%, var(--line)); border-left-width: 4px; border-radius: 8px; background: color-mix(in srgb, var(--bad) 10%, var(--panel)); color: var(--text); font-size: 13.5px; }
+.cr-warn b { color: var(--bad); margin-right: 4px; }
 /* The item window's type switch (shown for a new bag item in the Save Creator). */
 .io-slots { flex-wrap: wrap; margin: 0 0 10px; }
 /* An idol being dragged (Fossil or bag): the copy that follows the pointer, as the Character tab's. */

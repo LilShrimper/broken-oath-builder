@@ -15728,18 +15728,29 @@ window.BOCharacter = function (ctx) {
         const decayed = bars > 0 && coldHits > 0 && 1 / coldHits > decay;
         if (decayed) { bars = 0; res.notes.push('Freeze bar: your cold hits land about every ' + (1 / coldHits).toFixed(1) + ' s, and the Guardian\'s bar empties after ' + decay + ' s without one, so it never fills (no Brittle).'); }
         const fightSec = dmg > 0 ? life / dmg : 0;
-        const uptime = fightSec > 0 ? Math.min(1, bars * win / fightSec) : 0;
+
+
+
+
+
+        let covered = 0;
+        if (bars > 0 && cold > 0 && fightSec > 0) for (let t = 0, end = 0, size = barPct / 100 * life, i = 0; i < bars; i++, size *= grow) {
+          t += size / cold;
+          const a = Math.max(t, end), b = Math.min(t + win, fightSec);
+          if (b > a) { covered += b - a; end = b; }
+        }
+        const uptime = fightSec > 0 ? Math.min(1, covered / fightSec) : 0;
         const bAdd = brittlePct / 100 * uptime, kB = 1 + bAdd / shockF; // adds to shock + chill (hits only)
         const k = 1 + more / 100 * uptime;
         Object.assign(res.freeze, { frostbreak: hasFrostbreak, helpers, bars, uptime, fightSec, life, share, firstFillSec: cold > 0 ? barPct / 100 * life / cold : 0, more: (k - 1) * 100, brittleTaken: bAdd * 100 });
         const kAll = k * kB;
         if (kAll !== 1) { for (const d of Object.keys(byType)) byType[d] *= kAll; hitDpsVs *= kAll; res.hitDps = hitDpsVs; }
-        if (bAdd > 0) res.notes.push('Brittle: the Guardian is Brittle ' + Math.round(uptime * 100) + '% of the fight (' + bars + ' freeze bar' + (bars === 1 ? '' : 's') + ' x ' + win + ' s in about ' + Math.round(fightSec) + ' s), ' + (res.freeze.buildUp > 1 ? 'your increased freeze duration fills the bar x' + res.freeze.buildUp.toFixed(2) + ' faster, game log 20 Nov 2026; ' : '') + 'taking ' + brittlePct + '% more then, added to shock and chill (hits only: poison, ignite and bleed ticks do not take it) = +' + (bAdd * 100).toFixed(1) + '% on average. Developer stacking table + game tooltip 20 Nov 2026; not seen in a game sheet yet.');
+        if (bAdd > 0) res.notes.push('Brittle: the Guardian is Brittle ' + Math.round(uptime * 100) + '% of the fight (' + bars + ' freeze bar' + (bars === 1 ? '' : 's') + ' in about ' + Math.round(fightSec) + ' s, ' + win + ' s from each fill), ' + (res.freeze.buildUp > 1 ? 'your increased freeze duration fills the bar x' + res.freeze.buildUp.toFixed(2) + ' faster, game log 20 Nov 2026; ' : '') + 'taking ' + brittlePct + '% more then, added to shock and chill (hits only: poison, ignite and bleed ticks do not take it) = +' + (bAdd * 100).toFixed(1) + '% on average. Developer stacking table + game tooltip 20 Nov 2026; not seen in a game sheet yet.');
         const who = helpers.filter(h => h.on).map(h => h.name);
         if (hasFrostbreak) res.notes.push(cold > 0
           ? 'Frostbreak: ' + Math.round(Math.min(1, share) * 100) + '% of the damage on the Guardian is cold that fills its freeze bar' + (who.length ? ' (this skill with ' + who.join(', ') + ', taken as kept up; untick them under Vows, Heralds & charges)' : '') +
             '. The first bar (' + barPct + '% of its ~' + Math.round(life).toLocaleString('en-US') + ' life) fills after about ' + Math.round(barPct / 100 * life / cold) + ' s, each next one is ' + grow + ' times bigger: ' +
-            bars + ' bar' + (bars === 1 ? '' : 's') + ' in a fight of about ' + Math.round(fightSec) + ' s, ' + win + ' s Brittle each = ' + Math.round(uptime * 100) + '% of the fight -> hits ' + ((k - 1) * 100).toFixed(1) + '% more on average (' + more + '% while it is Brittle). Game log 19 Nov 2026.' +
+            bars + ' bar' + (bars === 1 ? '' : 's') + ' in a fight of about ' + Math.round(fightSec) + ' s, Brittle for ' + win + ' s from each fill = ' + Math.round(uptime * 100) + '% of the fight -> hits ' + ((k - 1) * 100).toFixed(1) + '% more on average (' + more + '% while it is Brittle). Game log 19 Nov 2026.' +
             (bars ? '' : ' Under ' + barPct + '% cold, the bar never fills before the Guardian dies.')
           : 'Frostbreak: nothing on your bar deals cold hit damage, so the Guardian\'s freeze bar never fills and the ' + more + '% more never counts.');
       }

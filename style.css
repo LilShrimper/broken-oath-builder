@@ -2105,6 +2105,9 @@ input.io-add::placeholder { color: var(--faint); }
 .is-head { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .is-name { font-size: 15px; line-height: 1.25; overflow-wrap: anywhere; }
 .is-head small { color: var(--faint); font-size: 12px; }
+.is-badge.has-tip { cursor: help; }
+.is-badge.has-tip:focus-visible { outline: 2px solid var(--dashboard-gold); outline-offset: 1px; }
+.is-name .is-badge { font-weight: 400; margin-left: 4px; vertical-align: 2px; white-space: nowrap; }
 .is-lvl { flex: none; align-self: flex-start; font-size: 12px; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: var(--panel-2); }
 /* Icon tile: the type's line drawing tinted by category (--ic) */
 .is-ico { --ic: var(--muted); flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 8px; color: var(--ic);
@@ -2786,3 +2789,37 @@ details.sw-sub.sw-sup { background: var(--panel); }
 :root[data-theme="light"] .tree-legend .tl-sw.unc { border-color: #5a6f9c; }
 @media (max-width: 560px) { .tree-legend { max-width: 170px; font-size: 10.5px; } .tree-legend .tl-bar { min-width: 110px; } .tree-sheet.oaths .oath-list { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .tree-sheet.oaths ~ .tree-zoom { display: none; } } /* phone: the Oath menu is tall, the zoom buttons would sit on the legend */
+/* Riven Atlas tab (atlas.js) */
+.at-wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 12px; align-items: start; }
+.at-tree { padding: 8px; }
+.at-svg { display: block; width: 100%; max-width: 760px; height: auto; margin: 0 auto; user-select: none; }
+.at-ring-bg { fill: none; stroke: color-mix(in srgb, var(--dashboard-gold) 14%, transparent); stroke-width: 18; }
+.at-link { stroke: color-mix(in srgb, var(--line) 85%, transparent); stroke-width: 1.5; }
+.at-link.on { stroke: var(--dashboard-gold); stroke-width: 3; }
+.at-node { cursor: pointer; outline: none; }
+.at-node rect, .at-node circle { fill: var(--panel-2); stroke: color-mix(in srgb, var(--dashboard-gold) 35%, var(--line)); stroke-width: 1.5; transition: fill .12s; }
+.at-node .at-ring { fill: none; stroke-dasharray: 3 4; }
+.at-node circle.at-hit, .at-node:hover circle.at-hit, .at-node.on circle.at-hit, .at-node.open circle.at-hit { fill: transparent; stroke: none; }
+.at-node.open rect, .at-node.open circle:not(.at-ring):not(.at-hit) { stroke: var(--dashboard-gold); }
+.at-node.on rect, .at-node.on circle:not(.at-ring):not(.at-hit) { fill: var(--dashboard-gold); stroke: color-mix(in srgb, var(--dashboard-gold) 60%, #fff); }
+.at-node.on .at-ring { stroke: var(--dashboard-gold); }
+.at-node:hover rect, .at-node:hover circle:not(.at-ring):not(.at-hit), .at-node:focus-visible rect, .at-node:focus-visible circle:not(.at-ring):not(.at-hit) { stroke: var(--text); stroke-width: 2.5; }
+.at-label { fill: var(--muted); font-size: 14px; font-weight: 650; letter-spacing: .06em; }
+.at-label.on { fill: var(--dashboard-gold); }
+.at-count { fill: var(--faint); font-weight: 500; font-size: 12px; }
+.at-core { fill: var(--dashboard-gold); stroke: color-mix(in srgb, var(--dashboard-gold) 60%, #fff); stroke-width: 2; }
+.at-core-n { fill: #1b1d2a; font-size: 22px; font-weight: 750; }
+.at-core-of { fill: #1b1d2a; font-size: 10px; font-weight: 650; }
+.at-side { display: grid; gap: 12px; }
+.at-card h2 small { color: var(--muted); font-weight: 500; font-size: 13px; }
+.at-fields { display: grid; gap: 4px; }
+.at-fields .field { margin: 6px 0 0; }
+.at-note { margin: 2px 0 0; }
+.at-btns { margin: 10px 0 4px; }
+.at-small { padding: 2px 8px; font-size: 12px; }
+.at-sum li { margin: 2px 0; }
+.at-tip-where { color: var(--faint); font-size: 11px; margin-top: 5px; }
+.at-tip-state { color: var(--muted); font-size: 11px; margin-top: 4px; }
+.at-faq-c { margin: 6px 0; }
+.at-faq-c summary { cursor: pointer; color: var(--dashboard-gold); font-weight: 650; padding: 4px 0; }
+@media (max-width: 1100px) { .at-wrap { grid-template-columns: 1fr; } }

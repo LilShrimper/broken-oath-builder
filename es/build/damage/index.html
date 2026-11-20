@@ -50,7 +50,7 @@
   var b = new URL("../../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/es.json'), langCode: 'es' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=412">
+<link rel="stylesheet" href="../../../style.css?v=413">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -183,6 +183,7 @@
     <nav class="tabs build-subtabs" id="buildSubtabs" role="tablist" aria-label="Build setup" hidden>
       <button class="tab" type="button" role="tab" data-tab="character" aria-selected="false" aria-label="Character"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><span>Character</span></button>
       <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false" aria-label="Passive tree"><svg viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(15 12 12)"><path d="M10.4 21a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0M10.4 14a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0M3.4 9a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0M17.4 9a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0M9.6 3.4a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0-4.8 0M12 19.4V15.6M10.7 13.07 6.3 9.93M13.3 13.07 17.7 9.93M12 12.4V5.8"/></g></svg><span>Passive tree</span></button>
+      <button class="tab" type="button" role="tab" data-tab="atlas" aria-selected="false" aria-label="Riven Atlas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 3v4M12 17v4M3 12h4M17 12h4M12 9.5l2.5 2.5-2.5 2.5-2.5-2.5z"/></svg><span>Riven Atlas</span></button>
       <button class="tab" type="button" role="tab" data-sub="skills" aria-selected="false" aria-label="Skills"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span>Skills</span></button>
       <button class="tab active" type="button" role="tab" data-tab="damage" aria-selected="true" aria-label="Damage Analysis">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h17M8 16v-5M13 16V7M18 16V3"/></svg><span>Damage Analysis</span>
@@ -388,6 +389,7 @@
       <div class="build-pane faq-sec" id="affixPane" hidden></div>
     </section>
     <section class="build-pane compare-pane character-pane" id="characterPane" hidden></section>
+    <section class="build-pane compare-pane atlas-pane" id="atlasPane" hidden></section>
     <section class="code-pane" id="codePane" hidden>
       <div class="code-intro">
         <div class="eyebrow">IMPORT A LOADOUT</div>
@@ -653,7 +655,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":412,"at":"2026-11-20T04:13:39.128Z"};
+window.SITE_VERSION = {"v":413,"at":"2026-11-20T06:29:34.283Z"};
 window.SITE_LANG = 'es';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -662,6 +664,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=4e9487f7","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../../app.js?v=412"></script>
+<script src="../../../app.js?v=413"></script>
 </body>
 </html>

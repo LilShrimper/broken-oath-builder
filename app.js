@@ -7239,6 +7239,25 @@ window.BOItemSearch = function (ctx) {
 
 
   const badge = (t, cls) => '<span class="is-badge ' + (cls || '') + '">' + esc(t) + '</span>';
+
+
+
+
+  function tagTip(GD, t) {
+    const P = (GD.loot || {}).primal || {}, pc = c => c >= 0.01 ? Math.round(c * 1000) / 10 + '%' : '1 in ' + Math.round(1 / c).toLocaleString('en-US');
+    const d = s => '<span class="pl-tip-desc">' + esc(s) + '</span>';
+    const text = {
+      Signature: ['Dropped by a Guardian', ['A Guardian can drop this when you kill it. The card says which Guardian.']],
+      Chase: ['A rare prize', ['Only one Guardian or one Core area drops this. It never drops anywhere else. The card says where.']],
+      Core: ['Dropped in the Core', ['Only drops in one Core area. The card says which one.']],
+      Primal: ['A stronger copy of a normal unique', ['Same name as the normal one, but every line is at its best roll, and it often has extra lines.',
+        'You can get it from any kill' + (P.PrimalFromML ? ' from monster level ' + P.PrimalFromML : '') + ' (very rare), the Core\'s jackpot' + (P.CorePrimalChance ? ' (' + pc(P.CorePrimalChance) + ')' : '') + ', a Riven Lord' + (P.LordPrimalChance ? ' (' + pc(P.LordPrimalChance) + ')' : '') + ', or by unswearing a unique, which can turn it into its Primal copy.']],
+      Limited: ['Marked "limited" in the game data', ['We don\'t know what this means yet. Most of these are rare prizes from the Core areas.']],
+    }[t];
+    if (!text) return '';
+    return '<b>' + esc(t) + '</b><span class="pl-tip-sub">' + esc(text[0]) + '</span>' + text[1].map(d).join('') + '<span class="pl-tip-desc pl-tip-flavour">The game doesn\'t explain this tag. This is our reading of its data.</span>';
+  }
+  const tagBadge = (GD, t, cls) => { const h = tagTip(GD, t); return h ? '<span class="is-badge has-tip ' + (cls || '') + '" tabindex="0" data-tiphtml="' + esc(h) + '">' + esc(t) + '</span>' : badge(t, cls); };
   const li = (t, cls) => '<li' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(t) + '</li>';
   function baseStats(GD, b) {
     const out = [];
@@ -7289,7 +7308,7 @@ window.BOItemSearch = function (ctx) {
   }
   function card(e) {
     const GD = ctx.gd();
-    let ico, sub = '', body = '', badges = [];
+    let ico, sub = '', body = '', badges = [], nameTag = '';
     if (e.cat === 'base') {
       const b = e.b;
       ico = art('base', b.Id, 'base', ICON_NAMES[e.icon]) || icon(e.icon, 'base');
@@ -7311,8 +7330,11 @@ window.BOItemSearch = function (ctx) {
       const og = ctx.owned && ctx.owned();
       const from = og && og.dropText ? og.dropText(u) : [];
       if (from.length) body += '<p class="is-into">Drops from: ' + esc(from.join(' · ')) + '</p>';
-      if (e.tiers[0] !== 'Standard') badges.push(badge(e.tiers[0], 'tier ' + lc(e.tiers[0])));
-      if (u.Limited) badges.push(badge('Limited', 'muted'));
+
+
+      if (e.tiers[0] === 'Primal') nameTag = tagBadge(GD, 'Primal', 'tier primal');
+      else if (e.tiers[0] !== 'Standard') badges.push(tagBadge(GD, e.tiers[0], 'tier ' + lc(e.tiers[0])));
+      if (u.Limited) badges.push(tagBadge(GD, 'Limited', 'muted'));
 
       const sourced = from.length && !/not in the game files/.test(from[0]);
       if (u.DropWeight === 0) badges.push(badge(sourced ? 'No random drops' : 'Does not drop', 'muted'));
@@ -7385,7 +7407,7 @@ window.BOItemSearch = function (ctx) {
       if (n != null) badges.push(badge(n ? 'You have ' + n + ' (' + inv.runeWhere[lc(r.Id)].join(', ') + ')' : 'You have none', n ? 'held' : 'muted'));
     }
     const nb = addedBadge(e); if (nb) badges.unshift(nb);
-    return '<article class="is-card cat-' + e.cat + '"><header>' + ico + '<div class="is-head"><b class="is-name">' + esc(e.name) + '</b><small>' + (GEM_CATS[e.cat] ? [e.cat === 'skill' ? skillKind(e.sk) : CAT_NAME[e.cat]].concat(sub ? sub.split(' · ') : []).map(t => '<span>' + esc(t) + '</span>').join(' · ') : esc((e.cat === 'rune' ? (e.jewel ? 'Jewel' : 'Rune') : CAT_NAME[e.cat]) + (sub ? ' · ' + sub : ''))) + '</small></div>' +
+    return '<article class="is-card cat-' + e.cat + '"><header>' + ico + '<div class="is-head"><b class="is-name">' + esc(e.name) + (nameTag ? ' ' + nameTag : '') + '</b><small>' + (GEM_CATS[e.cat] ? [e.cat === 'skill' ? skillKind(e.sk) : CAT_NAME[e.cat]].concat(sub ? sub.split(' · ') : []).map(t => '<span>' + esc(t) + '</span>').join(' · ') : esc((e.cat === 'rune' ? (e.jewel ? 'Jewel' : 'Rune') : CAT_NAME[e.cat]) + (sub ? ' · ' + sub : ''))) + '</small></div>' +
       (GEM_CATS[e.cat] ? '' : '<span class="is-lvl" title="' + (e.cat === 'mod' ? 'Item level the ' + (tierIdx(e) >= 0 ? F.tier : 'lowest') + ' tier needs' : 'Level') + '">' + (e.cat === 'mod' ? 'iLvl ' : 'Lvl ') + levelOf(e) + '</span>') + '</header>' +
       body + histBox(e) + (badges.length ? '<footer>' + badges.join('') + '</footer>' : '') + '</article>';
   }
@@ -7727,7 +7749,9 @@ window.BOItemSearch = function (ctx) {
       for (const x of gs) if (lc(x.chase) === lc(u.Id)) out.push(x.name + ' (chase, ' + fmtChance(x.chaseChance >= 1 ? x.chaseChance : x.chaseChance * redK) + ' a kill)');
       const sig = gs.filter(x => (x.sig || []).map(lc).includes(lc(u.Id))).map(x => x.name);
       if (sig.length) out.push('Signature drop: ' + sig.join(', '));
-      if (u.Primal) out.push("The Core's jackpot (Primal)");
+
+
+      if (u.Primal) { const P = (g.loot || {}).primal || {}; out.push('Any kill' + (P.PrimalFromML ? ' from monster level ' + P.PrimalFromML : '') + " (very rare), the Core's jackpot, Riven Lords"); }
       else if (u.DwarvenSockets) out.push("The Core's jackpot (Deep-forged)");
       else if (u.Core) out.push(CORE_SOURCE[u.Core] || 'The Core' + (typeof u.Core === 'string' ? ' (' + nice(u.Core) + ')' : ''));
       const slot = (g.bases[lc(u.BaseId)] || {}).Slot;
@@ -8840,12 +8864,264 @@ window.BOScaling = function (ctx) {
 
 
 
+
+
+
+
+
+window.BOAtlas = function (ctx) {
+  'use strict';
+  const { $, esc } = ctx;
+  const N = (name, text) => ({ name, text }); // text: lines joined with ' · ', as the tooltip shows them
+
+  const CLUSTERS = [
+    ['hunt', 'The Hunt', 'Magic and rare monsters, pack size, experience', [
+      N('Marked Packs', '+5% magic and rare monsters'), N('Thick Hunt', '+5% magic and rare monsters'), N('The Muster', '+10% magic and rare monsters · +4% pack size'),
+      N('Crowded Ways', '+4% pack size'), N('Swarming Ways', '+4% pack size'), N('Teeming Lands', '+10% pack size · +4% experience'),
+      N('Champion\'s Path', '+5% magic and rare monsters'),
+      N('Sharp Hunt', '+3% experience'), N('Blooded Hunt', '+3% experience'), N('Trophy Hunter', '+8% item rarity · +5% experience'),
+      N('Warband', '+40% magic and rare monsters · rare monsters have 1 more affix · +15% item rarity · monsters deal +10% damage')]],
+    ['spoils', 'The Spoils', 'Item rarity and quantity, gold, red drops', [
+      N('Keen Eye', '+4% item rarity'), N('Sharp Eye', '+4% item rarity'), N('Treasure Sense', '+10% item rarity'),
+      N('Heavy Packs', '+3% item quantity'), N('Laden Packs', '+3% item quantity'), N('Plenty', '+8% item quantity'),
+      N('Red Scent', '+8% red drop chance'),
+      N('Coin Scent', '+6% gold'), N('Coin Trail', '+6% gold'), N('Gilded Hoard', '+15% gold · +3% item quantity'),
+      N('Blood Price', '+50% red drop chance · 30% fewer items')]],
+    ['forge', 'The Forge', 'Rune and jewel drops, gold', [
+      N('Rune Scent', '+6% rune drop chance'), N('Rune Trail', '+6% rune drop chance'), N('Runecaller', '+15% rune drop chance'),
+      N('Jewel Scent', '+6% jewel drop chance'), N('Jewel Trail', '+6% jewel drop chance'), N('Cutter\'s Eye', '+15% jewel drop chance'),
+      N('Rune Hoarder', '+6% rune drop chance'),
+      N('Smith\'s Coin', '+5% gold'), N('Smith\'s Purse', '+5% gold'), N('Forge Tithe', '+10% gold · +5% rune drop chance'),
+      N('Smith\'s Oath', '+50% rune drop chance · +50% jewel drop chance · -15% item rarity')]],
+    ['ink', 'The Ink', 'Sigil find and sigil rewards', [
+      N('Ink Finder', '+6% sigil find'), N('Ink Seeker', '+6% sigil find'), N('Bound in Ink', '+12% sigil find · sigil rewards 5% stronger'),
+      N('Steady Ink', 'sigil rewards 4% stronger'), N('Sure Ink', 'sigil rewards 4% stronger'), N('Deep Ink', 'sigil rewards 10% stronger'),
+      N('Dark Ink', 'sigil rewards 4% stronger'),
+      N('Ink Hoarder', '+5% sigil find'), N('Ink Keeper', '+5% sigil find'), N('Ink Well', '+15% sigil find'),
+      N('Overwritten', 'sigil rewards 40% stronger · sigil dangers 40% stronger')]],
+    ['dust', 'The Dust', 'Dust pouch size, Dust per vein, more veins', [
+      N('Deep Pockets', '+10% Dust pouch (more Dust held)'), N('Deeper Pockets', '+10% Dust pouch (more Dust held)'), N('Dwarven Pouch', '+25% Dust pouch (more Dust held)'),
+      N('Vein Sense', '+6% Dust from every vein'), N('Vein Trail', '+6% Dust from every vein'), N('Rich Veins', '+15% Dust from every vein'),
+      N('Packed Pouch', '+10% Dust pouch (more Dust held)'),
+      N('Prospector', '8% chance of one more Dust vein a map'), N('Deep Prospector', '8% chance of one more Dust vein a map'), N('Mother Lode', '20% chance of one more Dust vein a map · +5% Dust from every vein'),
+      N('Dwarf-Sworn', '+60% Dust pouch (more Dust held) · +25% Dust from every vein · 10% fewer items on Riven maps')]],
+    ['omen', 'The Omen', 'World events: jackpots, the Wound, the Dark Wager', [
+      N('Omen Sense', '+1% world event jackpot chance'), N('Omen Trail', '+1% world event jackpot chance'), N('Omen Reader', '+2% world event jackpot chance'),
+      N('Bleeding Sky', '+3% of world events open as the Wound'), N('Red Sky', '+3% of world events open as the Wound'), N('The Blood Tear', '+8% of world events open as the Wound'),
+      N('Omen Keeper', '+1% world event jackpot chance'),
+      N('Gambler\'s Itch', '+3% of world events are the Dark Wager'), N('Loaded Dice', '+3% of world events are the Dark Wager'), N('The Dark Wager', '+8% of world events are the Dark Wager'),
+      N('A Thousand Omens', '+4% world event jackpot chance · +10% of world events open as the Wound · monsters +10% life')]],
+    ['guardians', 'The Guardians', 'Guardian drops on Riven and Gate Warden maps', [
+      N('Spoils', 'the Guardian drops 1 more item on Riven maps'), N('Choice Spoils', 'the Guardian drops 1 more rare item on Riven maps'), N('Hoard of the Fallen', 'the Guardian drops 1 more item on Riven maps · +6% item rarity on Riven maps'),
+      N('Warden\'s Toll', '+10% item rarity on Gate Warden maps'), N('Warden\'s Tithe', '+10% item quantity on Gate Warden maps'), N('Warden\'s Hoard', 'the Guardian drops 2 more items on Gate Warden maps · the Guardian drops 1 more rare item on Gate Warden maps'),
+      N('Spoil Seeker', '+5% item rarity on Riven maps'),
+      N('Heavy Spoils', 'the Guardian drops 1 more item on Riven maps'), N('Rich Spoils', 'the Guardian drops 1 more rare item on Riven maps'), N('Kingly Spoils', 'the Guardian drops 1 more rare item on Riven maps · +6% item rarity on Riven maps'),
+      N('Guardian\'s Due', 'the Guardian drops 3 more rare items · the Guardian has 1 more mod · 20% fewer items')]],
+    ['lord', 'The Lord', 'Riven Lord maps and the Pinnacle', [
+      N('Lordbane', '+15% item rarity on Riven Lord maps'), N('Lord\'s Purse', 'the Guardian drops 1 more item on Riven Lord maps'), N('Crownbreaker', 'the Guardian drops 2 more rare items on Riven Lord maps · +15% item rarity on Riven Lord maps'),
+      N('Oathbreaker', '+15% item rarity at the Pinnacle'), N('Oathbreak Purse', 'the Guardian drops 1 more item at the Pinnacle'), N('Pinnacle Spoils', 'the Guardian drops 2 more rare items at the Pinnacle · +15% item rarity at the Pinnacle'),
+      N('Lord\'s Herald', '+10% experience on Riven Lord maps'),
+      N('Lord\'s Blood', '+10% red drop chance on Riven Lord maps'), N('Royal Blood', '+10% red drop chance on Riven Lord maps'), N('Crown Jewels', '+25% red drop chance on Riven Lord maps · +10% experience on Riven Lord maps'),
+      N('Regicide', 'the Guardian drops 4 more rare items on Riven Lord maps · the Guardian drops 2 more rare items at the Pinnacle · the Guardian has 2 more mods on Riven Lord maps · monsters +20% life on Riven Lord maps')]],
+    ['deep', 'The Deep', 'The Core, the Catacombs and the Gnome Realms', [
+      N('Core Scent', '+8% Core Sigil drop chance'), N('Core Trail', '+8% Core Sigil drop chance'), N('Heart of the Core', '+15% item rarity in the Core · the Guardian drops 1 more item in the Core'),
+      N('Catacomb Lamp', '+8% item rarity in the Catacombs'), N('Bone Path', '+6% item quantity in the Catacombs'), N('Bone Hoard', 'the Guardian drops 1 more item in the Catacombs · the Guardian drops 1 more rare item in the Catacombs'),
+      N('Core Seeker', '+8% Core Sigil drop chance'),
+      N('Gnome Scent', '+10% Robo Sigil drop chance (the Gnome Realms)'), N('Gnome Trail', '+10% Robo Sigil drop chance (the Gnome Realms)'), N('Gnome-Forged', '+20% Robo Sigil drop chance (the Gnome Realms) · +15% item rarity in the Gnome Realms'),
+      N('Abyss Calls', '+30% item rarity in the Core, the Catacombs and the Gnome Realms · the Guardian drops 2 more items in the Core, the Catacombs and the Gnome Realms · -15% item rarity on Riven maps')]],
+    ['climb', 'The Climb', 'Riven modifier and Riven Tier rewards, experience', [
+      N('Riven Reader', 'Riven modifier rewards 5% stronger on Riven maps'), N('Riven Scholar', 'Riven modifier rewards 5% stronger on Riven maps'), N('Riven-Touched', 'Riven modifier rewards 12% stronger on Riven maps'),
+      N('Tier Climber', 'Riven Tier rewards 5% stronger on Riven Tier maps'), N('Tier Strider', 'Riven Tier rewards 5% stronger on Riven Tier maps'), N('Paragon\'s Due', 'Riven Tier rewards 15% stronger on Riven Tier maps'),
+      N('Riven Seeker', 'Riven modifier rewards 5% stronger on Riven maps'),
+      N('Deep Lore', '+3% experience on Riven maps'), N('Deeper Lore', '+3% experience on Riven maps'), N('Ascendant\'s Lore', '+8% experience on Riven Tier maps · +6% item rarity on Riven Tier maps'),
+      N('Unbound Ascent', 'Riven modifier rewards 50% stronger on Riven maps · Riven Tier rewards 25% stronger on Riven Tier maps · monsters deal +10% damage on Riven maps')]],
+  ];
+
+
+  const SHAPE = [['s1', null, 'node', 0, -75], ['s2', 's1', 'node', 0, -103], ['n1', 's2', 'notable', 0, -135],
+    ['a1', 'n1', 'node', -26, -163], ['a2', 'a1', 'node', -39, -196], ['n2', 'a2', 'notable', -52, -236],
+    ['k1', 'n1', 'node', 0, -195],
+    ['b1', 'n1', 'node', 27, -163], ['b2', 'b1', 'node', 41, -196], ['n3', 'b2', 'notable', 53, -236],
+    ['k', 'k1', 'keystone', 0, -272]];
+  const COST = { node: 1, notable: 2, keystone: 3 }, KIND = { node: 'Node', notable: 'Notable', keystone: 'Keystone' };
+  const NODES = {}, LIST = [];
+  CLUSTERS.forEach(([cid, cname, cfor, nodes], ci) => {
+    const t = ci * 36 * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+    SHAPE.forEach(([key, par, kind, x, y], i) => {
+      const n = { id: cid + '_' + key, cid, cname, key, kind, cost: COST[kind], parent: par ? cid + '_' + par : null, name: nodes[i].name, text: nodes[i].text,
+        x: x * c - y * s, y: x * s + y * c };
+      NODES[n.id] = n; LIST.push(n);
+    });
+  });
+  const kids = id => LIST.filter(n => n.parent === id);
+
+  const WORKS_ON = 'every endgame map: Riven maps (Rupture Level 80+), the Core, the Catacombs, the Gnome Realms, the Pinnacle';
+  const ownMaps = n => / on (Riven|Gate Warden)|at the Pinnacle| in the (Core|Catacombs|Gnome)/.test(n.text) && n.kind !== 'keystone' && !/^(Abyss Calls|Regicide|Unbound Ascent)$/.test(n.name);
+
+
+  const rlPoints = rl => rl >= 80 ? Math.min(25, Math.floor((Math.min(rl, 200) - 80) / 5) + 1) : 0;
+  const lordTiers = done => done >= 80 ? Math.floor((done - 80) / 50) + 1 : 0; // Lords stand at 80 and every 50 after (riven_atlas.json LordLevel 80, LordEvery 50)
+  const tierPoints = rt => rt > 0 ? Math.floor(Math.min(rt, 100) / 5) + (rt > 100 ? Math.floor((rt - 100) / 10) : 0) : 0;
+  const nextRl = rl => rl < 80 ? 80 : rl >= 200 ? null : 80 + (Math.floor((rl - 80) / 5) + 1) * 5;
+
+
+  const KEY = 'bods:atlas';
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } };
+  const save = all => { try { localStorage.setItem(KEY, JSON.stringify(all)); } catch (e) { /* storage blocked */ } };
+  const chKey = () => { const ch = ctx.current && ctx.current(); return ch && ch.id ? String(ch.id) : '_'; };
+  function state() {
+    const all = load(), s = all[chKey()] || {}, ch = (ctx.current && ctx.current()) || {};
+    const fromSave = { rl: +ch.deepBest || 0, lords: lordTiers(+ch.lordDone || 0), rt: Math.max(0, (+ch.deepBest || 0) - 200) };
+    return { taken: new Set((s.taken || []).filter(id => NODES[id])), rl: s.rl != null ? s.rl : fromSave.rl, lords: s.lords != null ? s.lords : fromSave.lords, rt: s.rt != null ? s.rt : fromSave.rt, fromSave, own: s };
+  }
+  function store(patch) { const all = load(), k = chKey(); all[k] = Object.assign({}, all[k] || {}, patch); save(all); }
+  const total = S => rlPoints(S.rl) + 2 * S.lords + tierPoints(S.rt);
+  const spent = S => [...S.taken].reduce((a, id) => a + NODES[id].cost, 0);
+
+
+  function totals(ids) {
+    const sum = new Map();
+    for (const id of ids) for (const line of NODES[id].text.split(' · ')) {
+      const m = line.match(/[+-]?\d+(\.\d+)?/); const key = m ? line.replace(m[0], '#') : line;
+      const v = m ? parseFloat(m[0]) : 0, cur = sum.get(key); sum.set(key, { v: (cur ? cur.v : 0) + v, plus: m && m[0][0] === '+', cluster: (cur && cur.cluster) || NODES[id].cid });
+    }
+    return [...sum.entries()].map(([k, o]) => ({ text: k.replace('#', (o.plus && o.v >= 0 ? '+' : '') + String(Math.round(o.v * 10) / 10)), cluster: o.cluster }));
+  }
+
+
+  let tip = null, hover = null;
+    function nodeSvg(n, S) {
+    const on = S.taken.has(n.id), canTake = !on && (!n.parent || S.taken.has(n.parent));
+    const cls = 'at-node at-' + n.kind + (on ? ' on' : canTake ? ' open' : '');
+    const x = (n.x).toFixed(1), y = (n.y).toFixed(1);
+    if (n.kind === 'keystone') return '<g class="' + cls + '" data-n="' + n.id + '" tabindex="0" role="button" aria-pressed="' + on + '" aria-label="' + esc(n.name) + '"><circle cx="' + x + '" cy="' + y + '" r="17"/><circle class="at-ring" cx="' + x + '" cy="' + y + '" r="22"/></g>';
+    const r = n.kind === 'notable' ? 13 : 7;
+    return '<g class="' + cls + '" data-n="' + n.id + '" tabindex="0" role="button" aria-pressed="' + on + '" aria-label="' + esc(n.name) + '"><circle class="at-hit" cx="' + x + '" cy="' + y + '" r="15"/><rect x="' + (x - r) + '" y="' + (y - r) + '" width="' + 2 * r + '" height="' + 2 * r + '" rx="' + (r / 4) + '" transform="rotate(45 ' + x + ' ' + y + ')"/></g>';
+  }
+  function draw(S) {
+    let h = '<svg class="at-svg" viewBox="-390 -335 780 670" role="group" aria-label="Riven Atlas tree">';
+    h += '<circle class="at-ring-bg" r="210"/>';
+    for (const n of LIST) {
+      const p = n.parent ? NODES[n.parent] : null, px = p ? p.x : n.x * 0.32, py = p ? p.y : n.y * 0.32; // the stem starts at the centre circle
+      h += '<line class="at-link' + (S.taken.has(n.id) ? ' on' : '') + '" x1="' + px.toFixed(1) + '" y1="' + py.toFixed(1) + '" x2="' + n.x.toFixed(1) + '" y2="' + n.y.toFixed(1) + '"/>';
+    }
+    for (const n of LIST) h += nodeSvg(n, S);
+    CLUSTERS.forEach(([cid, cname], ci) => {
+      const k = NODES[cid + '_k'], d = Math.hypot(k.x, k.y), lx = k.x / d * (d + 30), ly = k.y / d * (d + 30) + (k.y < -100 ? -8 : k.y > 100 ? 14 : 0), anc = Math.abs(lx) < 40 ? 'middle' : lx > 0 ? 'start' : 'end';
+      const got = LIST.filter(n => n.cid === cid && S.taken.has(n.id)).length;
+      h += '<text class="at-label' + (got ? ' on' : '') + '" x="' + lx.toFixed(1) + '" y="' + ly.toFixed(1) + '" text-anchor="' + anc + '">' + esc(cname.replace(/^The /, '').toUpperCase()) + '<tspan class="at-count" x="' + lx.toFixed(1) + '" dy="14">' + got + ' / 11</tspan></text>';
+    });
+    const left = total(S) - spent(S);
+    h += '<circle class="at-core" r="30"/><text class="at-core-n" y="2" text-anchor="middle">' + left + '</text><text class="at-core-of" y="17" text-anchor="middle">/' + total(S) + '</text>';
+    return h + '</svg>';
+  }
+  function side(S) {
+    const tot = total(S), sp = spent(S), nx = nextRl(S.rl), list = totals([...S.taken]);
+    const num = (id, label, v, max, note) => '<label class="field"><span>' + label + '</span><input type="number" id="' + id + '" min="0" max="' + max + '" value="' + esc(v) + '"></label>' + (note ? '<p class="hint at-note">' + note + '</p>' : '');
+    const ch = ctx.current && ctx.current();
+    let h = '<div class="card at-card"><h2>Points <small>' + (tot - sp) + ' of ' + tot + ' free · ' + S.taken.size + ' of 110 nodes</small></h2>' +
+      (sp > tot ? '<p class="warn">' + (sp - tot) + ' point' + (sp - tot === 1 ? '' : 's') + ' more than you have.</p>' : '') +
+      '<div class="at-fields">' +
+      num('atRl', 'Best Rupture Level cleared', S.rl, 9999, rlPoints(S.rl) + ' point' + (rlPoints(S.rl) === 1 ? '' : 's') + (nx ? ' · next at Rupture Level ' + nx : ' · all 25')) +
+      num('atLords', 'Riven Lord tiers broken', S.lords, 99, (2 * S.lords) + ' points (2 a tier: all five Lords at 80, 130, 180 ...)') +
+      num('atRt', 'Riven Tier', S.rt, 9999, tierPoints(S.rt) + ' points (every 5 to 100, then every 10)') +
+      '</div>' +
+      (ch && ch.deepBest ? '<p class="hint">Filled in from ' + esc(ch.name || 'this character') + '\'s save' + (S.own.rl != null || S.own.lords != null || S.own.rt != null ? ' (changed here) <button type="button" class="btn ghost at-small" id="atFromSave">use the save</button>' : '') + '.</p>' : '') +
+      '<div class="at-btns"><button type="button" class="btn ghost" id="atReset"' + (S.taken.size ? '' : ' disabled') + '>Reset all</button></div>' +
+      '<p class="hint">Click a node to take it (the node before it first). Click a taken end node to refund it. Kept in this browser' + (ch ? ', for this character' : '') + '.</p></div>';
+    h += '<div class="card at-card"><h2>Your Atlas now</h2>' + (list.length ? '<ul class="faq-list at-sum">' + list.map(l => '<li>' + esc(l.text) + '</li>').join('') + '</ul>' : '<p class="hint">Nothing taken yet.</p>') +
+      '<p class="hint">Lines with the same wording added up. Works on ' + esc(WORKS_ON) + ', unless the line names its own maps.</p></div>';
+    return h;
+  }
+  function tipHtml(n, S) {
+    const on = S.taken.has(n.id), canTake = !n.parent || S.taken.has(n.parent), end = !kids(n.id).some(k => S.taken.has(k.id));
+    const state = on ? (end ? 'taken · click to refund ' + n.cost + ' point' + (n.cost > 1 ? 's' : '') : 'taken · refund the nodes past it first') : canTake ? n.cost + ' point' + (n.cost > 1 ? 's' : '') + ' · click to take' : n.cost + ' point' + (n.cost > 1 ? 's' : '') + ' · take the node before it first';
+    return '<b>' + esc(n.name) + '</b><span class="pl-tip-sub">' + esc(n.cname) + ' · ' + KIND[n.kind] + '</span><span class="pl-tip-desc">' + n.text.split(' · ').map(esc).join('<br>') + '</span>' +
+      (ownMaps(n) ? '' : '<span class="pl-tip-desc at-tip-where">Works on ' + esc(WORKS_ON) + '</span>') + '<span class="pl-tip-desc at-tip-state">' + esc(state) + '</span>';
+  }
+  function showTip(el, S) {
+    const n = NODES[el.dataset.n]; if (!n) return hideTip();
+    if (!tip) { tip = document.createElement('div'); tip.className = 'pl-tip pl-tip-plain'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
+    tip.innerHTML = tipHtml(n, S); tip.hidden = false; tip.style.left = '0px'; tip.style.top = '0px';
+    const r = el.getBoundingClientRect(), w = tip.offsetWidth, hg = tip.offsetHeight;
+    let y = r.bottom + 8; if (y + hg > innerHeight - 8) y = Math.max(8, r.top - hg - 8);
+    tip.style.left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, innerWidth - w - 8)) + 'px'; tip.style.top = y + 'px';
+  }
+  function hideTip() { if (tip) tip.hidden = true; hover = null; }
+  function toggle(id) {
+    const S = state(), n = NODES[id]; if (!n) return;
+    if (S.taken.has(id)) { if (kids(id).some(k => S.taken.has(k.id))) return; S.taken.delete(id); }
+    else { if (n.parent && !S.taken.has(n.parent)) return; S.taken.add(id); }
+    store({ taken: [...S.taken] }); render(id);
+  }
+  function render(keepHover) {
+    const pane = $('#atlasPane'); if (!pane) return;
+    const S = state();
+    pane.innerHTML = '<div class="cmp-intro"><div class="eyebrow">BUILD PLANNER</div><h2>Riven Atlas</h2><p>Plan your Atlas points: 10 clusters of 11 nodes around the centre. Drops, experience and monsters only; nothing here changes your damage. How the points work is in the FAQ (Riven Atlas).</p></div>' +
+      '<div class="at-wrap"><div class="card at-tree">' + draw(S) + '</div><div class="at-side">' + side(S) + '</div></div>' +
+      '<p class="hint">Node texts copied from the game\'s tooltips (build 85, 20 Nov 2026). Numbers may change with any patch.</p>';
+    if (!pane.dataset.wired) {
+      pane.dataset.wired = '1';
+      pane.addEventListener('click', e => {
+        const g = e.target.closest('[data-n]'); if (g) { toggle(g.dataset.n); return; }
+        if (e.target.closest('#atReset')) { if (confirm('Refund every Atlas node?')) { store({ taken: [] }); render(); } return; }
+        if (e.target.closest('#atFromSave')) { const all = load(), k = chKey(); if (all[k]) { delete all[k].rl; delete all[k].lords; delete all[k].rt; save(all); } render(); }
+      });
+      pane.addEventListener('keydown', e => { const g = e.target.closest && e.target.closest('[data-n]'); if (g && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(g.dataset.n); } });
+      pane.addEventListener('change', e => {
+        const f = { atRl: 'rl', atLords: 'lords', atRt: 'rt' }[e.target.id]; if (!f) return;
+        store({ [f]: Math.max(0, Math.floor(+e.target.value || 0)) }); render();
+      });
+      const over = e => { const g = e.target.closest && e.target.closest('[data-n]'); if (!g) return hideTip(); hover = g.dataset.n; showTip(g, state()); };
+      pane.addEventListener('mouseover', over); pane.addEventListener('focusin', over);
+      pane.addEventListener('mouseleave', hideTip); pane.addEventListener('focusout', hideTip);
+    }
+    if (keepHover && hover === keepHover) { const g = pane.querySelector('[data-n="' + keepHover + '"]'); if (g) showTip(g, S); else hideTip(); }
+    else hideTip();
+  }
+
+
+  function faqHtml(h, H) { // h = the FAQ's own helpers { intro, card, list, table, hint }
+    let out = h.intro('Riven Atlas', 'The Atlas tree: points you earn past Rupture Level 80 and spend on drops, experience and harder monsters. Plan yours on the Build Planner\'s Riven Atlas tab.');
+    out += h.card('Earning points', h.list([
+      '<b>Rupture Level:</b> 1 point at Rupture Level 80 and 1 more every 5 levels up to 200 (25 at most). Your best cleared level counts.',
+      '<b>Riven Lords:</b> 2 points for every Lord tier you break (all five Lords at Rupture Level 80, again at 130, 180 ...).',
+      '<b>Riven Tiers:</b> 1 point every 5 tiers up to 100, then 1 every 10.',
+      'Points never go away. Example: best cleared Rupture Level 165 gives 18, two Lord tiers broken give 4: <b>22 points</b>.',
+    ]) + h.hint('From the game\'s own points tooltip and log, 20 Nov 2026 (build 85).'));
+    out += h.card('Taking and refunding', h.list([
+      'Every cluster has the same shape: a stem of 3 from the centre (the third is a notable), then three branches. Two end in a notable after 2 nodes; the middle one has 1 node and leads to the cluster\'s keystone.',
+      'A node costs <b>1</b> point, a notable <b>2</b>, a keystone <b>3</b>. A whole cluster is 11 nodes and 18 points.',
+      'Take a node only after the one before it. Refund any end node for free, or reset everything with Reset all.',
+      'Nodes work on every endgame map (Riven maps, the Core, the Catacombs, the Gnome Realms, the Pinnacle) unless they name their own maps.',
+      'Keystones come with a price: more danger (monster damage or life, sigil dangers, Guardian mods) or fewer items.',
+      'The game log mentions notables opening at Riven Tier 25 and keystones at 100, but keystones could be taken at Riven Tier 0 in our test, so that gate is not shown here.',
+    ]));
+    out += h.card('The ten clusters', h.table(['Cluster', 'For', 'Keystone (3 points)'], CLUSTERS.map(([cid, cname, cfor]) => { const k = NODES[cid + '_k']; return [esc(cname), esc(cfor), '<b>' + esc(k.name) + '</b>: ' + esc(k.text)]; })));
+    out += h.card('Every node', CLUSTERS.map(([cid, cname]) => '<details class="at-faq-c"><summary>' + esc(cname) + '</summary>' +
+      h.table(['Node', 'Kind', 'Effect'], LIST.filter(n => n.cid === cid).map(n => [esc(n.name), KIND[n.kind] + ' · ' + n.cost, esc(n.text)])) + '</details>').join('') +
+      h.hint('Copied from the in-game tooltips, build 85, 20 Nov 2026. The public game data does not have the Atlas tree yet.'));
+    return out;
+  }
+
+  return { render, faqHtml, NODES, CLUSTERS };
+};
+
+;
+
+
+
+
+
+
+
+
 window.BOFaq = function (ctx) {
   'use strict';
   const { $, esc } = ctx;
   const GROUPS = [
     ['Game mechanics', [['ailments', 'Ailments'], ['multipliers', 'Damage Multipliers'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
-      ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep'], ['tundra', 'Tundra Desert'], ['items', 'Item Quality, Riven & Mythic'], ['attrs', 'Attributes'], ['forge', 'Forge & Crafting'], ['cube', 'Cube, Vows & Runes'], ['drops', 'Drop Chances'], ['leagues', 'Custom Leagues']]],
+      ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep'], ['atlas', 'Riven Atlas'], ['tundra', 'Tundra Desert'], ['items', 'Item Quality, Riven & Mythic'], ['attrs', 'Attributes'], ['forge', 'Forge & Crafting'], ['cube', 'Cube, Vows & Runes'], ['drops', 'Drop Chances'], ['leagues', 'Custom Leagues']]],
     ['About this site', [['sim', 'Sim vs the Game Panel'], ['data', 'Game Data & Patches'], ['privacy', 'Privacy']]],
   ];
   const ALL = GROUPS.flatMap(g => g[1]);
@@ -9711,7 +9987,9 @@ window.BOFaq = function (ctx) {
     return h;
   }
 
-  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, tundra, items, attrs, forge, cube, drops, leagues, sim, data, privacy };
+
+  const atlas = () => ctx.atlas ? ctx.atlas.faqHtml({ intro, card, list, table, hint }) : intro('Riven Atlas', 'Not loaded.');
+  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, atlas, tundra, items, attrs, forge, cube, drops, leagues, sim, data, privacy };
   function show() {
     const nav = $('#faqNav'), GD = ctx.gd() || {};
     nav.innerHTML = GROUPS.map(g => '<div class="faq-group"><span class="faq-group-label">' + g[0] + '</span><div class="sc-chips">' +
@@ -11810,6 +12088,11 @@ window.BOCharacter = function (ctx) {
       potItems: savePotions(R),
       rupture: Math.max(+((R.RiftMap || {}).BestML) || 0, +((R.RiftMap || {}).RivenOpen) || 0), // Rupture Level as creator.js ruptureNow()
       mapLevel: +((R.RiftMap || {}).BestML) || 0, // best map level: a potion's own flat Evasion scales with it (game tooltip, 16 Nov 2026: 1150 x 0.84 = 966 at BestML 84)
+
+
+
+      deepBest: +((R.RiftMap || {}).DeepBest) || 0,
+      lordDone: +((R.RiftMap || {}).RivenTierDone) || 0,
     };
   }
   const POT_SLOTS = ['LifeFlask', 'ManaFlask', 'UtilityPotion1', 'UtilityPotion2'];
@@ -17292,6 +17575,7 @@ window.BOStartApp = function () {
   let lootFilter = null; // the Loot Filter tab (lootfilter.js)
   let scaling = null; // the Skills tab (scaling.js)
   let faq = null; // the FAQ / Game Mechanics tab (faq.js)
+  let atlas = null; // the Riven Atlas tab (atlas.js), a Build Planner view
   let character = null; // the Character tab (character.js)
   let itemSearch = null; // the Item Search tab (itemsearch.js)
   let patches = null; // the Recent Patch tab (patches.js): what each game build changed, and each skill's or item's history
@@ -21558,10 +21842,10 @@ window.BOStartApp = function () {
 
 
 
-  const ROUTES = { character: 'build/character', tree: 'build/tree', 'build:skills': 'build/skills', damage: 'build/damage',
+  const ROUTES = { character: 'build/character', tree: 'build/tree', atlas: 'build/atlas', 'build:skills': 'build/skills', damage: 'build/damage',
     compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', patch: 'patch', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', lootfilter: 'lootfilter', faq: 'faq',
     skillscaling: 'skills', minions: 'skills/minions', creator: 'creator', plan: 'plan', code: 'code', builds: 'savedbuilds' };
-  const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', 'build:skills': 'Skills', damage: 'Damage Analysis',
+  const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', atlas: 'Riven Atlas', 'build:skills': 'Skills', damage: 'Damage Analysis',
     compare: 'Item Simulator', items: 'Database', grail: 'Grail', ladder: 'Ladder', patch: 'Recent Patch', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery", lootfilter: 'Loot Filter',
     faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code', builds: 'Saved Builds' };
 
@@ -21633,7 +21917,7 @@ window.BOStartApp = function () {
   $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && document.body.classList.contains('build-page')) setTimeout(() => syncUrl('build'), 0); });
 
 
-  const lastBuildView = () => { const v = store.get('buildView', 'character'); return ['character', 'tree', 'damage', 'build'].includes(v) ? v : 'character'; };
+  const lastBuildView = () => { const v = store.get('buildView', 'character'); return ['character', 'tree', 'atlas', 'damage', 'build'].includes(v) ? v : 'character'; };
   function showTab(tab) {
     T.visible = tab === 'tree';
     document.body.classList.remove('landing-view');
@@ -21644,7 +21928,8 @@ window.BOStartApp = function () {
     document.body.classList.toggle('plan-page', tab === 'plan'); // the plan setup page: no Damage-tab controls beside it
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'builds' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'lootfilter' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'builds' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'lootfilter' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character' || tab === 'atlas');
+    document.body.classList.toggle('atlas-page', tab === 'atlas');
     document.body.classList.toggle('character-page', tab === 'character');
     document.body.classList.toggle('ladder-page', tab === 'ladder');
     document.body.classList.toggle('lootfilter-page', tab === 'lootfilter'); // nor on the Loot Filter tab // no character strip on the Ladder tab
@@ -21657,9 +21942,9 @@ window.BOStartApp = function () {
     }
     syncSettingsToViewport();
 
-    document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'damage'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
-    if (tab === 'tree' || tab === 'damage' || tab === 'character') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#savedBuildsPane').hidden = tab !== 'builds'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#lootFilterPane').hidden = tab !== 'lootfilter'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character';
+    document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'atlas', 'damage'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    if (tab === 'tree' || tab === 'damage' || tab === 'character' || tab === 'atlas') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#savedBuildsPane').hidden = tab !== 'builds'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#lootFilterPane').hidden = tab !== 'lootfilter'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character'; $('#atlasPane').hidden = tab !== 'atlas';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     renderBuildStats();
@@ -21677,9 +21962,10 @@ window.BOStartApp = function () {
     if (tab === 'faq') faq.render();
     if (tab === 'skillscaling') renderSkillsTab();
     if (tab === 'character') character.render();
+    if (tab === 'atlas') atlas.render();
     if (tab === 'damage' && (breweryDirty || mainStale) && st.ch) { breweryDirty = false; render(); }
     store.set('tab', tab);
-    if (['character', 'tree', 'damage', 'build'].includes(tab)) store.set('buildView', tab);
+    if (['character', 'tree', 'atlas', 'damage', 'build'].includes(tab)) store.set('buildView', tab);
     syncUrl(tab);
     if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } syncTreeTab(); renderTreeTabs(); if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
   }
@@ -21692,7 +21978,7 @@ window.BOStartApp = function () {
   }));
 
 
-  $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && (document.body.classList.contains('tree-page') || document.body.classList.contains('dashboard-view') || document.body.classList.contains('character-page'))) showTab('build'); });
+  $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && (document.body.classList.contains('tree-page') || document.body.classList.contains('dashboard-view') || document.body.classList.contains('character-page') || document.body.classList.contains('atlas-page'))) showTab('build'); });
 
 
   const view = $('#treeView'), tip = $('#treeTip');
@@ -22056,7 +22342,8 @@ window.BOStartApp = function () {
     },
     openBuild: async ch => { if (!await leaveOk(ch.id)) return; addChars([ch], 'code', ch.id); showTab('character'); saveTip('Loaded a ladder build as a plan. Damage Analysis sims it; your own characters are unchanged.'); },
   });
-  faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '' });
+  atlas = window.BOAtlas({ $, esc, current: () => st.ch });
+  faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, atlas, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '' });
   character = window.BOCharacter({
     beltCard: () => brewery ? brewery.beltCard() : '',
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, num, pct, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
@@ -22194,7 +22481,7 @@ window.BOStartApp = function () {
   cloud.start(); // back from Discord sign-in (#login=), or a sync of the account's plans
 
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
-  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'damage'); if (['character', 'tree', 'atlas', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
   routingReady = true; // from here on, switching tabs changes the address
 
   const bdbHash = /^#b=/.test(location.hash) && brokedCode(location.hash);

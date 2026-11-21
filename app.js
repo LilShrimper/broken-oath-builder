@@ -12548,7 +12548,11 @@ window.BOCharacter = function (ctx) {
 
 
 
-  const CLIP_FLOOR = { ranger: { split_shot: 0.35 }, samurai: { viper_fang: 0.163 }, necromancer: { orbiting_hammers: 0.3733 } };
+
+
+
+
+  const CLIP_FLOOR = { ranger: { split_shot: 0.35, hoarfrost_volley: 0.35 }, samurai: { viper_fang: 0.163 }, necromancer: { orbiting_hammers: 0.3733 } };
 
 
 
@@ -13612,6 +13616,9 @@ window.BOCharacter = function (ctx) {
 
     const SHAPE_TAG = { orbit: 'orbit', skyfall: 'skyfall', rain_support: 'rain', trap_support: 'trap', totem_support: 'totem', arrow_totem: 'totem' };
     const shapeId = res.supports.filter(s => s.ok && !(o.off && o.off.has(s.key))).map(s => lc(s.id)).find(id => SHAPE_TAG[id]) || null;
+
+
+
     if (shapeId) ctx.tags.add(SHAPE_TAG[shapeId]);
 
 
@@ -14171,6 +14178,12 @@ window.BOCharacter = function (ctx) {
       extraRules.push({ m, to: types[types.length - 1], from: types.length >= 2 ? types[0] : null });
       use(m, 'extra ' + types[types.length - 1]);
     }
+
+
+
+
+
+    const gotExtra = new Map();
     const addExtras = (rules, sources) => {
       for (const { m, to, from } of rules) {
 
@@ -14178,7 +14191,12 @@ window.BOCharacter = function (ctx) {
 
 
 
-        for (const p of sources) if (!from || p.type === from || (p.scales.has(from) && from !== to && !p.own)) extras.push({ type: to, scales: new Set([to]), min: p.min * m.v / 100, max: p.max * m.v / 100, from: p.type });
+        for (const p of sources) if (!from || p.type === from || (p.scales.has(from) && from !== to && !p.own)) {
+          const seen = gotExtra.get(p) || new Set(), k = (m.src || '') + '>' + to;
+          if (m.src && seen.has(k)) continue;
+          seen.add(k); gotExtra.set(p, seen);
+          extras.push({ type: to, scales: new Set([to]), min: p.min * m.v / 100, max: p.max * m.v / 100, from: p.type });
+        }
       }
     };
     addExtras(extraRules.filter(r => r.to !== 'Fire'), pieces);
@@ -14948,8 +14966,13 @@ window.BOCharacter = function (ctx) {
     let rollShares = null; // each projectile's share of a full hit, when they differ (Focused Volley, Orbit); for the bleed's strongest roll
     if (projectiles && shape === 'rain_support') {
 
-      projOnTarget = o.projOnTarget || (projectiles >= 4 ? 3 : 2); projWeight = projOnTarget;
-      res.notes.push('Rain: the target is struck ' + projOnTarget + ' times per use.');
+
+
+
+
+      const ballistaRain = !!(sk.Totem && sk.Totem.Kind === 'Ballista');
+      projOnTarget = o.projOnTarget || (ballistaRain ? 2 : projectiles >= 4 ? 4 : 3); projWeight = projOnTarget;
+      res.notes.push('Rain: the target is struck ' + projOnTarget + ' times per use' + (ballistaRain ? ' (a Ballista\'s bolts rain down twice)' : '') + '.');
     } else if (projectiles && shape === 'skyfall') {
       projOnTarget = 1; projWeight = 1;
       res.notes.push('Skyfall: each enemy is struck once per use; extra projectiles only add targets.');

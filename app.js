@@ -8802,12 +8802,13 @@ window.BOItemSearch = function (ctx) {
 
 
 
+
   const MARKS = [['sig', 'Signature', 'A Signature unique: build defining and very rare'], ['pin', 'Pinnacle', 'Drops only from its own Pinnacle boss'],
     ['riven', 'Riven line (T0)', 'Has a Riven line, the T0 tier above the best tier (rolls at Rupture Level 120 and up)'],
 
 
     ['true', 'Truesworn base', 'Base Grade 90 or higher: 119% to 125% of the base number'], ['top', 'Top tier mods', 'Mods that rolled their best tier (T1)']];
-  const TOP_FROM = 3;
+  const TOP_FROM = 2;
 
 
   const SIM_SLOTS = new Set(['MainHand', 'OffHand', 'Helm', 'Chest', 'Gloves', 'Boots', 'Belt', 'Amulet', 'Ring']);
@@ -9338,6 +9339,28 @@ window.BOItemSearch = function (ctx) {
     const plainLines = v => '<ul>' + v.lines.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul>';
     const tipInline = l => { const b = tipBody(l); return b ? '<div class="pl-tip mk-inline-tip">' + b + '</div>' : plainLines(view(l)); };
     const tipHover = l => { const v = view(l), b = tipBody(l); return '<b>' + esc(v.title) + '</b><span class="pl-tip-sub">' + esc([v.title !== v.base ? v.base : '', SLOT_NAME[l.slot] || l.slot, l.rarity, v.facts].filter(Boolean).join(' · ')) + '</span>' + (b || plainLines(v)) + '<span class="pl-tip-desc">' + esc(priceText(l._p)) + '</span>'; };
+    const findText = l => { const u = l.unique && l.unique !== 'None' && !isHidden(l.unique) ? nameOf('uniques', l.unique) : ''; return u || baseNameOf(l.base); };
+
+
+
+
+
+
+
+
+    const modWords = label => String(label).replace(/\s*\([^)]*\)/g, '').split('#').map(p => p.split(',')[0].replace(/^[\s%+\-–]*(?:(?:to|of)\s+)?/i, '').trim()).sort((a, b) => b.length - a.length)[0] || '';
+    function findMods(l) {
+      if (l._u || runeOfBase(l.base)) return '';
+      const seen = new Set(), out = [];
+      const as = ((l.item || {}).affixes || []).filter(a => a && a.affixId && !isHidden(a.affixId) && !/^unique:/.test(a.affixId)).slice().sort((a, b) => (a.tier || 0) - (b.tier || 0));
+      for (const a of as) {
+        const label = modLabel(a.affixId); if ((label.match(/#/g) || []).length !== 1) continue; // one number only: "Adds # to #" has no single minimum
+        const w = modWords(label); if (w.length < 4 || seen.has(w)) continue;
+        seen.add(w); out.push(w + (+a.value >= 1 ? ' ' + Math.floor(+a.value) + '+' : '')); // a roll under 1 (leech 0.4%) goes without a number
+        if (out.length >= 3) break;
+      }
+      return out.join(', ');
+    }
     function sellerBit(l) {
 
 
@@ -9348,6 +9371,12 @@ window.BOItemSearch = function (ctx) {
         '<button type="button" class="mk-name notranslate" data-seller="' + esc(l.seller || '') + '" aria-label="Show all listings of ' + esc(l.seller || '') + '">' + esc(l.seller || '') + '</button>' +
         '<small class="meta">' + (l.seller_online ? 'online' : 'offline') + (extra ? ' · ' + extra + ' more listed' : '') + '</small>' +
         (code ? '<button type="button" class="btn ghost mk-copy" data-code="' + esc(code) + '" aria-label="Copy seller code ' + esc(code) + '"><code class="notranslate">' + esc(code) + '</code><span>Copy</span></button>' : '<small class="meta mk-nocode">seller code hidden</small>') +
+
+
+
+
+        '<button type="button" class="btn ghost mk-copy mk-find" data-code="' + esc(findText(l)) + '" aria-label="Copy the name to search for in the game: ' + esc(findText(l)) + '"><span>Copy search</span></button>' +
+        (findMods(l) ? '<button type="button" class="btn ghost mk-copy mk-find mk-findmods" data-code="' + esc(findMods(l)) + '" aria-label="Copy this item\'s mods for the game\'s Mods box: ' + esc(findMods(l)) + '"><span>Copy mods</span></button>' : '') +
         '<button type="button" class="btn ghost mk-like" data-like="' + esc(l.id) + '">More like this</button>';
     }
     const times = l => esc(['listed ' + ago(l.listed_at), until(l.expires_at)].filter(x => x && x !== 'listed ').join(' · '));
@@ -9395,7 +9424,7 @@ window.BOItemSearch = function (ctx) {
 
     function howTo() {
       return '<details class="card mk-group mk-how" data-g="how"' + (S.open.how !== false ? ' open' : '') + '><summary><b>How to buy</b></summary>' +
-        '<p>Find the item here, then buy it in the game: open the <b>Settler Wagon</b>, go to <b>Market</b>, type the item\'s name into "Name or base" and press <b>Buy</b> on the listing.</p>' +
+        '<p>Find the item here, then buy it in the game: open the <b>Settler Wagon</b>, go to <b>Market</b>, paste the item\'s name into "Name or base" (<b>Copy search</b> on a listing copies it: a unique\'s name, or the base name for other items) and press <b>Buy</b> on the listing. For a rare or magic item, <b>Copy mods</b> copies its three best mods for the "Mods" box next to it (for example "Fire Resistance 31+, maximum Life 62+"). The price and the seller\'s name tell you which one it is.</p>' +
         '<p class="hint">To ask a seller something first, copy their seller code, open the <b>Social</b> window in the game, paste it into the box at the top and press <b>Add friend</b> (a hero name works there too). Listings here are a snapshot, so an item may already be sold.</p></details>';
     }
     function paint() {
@@ -9542,8 +9571,8 @@ window.BOItemSearch = function (ctx) {
         if (lk) { const url = linkUrl(); try { await navigator.clipboard.writeText(url); lk.textContent = 'Link copied'; setTimeout(() => { lk.textContent = 'Copy link to this search'; }, 1600); } catch (err) { prompt('Copy this link:', url); } return; }
         const c = t.closest('.mk-copy');
         if (c) {
-          const code = c.dataset.code, lab = c.querySelector('span');
-          try { await navigator.clipboard.writeText(code); if (lab) { lab.textContent = 'Copied'; setTimeout(() => { lab.textContent = 'Copy'; }, 1600); } } catch (err) { try { prompt('Copy this seller code:', code); } catch (e2) { /* no prompt here */ } }
+          const code = c.dataset.code, lab = c.querySelector('span'), was = c.classList.contains('mk-findmods') ? 'Copy mods' : c.classList.contains('mk-find') ? 'Copy search' : 'Copy';
+          try { await navigator.clipboard.writeText(code); if (lab) { lab.textContent = 'Copied'; setTimeout(() => { lab.textContent = was; }, 1600); } } catch (err) { try { prompt(c.classList.contains('mk-find') ? 'Copy this name:' : 'Copy this seller code:', code); } catch (e2) { /* no prompt here */ } }
         }
       });
     }

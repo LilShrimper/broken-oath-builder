@@ -11933,6 +11933,9 @@ window.BOCharacter = function (ctx) {
     'BannerEffect',
 
     'ManaOnKillPct', 'MoveSpeedOnKill',
+
+
+    'EsRechargeKeep', 'MarkJump', 'CorpseKeepMinion',
     'DexLife']); // Wind Dancer: "+{v} to maximum Life for every 10 Dexterity" (statText)
 
   const HANDLED = new Set(['MinionOneKind', 'RepeatOwnDamage', 'StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'UnravelOnHit', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
@@ -11953,7 +11956,9 @@ window.BOCharacter = function (ctx) {
 
     'DexAttackMore', 'ChannelRamp', 'OrbitMovingDamage', 'CooldownRecovery', 'VowEffect', 'HeraldEffect', 'TrogNote100', 'BleedStacks', 'BallistaVolley76', 'GolemAuraStack76',
 
-    'AfterimageDamage']);
+    'AfterimageDamage',
+
+    'HallowStill']);
 
 
 
@@ -12189,6 +12194,8 @@ window.BOCharacter = function (ctx) {
 
   const is084 = GD => apiBuildAtLeast(GD, 84, '2026-11-19T00');
   const is085 = GD => apiBuildAtLeast(GD, 85, '2026-11-19T19');
+
+  const is086 = GD => apiBuildAtLeast(GD, 86, '2026-11-21T00');
   const VOW_BUILT_IN = 0.15; // every Vow gem's lines x1.15 since patch 82 (gem texts, API game data build 85; see the Vow block)
   const takenRule = (GD, isBoss) => is084(GD) ? 'kinds' : is082(GD) ? 'add' : !!(isBoss && guardianStrongestTaken(GD));
 
@@ -13063,6 +13070,8 @@ window.BOCharacter = function (ctx) {
     const isAttack = has(tags, 'Attack');
     const isGem = sk.Kind === 'Gem' || ch.gems.includes(skillId);
     if (isGem) tags.add('gem');
+
+    if (sk && sk.Id) tags.add('skill_' + lc(sk.Id));
     const gear = new Set();
     for (const b of [mainBase, offBase]) if (b) for (const t of [...(b.Tags || []), b.Class]) gear.add(lc(t));
     if (mainBase && offBase && offBase.DamageMin) gear.add('dualwielding');
@@ -13356,15 +13365,17 @@ window.BOCharacter = function (ctx) {
 
 
     let gfHeld = false; // passed to the sheets worked out inside this one: the charges are the hero's
+    let furyHeldN = 0; // Fury charges held (typed on the page, or Gather Fury's), for the patch 86 feeder lines
     {
       const fb = GD.blessings.fury, isGF = y => lc(String(y).replace('@granted', '')) === 'gather_fury';
 
       const want = col.fury ? col.fury.want : 2, have = col.fury ? col.fury.have : 0;
+      furyHeldN = have;
       if (fb && want > have) {
         const here = o._gfHeld || res.supports.some(s => isGF(s.id) && s.ok && !s.hostOnly && !(o.off && o.off.has(s.key)));
         const other = here ? null : (ch.sockets || []).find(s => lc(s.skill) !== lc(skillId) && GD.skills[lc(s.skill)] && (ch.hotbar || []).some(h => lc(h) === lc(s.skill)) && (s.supports || []).some(isGF));
         if (here || other) {
-          gfHeld = true;
+          gfHeld = true; furyHeldN = want;
           const n = want - have;
           for (const m of fb.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: (m.Value || 0) * (m.PerStack ? n : 1), v2: m.Value2 || 0, local: false, src: 'Fury x' + n + ' (Gather Fury)', key: 'charge:fury' });
           if (!o._gfHeld) res.notes.push('Gather Fury' + (other ? ' (linked to ' + GD.skills[lc(other.skill)].Name + ')' : '') + ': counted as ' + want + ' Fury charges held (8% increased damage, 4% attack and cast speed each). Change the number under Vows, Heralds & charges; how many you really hold depends on how fast things die and is not checked in game.');
@@ -13489,6 +13500,49 @@ window.BOCharacter = function (ctx) {
 
 
 
+    if (is086(GD)) {
+      const flag = st => modsOf(mods, st).filter(m => m.stat === st);
+      const nodeText = id => ((GD.nodes || {})[id] || {}).Text || '';
+      const num = (re, id, d) => { const t = re.exec(nodeText(id)); return t ? +t[1] : d; };
+      const say = (m, why, v, stat, tags) => {
+        use(m, why);
+        mods.push({ stat: stat || 'Damage', mode: 'More', tags: tags || [], v, v2: 0, local: false, src: (m.src || '').replace(/\s*\(.*$/, '') + ' (' + why + ')', key: 'tree86:' + m.stat });
+        res.notes.push(why + ': ' + +v.toFixed(1) + '% more' + (stat === 'AttackSpeed' ? ' attack speed' : stat ? '' : ' damage') + ' (patch 86 node text; not checked in game).');
+      };
+
+
+      for (const m of flag('MomentumOnChannel')) {
+        if (!(sk.Channel && ctx.gear.has('twohanded'))) { use(m, 'Iron Momentum: needs a channelled skill with a two-handed weapon'); continue; }
+        if (!o.moving) { use(m, 'Iron Momentum: no Momentum while you stand (set a moving fight to count it)'); continue; }
+        const per = num(/(\d+(?:\.\d+)?)% more damage each/i, 'r113_persona_warr_momentum', 2), cap = num(/at most (\d+)\)/i, 'r113_persona_warr_momentum', 10);
+        say(m, 'Iron Momentum, ' + cap + ' Momentum while you move', per * cap);
+      }
+
+
+
+      for (const m of flag('ElementCadence')) {
+        if (!isSpell) { use(m, 'Elemental Cadence: spells only'); continue; }
+        const els = new Set();
+        for (const id of ch.hotbar || []) { const k = GD.skills[lc(id)]; if (k && (k.Tags || []).includes('Spell')) for (const e of ELEMENTS) if ((k.Tags || []).includes(e)) els.add(e); }
+        const per = num(/(\d+(?:\.\d+)?)% more spell damage for each element/i, 'r113_persona_mage_cadence', 4), cap = num(/up to (\d+)\)/i, 'r113_persona_mage_cadence', 2);
+        const n = Math.min(cap, els.size >= 2 ? els.size : 0);
+        if (!n) { use(m, 'Elemental Cadence: your bar has spells of only one element'); continue; }
+        say(m, 'Elemental Cadence, ' + n + ' elements counting (' + [...els].join(', ') + ' spells on your bar, cast in turn)', per * n, 'Damage', ['Spell']);
+      }
+
+
+      for (const m of flag('EdgeOnMove')) {
+        const moves = +o.windburstMoves > 0 ? +o.windburstMoves : 0;
+        if (!isAttack) { use(m, 'Reed Wind: attack speed only'); continue; }
+        if (!moves) { use(m, 'Reed Wind: set "Movement skills a second" in Configure Enemy to count it'); continue; }
+        const per = num(/(\d+(?:\.\d+)?)% more attack speed each/i, 'r113_persona_samu_reedwind', 2), cap = num(/at most (\d+)/i, 'r113_persona_samu_reedwind', 10), dur = num(/for (\d+(?:\.\d+)?) seconds/i, 'r113_persona_samu_reedwind', 6);
+        const edges = Math.min(cap, moves * dur);
+        say(m, 'Reed Wind, ' + +edges.toFixed(1) + ' Edges', per * edges, 'AttackSpeed', ['Attack']);
+      }
+    }
+
+
+
 
 
 
@@ -13508,6 +13562,7 @@ window.BOCharacter = function (ctx) {
     }
 
 
+    let dexEngine = null; // patch 86: Thousand Feathers' line joins the damage engine (see below)
     const cls = GD.classes[lc(ch.classId)] || {};
     const attr = attrsFrom(GD, ch, mods, use);
 
@@ -13524,7 +13579,11 @@ window.BOCharacter = function (ctx) {
 
       const dexFits = isAttack && (is085(GD) ? ctx.tags.has('projectile') || sk.Delivery === 'Rain' || ctx.tags.has('rain') : ctx.tags.has('bow'));
       const dexMore = dexFits ? sumOf('DexAttackMore') : 0;
-      if (dexMore) mods.push({ stat: 'Damage', mode: 'More', tags: ['Attack'], v: dexMore * (attr.Dex || 0) / 10, v2: 0, local: false, src: dexMore + '% more Attack damage per 10 Dexterity (' + (attr.Dex || 0) + ' Dex)', key: 'dexmore' });
+
+
+
+      if (dexMore && is086(GD)) dexEngine = { v: dexMore * (attr.Dex || 0) / 10, types: [], src: dexMore + '% more Attack damage per 10 Dexterity (' + (attr.Dex || 0) + ' Dex)' };
+      else if (dexMore) mods.push({ stat: 'Damage', mode: 'More', tags: ['Attack'], v: dexMore * (attr.Dex || 0) / 10, v2: 0, local: false, src: dexMore + '% more Attack damage per 10 Dexterity (' + (attr.Dex || 0) + ' Dex)', key: 'dexmore' });
       const ramp = sk.Channel ? sumOf('ChannelRamp') : 0;
       if (ramp) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: ramp, v2: 0, local: false, src: 'Channel ramp (full after the first second)', key: 'channelramp' });
       const orbMove = o.moving && ctx.tags.has('orbit') ? sumOf('OrbitMovingDamage') : 0;
@@ -13542,7 +13601,9 @@ window.BOCharacter = function (ctx) {
 
 
     const engine0565 = is0565(GD);
+    let engineU = 0; // the untyped engine sum, for the patch 86 feeder lines worked out after the ailments
     const engine = [];
+    if (dexEngine) { if (engine0565) engine.push(dexEngine); else mods.push({ stat: 'Damage', mode: 'More', tags: ['Attack'], v: dexEngine.v, v2: 0, local: false, src: dexEngine.src, key: 'dexmore' }); }
     for (const m of modsOf(mods, 'StrMeleeMore').filter(m => m.stat === 'StrMeleeMore' && m.mode === 'Flat')) {
       if (!isAttack || (!mountainAll && !ctx.tags.has('melee'))) continue;
       use(m, 'more per 10 Strength');
@@ -13982,6 +14043,7 @@ window.BOCharacter = function (ctx) {
       }
       if (engine.length) {
         const U = sum(engine.filter(e => !e.types.length).map(e => e.v));
+        engineU = U;
         const byType = {};
         for (const e of engine) for (const t of e.types) byType[t] = (byType[t] || 0) + e.v;
         if (U) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: U, v2: 0, local: false, src: 'Damage engine (added together, patch 0.56.5)', key: 'engine' });
@@ -14041,7 +14103,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const hallowSrc = o.enemyHallowedGround ? hallowedSources(GD, ch, mods, !!o.hallowedCG) : [];
+    const hallowSrc = o.enemyHallowedGround ? hallowedSources(GD, ch, mods, !!o.hallowedCG, !o.moving) : [];
     const hallowCrit = hallowSrc.reduce((b, s) => Math.max(b, s.crit || 0), 0);
     const critBase = clamp((baseCrit + critFlat) * (1 + critInc / 100) * critMore, 0, 95);
     let critChance = hallowCrit ? Math.min(95, critBase + hallowCrit) : critBase;
@@ -14572,7 +14634,9 @@ window.BOCharacter = function (ctx) {
           : coc.skill ? 'Cast on Crit: ' + coc.name + ' has no hit of its own to crit with, so no triggered casts are counted.'
           : 'Cast on Crit in this spell\'s own sockets is cast by your attacks\' crits, and there is no attack on your bar. If it is linked to another skill in game (build codes do not carry links), pick that skill in the Cast on Crit box.');
       } else {
-        const hr = calcSkill(GD, ch, coc.skill, { _col: col, _gfHeld: gfHeld, off: o.off, coc: false, conduit: false, barShock: false, _noBrittle: true, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyRes: o.enemyRes, curses: o.curses, enemyHallowedGround: o.enemyHallowedGround, flashfire: o.flashfire });
+
+
+        const hr = calcSkill(GD, ch, coc.skill, { _col: col, _gfHeld: gfHeld, _barProbe: !!o._barProbe, off: o.off, coc: false, conduit: false, barShock: false, _noBrittle: true, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyRes: o.enemyRes, curses: o.curses, enemyHallowedGround: o.enemyHallowedGround, flashfire: o.flashfire });
         if (hr.speed && hr.hits && hr.crit) {
           const cs = GD.supports.cast_on_crit || {};
           const cdLine = modsOf(mods, 'TrigCooldown').find(m => m.stat === 'TrigCooldown') || (cs.Mods || []).map(m => ({ v: m.Stat === 'TrigCooldown' ? m.Value : 0 })).find(m => m.v > 0);
@@ -14990,7 +15054,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-    let marks = 0, markPct = 0;
+    let marks = 0, markPct = 0, markHeld = 0;
     for (const m of pickMods(mods, 'MarkOnHit', 'Flat')) if (applies(ctx, m)) { marks += m.v; use(m); }
     if (marks > 0) {
       const t = /([\d.]+)% more damage for each Mark, up to (\d+)/i.exec((GD.supports.hunters_mark_support || {}).Description || '');
@@ -15001,6 +15065,7 @@ window.BOCharacter = function (ctx) {
 
 
       const held = hitsPerSec * marks >= 1 / 3 ? cap : 0;
+      markHeld = held;
       markPct = held * per * (1 + eff / 100);
     }
     res.marks = markPct ? { pct: markPct } : null;
@@ -15176,6 +15241,14 @@ window.BOCharacter = function (ctx) {
     const sumMod = (stat, mode) => { let s = mode === 'More' ? 1 : 0; for (const m of pickMods(mods, stat, mode)) if (applies(ctx, m)) { s = mode === 'More' ? s * (1 + m.v / 100) : s + m.v; use(m); } return s; };
     const ail = { dotMulti, durationInc: ailDur };
     res.ailments = ail;
+
+
+
+    const ailSpill = (raw, what) => {
+      const x = is086(GD) && bSwitch(GD, 'r113.META.bAilSpill113', true) ? Math.max(0, raw - 100) : 0;
+      if (x > 0) res.notes.push(what + ' chance ' + Math.round(raw) + '%: the ' + Math.round(x) + '% past 100 counts as ' + Math.round(x) + '% increased ' + what.toLowerCase() + ' damage (patch 86 notes).');
+      return x;
+    };
 
 
 
@@ -15386,7 +15459,8 @@ window.BOCharacter = function (ctx) {
 
       const gemPChance = (GD.gemPoison || {})[lc(skillId)];
       const basePChance = gemPChance != null ? gemPChance : A.PoisonChance;
-      let pChance = clamp((hasPoison ? basePChance : 0) + poisonChanceStat, 0, 100);
+      const pChanceRaw = (hasPoison ? basePChance : 0) + poisonChanceStat;
+      let pChance = clamp(pChanceRaw, 0, 100);
 
 
 
@@ -15395,7 +15469,7 @@ window.BOCharacter = function (ctx) {
       const eligible = ((hit.Poison ? hit.Poison.avg : 0) + (poisonChanceStat > 0 && hit.Physical ? hit.Physical.avg / ruthK : 0)) * critFactor / hitFactor; // ruthK: Ruthless does not raise the poison (its text, build 85)
       if (!hasPoison && !(poisonChanceStat > 0 && hit.Physical)) pChance = 0;
       if (pChance > 0 && eligible > 0) {
-        const pInc = sumMod('PoisonDamage', 'Inc'), pMore = sumMod('PoisonDamage', 'More');
+        const pInc = sumMod('PoisonDamage', 'Inc') + ailSpill(pChanceRaw, 'Poison'), pMore = sumMod('PoisonDamage', 'More');
 
 
 
@@ -15436,9 +15510,10 @@ window.BOCharacter = function (ctx) {
         ail.poison = { chance: pChance, eligible, duration: dur, tipDuration: tipDur, virulence: !!virulence, perStack, stacks, stacksRaw, cap, panelStacks, inc: pInc, more: pMore, dps: poisonDps, burstDps, burstPct, perHitTotal: perStack * dur };
         if (virulence) res.notes.push('Virulence (Dragonling): ' + (dur < tipDur ? 'poisons last ' + dur.toFixed(2) + ' s in combat instead of the tooltip\'s ' + tipDur.toFixed(2) + ' s; ' : 'poisons keep their full time (the game runs the rule without its price: log 16 Nov 2026 "Ascend76: on"); ') + 'Rares and Guardians hold up to ' + virulence.Cap + ' stacks.' + (dur < tipDur ? ' The skill panel DPS uses the tooltip duration, like the game.' : ''));
       }
-      const igChance = clamp((hit.Fire ? A.IgniteChance : 0) + sumMod('IgniteChance', 'Flat'), 0, 100);
+      const igChanceRaw = (hit.Fire ? A.IgniteChance : 0) + sumMod('IgniteChance', 'Flat');
+      const igChance = clamp(igChanceRaw, 0, 100);
       if (hit.Fire && igChance > 0) {
-        const iInc = sumMod('IgniteDamage', 'Inc'), iMore = sumMod('IgniteDamage', 'More');
+        const iInc = sumMod('IgniteDamage', 'Inc') + ailSpill(igChanceRaw, 'Ignite'), iMore = sumMod('IgniteDamage', 'More');
         const dur = snap(A.IgniteSeconds * (1 + ailDur / 100));
         const dps1 = hit.Fire.avg * critFactor * A.IgniteFrac / A.IgniteSeconds * Math.max(0, 1 + iInc / 100) * iMore * Math.max(0, 1 + dotMulti / 100);
         const mu = hitsPerSec * igChance / 100 * dur;
@@ -15500,9 +15575,10 @@ window.BOCharacter = function (ctx) {
 
 
 
-      const bleedChance = clamp(sumMod('BleedChance', 'Flat'), 0, 100);
+      const bleedChanceRaw = sumMod('BleedChance', 'Flat');
+      const bleedChance = clamp(bleedChanceRaw, 0, 100);
       if (bleedChance > 0 && hit.Physical) {
-        const bInc = sumMod('BleedDamage', 'Inc'), bMore = sumMod('BleedDamage', 'More');
+        const bInc = sumMod('BleedDamage', 'Inc') + ailSpill(bleedChanceRaw, 'Bleed'), bMore = sumMod('BleedDamage', 'More');
         let baseDur = 4;
         for (const s of res.supports) { const d = s.ok && GD.supports[lc(s.id)] && /Bleeding[^.]*?for (\d+(?:\.\d+)?) seconds/i.exec(GD.supports[lc(s.id)].Description || ''); if (d) { baseDur = +d[1]; break; } }
         const dur = snap(baseDur * (1 + ailDur / 100));
@@ -15819,6 +15895,59 @@ window.BOCharacter = function (ctx) {
       res.hitDps = hitDpsVs;
       res.overload = { uptime: up, critsPerSec, factor: ovF };
       res.notes.push('Elemental Overload: critical strikes grant ' + ovMore + '% more elemental damage for 8 s, counted up ' + Math.round(up * 100) + '% of the time (' + critsPerSec.toFixed(1) + ' crits a second); your critical strike multiplier is fixed at 100%.');
+    }
+
+
+
+
+
+
+
+
+
+
+
+    if (is085(GD)) {
+      const ign = ail.ignite ? ail.ignite.burning : 0, chillOn = ail.chill ? ail.chill.size * ail.chill.uptime : 0;
+      const dealt = Object.keys(hit).filter(d => hit[d] && hit[d].avg > 0);
+      const woeMatch = activeCurses.filter(r => r.kind === 'Woe').reduce((b, r) => Math.max(b, ...dealt.map(d => (r.resDown[d] || 0) + (r.elem[d] || 0)), 0), 0);
+      const onBar = id => (ch.hotbar || []).some(h => lc(h) === id);
+      const COUNT = {
+        Feed85_FuryCharges: [furyHeldN, 'Fury charges'], Feed85_MaimEffect: [maimPct, '% Maim'], Feed85_IgniteStacks: [ign, 'Ignites burning'],
+        Feed85_MarkStacks: [markHeld, "Hunter's Marks"], Feed85_ChillEffect: [chillOn, '% chill'], Feed85_PoisonChance: [ail.poison ? ail.poison.chance : 0, '% poison chance'],
+        Feed85_ExtraProjectiles: [Math.max(0, (res.hits.projectiles || 1) - 1), 'extra projectiles'], Feed85_CritChance: [critChance, '% crit chance'],
+        Feed85_WoeEffectMatch: [woeMatch, '% Woe effect of its element'],
+      };
+      const lazy = { Feed85_BlockChance: () => [defenceTotal(GD, ch, mods, attr, 'Block'), '% block, estimated'] };
+      let F = 0; const why = [];
+      for (const st of Object.keys(COUNT).concat(Object.keys(lazy))) for (const m of pickMods(mods, st, 'Flat')) {
+        if (splitTags(m.tags).conds.some(t => lc(t) === 'minion') || !applies(ctx, m)) continue;
+        const [n, what] = COUNT[st] || lazy[st]();
+        if (!(n > 0)) { use(m, 'engine feeder: none held'); continue; }
+        use(m, 'engine feeder'); F += m.v * n; why.push((m.src || st).replace(/^[^·]*·\s*/, '') + ' ' + m.v + '% x ' + +n.toFixed(1) + ' ' + what);
+      }
+
+
+      for (const m of pickMods(mods, 'Feed85_OrbitCount', 'Flat')) if (applies(ctx, m)) {
+        const t = /at most (\d+)%/i.exec(((GD.nodes || {}).r113_persona_pala_choir || {}).Text || ''), cap = t ? +t[1] : 12;
+        if (!onBar('orbiting_hammers')) { use(m, 'engine feeder: Orbiting Hammers not on your bar'); continue; }
+        use(m, 'engine feeder'); F += cap; why.push('Hammer Choir ' + cap + '% (Orbiting Hammers on your bar, counted at its cap)');
+      }
+      const ailF = { bleed: 0, poison: 0 };
+      const ailOk = m => condsOk(ctx, splitTags(m.tags).conds.filter(c => !/^(bleed|ignite)$/i.test(c))); // the ailment named is its target, not a skill tag
+      for (const m of pickMods(mods, 'Feed85Ail_FuryCharges', 'Flat')) if (ailOk(m)) { use(m, 'engine feeder, bleed'); ailF.bleed += m.v * furyHeldN; if (furyHeldN && bleedDps) why.push('Wrath of the Wound: bleeds ' + m.v + '% x ' + furyHeldN + ' Fury'); }
+      for (const m of pickMods(mods, 'Feed85Ail_MarkStacks', 'Flat')) if (ailOk(m)) { use(m, 'engine feeder, poison'); ailF.poison += m.v * markHeld; if (markHeld && poisonDps) why.push('Venom Mark: poisons ' + m.v + '% x ' + markHeld + ' Marks'); }
+      for (const m of pickMods(mods, 'Feed85Ail_RepeatIndex', 'Flat')) if (ailOk(m)) { const r = (res.hits.repeats || 0) / 2; use(m, 'engine feeder, bleed'); ailF.bleed += m.v * r; if (r && bleedDps) why.push('A Thousand Wounds: bleeds ' + m.v + '% x ' + r.toFixed(1) + ' repeats on average'); }
+      const kOf = x => (1 + (engineU + x) / 100) / (1 + engineU / 100);
+      if (F > 0 || ailF.bleed > 0 || ailF.poison > 0) {
+        const kh = kOf(F);
+        for (const d of Object.keys(byType)) byType[d] *= kh;
+        hitDpsVs *= kh; res.hitDps = hitDpsVs;
+        poisonDps *= kOf(F + ailF.poison); igniteDps *= kh; bleedDps *= kOf(F + ailF.bleed);
+        if (ail.poison) ail.poison.dps = poisonDps; if (ail.ignite) ail.ignite.dps = igniteDps; if (ail.bleed) ail.bleed.dps = bleedDps;
+        res.feeders = { F, ail: ailF, engineU, hitFactor: kh };
+        res.notes.push('Engine feeders (patch 85/86 tree lines): ' + why.join(', ') + ' = +' + F.toFixed(1) + '% added into your damage engine (' + engineU.toFixed(1) + '% before), x' + kh.toFixed(3) + ' on hits' + (ailF.bleed ? ', x' + kOf(F + ailF.bleed).toFixed(3) + ' on bleeds' : '') + (ailF.poison ? ', x' + kOf(F + ailF.poison).toFixed(3) + ' on poisons' : '') + ' (developer stacking table and formulas.md: they add, then the engine multiplies once). From the line texts; not checked in game.');
+      }
     }
     res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
 
@@ -16807,7 +16936,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-  function hallowedSources(GD, ch, mods, consecrated) {
+  function hallowedSources(GD, ch, mods, consecrated, still) {
     const out = [];
     const home = String((GD.rules || {})['r98.META.sHallowHome74'] || 'Paladin').toLowerCase();
     const off = lc(ch.classId || '') === home ? 1 : ruleNum(GD, 'r98.META.fHallowOff74', 0.5);
@@ -16821,6 +16950,14 @@ window.BOCharacter = function (ctx) {
     const flags = new Set(); for (const m of mods || []) if (m.stat === 'Dragonling') (m.tags || []).forEach(t => flags.add(t));
     for (const [k, r] of Object.entries(rules)) if (r && r.TakenPct > 0 && flags.has('Asc71_' + k)) {
       out.push({ name: k.replace(/([a-z])([A-Z])/g, '$1 $2'), taken: r.TakenPct, crit: r.Crit || 0, half: false });
+    }
+
+
+
+    if (still !== false && is086(GD) && (mods || []).some(m => m.stat === 'HallowStill')) {
+      const t = (((GD.nodes || {}).r113_persona_pala_stride || {}).Text || '');
+      const tk = /take (\d+(?:\.\d+)?)% more damage/i.exec(t), cr = /\+(\d+(?:\.\d+)?)% chance to critically/i.exec(t);
+      out.push({ name: 'Hallowed Stand', taken: tk ? +tk[1] : 10, crit: cr ? +cr[1] : 10, half: false });
     }
     return out;
   }
@@ -16866,8 +17003,17 @@ window.BOCharacter = function (ctx) {
       for (const st of ['MinionDamage', 'MinionLife']) for (const m of pickMods(mods || NO_MODS, st, 'Inc')) if (!String(m.key || '').startsWith('support:')) incs += m.v || 0;
       grow = gBase + (1 - gBase) * clamp(incs / 100, 0, 1);
     }
-    const v = a.Value * grow * (1 + gh / 100);
-    return { element: el, stat: a.Stat, v, grow, name: name + (gh ? ' (Golemheart +' + gh + '%)' : '') + (grow < 1 ? ' (blessing at ' + Math.round(grow * 100) + '% strength: under 100% increased minion damage and life)' : ''), text: a.Stat === 'MinionDamage' ? +v.toFixed(2) + '% more damage' : a.Stat === 'EnemyTaken' ? 'enemies take ' + +v.toFixed(2) + '% more damage' : +v.toFixed(2) + '% faster' };
+
+
+
+
+    let golems = 1;
+    if (gh && is086(GD) && bSwitch(GD, 'r80.TRUST.bAllGolems', true)) {
+      for (const m of modsOf(mods || NO_MODS, 'MinionCap')) if (m.stat === 'MinionCap' && (m.tags || []).some(t => lc(t) === 'fire_golem')) golems += m.v || 0;
+      golems = Math.max(1, Math.round(golems));
+    }
+    const v = a.Value * grow * (1 + gh / 100) * golems;
+    return { element: el, stat: a.Stat, v, grow, golems, name: name + (golems > 1 ? ' x' + golems + ' golems' : '') + (gh ? ' (Golemheart +' + gh + '%)' : '') + (grow < 1 ? ' (blessing at ' + Math.round(grow * 100) + '% strength: under 100% increased minion damage and life)' : ''), text: a.Stat === 'MinionDamage' ? +v.toFixed(2) + '% more damage' : a.Stat === 'EnemyTaken' ? 'enemies take ' + +v.toFixed(2) + '% more damage' : +v.toFixed(2) + '% faster' };
   }
 
   function earlyDamage(cls, level) {

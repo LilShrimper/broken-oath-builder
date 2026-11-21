@@ -3875,8 +3875,7 @@ window.BOPlanner = function (ctx) {
       const m = ctx.supMarks ? ctx.supMarks(skill) : null;
       if (s.supports.some(x => lc(x) === id)) { s.supports = s.supports.filter(x => lc(x) !== id); if (m) m.pin.delete(id); status = ''; return done({ skills: true }); }
       if (m) m.block.delete(id); // socketing a blocked support by hand allows it again
-      const SHAPES = ['orbit', 'rain_support', 'trap_support', 'totem_support'];
-      const swap = SHAPES.includes(id) ? s.supports.find(x => SHAPES.includes(lc(x))) : null;
+      const swap = s.supports.find(x => S.shapesClash(id, lc(x))) || null; // shapes that clash (Trap may sit next to a totem: S.shapesClash)
       const slots = S.socketsFor(GD, ch, skill, ch.gemLevels[skill] || 1);
       if (GD.skills[lc(skill)] && !S.supportChoices(GD, ch, skill, { conduit: s.conduit }).some(c => c.id === id)) { status = (sd.Name || id) + ' cannot go into ' + (GD.skills[lc(skill)].Name) + (S.noFitWhy(sd, GD.skills[lc(skill)]) ? ': ' + S.noFitWhy(sd, GD.skills[lc(skill)]) + '.' : '.'); return render(); }
       if (swap) { s.supports = s.supports.filter(x => x !== swap); status = (sd.Name || id) + ' replaces ' + (GD.supports[lc(swap)] || { Name: swap }).Name + ': only one shape support counts.'; }
@@ -10593,6 +10592,27 @@ window.BOFaq = function (ctx) {
       table(['Group', 'What is in it', 'Lines inside the group', 'Against the other groups', 'How we know'], AIL_ROWS().concat(+GD.apiBuild >= 85 ? [
         ['<b>Hit-only "more" lines</b>', 'Ruthless, Executioner and Life Leech "more damage".', '–', 'Neither: <b>hits only</b><span class="faq-note">the ailment a Ruthless blow starts is not raised</span>', 'The gems\' own texts, build 85.'],
       ] : []), 'faq-stack') + hint('The same rows are on <b>Damage Multipliers</b>, with the other groups.'));
+
+
+
+
+    {
+      const R = GD.rules || {}, rv = (k, d) => { const v = R[k]; const n = +(v && typeof v === 'object' ? v.value : v); return v != null && isFinite(n) ? n : d; };
+      const cp = rv('r103.AILMENTS.CrackPct103', 25), cs = rv('r103.AILMENTS.CrackSeconds103', 3);
+      h += card('Crack', '<p class="faq-stats faq-formula"><b>Crack</b> = ' + cp + '% of the Cold hit damage the enemy takes × (1 + Damage over Time Multiplier) × (1 + increased Freeze Duration)</p>' +
+        list([
+          'Rares, uniques, Guardians and the Training Post store part of the Cold they take. It breaks as one Cold hit when the enemy freezes, or every ' + cs + ' s.',
+          '<b>Both raise it, and they multiply.</b> Game log, 21 Nov 2026, Hoarfrost Volley on the Training Post, cracks against the Cold hit damage over nine breaks each:' + table(['Support', 'Cracks ÷ hits', 'Against none'], [
+            ['None', '0.236', '–'],
+            ['Deep Wounds (+40% Damage over Time Multiplier)', '0.335', '×1.42'],
+            ['Stormfrost (+60% Freeze Duration)', '0.377', '×1.60'],
+            ['Both', '0.542', '×2.30 (1.40 × 1.60 = 2.24; added they would give ×2.00)'],
+          ], 'faq-wrap'),
+          'The game stores a little less than ' + cp + '% (about 95% of it, on the Post and on Guardians alike). We do not know why yet; the Damage tab uses the full ' + cp + '%.',
+          'On a Guardian, +60% Freeze Duration measured ×1.50 rather than ×1.60 (20 Nov 2026). A Guardian really freezes and a freeze breaks the crack early, which may explain it (not checked).',
+          'Cracks do not fill the freeze bar (game log, 19 Nov 2026). Only Cold hits do.',
+        ]));
+    }
     h += card('Good to know', list([
       'Any Cold in a hit chills again since Patch 72 (see Chill above); the 25% Cold floor from 0.56.9 is gone. The sim\'s Stormfrost line follows this.',
       'Chances are per hit that carries the element. Ignite, shock and poison chance lines add to the base chance.',
@@ -12963,6 +12983,8 @@ window.BOCharacter = function (ctx) {
   const ELEMENTS = ['Fire', 'Cold', 'Lightning'];
   const isNoElem = m => m.stat === 'Keystone' && m.mode === 'Flag' && (m.tags || []).includes('NoElemental');
   const lc = s => String(s == null ? '' : s).toLowerCase();
+
+  const TRAP_HOSTS = ['totem_support', 'arrow_totem'];
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
   const sum = a => a.reduce((s, x) => s + x, 0);
 
@@ -14465,7 +14487,10 @@ window.BOCharacter = function (ctx) {
 
 
     const SHAPE_TAG = { orbit: 'orbit', skyfall: 'skyfall', rain_support: 'rain', trap_support: 'trap', totem_support: 'totem', arrow_totem: 'totem' };
-    const shapeId = res.supports.filter(s => s.ok && !(o.off && o.off.has(s.key))).map(s => lc(s.id)).find(id => SHAPE_TAG[id]) || null;
+    const shapeIds = res.supports.filter(s => s.ok && !(o.off && o.off.has(s.key))).map(s => lc(s.id));
+
+
+    const shapeId = (shapeIds.includes('trap_support') && shapeIds.find(id => TRAP_HOSTS.includes(id))) || shapeIds.find(id => SHAPE_TAG[id]) || null;
 
 
 
@@ -15095,6 +15120,8 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
     if (engine0565) {
       for (let i = mods.length - 1; i >= 0; i--) {
         const m = mods[i];
@@ -15353,7 +15380,12 @@ window.BOCharacter = function (ctx) {
 
     const SHAPES = ['orbit', 'skyfall', 'rain_support', 'trap_support', 'totem_support', 'arrow_totem'];
     const activeSup = res.supports.filter(s => s.ok && !(o.off && o.off.has(s.key))).map(s => lc(s.id));
-    const shape = activeSup.find(id => SHAPES.includes(id)) || null;
+    let shape = activeSup.find(id => SHAPES.includes(id)) || null;
+
+
+
+
+    if (shape === 'trap_support') { const tot = activeSup.find(id => TRAP_HOSTS.includes(id)); if (tot) shape = tot; }
     res.shape = shape;
 
 
@@ -16446,6 +16478,11 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
+
     if (is079(GD) && A.bEnabled && byType.Cold > 0) {
       let ce = 0; for (const m of pickMods(mods, 'ChillEffect', 'Inc')) if (applies(ctx, m)) { ce += m.v; use(m, 'chill size'); }
 
@@ -16477,10 +16514,11 @@ window.BOCharacter = function (ctx) {
       }
       if (rarity === 'rare' || rarity === 'unique' || isBoss) { // text: "a rare, unique or Guardian stores 25% of the cold damage it takes"
         let fd = 0; for (const m of pickMods(mods, 'FreezeDuration', 'Inc')) if (applies(ctx, m)) { fd += m.v; use(m, 'Crack'); }
-        const crack = byType.Cold * p80(GD, 'r103.AILMENTS.CrackPct103', 25) / 100 * Math.max(0, 1 + (dotMulti + fd) / 100);
+        const crackK = Math.max(0, 1 + dotMulti / 100) * Math.max(0, 1 + fd / 100);
+        const crack = byType.Cold * p80(GD, 'r103.AILMENTS.CrackPct103', 25) / 100 * crackK;
         byType.Cold += crack; hitDpsVs += crack; res.hitDps = hitDpsVs;
         ail.crack = { dps: crack, freezeInc: fd };
-        res.notes.push('Crack (patch 79): the ' + (isBoss ? 'Guardian' : 'rare') + ' stores ' + p80(GD, 'r103.AILMENTS.CrackPct103', 25) + '% of the cold it takes (x' + Math.max(0, 1 + (dotMulti + fd) / 100).toFixed(2) + ' from your damage over time multiplier and freeze duration) and it breaks as a cold hit every 3 s: +' + Math.round(crack).toLocaleString('en-US') + ' DPS. From the patch notes; not checked in game.');
+        res.notes.push('Crack (patch 79): the ' + (isBoss ? 'Guardian' : 'rare') + ' stores ' + p80(GD, 'r103.AILMENTS.CrackPct103', 25) + '% of the cold it takes (x' + Math.max(0, 1 + dotMulti / 100).toFixed(2) + ' from your damage over time multiplier, x' + Math.max(0, 1 + fd / 100).toFixed(2) + ' from freeze duration, multiplied) and it breaks as a cold hit every 3 s: +' + Math.round(crack).toLocaleString('en-US') + ' DPS. Both raises and how they multiply checked against the game log (21 Nov 2026).');
       }
     }
 
@@ -18512,6 +18550,13 @@ window.BOCharacter = function (ctx) {
   const SHAPES = ['orbit', 'skyfall', 'rain_support', 'trap_support', 'totem_support', 'arrow_totem'];
 
 
+  function shapesClash(a, b) {
+    a = lc(a); b = lc(b);
+    if (a === b || !SHAPES.includes(a) || !SHAPES.includes(b) || a === 'skyfall' || b === 'skyfall') return false;
+    return !((a === 'trap_support' && TRAP_HOSTS.includes(b)) || (b === 'trap_support' && TRAP_HOSTS.includes(a)));
+  }
+
+
   function ownedSupports(ch) {
     const s = new Set((ch.supportGems || []).map(lc));
     for (const so of ch.sockets) for (const id of so.supports) s.add(lc(id));
@@ -18551,7 +18596,9 @@ window.BOCharacter = function (ctx) {
 
   function arrangeShapes(set) {
     const shapes = set.filter(id => SHAPES.includes(id));
-    const real = shapes.filter(id => id !== 'skyfall');
+    let real = shapes.filter(id => id !== 'skyfall');
+
+    if (real.includes('trap_support') && real.some(id => TRAP_HOSTS.includes(id))) real = real.filter(id => id !== 'trap_support');
     if (real.length > 1) return null;
     const first = real[0] || (shapes.includes('skyfall') ? 'skyfall' : null);
     return first ? [first, ...set.filter(id => id !== first)] : set;
@@ -18624,7 +18671,7 @@ window.BOCharacter = function (ctx) {
     const blocked = new Set((opt.blocked || []).map(lc));
     let pinned = (opt.pinned || []).map(lc).filter(id => !blocked.has(id) && fits.some(s => lc(s.Id) === id));
     const pinnedShapes = pinned.filter(id => SHAPES.includes(id) && id !== 'skyfall');
-    if (pinnedShapes.length > 1) pinned = pinned.filter(id => !pinnedShapes.slice(1).includes(id));
+    if (pinnedShapes.length > 1) pinned = pinned.filter(id => !pinnedShapes.some((p, i) => i < pinnedShapes.indexOf(id) && shapesClash(p, id)));
     const pool = fits.filter(s => !isSummon(sk) || minionCounts(s, sk) || furyForMinions(s, sk, mods0)).map(s => lc(s.Id)).filter(id => !pinned.includes(id) && !blocked.has(id) && (isSummon(sk) || !NO_SINGLE_TARGET.has(id) || (opt.manaOk && MANA_ONLY.has(id))) && (opt.pool === 'all' || owned.has(id)));
 
     const sockets = opt.sockets || (host ? socketsFor(GD, ch, host.skill) : socketsFor(GD, ch, skillId, o.gemLevel));
@@ -18750,7 +18797,7 @@ window.BOCharacter = function (ctx) {
     for (const id of ch.dragonNodes || []) { const k = T[id] ? id : moved[id]; if (k && T[k] && !out.includes(k)) out.push(k); }
     return out;
   }
-  const api = { dragonIds, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
+  const api = { dragonIds, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
 
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -19719,8 +19766,7 @@ window.BOStartApp = function () {
       st.supports = st.supports.filter(s => s.toLowerCase() !== id); st.keepSup.delete(id); st.off.delete('support:' + id);
     } else {
       if (!S.supportChoices(GD, st.ch, st.skill, opts()).some(c => c.id === id)) { const sk = GD.skills[st.skill] || {}; st.supMsg = (sd.Name || id) + ' cannot go into ' + (sk.Name || 'this skill') + (S.noFitWhy(sd, sk) ? ': ' + S.noFitWhy(sd, sk) + '.' : '.'); renderSupportPicker(st.last || S.calcSkill(GD, st.ch, st.skill, opts())); return; }
-      const SHAPES = ['orbit', 'rain_support', 'trap_support', 'totem_support'];
-      const swap = SHAPES.includes(id) ? st.supports.find(s => SHAPES.includes(s.toLowerCase())) : null;
+      const swap = st.supports.find(s => S.shapesClash(id, s.toLowerCase())) || null; // shapes that clash (Trap may sit next to a totem: S.shapesClash)
       if (swap) { st.supports = st.supports.filter(s => s !== swap); st.keepSup.delete(swap.toLowerCase()); st.supMsg = sd.Name + ' replaces ' + (GD.supports[swap.toLowerCase()] || { Name: swap }).Name + ': only one shape support counts.'; }
       else if (inSet.length >= supSockets()) { st.supMsg = 'All ' + supSockets() + ' sockets are used: take a support out first (a higher gem level opens more).'; renderSupportPicker(st.last || S.calcSkill(GD, st.ch, st.skill, opts())); return; }
       st.supports.push(sd.Id || id);

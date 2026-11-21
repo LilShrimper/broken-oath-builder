@@ -2994,3 +2994,6 @@ details.sw-sub.sw-sup { background: var(--panel); }
 .mk-gain.up { color: var(--good); border-color: color-mix(in srgb, var(--good) 55%, var(--line)); background: color-mix(in srgb, var(--good) 12%, transparent); }
 .mk-gain.down { color: var(--bad, #e06c6c); border-color: color-mix(in srgb, var(--bad, #e06c6c) 55%, var(--line)); background: none; }
 .mk-gain.same, .mk-gain.none, .mk-gain.wait { color: var(--faint); border-color: var(--line); background: none; }
+/* Live search */
+.mk-watch { margin-bottom: 10px; }
+.market-pane #mkWatch.on { border-color: var(--good); color: var(--good); }

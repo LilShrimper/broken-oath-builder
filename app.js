@@ -8786,9 +8786,9 @@ window.BOItemSearch = function (ctx) {
   const GEAR = new Set(['MainHand', 'OffHand', 'Helm', 'Chest', 'Gloves', 'Boots']); // slots whose base has damage or defences
   const RARITIES = ['All', 'Unique', 'Rare', 'Magic', 'Normal'];
   const SORTS = [['cheap', 'Cheapest first'], ['dear', 'Most expensive first'], ['new', 'Newest listing'], ['old', 'Ending soonest'], ['ilvl', 'Item level'],
-    ['top', 'Most top-tier mods'], ['dps', 'Weapon DPS'], ['arm', 'Armour'], ['eva', 'Evasion'], ['es', 'Energy Shield']];
+    ['top', 'Most top-tier mods'], ['grade', 'Base Grade'], ['dps', 'Weapon DPS'], ['arm', 'Armour'], ['eva', 'Evasion'], ['es', 'Energy Shield']];
 
-  const RANGES = [['ilvl', 'Item level', 'item'], ['req', 'Wearable at level', 'item'], ['sock', 'Sockets', 'item'],
+  const RANGES = [['ilvl', 'Item level', 'item'], ['req', 'Wearable at level', 'item'], ['sock', 'Sockets', 'item'], ['grade', 'Base Grade', 'item'],
     ['dps', 'Weapon DPS', 'base'], ['hit', 'Average hit', 'base'], ['aps', 'Attacks per second', 'base'], ['crit', 'Critical chance %', 'base'],
     ['arm', 'Armour', 'base'], ['eva', 'Evasion', 'base'], ['es', 'Energy Shield', 'base'], ['price', 'Price', 'trade']];
   const BASE_KEYS = RANGES.filter(r => r[2] === 'base').map(r => r[0]);
@@ -8803,7 +8803,10 @@ window.BOItemSearch = function (ctx) {
 
 
   const MARKS = [['sig', 'Signature', 'A Signature unique: build defining and very rare'], ['pin', 'Pinnacle', 'Drops only from its own Pinnacle boss'],
-    ['riven', 'Riven line', 'Has a Riven line, the tier above the best tier (rolls at Rupture Level 120 and up)'], ['top', 'Top tier mods', 'Mods that rolled their best tier (T1)']];
+    ['riven', 'Riven line (T0)', 'Has a Riven line, the T0 tier above the best tier (rolls at Rupture Level 120 and up)'],
+
+
+    ['true', 'Truesworn base', 'Base Grade 90 or higher: 119% to 125% of the base number'], ['top', 'Top tier mods', 'Mods that rolled their best tier (T1)']];
   const TOP_FROM = 3;
 
 
@@ -8887,7 +8890,7 @@ window.BOItemSearch = function (ctx) {
       let top = 0, riven = 0;
       if (!uniq) for (const a of it.affixes || []) { const af = a && a.affixId && tbl('affixes', a.affixId); if (!af) continue; if (af.Kind === 'Riven') riven++; else if ((a.tier || 0) === 0 && (af.Tiers || []).length > 1) top++; }
       const U = uniq && !isHidden(uniq) ? tbl('uniques', uniq) : null;
-      const marks = { sig: !!(U && U.Signature), pin: !!(U && /^pinnacle/.test(String(U.Core || ''))), riven: riven > 0, top: top >= TOP_FROM };
+      const marks = { sig: !!(U && U.Signature), pin: !!(U && /^pinnacle/.test(String(U.Core || ''))), riven: riven > 0, top: top >= TOP_FROM, true: (it.baseGrade95 || 0) >= 90 };
       const find = [uniq && nameOf('uniques', uniq), baseNameOf(l.base), it.name, SLOT_NAME[l.slot], l.rarity, ...Object.keys(vals), ...(it.runes || []).map(r => isHidden(r) ? '' : nameOf('runes', r)), l.seller].filter(Boolean).join('\n').toLowerCase();
       return Object.assign({}, l, { _p: p, _find: find, _vals: vals, _at: Date.parse(l.listed_at || '') || 0, _end: Date.parse(l.expires_at || '') || 0, _u: lc(uniq), _b: lc(l.base), _s: lc(l.seller), _top: top, _riven: riven, _m: marks });
     }
@@ -8896,14 +8899,18 @@ window.BOItemSearch = function (ctx) {
       const ls = (S.index && S.index.leagues) || [];
       if (!ls.some(x => x.league === S.league)) S.league = (ls.slice().sort((a, b) => (b.total || 0) - (a.total || 0))[0] || {}).league || null;
     }
-    async function loadLeague() {
-      S.info = null; S.list = null; S.loaded = 0; S.pages = 0; S.shown = PAGE;
+
+
+    async function loadLeague(quiet) {
+      quiet = quiet === true;
+      if (!quiet) { S.info = null; S.list = null; S.loaded = 0; S.pages = 0; S.shown = PAGE; }
       const league = S.league; if (!league) return;
       const info = await get('market/' + league + '/index.json');
       if (S.league !== league) return;
-      S.info = info;
       const files = ((info && info.files) || []).filter(f => /^page-\d{1,3}\.json$/.test(f));
-      S.pages = files.length; paint();
+      if (!quiet) { S.info = info; S.pages = files.length; paint(); }
+      const old = quiet && S.list ? new Map(S.list.map(l => [l.id, l])) : null;
+      const same = (o, l) => o && o.listed_at === l.listed_at && o.price_gold === l.price_gold && JSON.stringify(o.price_resources) === JSON.stringify(l.price_resources);
       const seen = new Set(), all = [];
       let failed = 0;
 
@@ -8913,11 +8920,16 @@ window.BOItemSearch = function (ctx) {
         for (const pg of part) {
           if (pg === undefined) { failed++; continue; }
 
-          for (const l of (pg && pg.listings) || []) if (l && l.id && !seen.has(l.id)) { seen.add(l.id); all.push(prep(l)); }
+          for (const l of (pg && pg.listings) || []) if (l && l.id && !seen.has(l.id)) {
+            seen.add(l.id);
+            const o = old && old.get(l.id);
+            if (same(o, l)) { o.seller_online = l.seller_online; o.seller_code = l.seller_code; o.expires_at = l.expires_at; all.push(o); } else all.push(prep(l));
+          }
         }
-        S.loaded = Math.min(files.length, i + 4); S.list = all; paint();
+        if (!quiet) { S.loaded = Math.min(files.length, i + 4); S.list = all; paint(); }
       }
-      S.list = all;
+      if (quiet && failed) throw new Error('some market files did not load');
+      S.info = info; S.pages = files.length; S.loaded = files.length; S.list = all;
       if (failed) S.err = failed + ' of ' + files.length + ' market files did not load, so some listings are missing. Press Refresh to try again.';
     }
     async function refresh(fn) {
@@ -8942,6 +8954,72 @@ window.BOItemSearch = function (ctx) {
         if (++k % 200 === 0) { S.numsN = i + 1; paint(); await new Promise(r => setTimeout(r, 0)); if (S.list !== list) { S.numsBusy = false; return; } }
       }
       S.numsBusy = false; paint();
+    }
+
+
+
+
+
+
+
+
+
+    const W = S.watch = { on: false, known: null, fresh: new Set(), timer: 0, at: 0, next: 0, note: '', only: false, title: '' };
+    const watchEvery = () => Math.max(300, +((S.index || {}).refresh_seconds) || 300) * 1000 + 10000;
+    function watchPlan() { clearTimeout(W.timer); W.next = Date.now() + watchEvery(); W.timer = setTimeout(watchTick, watchEvery()); }
+    function watchTitle() {
+      if (!W.title || !/^\(\d+\) /.test(document.title)) W.title = document.title.replace(/^\(\d+\) /, '');
+      document.title = (W.on && W.fresh.size ? '(' + W.fresh.size + ') ' : '') + W.title;
+    }
+    function watchStart() {
+      W.on = true; W.known = new Set((S.list || []).map(l => l.id)); W.fresh = new Set(); W.only = false; W.at = Date.now(); W.note = '';
+      try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch (e) { /* no notifications here */ }
+      watchPlan();
+    }
+    function watchStop() { W.on = false; W.only = false; clearTimeout(W.timer); W.fresh = new Set(); watchTitle(); }
+    function watchAlert(found) {
+      watchTitle();
+      const text = found.slice(0, 3).map(l => view(l).title + ' · ' + priceText(l._p)).join('\n') + (found.length > 3 ? '\n+ ' + (found.length - 3) + ' more' : '');
+      try { if (window.Notification && Notification.permission === 'granted') new Notification('Broken Oath Market: ' + found.length + ' new listing' + (found.length > 1 ? 's' : ''), { body: text, tag: 'bo-market' }); } catch (e) { /* no notifications here */ }
+      try {
+        const A = window.AudioContext || window.webkitAudioContext, a = new A(), o = a.createOscillator(), g = a.createGain();
+        o.type = 'sine'; o.frequency.value = 880; g.gain.setValueAtTime(0.0001, a.currentTime); g.gain.exponentialRampToValueAtTime(0.12, a.currentTime + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + 0.5);
+        o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + 0.55); setTimeout(() => a.close(), 900);
+      } catch (e) { /* no sound here */ }
+    }
+    async function watchTick() {
+      if (!W.on) return;
+      const league = S.league;
+      try {
+        mem.clear(); await loadIndex();
+        if (S.league !== league) { watchStop(); paint(); return; }
+        await loadLeague(true);
+
+        const fresh = (S.list || []).filter(l => !W.known.has(l.id));
+        for (const l of fresh) {
+          if (needNums() && l._n === undefined) { let v = null; if (GEAR.has(l.slot)) { try { v = ctx.baseNums(itemOf(l)) || null; } catch (e) { v = null; } } l._n = v; }
+          if (upOn() && S.up.key === who.key && S.up.base > 0 && SIM_SLOTS.has(l.slot)) { let d = null; try { d = ctx.upgrade.dps(itemOf(l)); } catch (e) { d = null; } l._g = { key: who.key, dps: d, pct: d != null ? (d / S.up.base - 1) * 100 : null }; }
+        }
+        const was = W.only; W.only = false;
+        const found = rows().filter(l => !W.known.has(l.id));
+        W.only = was;
+        for (const l of S.list || []) W.known.add(l.id);
+        for (const l of found) W.fresh.add(l.id);
+        for (const id of [...W.fresh]) if (!W.known.has(id)) W.fresh.delete(id);
+        W.at = Date.now(); W.note = '';
+        if (found.length) watchAlert(found);
+      } catch (e) { W.note = 'The last check did not get through; trying again at the next one.'; }
+      if (!W.on) return;
+      watchPlan(); paint();
+    }
+    const clock = t => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    function watchBox() {
+      if (!W.on) return '';
+      const nf = W.fresh.size;
+      return '<div class="card mk-up on mk-watch"><span><b>Live search is on.</b> ' + (nf ? nf + ' new listing' + (nf > 1 ? 's' : '') + ' for this search since you turned it on.' : 'No new listing for this search yet.') + '</span>' +
+        (nf ? '<label class="mk-check"><input type="checkbox" id="mkOnlyNew"' + (W.only ? ' checked' : '') + '> Only new</label><button type="button" class="btn ghost mk-like" id="mkSeen">Mark as seen</button>' : '') +
+        '<span class="meta mk-up-status">Checked at ' + esc(clock(W.at)) + ', next check about ' + esc(clock(W.next)) + '.' + (W.note ? ' ' + esc(W.note) : '') + '</span>' +
+        '<p class="hint mk-wide">Keep this page open. It reads the market again every 5 minutes, the game\'s own refresh time, so a new item can show up to about 10 minutes after it was listed. New listings that match the filters on screen get a "new" mark, a short tone, a count in the page title, and a browser notification if you allowed them.</p></div>';
     }
 
 
@@ -8976,7 +9054,7 @@ window.BOItemSearch = function (ctx) {
     }
 
 
-    const rangeGet = { ilvl: l => l.item_level || 0, req: l => l.req_level || 0, sock: l => (l.item || {}).sockets || 0, price: l => l._p.amt };
+    const rangeGet = { ilvl: l => l.item_level || 0, req: l => l.req_level || 0, sock: l => (l.item || {}).sockets || 0, grade: l => (l.item || {}).baseGrade95 || 0, price: l => l._p.amt };
     for (const k of BASE_KEYS) rangeGet[k] = l => (l._n && l._n[k] != null ? l._n[k] : null);
     const inRange = (v, r) => v != null && (r[0] === '' || r[0] == null || v >= +r[0]) && (r[1] === '' || r[1] == null || v <= +r[1]);
     const modHas = (l, m) => { const v = l._vals[m.id]; return v != null && (m.min === '' || v >= +m.min) && (m.max === '' || v <= +m.max); };
@@ -9004,6 +9082,7 @@ window.BOItemSearch = function (ctx) {
         not.every(m => !modHas(l, m)) && (!want.length || want.reduce((c, m) => c + (modHas(l, m) ? 1 : 0), 0) >= least) &&
         words.every(w => l._find.includes(w)));
 
+      if (W.on && W.only) out = out.filter(l => W.fresh.has(l.id));
       upQueue = upOn() ? out.filter(l => SIM_SLOTS.has(l.slot)) : [];
       if (upOn() && F.upOnly) out = out.filter(l => { const g = gainOf(l); return g && g.pct > 0.05; });
       const gain = l => { const g = gainOf(l); return g && g.pct != null ? g.pct : -Infinity; };
@@ -9017,15 +9096,17 @@ window.BOItemSearch = function (ctx) {
         : s === 'ilvl' ? (a, b) => (b.item_level || 0) - (a.item_level || 0) || byPrice(a, b)
         : s === 'gain' && upOn() ? (a, b) => gain(b) - gain(a) || byPrice(a, b)
         : s === 'value' && upOn() ? (a, b) => curCmp(a, b) || worth(b) - worth(a) || byPrice(a, b)
+        : s === 'grade' ? (a, b) => rangeGet.grade(b) - rangeGet.grade(a) || byPrice(a, b)
         : s === 'top' ? (a, b) => (b._riven + b._top) - (a._riven + a._top) || (b._riven - a._riven) || byPrice(a, b)
         : BASE_KEYS.includes(s) ? (a, b) => num(b, s) - num(a, s) || byPrice(a, b)
         : sm ? (a, b) => val(b) - val(a) || byPrice(a, b) : byPrice);
+      if (W.on && W.fresh.size) out = out.filter(l => W.fresh.has(l.id)).concat(out.filter(l => !W.fresh.has(l.id))); // new listings first
       more = new Map();
       if (F.one) { const first = []; for (const l of out) { if (more.has(l.seller)) more.set(l.seller, more.get(l.seller) + 1); else { more.set(l.seller, 0); first.push(l); } } out = first; }
       return out;
     }
     const modsSet = () => S.F.mods.filter(m => m.id).length;
-    const setIn = g => g === 'item' ? (S.F.slot ? 1 : 0) + (S.F.mark ? 1 : 0) + (S.F.use ? 1 : 0) + ['ilvl', 'req', 'sock'].filter(rset).length : g === 'base' ? BASE_KEYS.filter(rset).length : g === 'mods' ? modsSet()
+    const setIn = g => g === 'item' ? (S.F.slot ? 1 : 0) + (S.F.mark ? 1 : 0) + (S.F.use ? 1 : 0) + ['ilvl', 'req', 'sock', 'grade'].filter(rset).length : g === 'base' ? BASE_KEYS.filter(rset).length : g === 'mods' ? modsSet()
       : (S.F.cur ? 1 : 0) + (rset('price') && S.F.cur ? 1 : 0) + (S.F.listed ? 1 : 0) + (S.F.online ? 1 : 0) + (S.F.seller.trim() ? 1 : 0) + (S.F.one ? 1 : 0);
     const filtered = () => !!(S.F.q.trim() || S.F.pick || S.F.up || S.F.rarity !== 'All' || S.F.sort !== 'cheap' || GROUPS.some(g => setIn(g[0])));
 
@@ -9156,7 +9237,8 @@ window.BOItemSearch = function (ctx) {
           '<p class="hint mk-wide">Each listing takes its slot on your character and your main skill is simmed with your Damage Analysis settings, as the Item Simulator does. A ring is tried in both ring slots. Weapons, armour, belts, amulets and rings only. It does not check that you can wear the item, and it is a sim estimate.</p>' : '') + '</div>';
     }
 
-    function gainChip(l) {
+    const gainChip = l => (W.on && W.fresh.has(l.id) ? '<span class="lad-tag mk-gain up">new</span>' : '') + gainOnly(l);
+    function gainOnly(l) {
       if (!upOn() || !SIM_SLOTS.has(l.slot)) return '';
       const g = gainOf(l);
       if (!g) return '<span class="lad-tag mk-gain wait">simming…</span>';
@@ -9191,6 +9273,7 @@ window.BOItemSearch = function (ctx) {
         '<label class="field"><span>League</span><select id="mkLeague">' + ls.map(lgOpt).join('') + '</select></label>' +
         '<button type="button" class="btn ghost lad-reset" id="mkRefresh"' + (S.loading ? ' disabled' : '') + '>Refresh</button>' +
         '<button type="button" class="btn ghost lad-reset" id="mkLink">Copy link to this search</button>' +
+        '<button type="button" class="btn ghost lad-reset' + (W.on ? ' on' : '') + '" id="mkWatch" aria-pressed="' + W.on + '"' + (S.list ? '' : ' disabled') + '>' + (W.on ? 'Stop live search' : 'Live search: alert me on new listings') + '</button>' +
         '<button type="button" class="btn ghost lad-reset" id="mkHide" aria-expanded="' + !S.hide + '">' + (S.hide ? 'Show filters' : 'Hide filters') + '</button>' +
         '</div>';
       const search = '<div class="mk-searchrow"><div class="field lad-item-search mk-search"><label for="mkQ">Search</label>' +
@@ -9200,9 +9283,9 @@ window.BOItemSearch = function (ctx) {
         '<div class="cmp-modes mk-view" role="tablist" aria-label="Results as">' + [['cards', 'Cards'], ['list', 'Compact list']].map(v => '<button type="button" class="cmp-mode' + (S.view === v[0] ? ' on' : '') + '" role="tab" aria-selected="' + (S.view === v[0]) + '" data-view="' + v[0] + '">' + v[1] + '</button>').join('') + '</div>' +
         '<button type="button" class="btn ghost lad-reset" id="mkReset"' + (filtered() ? '' : ' disabled') + '>Reset filters</button></div>';
       const rarity = '<div class="lad-classes" role="tablist" aria-label="Rarity">' + RARITIES.map(r => '<button type="button" role="tab" class="lad-class' + (F.rarity === r ? ' on' : '') + '" aria-selected="' + (F.rarity === r) + '" data-rar="' + r + '">' + r + (r !== 'All' && rar[r] ? ' <small>' + n(rar[r]) + '</small>' : '') + '</button>').join('') + '</div>';
-      if (S.hide) { const c = GROUPS.reduce((a, g) => a + setIn(g[0]), 0); return top + search + rarity + upBox() + (c ? '<p class="hint">' + c + ' more filter' + (c > 1 ? 's' : '') + ' set (hidden).</p>' : ''); }
+      if (S.hide) { const c = GROUPS.reduce((a, g) => a + setIn(g[0]), 0); return top + search + rarity + watchBox() + upBox() + (c ? '<p class="hint">' + c + ' more filter' + (c > 1 ? 's' : '') + ' set (hidden).</p>' : ''); }
       const gItem = '<label class="field"><span>Slot</span><select id="mkSlot"><option value="">All slots</option>' + slots.map(s => '<option value="' + esc(s) + '"' + (s === F.slot ? ' selected' : '') + '>' + esc(SLOT_NAME[s] || s) + ' (' + n(fac.slot[s]) + ')</option>').join('') + '</select></label>' +
-        rangeBox('ilvl', 'Item level') + rangeBox('req', 'Wearable at level') + rangeBox('sock', 'Sockets') +
+        rangeBox('ilvl', 'Item level') + rangeBox('req', 'Wearable at level') + rangeBox('sock', 'Sockets') + rangeBox('grade', 'Base Grade') +
         '<label class="field"><span>Marked</span><select id="mkMark"><option value="">Any</option>' + MARKS.map(x => '<option value="' + x[0] + '"' + (x[0] === F.mark ? ' selected' : '') + '>' + (x[0] === 'top' ? TOP_FROM + ' or more top tier mods' : x[1]) + '</option>').join('') + '</select></label>' +
         '<label class="mk-check"><input type="checkbox" id="mkUse"' + (F.use && hero ? ' checked' : '') + (hero ? '' : ' disabled') + '> <span>' + (hero ? 'Usable now by <span class="notranslate">' + esc(hero.name) + '</span> (level ' + hero.level + ')' : 'Usable now (load a character first)') + '</span></label>';
       const gBase = rangeBox('dps', 'Weapon DPS') + rangeBox('hit', 'Average hit') + rangeBox('aps', 'Attacks per second') + rangeBox('crit', 'Critical chance %') +
@@ -9219,7 +9302,7 @@ window.BOItemSearch = function (ctx) {
         '<label class="mk-check"><input type="checkbox" id="mkOnline"' + (F.online ? ' checked' : '') + '> Seller online now</label>' +
         '<label class="mk-check"><input type="checkbox" id="mkOne"' + (F.one ? ' checked' : '') + '> One listing per seller</label>';
       const body = { item: gItem, base: gBase, mods: gMods, trade: gTrade };
-      return top + search + rarity + upBox() + '<div class="mk-groups">' + GROUPS.map(g => group(g[0], g[1], body[g[0]])).join('') + '</div>';
+      return top + search + rarity + watchBox() + upBox() + '<div class="mk-groups">' + GROUPS.map(g => group(g[0], g[1], body[g[0]])).join('') + '</div>';
     }
 
     function view(l) {
@@ -9240,7 +9323,7 @@ window.BOItemSearch = function (ctx) {
       const marks = [flags.o ? 'Oath line' : '', flags.c ? flags.c + ' forged line' + (flags.c > 1 ? 's' : '') : '', flags.s ? flags.s + ' Scarred' : ''].filter(Boolean).join(' · ');
       const ico = ctx.art ? (uniq && !isHidden(uniq) && ctx.art('uniq', uniq, 'unique')) || (rune && ctx.art('rune', rune.Id, 'rune')) || ctx.art('base', lc(l.base), 'base') || '' : '';
       const chip = (k, text) => '<span class="lad-tag mk-tag mk-tag-' + k + '">' + esc(text) + '</span>';
-      const tags = (l._m.sig ? chip('sig', 'Signature') : '') + (l._m.pin ? chip('pin', 'Pinnacle') : '') + (l._riven ? chip('riven', 'Riven line') : '') + (l._top >= TOP_FROM ? chip('top', l._top + ' top tier') : '');
+      const tags = (l._m.sig ? chip('sig', 'Signature') : '') + (l._m.pin ? chip('pin', 'Pinnacle') : '') + (l._riven ? chip('riven', 'Riven line (T0)') : '') + (l._m.true ? chip('true', 'Truesworn') : '') + (l._top >= TOP_FROM ? chip('top', l._top + ' top tier') : '');
       return (l._v = { title, base, lines, facts, marks, ico, tags });
     }
 
@@ -9358,7 +9441,8 @@ window.BOItemSearch = function (ctx) {
       const pickItem = v => { const i = String(v).indexOf(':'); F().pick = { k: v.slice(0, i), id: v.slice(i + 1) }; F().q = ''; S.sug = false; S.sugIdx = -1; again(); };
       el.addEventListener('change', e => {
         const t = e.target, id = t.id, k = (t.dataset.k || '').split(':');
-        if (id === 'mkLeague') { S.league = t.value; keep('marketLeague', S.league); S.F = blank(); refresh(loadLeague); }
+        if (id === 'mkOnlyNew') { W.only = t.checked; again(); return; }
+        if (id === 'mkLeague') { watchStop(); S.league = t.value; keep('marketLeague', S.league); S.F = blank(); refresh(loadLeague); }
         else if (id === 'mkSlot') { F().slot = t.value; again(); }
         else if (id === 'mkCur') { F().cur = t.value; if (!t.value) delete F().r.price; again(); }
         else if (id === 'mkListed') { F().listed = t.value; again(); }
@@ -9451,6 +9535,8 @@ window.BOItemSearch = function (ctx) {
           box.hidden = !open; hideTip(); return;
         }
 
+        if (t.closest('#mkWatch')) { if (W.on) watchStop(); else watchStart(); again(); return; }
+        if (t.closest('#mkSeen')) { W.fresh = new Set(); W.only = false; watchTitle(); again(); return; }
         if (t.closest('#mkRefresh')) { mem.clear(); refresh(async () => { await loadIndex(); await loadLeague(); }); return; }
         const lk = t.closest('#mkLink');
         if (lk) { const url = linkUrl(); try { await navigator.clipboard.writeText(url); lk.textContent = 'Link copied'; setTimeout(() => { lk.textContent = 'Copy link to this search'; }, 1600); } catch (err) { prompt('Copy this link:', url); } return; }

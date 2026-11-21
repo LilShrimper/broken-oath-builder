@@ -10568,7 +10568,7 @@ window.BOFaq = function (ctx) {
     const shockAt = f => Math.max(A.ShockMin, Math.min(A.ShockMax, A.ShockCoef * Math.pow(f, A.ShockPow)));
     h += card('The five ailments', table(['Ailment', 'Base chance', 'What it does', 'On Guardians'], [
       ['<b>Ignite</b>', A.IgniteChance + '% per hit with Fire', 'Deals ' + pct(A.IgniteFrac) + '% of the Fire hit over ' + A.IgniteSeconds + ' s. Only the strongest ignite counts: more ignites do not stack.', 'Same rules.'],
-      ['<b>Shock</b>', A.ShockChance + '% per hit with Lightning', 'The enemy takes more damage for ' + A.ShockSeconds + ' s. The size depends on the hit compared with the enemy\'s life: ' + A.ShockCoef + ' × (hit ÷ life)<sup>' + A.ShockPow + '</sup> %, from ' + A.ShockMin + '% to ' + A.ShockMax + '%. Shock Effect lines raise the ' + A.ShockMax + '% cap up to ' + A.ShockMaxCap + '%.' + (A.ShockStackCap ? ' Several shocks add up to at most ' + A.ShockStackCap + '%.' : ''),
+      ['<b>Shock</b>', A.ShockChance + '% per hit with Lightning', 'The enemy takes more damage for ' + A.ShockSeconds + ' s. The size depends on the hit compared with the enemy\'s life: ' + A.ShockCoef + ' × (hit ÷ life)<sup>' + A.ShockPow + '</sup> %, from ' + A.ShockMin + '% to ' + A.ShockMax + '%.' + (A.ShockFloorShare ? ' The ' + A.ShockMin + '% floor shrinks with the Lightning share of the hit: a hit that Ice left 40% Lightning has a floor of about 2.8% (game log, 21 Nov 2026).' : '') + ' Shock Effect lines raise the ' + A.ShockMax + '% cap up to ' + A.ShockMaxCap + '%.' + (A.ShockStackCap ? ' Several shocks add up to at most ' + A.ShockStackCap + '%.' : ''),
         'Only one shock counts on a Guardian; shocks do not stack there (game log, 13 Nov 2026). Guardians have a lot of life, so a hit is a small share of it: a hit of 1% of its life shocks for ' + r1(shockAt(0.01)) + '%, 5% for ' + r1(shockAt(0.05)) + '%.'],
       ['<b>Poison</b>', A.PoisonChance + '% per hit with Poison', 'Each poison deals ' + pct(A.PoisonFracPerSec) + '% of the hit per second for ' + A.PoisonSeconds + ' s and they stack, up to ' + A.PoisonMaxStacks + '.' + (A.bPoisonTakesDamageTaken ? ' Each tick counts the enemy\'s damage taken (curses, Hunter\'s Marks, War Banner), like a hit.' : '') + ' Poison chance lines also poison Physical hits.',
         'The Dragonling\'s Virulence lets Rares and Guardians hold more stacks (60).'],
@@ -16374,7 +16374,16 @@ window.BOCharacter = function (ctx) {
         const effK = Math.max(0, 1 + sumMod('ShockEffect', 'Inc') / 100) * sumMod('ShockEffect', 'More');
         const raw = A.ShockCoef * Math.pow(Math.max(0, lightHit) / life, A.ShockPow);
         const cap = effK > 1 ? Math.min(A.ShockMaxCap || A.ShockMax, A.ShockMax * effK) : A.ShockMax;
-        const size = Math.min(cap, clamp(raw, A.ShockMin, A.ShockMax) * effK);
+
+
+
+
+
+        let allHit = 0;
+        for (const t of Object.keys(hit)) if (hit[t] && hit[t].avg > 0 && mitig[t]) allHit += hit[t].avg * critFactor * mitig[t].k * mitig[t].taken;
+        const lShare = allHit > 0 ? clamp(lightHit / allHit, 0, 1) : 1;
+        const floorPct = A.ShockMin * (1 - clamp(A.ShockFloorShare || 0, 0, 1) * (1 - lShare));
+        const size = Math.min(cap, clamp(raw, floorPct, A.ShockMax) * effK);
 
 
 
@@ -16410,7 +16419,7 @@ window.BOCharacter = function (ctx) {
         if (staticAvg > 0) res.notes.push('Static Build (patch 79): your lightning hits grow the shock on a rare or Guardian by 1% each up to its ' + Math.round(cap) + '% cap, about +' + staticAvg.toFixed(1) + '% over a shock\'s life. From the patch notes; not checked in game.');
         for (const d of Object.keys(byType)) byType[d] *= shockF;
         hitDpsVs *= shockF; res.hitDps = hitDpsVs;
-        res.notes.push('Shock: ' + Math.round(chance) + '% chance a hit, each shock ' + size.toFixed(1) + '% more damage taken (' + (raw < A.ShockMin ? "the game's " + A.ShockMin + '% floor: your lightning hit is small next to its ~' + Math.round(life).toLocaleString('en-US') + ' life' : 'from your lightning hit vs its ~' + Math.round(life).toLocaleString('en-US') + ' life') + (effK !== 1 ? ', shock effect x' + effK.toFixed(2) : '') + '), ' + avg.toFixed(2) + ' of ' + stacks + ' on it on average = +' + pct.toFixed(1) + '%.' + (isBoss ? (stackLines > 1 ? ' On a Guardian only one shock counts (game log 13 Nov), so your extra shock stacks do nothing here.' : '') + (o.enemyLife ? '' : ' Guardian life is an estimate from the Rupture level; type the real one in the life box for an exact shock.') : ' Not checked against the game yet.'));
+        res.notes.push('Shock: ' + Math.round(chance) + '% chance a hit, each shock ' + size.toFixed(1) + '% more damage taken (' + (raw < floorPct ? "the game's floor, " + (lShare < 0.999 ? A.ShockMin + '% x ' + Math.round(lShare * 100) + '% of the hit being Lightning = ' + floorPct.toFixed(1) + '% (game log 21 Nov 2026)' : A.ShockMin + '%') + ': your lightning hit is small next to its ~' + Math.round(life).toLocaleString('en-US') + ' life' : 'from your lightning hit vs its ~' + Math.round(life).toLocaleString('en-US') + ' life') + (effK !== 1 ? ', shock effect x' + effK.toFixed(2) : '') + '), ' + avg.toFixed(2) + ' of ' + stacks + ' on it on average = +' + pct.toFixed(1) + '%.' + (isBoss ? (stackLines > 1 ? ' On a Guardian only one shock counts (game log 13 Nov), so your extra shock stacks do nothing here.' : '') + (o.enemyLife ? '' : ' Guardian life is an estimate from the Rupture level; type the real one in the life box for an exact shock.') : ' Not checked against the game yet.'));
       }
     }
 

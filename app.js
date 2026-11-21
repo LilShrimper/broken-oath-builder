@@ -12199,32 +12199,17 @@ window.BOCharacter = function (ctx) {
 
   const SPOTTER_RAMP_PER = 2, SPOTTER_RAMP_MAX = 50;
   const spotterGap = (GD, mods) => {
-    for (const m of pickMods(mods, 'BallistaVolley76', 'Flat')) { const t = /once every (d+(?:.d+)?) seconds?/i.exec(m.text || m.Text || ''); if (t) return +t[1]; }
+    for (const m of pickMods(mods, 'BallistaVolley76', 'Flat')) { const t = /once every (\d+(?:\.\d+)?) seconds?/i.exec(m.text || m.Text || ''); if (t) return +t[1]; }
     const u = (GD.uniques || {}).community_binas_spotters_helm, line = u && (u.Mods || []).find(x => x.Mod && x.Mod.Stat === 'BallistaVolley76');
-    const t = line && /once every (d+(?:.d+)?) seconds?/i.exec(line.Text || '');
+    const t = line && /once every (\d+(?:\.\d+)?) seconds?/i.exec(line.Text || '');
     return t && !(is081(GD) && +t[1] === 3) ? +t[1] : (is081(GD) ? 2 : 3);
   };
 
 
 
 
+  const atkAddLift = () => 1;
 
-
-  const ATK_ADD_LIFT_79 = {
-
-
-
-
-    glacial_shards: [1.72, 5.6949], thunderfall: [1.40, 4.421], blade_vortex: [1.32, 4.9333],
-    wheeling_axe: [1.29, 6.9875], lightning_arrow: [1.28, 9.6003], power_shot: [1.27, 4.7737], grave_reap: [1.25, 4.9522], shuriken_fan: [1.20, 10.5878],
-    split_shot: [1.19, 13.4436], fuse_arrow: [1.18, 9.4218], summon_ballista: [1.18, 4], flurry: [1.17, 2.0792], crescent_slash: [1.17, 8.6801],
-    arrow_rain: [1.13, 10.2721], caustic_arrow: [1.07, 9.8213],
-  };
-  const atkAddLift = (GD, sk) => {
-    const e = is079(GD) && sk && ATK_ADD_LIFT_79[lc(sk.Id)];
-    if (!e || sk.EffectivenessLate == null) return 1;
-    return e[1] == null || Math.abs(sk.EffectivenessLate - e[1]) < 1e-3 ? e[0] : 1;
-  };
 
 
   const guardianStrongestTaken = GD => { const v = ((GD.scaling || {}).Meta || {}).bGuardianStrongestTaken; return v != null ? !!v : is073(GD); };
@@ -13441,7 +13426,8 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const spellDamageAttack = isAttack && (/spell damage modifiers (also )?apply/i.test(sk.Description || '') || (lc(skillId) === 'thunderfall' && is056(GD)));
+
+    const spellDamageAttack = isAttack && /spell damage modifiers (also )?apply/i.test(sk.Description || '');
     if (spellDamageAttack) res.notes.push(sk.Name + ': spell damage modifiers apply to it (patch 0.56), as with Spellblade.');
     const spellblade = isAttack && (spellDamageAttack || modsOf(mods, 'Keystone').some(m => m.stat === 'Keystone' && (m.tags || []).includes('Spellblade')));
 
@@ -14872,8 +14858,10 @@ window.BOCharacter = function (ctx) {
     const rainWaves = sk.Delivery === 'Rain' && sk.Rain && sk.Rain.Waves > 0 ? (res.coc && res.coc.attack ? 1 : sk.Rain.Waves) : 0;
     const hopper = mirage || flight, hops = mirage ? mirage.Hops : flights;
 
-    const axeFromTrapTotem = is0569(GD) && (res.totem || shape === 'trap_support' || shape === 'totem_support'); // 0.56.9 notes: a trap or totem axe strikes for 50% on the way back (once called back it hit twice for full)
-    const returnHits = sk.bReturnFlight ? (axeFromTrapTotem ? 1.5 : 2) : 1;
+
+
+    const axeFromTrapTotem = bSwitch(GD, 'r95.META.bTrapRet69', is0569(GD)) && (res.totem || shape === 'trap_support' || shape === 'totem_support');
+    const returnHits = sk.bReturnFlight ? (axeFromTrapTotem ? 1 + ruleNum(GD, 'r95.META.fTrapRetShare69', 0.5) : 2) : 1;
     const strikes = (hopper ? hops : rainWaves || (typeof sk.Strikes === 'object' && sk.Strikes ? (sk.Strikes.Count || 1) : (+sk.Strikes || 1))) * returnHits;
 
     if (hopper) {
@@ -15350,7 +15338,7 @@ window.BOCharacter = function (ctx) {
             staticAvg -= size;
           }
         }
-        const ls = /at most (d+)% more damage taken/i.exec((GD.supports.living_storm || {}).Description || '');
+        const ls = /at most (\d+)% more damage taken/i.exec((GD.supports.living_storm || {}).Description || '');
 
         const allCap = stacks > 1 ? (ls ? +ls[1] : is0564(GD) ? (A.ShockStackCap || 75) : 60) : cap;
         const dur = snap(A.ShockSeconds * (1 + ailDur / 100));
@@ -15760,7 +15748,6 @@ window.BOCharacter = function (ctx) {
         if (!['Hit', 'Crit', 'SkillUse'].includes(t.when) || !t.pct) continue;
 
 
-        if (+GD.apiBuild >= 83 && sk.Delivery === 'Aura' && (t.when === 'Hit' || t.when === 'Crit')) { if (!res._auraNoProc) { res._auraNoProc = true; res.notes.push(sk.Name + ': its pulses fire no on-hit effects (patch 83), so the hit bursts from your tree and items are left out.'); } continue; }
 
 
 
@@ -15947,7 +15934,7 @@ window.BOCharacter = function (ctx) {
       for (const d of ['Fire', 'Cold', 'Lightning']) if (byType[d] !== undefined) { hitDpsVs += byType[d] * (ovF - 1); byType[d] *= ovF; }
       res.hitDps = hitDpsVs;
       res.overload = { uptime: up, critsPerSec, factor: ovF };
-      res.notes.push('Elemental Overload: critical strikes grant ' + ovMore + '% more elemental damage for 8 s, counted up ' + Math.round(up * 100) + '% of the time (' + critsPerSec.toFixed(1) + ' crits a second); your critical strike multiplier is fixed at 100%.');
+      res.notes.push((((GD.nodes || {}).elemental_overload || {}).Name || 'Elemental Overload') + ': critical strikes grant ' + ovMore + '% more elemental damage for 8 s, counted up ' + Math.round(up * 100) + '% of the time (' + critsPerSec.toFixed(1) + ' crits a second); your critical strike multiplier is fixed at 100%.');
     }
 
 

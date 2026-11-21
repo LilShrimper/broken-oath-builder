@@ -2959,6 +2959,7 @@ window.BOPlanner = function (ctx) {
 
 
 
+
   const dTree = ch => (GD.dragon.classes || {})[lc(ch.classId)] || {};
   const dRules = () => GD.dragon.tree || { milestones: [40, 45, 50, 55, 60, 70, 80, 90], hatch: 1, maxCrowns: 1, crownKinds: ['Keystone', 'Capstone'] };
   const dCore = T => Object.values(T).find(n => n.Kind === 'Core');
@@ -2979,7 +2980,10 @@ window.BOPlanner = function (ctx) {
   const dExtraMax = () => { const R = dRules(); if (R.asc2) return (R.ruptures || []).length; return Math.max(0, DGATE_TOP - (R.minGate || 4) + 1) * (R.perGate || 1) + (R.pinnacle != null ? R.pinnacle : 1) + dSeal80(); };
 
 
-  const dExtra = ch => Math.min(dExtraMax(), Math.max(ch.dragonExtra != null ? +ch.dragonExtra || 0 : asc2() ? dRupturesAt(ch.rupture) : 0, dUsed(ch) - dBase(ch)));
+
+
+  const dEarned = ch => Math.min(dExtraMax(), ch.dragonExtra != null ? +ch.dragonExtra || 0 : dRupturesAt(ch.rupture));
+  const dExtra = ch => asc2() ? dEarned(ch) : Math.min(dExtraMax(), Math.max(ch.dragonExtra != null ? +ch.dragonExtra || 0 : 0, dUsed(ch) - dBase(ch)));
 
   function dLevelNeed(count) {
     if (asc2()) return 1; // Ascension 2.0: points come from Dragon Ruptures, not the hero's level
@@ -3014,9 +3018,12 @@ window.BOPlanner = function (ctx) {
   }
   function dLabel(ch, n) {
     const a = ascOn(ch) && n.Ascend;
-    let text = a ? a.Text : n.Text;
-    if (!a && n.Kind === 'Capstone' && n.AspectText && ch.dragonAspect) text = (typeof n.AspectText === 'object' ? n.AspectText[ch.dragonAspect] : n.AspectText) || text;
-    return { name: a ? a.Name + ' (ascended ' + n.Name + ')' : n.Name, text: text || '' };
+    let text = a ? a.Text : n.Text, title = '';
+
+
+    const at = !a && n.AspectText && ch.dragonAspect ? (typeof n.AspectText === 'object' ? n.AspectText[ch.dragonAspect] : n.AspectText) : '';
+    if (at) { const parts = at.split(/\s+·\s+/); if (parts.length > 1) { title = parts[0]; text = parts.slice(1).join('  ·  '); } else text = at; }
+    return { name: a ? a.Name + ' (ascended ' + n.Name + ')' : n.Name, text: text || '', title };
   }
   function dragonCard(ch, edit, dis, q) {
     const T = dTree(ch), nodes = Object.values(T);
@@ -3055,7 +3062,7 @@ window.BOPlanner = function (ctx) {
 
     let h = '<div class="card dl-card"><div class="dl-side"><h2>Dragonling <small>' + used + ' / ' + pts + ' points' + (paths.length ? ' · ' + esc(paths.join(' + ')) + (paths.length > 1 ? ' paths' : ' path') : '') + '</small></h2>';
     h += '<div class="pl-row">' + (aspects.length ? '<label class="field inline"><span>Aspect</span><select data-f="aspect"' + dis + '>' + opt('', 'None', !ch.dragonAspect) + aspects.map(a => opt(a, GD.dragon.aspects[a].Name || a, a === ch.dragonAspect)).join('') + '</select></label>' : '') +
-      (asc2() ? '<label class="field inline" title="' + esc('Points: one for each Dragon Rupture you have cleared, at Rupture Levels ' + (dRules().ruptures || []).join(', ') + ' (' + dExtraMax() + ' at most). A crown costs ' + (dRules().crownCost || 3) + ' points. This box follows the nodes you take.') + '"><span>Dragon Ruptures</span><input'
+      (asc2() ? '<label class="field inline" title="' + esc('Points: one for each Dragon Rupture you have cleared, at Rupture Levels ' + (dRules().ruptures || []).join(', ') + ' (' + dExtraMax() + ' at most). A crown costs ' + (dRules().crownCost || 3) + ' points.') + '"><span>Dragon Ruptures</span><input'
         : '<label class="field inline" title="' + esc('Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, +1 each for Gates 4 to 7' + (dSeal80() ? ', the Seal of 80' : '') + ' and the Pinnacle (' + (dBase({ level: 100 }) + dExtraMax()) + ' at most). This box follows the nodes you take.') + '"><span>Gate kills + Pinnacle</span><input') + ' type="number" min="0" max="' + dExtraMax() + '" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
       (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') + '</div>';
 
@@ -3064,8 +3071,8 @@ window.BOPlanner = function (ctx) {
     const asp = GD.dragon.aspects && GD.dragon.aspects[ch.dragonAspect];
     h += asp ? '<p class="dl-aspect"><b>' + esc(asp.Name || ch.dragonAspect) + ' Aspect:</b> ' + esc(asp.Text || '') + '</p>'
       : '<p class="hint">No Aspect chosen: each one gives its own bonuses (pick one above to see them).</p>';
-    h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? 'This uses ' + used + ' points but the Dragonling has ' + pts + (asc2() ? ' from Dragon Ruptures: raise the Dragon Ruptures cleared, or refund some.' : ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.') :
-      (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + (asc2() ? 'Ascension 2.0 (patch 86): take nodes from any of your paths; a crown costs ' + (dRules().crownCost || 3) + ' points, one crown at a time (not checked in game yet).' : 'Paths can be mixed; one Keystone or Capstone at a time.')) + '</p>';
+    h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? (asc2() ? 'Not a valid tree: these nodes cost ' + used + ' points but the Dragonling has ' + pts + ' (one for each Dragon Rupture cleared), so the game would not allow it. Raise Dragon Ruptures cleared, or refund ' + (used - pts) + ' point' + (used - pts === 1 ? '' : 's') + '. The damage numbers still count every node taken.' : 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.') :
+      (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + (asc2() ? 'Ascension 2.0 (patch 86): take nodes from any of your paths; a crown costs ' + (dRules().crownCost || 3) + ' points; one crown at a time (not checked in game yet).' : 'Paths can be mixed; one Keystone or Capstone at a time.')) + '</p>';
     if (list) h += '<h3 class="dl-list-h">Taken</h3><ul class="dl-list">' + list + '</ul>';
 
     let vb = '-545 -625 1090 1065';
@@ -4001,7 +4008,8 @@ window.BOPlanner = function (ctx) {
     let mods = (a ? a.Mods : n.Mods) || [];
     if (!a && n.AspectMods && n.AspectMods[ch.dragonAspect]) mods = mods.concat(n.AspectMods[ch.dragonAspect]);
     const aspect = n.Kind === 'Core' && GD.dragon.aspects && GD.dragon.aspects[ch.dragonAspect];
-    return { id, kind: n.Kind, path: n.Path || '', name: lab.name, text: aspect ? (aspect.Name || ch.dragonAspect) + ' Aspect: ' + aspect.Text : lab.text, mods: aspect ? aspect.Mods || [] : mods, state: st.s, why: st.why || '' };
+
+    return { id, cost: dCost(n), kind: n.Kind, kindLabel: n.Heart ? 'Shared' : n.Kind, title: lab.title || '', path: n.Path || '', name: lab.name, text: aspect ? (aspect.Name || ch.dragonAspect) + ' Aspect: ' + aspect.Text : lab.text, mods: aspect ? aspect.Mods || [] : mods, state: st.s, why: st.why || '' };
   }
   const dragon = { html: (ch, q) => dragonCard(ch, true, '', q), toggle: dToggle, info: dInfo, points: ch => ({ total: dPoints(ch), used: dUsed(ch) }), extra: dExtra, levelNeed: ch => dLevelNeed(dTaken(ch).size) };
 
@@ -8217,6 +8225,7 @@ window.BOItemSearch = function (ctx) {
       id: 'api:' + h.hero, name: h.class + ' #' + (h.class_rank || '?') + ' (ladder ' + String(h.hero).slice(0, 6) + ')', classId: h.class, level: l,
       league: h.league || '', lastZone: '', items, passives: (b.passive_nodes || []).filter(id => id && !isHidden(id) && !/^start_/.test(id)),
       bonusPoints: b.bonus_passive_points || 0, gems, gemLevels, sockets, hotbar, weaponId: '',
+      rupture: +h.rupture_level || 0, // the Dragonling's points on the Ascension 2.0 tree (Dragon Ruptures reached), planner.js dEarned
       dragonNodes: (asc.nodes || []).filter(x => x && !isHidden(x)), dragonAspect: asc.aspect && asc.aspect !== 'None' ? asc.aspect : '',
       mainSkill: mainSkillOf(h), supportGems: [], fromCode: true, fromLadder: true,
       codeWarnings: ['From the ' + (h.league || '') + ' ladder (Data: Broken Oath public API). Undiscovered items, nodes and supports are left out.']
@@ -8870,6 +8879,138 @@ window.BOPatches = function (ctx) {
   }
 
 
+
+
+
+
+  const NUM = /\d+(?:\.\d+)?%?/g;
+
+  function numDiff(o, n) {
+    const a = o.match(NUM) || [], b = n.match(NUM) || [];
+    if (!a.length || a.length !== b.length || o.replace(NUM, '#') !== n.replace(NUM, '#')) return null;
+    const out = [], re = new RegExp(NUM.source, 'g'); let i = 0, m;
+    while ((m = re.exec(n))) {
+      if (a[i] !== m[0]) {
+        const tail = (n.slice(m.index + m[0].length).match(/^(?:\s+[^\s.,;:()·]+){0,8}/) || [''])[0];
+        const head = tail.trim().split(/\s+/).filter(Boolean).length < 2 ? (n.slice(0, m.index).match(/(?:[^\s.,;:()·]+\s+){0,4}$/) || [''])[0] : '';
+        out.push(head + m[0] + tail + ' (was ' + a[i] + ')');
+      }
+      i++;
+    }
+    return out.length && out.length <= 4 ? out : null;
+  }
+  const WEIGHT = /^Tier \d+ Weight: /;
+  const EFF = /^(Effectiveness(?: Late From| Late At| Late| Early Hold| Early Full| Early)?): (-?[\d.]+)$/;
+
+
+  function sayLine(o, n, all) {
+    const a = EFF.exec(o || ''), b = EFF.exec(n || '');
+    if (a && b && a[1] === b[1]) {
+      const f = a[1], x = +a[2], y = +b[2], p = x > 0 ? (Math.round(Math.abs(y / x - 1) * 100) || '<1') : 0, up = y > x;
+      if (f === 'Effectiveness' || f === 'Effectiveness Late' || f === 'Effectiveness Early') {
+        if (!(x > 0)) return [{ t: f + ' ' + a[2] + ' → ' + b[2], s: 0 }];
+        return [{ t: 'about ' + p + '% ' + (up ? 'more' : 'less') + ' damage ' + (f === 'Effectiveness' ? 'at every gem level' : f === 'Effectiveness Late' ? 'at high gem levels' : 'at low gem levels'), s: up ? 2 : -2 }];
+      }
+      if (f === 'Effectiveness Late From') return [{ t: 'starts growing at gem level ' + b[2] + ' (was ' + a[2] + ')', s: y < x ? 1 : -1 }];
+      if (f === 'Effectiveness Late At') return [{ t: 'fully grown at gem level ' + b[2] + ' (was ' + a[2] + ')', s: y < x ? 1 : -1 }];
+
+      if (f === 'Effectiveness Early Hold' && all.some(l => /^Effectiveness Early Full: /.test(l[1] || ''))) return [];
+      return [{ t: 'its low-level boost or cut ' + (f === 'Effectiveness Early Hold' ? 'starts fading at' : 'is gone by') + ' gem level ' + b[2] + ' (was ' + a[2] + ')', s: 0, m: 1 }];
+    }
+
+    if (WEIGHT.test(o || '') || WEIGHT.test(n || '')) return [];
+    if (!o) return [{ t: 'now also: ' + n, s: 0 }];
+    if (!n) return [{ t: 'no longer: ' + o, s: 0 }];
+    const fa = /^([^:]{1,40}): (.+)$/.exec(o), fb = /^([^:]{1,40}): (.+)$/.exec(n);
+    if (fa && fb && fa[1] === fb[1] && o.length <= 90 && n.length <= 90) {
+      const tk = /^Element Taken Pct (\w+)$/.exec(fa[1]);
+      if (tk) return [{ t: 'enemies take ' + fb[2] + '% more ' + tk[1] + ' damage (was ' + fa[2] + '%)', s: 0 }];
+      if (fa[1] === 'Name') return [{ t: 'new name (was ' + fa[2].replace(/ \([^)]*\)$/, '') + ')', s: 0 }];
+      return [{ t: fa[1] + ' ' + fa[2] + ' → ' + fb[2], s: 0 }];
+    }
+    const d = numDiff(o, n);
+    if (d) return d.map(t => ({ t, s: 0 }));
+    if (o.length <= 60 && n.length <= 60) return [{ t: o + ' → ' + n, s: 0 }];
+    return [{ t: 'wording changed', s: 0, w: 1 }];
+  }
+
+  function sayEntries(rows) {
+    const by = new Map();
+    for (const c of rows) {
+      const e = by.get(c.name) || { c, n: 0, parts: [], seen: new Set(), s: 0 };
+      e.n++;
+      for (const l of c.lines) for (const p of sayLine(l[0], l[1], c.lines)) { if (e.seen.has(p.t)) continue; e.seen.add(p.t); e.parts.push(p); if (e.n === 1) e.s += p.s; }
+      by.set(c.name, e);
+    }
+    return [...by.values()].filter(e => e.parts.length);
+  }
+  const partHtml = p => '<span class="' + (p.s > 0 ? 'pt-buff' : p.s < 0 ? 'pt-nerf' : '') + '">' + esc(p.t) + '</span>';
+  const nameHtml = e => '<b' + tipAttr(e.c) + '>' + esc(e.c.name) + '</b>' + (e.n > 1 ? ' <small>×' + e.n + '</small>' : '');
+  function entryLine(e, max) {
+    const main = e.parts.filter(p => !p.w && !p.m), real = main.length ? main : e.parts.filter(p => !p.w), show = real.slice(0, max || 4);
+    return '<li>' + icon(e.c) + nameHtml(e) + ': ' + show.map(partHtml).join('; ') + (real.length > show.length ? '; <span class="pt-more">' + (real.length - show.length) + ' more</span>' : '') +
+      (e.parts.some(p => p.w) ? (show.length ? '; ' : '') + 'wording changed' : '') + '</li>';
+  }
+  const names = (list, max) => { const u = [...new Set(list)]; return u.slice(0, max).map(esc).join(', ') + (u.length > max ? ' and ' + (u.length - max) + ' more' : ''); };
+  const fullBtn = sec => '<button type="button" class="btn small ghost pt-full" data-pt="full" data-v="' + esc(sec) + '">Every line</button>';
+  function tldrView() {
+    const list = withChanges();
+    if (!V.b || !buildOf(V.b)) V.b = (list[list.length - 1] || {}).b;
+    const cur = buildOf(V.b), prev = prevOf(V.b);
+    if (!cur) return '<div class="card"><p class="hint">No patch history yet.</p></div>';
+    const all = LOG.changes.filter(c => c.b === V.b), secs = (LOG.sections || []).filter(s => all.some(c => c.sec === s[0]));
+    const cnt = (sec, kind) => all.filter(c => c.sec === sec && c.kind === kind).length;
+    let h = '<div class="card pt-controls"><div class="pt-row"><label class="field inline"><span>Patch</span><select id="ptBuild">' +
+      list.slice().reverse().map(x => '<option value="' + x.b + '"' + (x.b === V.b ? ' selected' : '') + '>' + esc(x.label + ' (' + day(x.day) + ')' + (x.src === 'game' ? ' · from game files' : '')) + '</option>').join('') + '</select></label></div>' +
+      '<p class="hint">' + esc(cur.label) + ' against ' + esc(prev ? prev.label : 'the build before') + ', in plain words. The lists are worked out from the game data of both builds, so they show what really moved, also where the patch notes did not say. Green is stronger, red is weaker; anything uncoloured we do not judge. Hover a name for what it does now.' + (cur.src === 'game' ? ' ' + SRC_TAG : '') + '</p></div>';
+
+    const own = (LOG.tldr || {})[V.b];
+    if (own && own.lines && own.lines.length) h += '<div class="card pt-sec pt-tl"><h2>In short</h2><ul>' + own.lines.map(l => '<li><b>' + esc(l[0]) + ':</b> ' + esc(l[1]) + '</li>').join('') +
+      '</ul><p class="hint">Written by us from the game data and the developer’s patch notes. Not an official summary.</p></div>';
+
+    const coming = k => secs.map(s => {
+      const rows = all.filter(c => c.sec === s[0] && c.kind === k); if (!rows.length) return '';
+      const many = s[0] === 'nodes' || s[0] === 'dragon' || s[0] === 'bases' || s[0] === 'affixes';
+      return '<li><b>' + esc(s[1]) + (many || rows.length > 1 ? ' (' + rows.length + ')' : '') + ':</b> ' + names(rows.map(c => c.name.replace(/ \((?:Warrior|Mage|Ranger|Samurai|Paladin|Necromancer)(?: Heart)?\)$/, '')), many ? 8 : 30) + '</li>';
+    }).join('');
+    const added = coming('added'), removed = coming('removed');
+    if (added) h += '<div class="card pt-sec pt-tl"><h2>New</h2><ul>' + added + '</ul></div>';
+    if (removed) h += '<div class="card pt-sec pt-tl"><h2>Removed</h2><ul>' + removed + '</ul></div>';
+
+    const sk = sayEntries(all.filter(c => c.sec === 'skills' && c.kind === 'changed'));
+    if (sk.length) {
+      const size = e => Math.max(0, ...e.parts.map(p => { const m = /^about (\d+)%/.exec(p.t); return m ? +m[1] : 0; }));
+      const grp = (title, rows, cls) => rows.length ? '<h3 class="' + cls + '">' + title + ' <small>' + rows.length + '</small></h3><ul>' + rows.sort((a, b) => size(b) - size(a) || a.c.name.localeCompare(b.c.name)).map(e => entryLine(e, 5)).join('') + '</ul>' : '';
+      const words = sk.filter(e => e.parts.every(p => p.w)), rest = sk.filter(e => !e.parts.every(p => p.w));
+      h += '<div class="card pt-sec pt-tl"><h2>Skills <small>' + cnt('skills', 'changed') + ' changed</small>' + fullBtn('skills') + '</h2>' +
+        grp('Stronger', rest.filter(e => e.s > 0), 'pt-buff') + grp('Weaker', rest.filter(e => e.s < 0), 'pt-nerf') + grp('Changed in other ways', rest.filter(e => !e.s), '') +
+        (words.length ? '<p class="pt-note"><b>Only the description changed:</b> ' + names(words.map(e => e.c.name), 20) + '</p>' : '') +
+        '<p class="hint">Stronger and weaker are read from each skill’s own damage numbers (its Effectiveness) only. A skill can also move through a rule that is not in its own data.</p></div>';
+    }
+
+    for (const s of secs) {
+      if (s[0] === 'skills') continue;
+      const ch = all.filter(c => c.sec === s[0] && c.kind === 'changed'), ent = sayEntries(ch), wt = ch.filter(c => c.lines.some(l => WEIGHT.test(l[0] || '') || WEIGHT.test(l[1] || ''))).length;
+      if (!ent.length && !wt) continue;
+      const share = new Map();
+      for (const e of ent) for (const p of e.parts) if (!p.w) { const g = share.get(p.t) || []; g.push(e); share.set(p.t, g); }
+      let body = '';
+      for (const [t, g] of share) {
+        if (g.length < 4) continue;
+        body += '<li><b>' + g.reduce((n, e) => n + e.n, 0) + ' ' + esc(s[0] === 'nodes' ? 'nodes' : s[0] === 'dragon' ? 'Dragonling nodes' : s[1].toLowerCase()) + ':</b> ' + esc(t) + ' <span class="pt-who">(' + names(g.map(e => e.c.name), 6) + ')</span></li>';
+        for (const e of g) e.parts = e.parts.filter(p => p.t !== t);
+      }
+      const left = ent.filter(e => e.parts.some(p => !p.w)), words = ent.filter(e => e.parts.length && e.parts.every(p => p.w)), MAX = 16;
+      body += left.slice(0, MAX).map(e => entryLine(e, 4)).join('');
+      h += '<div class="card pt-sec pt-tl"><h2>' + esc(s[1]) + ' <small>' + cnt(s[0], 'changed') + ' changed</small>' + fullBtn(s[0]) + '</h2>' + (body ? '<ul>' + body + '</ul>' : '') +
+        (left.length > MAX ? '<p class="pt-note">And ' + (left.length - MAX) + ' more: ' + names(left.slice(MAX).map(e => e.c.name), 12) + '.</p>' : '') +
+        (words.length ? '<p class="pt-note"><b>Only the wording changed:</b> ' + names(words.map(e => e.c.name), 14) + '</p>' : '') +
+        (wt ? '<p class="pt-note">How often each tier drops (its weight) changed or was first listed on ' + wt + ' of them.</p>' : '') + '</div>';
+    }
+    return h;
+  }
+
+
   function historyOf(sec, id) { return LOG.changes.filter(c => c.sec === sec && c.id === id).sort((a, b) => b.b - a.b); }
   function historyView() {
     const q = lc(V.hq.trim());
@@ -8920,8 +9061,8 @@ window.BOPatches = function (ctx) {
       if (!failed) load().then(() => render());
       return;
     }
-    h += '<div class="cmp-modes pt-views" role="tablist">' + [['patch', 'Patch changes'], ['history', 'Change history']].map(v => '<button type="button" role="tab" class="cmp-mode' + (V.view === v[0] ? ' on' : '') + '" data-pt="view" data-v="' + v[0] + '" aria-selected="' + (V.view === v[0]) + '">' + v[1] + '</button>').join('') + '</div>';
-    el.innerHTML = h + (V.view === 'patch' ? patchView() : historyView());
+    h += '<div class="cmp-modes pt-views" role="tablist">' + [['patch', 'Patch changes'], ['tldr', 'TLDR'], ['history', 'Change history']].map(v => '<button type="button" role="tab" class="cmp-mode' + (V.view === v[0] ? ' on' : '') + '" data-pt="view" data-v="' + v[0] + '" aria-selected="' + (V.view === v[0]) + '">' + v[1] + '</button>').join('') + '</div>';
+    el.innerHTML = h + (V.view === 'patch' ? patchView() : V.view === 'tldr' ? tldrView() : historyView());
   }
   function keepFocus(id, fn) {
     const a = document.activeElement, pos = a && a.id === id ? a.selectionStart : null;
@@ -8938,6 +9079,7 @@ window.BOPatches = function (ctx) {
       const a = b.dataset.pt;
       if (a === 'view') { V.view = b.dataset.v; return render(); }
       if (a === 'sec') { V.sec = b.dataset.v; return render(); }
+      if (a === 'full') { V.view = 'patch'; V.sec = b.dataset.v; V.q = ''; render(); return el.scrollIntoView({ block: 'start' }); }
       if (a === 'hist' || a === 'pick') { V.view = 'history'; V.pick = b.dataset.sec + ':' + b.dataset.id; if (a === 'hist') V.hq = (LOG.changes.find(c => c.sec === b.dataset.sec && c.id === b.dataset.id) || {}).name || ''; render(); if (a === 'hist') el.scrollIntoView({ block: 'start' }); }
     });
     el.addEventListener('change', e => { if (e.target.id === 'ptBuild') { V.b = +e.target.value; render(); } });
@@ -20899,15 +21041,18 @@ window.BOStartApp = function () {
   }
   function dragonTipHtml(id) {
     const d = planner.dragon.info(st.ch, id); if (!d) return '';
-    let h = '<div class="tk">' + esc(d.kind) + (d.path ? ' · ' + esc(d.path) : '') + '</div><b>' + esc(d.name) + '</b>';
+    let h = '<div class="tk">' + esc(d.kindLabel || d.kind) + (d.path ? ' · ' + esc(d.path) : '') + '</div><b>' + esc(d.name) + '</b>';
     const lines = d.mods.filter(m => m.Mode !== 'Flag' && m.Mode !== 'Trigger').map(modLine).filter(Boolean);
+    if (d.title) h += '<div><b>' + esc(d.title) + '</b></div>';
     if (lines.length) h += '<ul>' + lines.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>';
-    if (d.text && d.kind !== 'Core' && d.text !== lines.join('  ·  ') && (d.kind !== 'Small' && d.kind !== 'Shared' || !lines.length)) h += '<div>' + esc(d.text) + '</div>';
+
+    if (d.title && !lines.length && d.text) h += '<div>' + d.text.split('  ·  ').map(s => esc(s.replace(/^./, c => c.toUpperCase()))).join('<br>') + '</div>';
+    else if (d.text && !d.title && d.kind !== 'Core' && d.text !== lines.join('  ·  ') && (d.kind !== 'Small' && d.kind !== 'Shared' || !lines.length)) h += '<div>' + esc(d.text) + '</div>';
     if (d.kind === 'Core') return h + '<div class="tk" style="margin-top:5px">Pick the Aspect at the top of this panel</div>';
     if (d.why) return h + '<div class="gain down">' + esc(d.why.replace(/^./, c => c.toUpperCase())) + '</div>';
     const g = dragonGain(id), skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
     const verb = d.state === 'taken' ? 'Refund' : 'Take';
-    if (g != null) h += '<div class="gain ' + (g > 0.0005 ? 'up' : g < -0.0005 ? 'down' : '') + '">' + verb + ': ' + pct(g) + ' ' + esc(skillName) + ' DPS' + (verb === 'Take' ? ' · 1 point' : '') + '</div>';
+    if (g != null) h += '<div class="gain ' + (g > 0.0005 ? 'up' : g < -0.0005 ? 'down' : '') + '">' + verb + ': ' + pct(g) + ' ' + esc(skillName) + ' DPS' + (verb === 'Take' ? ' · ' + (d.cost || 1) + ' point' + ((d.cost || 1) === 1 ? '' : 's') : '') + '</div>';
     else h += '<div class="tk">Click to ' + verb.toLowerCase() + '</div>';
     const unc = d.mods.filter(m => m.Mode === 'Trigger' || (m.Mode === 'Flag' && m.Stat !== 'Dragonling') || (m.Mode !== 'Flag' && !S.counted(m.Stat))).map(m => m.Mode === 'Flag' || m.Mode === 'Trigger' ? d.text : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
     if (unc.length) h += '<div class="tk" style="margin-top:5px">Not in the DPS number: ' + esc(unc.join(' · ')) + '</div>';

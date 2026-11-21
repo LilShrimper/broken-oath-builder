@@ -2960,6 +2960,7 @@ window.BOPlanner = function (ctx) {
 
 
 
+
   const dTree = ch => (GD.dragon.classes || {})[lc(ch.classId)] || {};
   const dRules = () => GD.dragon.tree || { milestones: [40, 45, 50, 55, 60, 70, 80, 90], hatch: 1, maxCrowns: 1, crownKinds: ['Keystone', 'Capstone'] };
   const dCore = T => Object.values(T).find(n => n.Kind === 'Core');
@@ -3072,7 +3073,7 @@ window.BOPlanner = function (ctx) {
     h += asp ? '<p class="dl-aspect"><b>' + esc(asp.Name || ch.dragonAspect) + ' Aspect:</b> ' + esc(asp.Text || '') + '</p>'
       : '<p class="hint">No Aspect chosen: each one gives its own bonuses (pick one above to see them).</p>';
     h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? (asc2() ? 'Not a valid tree: these nodes cost ' + used + ' points but the Dragonling has ' + pts + ' (one for each Dragon Rupture cleared), so the game would not allow it. Raise Dragon Ruptures cleared, or refund ' + (used - pts) + ' point' + (used - pts === 1 ? '' : 's') + '. The damage numbers still count every node taken.' : 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.') :
-      (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + (asc2() ? 'Ascension 2.0 (patch 86): take nodes from any of your paths; a crown costs ' + (dRules().crownCost || 3) + ' points; one crown at a time (not checked in game yet).' : 'Paths can be mixed; one Keystone or Capstone at a time.')) + '</p>';
+      (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + (asc2() ? 'Ascension 2.0 (patch 86): take nodes from any of your paths; a crown costs ' + (dRules().crownCost || 3) + ' points; one crown at a time.' : 'Paths can be mixed; one Keystone or Capstone at a time.')) + '</p>';
     if (list) h += '<h3 class="dl-list-h">Taken</h3><ul class="dl-list">' + list + '</ul>';
 
     let vb = '-545 -625 1090 1065';
@@ -9773,13 +9774,14 @@ window.BOFaq = function (ctx) {
 
 
 
+
     h += card('Adds or multiplies: the short version',
       '<p class="faq-stats faq-formula"><b>Hit</b> = base damage × (1 + all increased) × each "more" line × (1 + all engine lines) × enemy takes more × crit</p>' +
       '<p class="faq-stats faq-formula"><b>DPS</b> = hit × speed × count</p>' +
       table(['Group', 'What is in it', 'Lines inside the group', 'Against the other groups', 'How we know'], [
         ['<b>Increased damage</b>', 'Every "X% increased damage" that fits the skill: tree, gear, idols, runes, charges.', ADD, MUL + ' once, as one total', st('every tooltip check fits it.')],
         ['<b>More damage</b>', 'Every plain "X% more damage": supports, keystones, a unique\'s "more" line, an Oath.', MUL + '<span class="faq-note">each line by itself, they never add</span>', MUL, st('character panel, 11 and 12 Nov 2026 (Glass Cannon).')],
-        ['<b>Damage engine</b>', '"X% more damage for every 1,000 Armour, Life, Energy Shield or Evasion", "per 1% Block", "per 10 Strength or Intelligence", "per 100 Mana".', ADD, MUL + ' once, as one total', 'Measured in the game on build 85 (19 Nov 2026): Judgement with 16 engine lines, one 22.5% line taken off. The hit fell by ×1.1183; adding predicts ×1.1183, multiplying ×1.225.<span class="faq-note">The game\'s log and the developer\'s switch file say the same.</span><span class="faq-note faq-flag"><b>Differs from the developer\'s stacking table</b>, which lists these lines as "multiplies". Reported to the developer on 19 Nov 2026; this page follows the measurement.</span>'],
+        ['<b>Damage engine</b>', '"X% more damage for every 1,000 Armour, Life, Energy Shield or Evasion", "per 1% Block", "per 10 Strength or Intelligence", "per 100 Mana".', ADD, MUL + ' once, as one total', 'The developer\'s stacking table (public API, build 86).<span class="faq-note">Also seen in the game: measured on build 85 (19 Nov 2026), Judgement with 16 engine lines, one 22.5% line taken off. The hit fell by ×1.1183; adding predicts ×1.1183, multiplying ×1.225. The game\'s log and the developer\'s switch file say the same.</span>'],
         ['<b>Enemy takes more damage</b>', kinds ? 'Five kinds: Woes · Sentences · Hunter\'s Marks with the War Banner · shock, chill and Brittle · hallowed ground, Maim and the golem\'s blessing.' : 'Curses, Marks, the War Banner, shock.',
           kinds ? ADD + '<span class="faq-note">inside one kind</span>' : 'See <b>Curses &amp; Marks</b>', kinds ? MUL + '<span class="faq-note">kind against kind, and against the rest</span>' : MUL, kinds ? st('game log, build 84.') : 'See <b>Curses &amp; Marks</b>.'],
         ['<b>Resistance</b>', 'The enemy\'s resistance, less your penetration and "−X% resistance" curses.', ADD + '<span class="faq-note">penetration and resistance cuts add up, then come off the resistance</span>', MUL, st('resistance tests on Guardians.')],

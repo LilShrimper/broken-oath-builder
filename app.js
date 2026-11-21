@@ -7879,7 +7879,7 @@ window.BOItemSearch = function (ctx) {
     if (u.Flavour) h += '<span class="pl-tip-desc pl-tip-flavour">' + esc(u.Flavour) + '</span>';
     return h;
   }
-  return Object.assign({ render: () => { bind(); render(); }, uniqueTip }, forGrail);
+  return Object.assign({ render: () => { bind(); render(); }, uniqueTip, art }, forGrail);
 };
 
 ;
@@ -8737,6 +8737,741 @@ window.BOItemSearch = function (ctx) {
   };
   root.BOLadderChar = charFromApi;
   if (typeof module !== 'undefined') module.exports = { charFromApi, ehpOf, evadeOf };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(function (root) {
+  'use strict';
+  const HIDDEN = 'hidden';
+  const isHidden = id => String(id || '').toLowerCase() === HIDDEN;
+  const lc = s => String(s || '').toLowerCase();
+  const SLOT_NAME = { MainHand: 'Weapon', OffHand: 'Off hand', Helm: 'Helmet', Chest: 'Body armour', Gloves: 'Gloves', Boots: 'Boots', Belt: 'Belt', Amulet: 'Amulet', Ring: 'Ring', Idol: 'Idol', DwarvenRune: 'Dwarven Rune', None: 'Runes and jewels' };
+  const SLOT_ORDER = ['MainHand', 'OffHand', 'Helm', 'Chest', 'Gloves', 'Boots', 'Belt', 'Amulet', 'Ring', 'Idol', 'DwarvenRune', 'None'];
+  const GEAR = new Set(['MainHand', 'OffHand', 'Helm', 'Chest', 'Gloves', 'Boots']); // slots whose base has damage or defences
+  const RARITIES = ['All', 'Unique', 'Rare', 'Magic', 'Normal'];
+  const SORTS = [['cheap', 'Cheapest first'], ['dear', 'Most expensive first'], ['new', 'Newest listing'], ['old', 'Ending soonest'], ['ilvl', 'Item level'],
+    ['top', 'Most top-tier mods'], ['dps', 'Weapon DPS'], ['arm', 'Armour'], ['eva', 'Evasion'], ['es', 'Energy Shield']];
+
+  const RANGES = [['ilvl', 'Item level', 'item'], ['req', 'Wearable at level', 'item'], ['sock', 'Sockets', 'item'],
+    ['dps', 'Weapon DPS', 'base'], ['hit', 'Average hit', 'base'], ['aps', 'Attacks per second', 'base'], ['crit', 'Critical chance %', 'base'],
+    ['arm', 'Armour', 'base'], ['eva', 'Evasion', 'base'], ['es', 'Energy Shield', 'base'], ['price', 'Price', 'trade']];
+  const BASE_KEYS = RANGES.filter(r => r[2] === 'base').map(r => r[0]);
+  const LISTED = [['', 'Any time'], ['1', 'Last day'], ['3', 'Last 3 days'], ['7', 'Last week']];
+  const GROUPS = [['item', 'Item'], ['base', 'Weapon and armour'], ['mods', 'Mods'], ['trade', 'Price and seller']];
+
+
+
+
+
+
+
+
+  const MARKS = [['sig', 'Signature', 'A Signature unique: build defining and very rare'], ['pin', 'Pinnacle', 'Drops only from its own Pinnacle boss'],
+    ['riven', 'Riven line', 'Has a Riven line, the tier above the best tier (rolls at Rupture Level 120 and up)'], ['top', 'Top tier mods', 'Mods that rolled their best tier (T1)']];
+  const TOP_FROM = 3;
+
+
+  const SIM_SLOTS = new Set(['MainHand', 'OffHand', 'Helm', 'Chest', 'Gloves', 'Boots', 'Belt', 'Amulet', 'Ring']);
+  const PAGE = 48, MAX_MODS = 8, SUGGEST = 14;
+
+
+  function priceOf(l) {
+    const r = l.price_resources && typeof l.price_resources === 'object' ? Object.entries(l.price_resources).filter(e => +e[1] > 0) : [];
+    const gold = +l.price_gold || 0;
+    return { cur: r.length ? r[0][0] : 'gold', amt: r.length ? +r[0][1] : gold, gold: r.length ? gold : 0, more: r.slice(1) };
+  }
+
+  function itemOf(l) {
+    const it = l.item || {};
+    return {
+      slot: l.slot === 'Ring' ? 'Ring1' : l.slot, base: lc(l.base), rarity: l.rarity || 'Normal', unique: l.unique && l.unique !== 'None' ? l.unique : 'None',
+      item_level: l.item_level || it.itemLevel || 1, quality: it.quality || 0, sockets: it.sockets || 0, forged: it.forged79 || 0, grade: it.baseGrade95 || 0,
+      affixes: (it.affixes || []).map(a => ({ id: a.affixId, tier: a.tier || 0, value: a.value, value2: a.value2, crafted: !!a.bCrafted, oath: !!a.bOath83, scar: !!a.bScar93 })),
+      runes: (it.runes || []).filter(Boolean),
+    };
+  }
+  const blank = () => ({ q: '', pick: null, slot: '', rarity: 'All', cur: '', r: {}, listed: '', online: false, seller: '', one: false, mark: '', use: false, up: false, upOnly: false, match: 'all', count: 1, mods: [{ id: '', min: '', max: '', not: false }], sort: 'cheap' });
+
+  root.BOMarket = function (ctx) {
+    const { $, esc } = ctx, GD = () => ctx.gd() || {};
+    const S = { index: null, league: null, info: null, list: null, loaded: 0, pages: 0, err: '', loading: false, shown: PAGE, F: blank(),
+      open: { item: true, base: false, mods: true, trade: true }, hide: false, view: 'cards', sug: false, sugIdx: -1, numsBusy: false, numsN: 0, openRows: new Set(), up: { key: '', base: null, busy: false } };
+    try {
+      S.league = localStorage.getItem('bods:marketLeague') || null;
+      S.view = localStorage.getItem('bods:marketView') === 'list' ? 'list' : 'cards';
+      Object.assign(S.open, JSON.parse(localStorage.getItem('bods:marketOpen') || '{}'));
+    } catch (e) { /* storage off */ }
+    const keep = (k, v) => { try { localStorage.setItem('bods:' + k, v); } catch (e) { /* storage off */ } };
+    const mem = new Map(); // path -> { at, data } (this page only; the worker does the real caching)
+    async function get(path, ms) {
+      const m = mem.get(path);
+      if (m && Date.now() - m.at < 5 * 60000) return m.data;
+      let r;
+      try { r = await fetch(ctx.api + path, { signal: AbortSignal.timeout ? AbortSignal.timeout(ms || 25000) : undefined }); }
+      catch (e) { throw new Error(e && (e.name === 'TimeoutError' || e.name === 'AbortError') ? 'The market service took too long to answer. Press Refresh to try again.' : 'Could not reach the market service. Check your connection and press Refresh.'); }
+      if (r.status === 404) { mem.set(path, { at: Date.now(), data: null }); return null; }
+      if (!r.ok) throw new Error((await r.text().catch(() => '')) || 'The market service answered ' + r.status + '.');
+      const data = await r.json();
+      if (data && data.schema != null && data.schema !== 1) console.warn('Market: API schema ' + data.schema + ' (written for 1).');
+      mem.set(path, { at: Date.now(), data });
+      return data;
+    }
+    const tbl = (kind, id) => { const t = GD()[kind] || {}; return t[id] || t[lc(id)] || null; };
+    const nameOf = (kind, id) => { if (!id) return ''; if (isHidden(id)) return 'Undiscovered'; const t = tbl(kind, id); return t && t.Name ? t.Name : String(id).replace(/_/g, ' '); };
+
+    const runeOfBase = b => (/^rune_/.test(b) && tbl('runes', String(b).slice(5))) || null;
+    const baseNameOf = b => { const r = runeOfBase(b); return r ? r.Name + (r.Kind === 'jewel' ? '' : ' Rune') : nameOf('bases', b); };
+    const curName = c => c === 'gold' ? 'Gold' : ((GD().materials || {})[c] || String(c).replace(/_/g, ' ').replace(/^./, m => m.toUpperCase()));
+    const n = x => (+x || 0).toLocaleString('en-US');
+    const priceText = p => n(p.amt) + ' ' + curName(p.cur) + (p.gold ? ' + ' + n(p.gold) + ' Gold' : '') + p.more.map(e => ' + ' + n(e[1]) + ' ' + curName(e[0])).join('');
+    const ago = iso => {
+      const t = Date.parse(iso || ''); if (!t) return '';
+      const m = Math.round((Date.now() - t) / 60000);
+      return m < 1 ? 'just now' : m < 60 ? m + 'm ago' : m < 48 * 60 ? Math.round(m / 60) + 'h ago' : Math.round(m / 1440) + ' days ago';
+    };
+    const until = iso => {
+      const t = Date.parse(iso || ''); if (!t) return '';
+      const m = Math.round((t - Date.now()) / 60000);
+      return m <= 0 ? 'ending now' : m < 60 ? 'ends in ' + m + 'm' : m < 48 * 60 ? 'ends in ' + Math.round(m / 60) + 'h' : 'ends in ' + Math.round(m / 1440) + ' days';
+    };
+
+
+    const labels = new Map(), labelId = new Map();
+    const modLabel = id => {
+      if (!labels.has(id)) { let t = ''; try { t = ctx.modLabel(id) || ''; } catch (e) { t = ''; } t = t || String(id).replace(/_/g, ' '); labels.set(id, t); if (!labelId.has(t)) labelId.set(t, id); }
+      return labels.get(id);
+    };
+
+
+
+    function prep(l) {
+      const it = l.item || {}, p = priceOf(l);
+      const uniq = l.unique && l.unique !== 'None' ? l.unique : '';
+      const vals = {}; for (const a of it.affixes || []) if (a && a.affixId && !/^unique:/.test(a.affixId) && !isHidden(a.affixId)) { const k = modLabel(a.affixId); vals[k] = Math.max(vals[k] == null ? -Infinity : vals[k], +a.value || 0); }
+      let top = 0, riven = 0;
+      if (!uniq) for (const a of it.affixes || []) { const af = a && a.affixId && tbl('affixes', a.affixId); if (!af) continue; if (af.Kind === 'Riven') riven++; else if ((a.tier || 0) === 0 && (af.Tiers || []).length > 1) top++; }
+      const U = uniq && !isHidden(uniq) ? tbl('uniques', uniq) : null;
+      const marks = { sig: !!(U && U.Signature), pin: !!(U && /^pinnacle/.test(String(U.Core || ''))), riven: riven > 0, top: top >= TOP_FROM };
+      const find = [uniq && nameOf('uniques', uniq), baseNameOf(l.base), it.name, SLOT_NAME[l.slot], l.rarity, ...Object.keys(vals), ...(it.runes || []).map(r => isHidden(r) ? '' : nameOf('runes', r)), l.seller].filter(Boolean).join('\n').toLowerCase();
+      return Object.assign({}, l, { _p: p, _find: find, _vals: vals, _at: Date.parse(l.listed_at || '') || 0, _end: Date.parse(l.expires_at || '') || 0, _u: lc(uniq), _b: lc(l.base), _s: lc(l.seller), _top: top, _riven: riven, _m: marks });
+    }
+    async function loadIndex() {
+      S.index = await get('market/index.json');
+      const ls = (S.index && S.index.leagues) || [];
+      if (!ls.some(x => x.league === S.league)) S.league = (ls.slice().sort((a, b) => (b.total || 0) - (a.total || 0))[0] || {}).league || null;
+    }
+    async function loadLeague() {
+      S.info = null; S.list = null; S.loaded = 0; S.pages = 0; S.shown = PAGE;
+      const league = S.league; if (!league) return;
+      const info = await get('market/' + league + '/index.json');
+      if (S.league !== league) return;
+      S.info = info;
+      const files = ((info && info.files) || []).filter(f => /^page-\d{1,3}\.json$/.test(f));
+      S.pages = files.length; paint();
+      const seen = new Set(), all = [];
+      let failed = 0;
+
+      for (let i = 0; i < files.length; i += 4) {
+        const part = await Promise.all(files.slice(i, i + 4).map(f => get('market/' + league + '/' + f, 40000).catch(() => undefined)));
+        if (S.league !== league) return;
+        for (const pg of part) {
+          if (pg === undefined) { failed++; continue; }
+
+          for (const l of (pg && pg.listings) || []) if (l && l.id && !seen.has(l.id)) { seen.add(l.id); all.push(prep(l)); }
+        }
+        S.loaded = Math.min(files.length, i + 4); S.list = all; paint();
+      }
+      S.list = all;
+      if (failed) S.err = failed + ' of ' + files.length + ' market files did not load, so some listings are missing. Press Refresh to try again.';
+    }
+    async function refresh(fn) {
+      S.loading = true; S.err = ''; paint();
+      try { await fn(); } catch (e) { S.err = e.message || String(e); }
+      S.loading = false; paint();
+    }
+
+
+    const rset = k => { const r = S.F.r[k]; return !!r && (r[0] !== '' && r[0] != null || r[1] !== '' && r[1] != null); };
+    const needNums = () => BASE_KEYS.some(rset) || BASE_KEYS.includes(S.F.sort);
+    const numsDone = () => !!S.list && S.loaded >= S.pages && S.list.every(l => l._n !== undefined);
+    async function ensureNums() {
+      if (S.numsBusy || !S.list || S.loaded < S.pages) return;
+      const list = S.list; S.numsBusy = true;
+      let k = 0;
+      for (let i = 0; i < list.length; i++) {
+        const l = list[i]; if (l._n !== undefined) continue;
+        let v = null;
+        if (GEAR.has(l.slot)) { try { v = ctx.baseNums(itemOf(l)) || null; } catch (e) { v = null; } }
+        l._n = v;
+        if (++k % 200 === 0) { S.numsN = i + 1; paint(); await new Promise(r => setTimeout(r, 0)); if (S.list !== list) { S.numsBusy = false; return; } }
+      }
+      S.numsBusy = false; paint();
+    }
+
+
+
+    let who = null, upQueue = [];
+    const gainOf = l => (who && l._g && l._g.key === who.key ? l._g : null);
+    const upOn = () => !!(S.F.up && who);
+    async function gainLoop() {
+      if (S.up.busy) return;
+      S.up.busy = true;
+      let drew = performance.now(), any = false;
+      try {
+        for (;;) {
+          const q = upQueue, w = who; if (!S.F.up || !w) break;
+          if (S.up.key !== w.key) { S.up.key = w.key; try { S.up.base = ctx.upgrade.dps(null); } catch (e) { S.up.base = null; } }
+          if (!(S.up.base > 0)) break;
+          let did = false; const t0 = performance.now();
+          for (const l of q) {
+            if (l._g && l._g.key === w.key) continue;
+            let d = null; try { d = ctx.upgrade.dps(itemOf(l)); } catch (e) { d = null; }
+            l._g = { key: w.key, dps: d, pct: d != null ? (d / S.up.base - 1) * 100 : null };
+            did = true;
+            if (performance.now() - t0 > 30) break;
+          }
+          if (!did) break;
+          any = true;
+          if (performance.now() - drew > 600) { paint(); drew = performance.now(); }
+          await new Promise(r => setTimeout(r, 0));
+        }
+      } finally { S.up.busy = false; }
+      if (any) paint();
+    }
+
+
+    const rangeGet = { ilvl: l => l.item_level || 0, req: l => l.req_level || 0, sock: l => (l.item || {}).sockets || 0, price: l => l._p.amt };
+    for (const k of BASE_KEYS) rangeGet[k] = l => (l._n && l._n[k] != null ? l._n[k] : null);
+    const inRange = (v, r) => v != null && (r[0] === '' || r[0] == null || v >= +r[0]) && (r[1] === '' || r[1] == null || v <= +r[1]);
+    const modHas = (l, m) => { const v = l._vals[m.id]; return v != null && (m.min === '' || v >= +m.min) && (m.max === '' || v <= +m.max); };
+
+    let curRank = {};
+    function rankCurs() { const c = {}; for (const l of S.list || []) c[l._p.cur] = (c[l._p.cur] || 0) + 1; curRank = {}; Object.keys(c).sort((a, b) => c[b] - c[a] || a.localeCompare(b)).forEach((k, i) => { curRank[k] = i; }); }
+    const curCmp = (a, b) => (curRank[a._p.cur] || 0) - (curRank[b._p.cur] || 0);
+
+
+    let more = new Map();
+    function rows() {
+      rankCurs();
+      const F = S.F, words = F.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const ranges = RANGES.map(r => r[0]).filter(k => rset(k) && (k !== 'price' || F.cur));
+      const want = F.mods.filter(m => m.id && !m.not), not = F.mods.filter(m => m.id && m.not);
+      const least = F.match === 'count' ? Math.max(1, Math.min(want.length, +F.count || 1)) : want.length;
+      const since = +F.listed ? Date.now() - +F.listed * 86400000 : 0, seller = lc(F.seller.trim());
+      const pick = F.pick, me = ctx.hero ? ctx.hero() : null, usable = F.use && me ? me.level : 0;
+      let out = (S.list || []).filter(l =>
+        (!F.slot || l.slot === F.slot) && (F.rarity === 'All' || l.rarity === F.rarity) && (!F.cur || l._p.cur === F.cur) &&
+        (!pick || (pick.k === 'u' ? l._u === pick.id : l._b === pick.id)) &&
+        (!F.mark || l._m[F.mark]) && (!usable || (l.req_level || 0) <= usable) &&
+        (!F.online || l.seller_online) && (!since || l._at >= since) && (!seller || l._s.includes(seller)) &&
+        ranges.every(k => inRange(rangeGet[k](l), F.r[k])) &&
+        not.every(m => !modHas(l, m)) && (!want.length || want.reduce((c, m) => c + (modHas(l, m) ? 1 : 0), 0) >= least) &&
+        words.every(w => l._find.includes(w)));
+
+      upQueue = upOn() ? out.filter(l => SIM_SLOTS.has(l.slot)) : [];
+      if (upOn() && F.upOnly) out = out.filter(l => { const g = gainOf(l); return g && g.pct > 0.05; });
+      const gain = l => { const g = gainOf(l); return g && g.pct != null ? g.pct : -Infinity; };
+      const worth = l => { const g = gain(l); return g > 0 ? g / Math.max(1, l._p.amt) : g === -Infinity ? -Infinity : -1; };
+      const byPrice = (a, b) => curCmp(a, b) || a._p.amt - b._p.amt || a._p.gold - b._p.gold;
+      const num = (l, k) => { const v = rangeGet[k](l); return v == null ? -Infinity : v; };
+      const s = F.sort, mi = /^mod:(\d+)$/.exec(s), sm = mi && F.mods[+mi[1]] && F.mods[+mi[1]].id;
+      const val = l => (l._vals[sm] == null ? -Infinity : l._vals[sm]);
+      out = out.slice().sort(s === 'dear' ? (a, b) => curCmp(a, b) || b._p.amt - a._p.amt || b._p.gold - a._p.gold
+        : s === 'new' ? (a, b) => b._at - a._at : s === 'old' ? (a, b) => a._end - b._end
+        : s === 'ilvl' ? (a, b) => (b.item_level || 0) - (a.item_level || 0) || byPrice(a, b)
+        : s === 'gain' && upOn() ? (a, b) => gain(b) - gain(a) || byPrice(a, b)
+        : s === 'value' && upOn() ? (a, b) => curCmp(a, b) || worth(b) - worth(a) || byPrice(a, b)
+        : s === 'top' ? (a, b) => (b._riven + b._top) - (a._riven + a._top) || (b._riven - a._riven) || byPrice(a, b)
+        : BASE_KEYS.includes(s) ? (a, b) => num(b, s) - num(a, s) || byPrice(a, b)
+        : sm ? (a, b) => val(b) - val(a) || byPrice(a, b) : byPrice);
+      more = new Map();
+      if (F.one) { const first = []; for (const l of out) { if (more.has(l.seller)) more.set(l.seller, more.get(l.seller) + 1); else { more.set(l.seller, 0); first.push(l); } } out = first; }
+      return out;
+    }
+    const modsSet = () => S.F.mods.filter(m => m.id).length;
+    const setIn = g => g === 'item' ? (S.F.slot ? 1 : 0) + (S.F.mark ? 1 : 0) + (S.F.use ? 1 : 0) + ['ilvl', 'req', 'sock'].filter(rset).length : g === 'base' ? BASE_KEYS.filter(rset).length : g === 'mods' ? modsSet()
+      : (S.F.cur ? 1 : 0) + (rset('price') && S.F.cur ? 1 : 0) + (S.F.listed ? 1 : 0) + (S.F.online ? 1 : 0) + (S.F.seller.trim() ? 1 : 0) + (S.F.one ? 1 : 0);
+    const filtered = () => !!(S.F.q.trim() || S.F.pick || S.F.up || S.F.rarity !== 'All' || S.F.sort !== 'cheap' || GROUPS.some(g => setIn(g[0])));
+
+
+    function hashOf() {
+      const F = S.F, p = new URLSearchParams();
+      p.set('m', S.league || '');
+      if (F.q.trim()) p.set('q', F.q.trim());
+      if (F.pick) p.set(F.pick.k, F.pick.id);
+      if (F.slot) p.set('slot', F.slot);
+      if (F.rarity !== 'All') p.set('rar', F.rarity);
+      if (F.cur) p.set('cur', F.cur);
+      for (const [k] of RANGES) if (rset(k)) p.set(k, (F.r[k][0] == null ? '' : F.r[k][0]) + '..' + (F.r[k][1] == null ? '' : F.r[k][1]));
+      if (F.up) p.set('up', '1');
+      if (F.up && F.upOnly) p.set('upo', '1');
+      if (F.mark) p.set('mark', F.mark);
+      if (F.use) p.set('use', '1');
+      if (F.listed) p.set('listed', F.listed);
+      if (F.online) p.set('on', '1');
+      if (F.seller.trim()) p.set('seller', F.seller.trim());
+      if (F.one) p.set('one', '1');
+      if (F.match === 'count') p.set('least', String(F.count));
+      for (const m of F.mods) if (m.id) p.append('mod', (m.not ? '!' : '') + (labelId.get(m.id) || m.id) + ':' + m.min + '..' + m.max);
+      if (F.sort !== 'cheap') p.set('sort', F.sort);
+      return '#' + p.toString();
+    }
+    const numStr = v => (/^-?\d+(\.\d+)?$/.test(v || '') ? v : '');
+    function readHash(hash) {
+      const p = new URLSearchParams(String(hash || '').replace(/^#/, '')), league = p.get('m');
+      if (league == null || !/^[a-z0-9-]{0,40}$/.test(league)) return null;
+      const F = blank();
+      F.q = (p.get('q') || '').slice(0, 80);
+      if (p.get('u')) F.pick = { k: 'u', id: lc(p.get('u')).slice(0, 60) }; else if (p.get('b')) F.pick = { k: 'b', id: lc(p.get('b')).slice(0, 60) };
+      if (SLOT_NAME[p.get('slot')]) F.slot = p.get('slot');
+      if (RARITIES.includes(p.get('rar'))) F.rarity = p.get('rar');
+      if (/^[a-z_]{1,30}$/.test(p.get('cur') || '')) F.cur = p.get('cur');
+      for (const [k] of RANGES) { const v = (p.get(k) || '').split('..'); if (v.length === 2 && (numStr(v[0]) || numStr(v[1]))) F.r[k] = [numStr(v[0]), numStr(v[1])]; }
+      if (LISTED.some(x => x[0] === p.get('listed'))) F.listed = p.get('listed');
+      if (MARKS.some(x => x[0] === p.get('mark'))) F.mark = p.get('mark');
+      F.use = p.get('use') === '1';
+      F.up = p.get('up') === '1'; F.upOnly = F.up && p.get('upo') === '1';
+      F.online = p.get('on') === '1'; F.one = p.get('one') === '1';
+      F.seller = (p.get('seller') || '').slice(0, 40);
+      if (+p.get('least') > 0) { F.match = 'count'; F.count = Math.min(MAX_MODS, Math.round(+p.get('least'))); }
+      const mods = p.getAll('mod').slice(0, MAX_MODS).map(t => {
+        const m = /^(!?)([A-Za-z0-9_]{1,60}):([^.]*)\.\.(.*)$/.exec(t); if (!m) return null;
+        return { id: modLabel(m[2]), min: numStr(m[3]), max: numStr(m[4]), not: !!m[1] };
+      }).filter(Boolean);
+      if (mods.length) F.mods = mods;
+      const s = p.get('sort') || '';
+      if (SORTS.some(x => x[0] === s) || (F.up && (s === 'gain' || s === 'value')) || (/^mod:\d$/.test(s) && F.mods[+s.slice(4)])) F.sort = s;
+      return { league, F };
+    }
+    function openFromHash(hash) {
+      const h = /^#m=/.test(hash || '') && readHash(hash); if (!h) return false;
+      const changed = !!h.league && h.league !== S.league;
+      if (h.league) S.league = h.league;
+      S.F = h.F; S.shown = PAGE;
+      if (started) { if (changed) refresh(loadLeague); else paint(); }
+      return true;
+    }
+    const linkUrl = () => location.origin + location.pathname + location.search + hashOf();
+
+    function syncHash() {
+      const el = $('#marketPane'); if (!el || el.hidden) return;
+      const want = filtered() ? hashOf() : '';
+      if (!want && !/^#m=/.test(location.hash)) return;
+      if (location.hash !== want) try { history.replaceState(history.state, '', location.pathname + location.search + want); } catch (e) { /* a file page */ }
+    }
+
+
+    function header() {
+      const I = S.info, lg = ((S.index && S.index.leagues) || []).find(x => x.league === S.league);
+      const gen = (I && I.generated_at) || (S.index && S.index.generated_at);
+      const fresh = gen && Date.now() - Date.parse(gen) < 12 * 60000;
+      const kpi = (label, value, sub) => '<div class="bs-cell"><span class="bs-label">' + label + '</span><b>' + value + '</b>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>';
+      const sellers = S.list ? new Set(S.list.map(l => l.seller)).size : null;
+      const uniques = I && I.facets && I.facets.rarity ? I.facets.rarity.Unique || 0 : null;
+      return '<div class="lad-top"><div class="cmp-intro"><div class="eyebrow">WAGON MARKET</div><h2>Market</h2>' +
+        '<p>Every item listed on the Wagon Market in the public trade leagues, to search by name, slot, mods and price. Look only: you buy in the game, at the Settler Wagon\'s Market.</p>' +
+        '<div class="lad-status"><span class="lad-dot' + (fresh ? ' on' : '') + '" aria-hidden="true"></span>' + (gen ? 'Listings from ' + esc(ago(gen)) + ' (the game refreshes them every 5 minutes)' : S.loading ? 'Loading…' : 'Not loaded') + '</div></div>' +
+        '<div class="build-summary lad-kpis mk-kpis">' +
+        kpi('League', lg ? esc((lg.hardcore ? 'Hardcore' : 'Softcore') + ' Trade') : '–', lg ? esc(lg.name || lg.league) : '') +
+        kpi('Listings', I ? n(I.total) : '–', I && I.capped ? 'the feed is capped' : '') +
+        kpi('Uniques listed', uniques != null ? n(uniques) : '–', '') +
+        kpi('Sellers', sellers != null ? n(sellers) : '–', S.list ? n(new Set(S.list.filter(l => l.seller_online).map(l => l.seller)).size) + ' online now' : '') +
+        '</div></div>';
+    }
+
+    function suggestions() {
+      const words = S.F.q.trim().toLowerCase().split(/\s+/).filter(Boolean); if (!words.length) return [];
+      const fac = (S.info && S.info.facets) || {}, out = [];
+      const hit = nm => words.every(w => nm.toLowerCase().includes(w));
+      for (const [id, c] of Object.entries(fac.unique || {})) { if (isHidden(id)) continue; const nm = nameOf('uniques', id); if (hit(nm)) out.push({ k: 'u', id: lc(id), name: nm, group: 'Uniques', c }); }
+      for (const [id, c] of Object.entries(fac.base || {})) {
+        if (isHidden(id)) continue; const nm = baseNameOf(id); if (!hit(nm)) continue;
+        const b = tbl('bases', id);
+        out.push({ k: 'b', id: lc(id), name: nm, group: runeOfBase(id) ? 'Runes and jewels' : (b && (b.TypeName || SLOT_NAME[b.Slot])) || 'Bases', c });
+      }
+      const first = x => (x.name.toLowerCase().startsWith(words[0]) ? 0 : 1);
+      return out.sort((a, b) => (a.k === b.k ? 0 : a.k === 'u' ? -1 : 1) || first(a) - first(b) || b.c - a.c || a.name.localeCompare(b.name)).slice(0, SUGGEST);
+    }
+    function suggestBox() {
+      if (!S.sug) return '';
+      const list = suggestions(); if (!list.length) return '';
+      let h = '', g = '';
+      list.forEach((x, i) => {
+        if (x.group !== g) { g = x.group; h += '<div class="mk-sug-group">' + esc(g) + '</div>'; }
+        h += '<button type="button" class="mk-sug' + (i === S.sugIdx ? ' on' : '') + '" role="option" data-pick="' + x.k + ':' + esc(x.id) + '"><span>' + esc(x.name) + '</span><small class="meta">' + n(x.c) + ' listed</small></button>';
+      });
+      return '<div class="mk-suggest" id="mkSuggest" role="listbox" aria-label="Items listed">' + h + '</div>';
+    }
+    const rangeBox = (k, label, off, ph) => {
+      const r = S.F.r[k] || ['', ''], inp = i => '<input type="number" inputmode="decimal" data-k="r:' + k + ':' + i + '" placeholder="' + (off ? '–' : i ? 'max' : 'min') + '" aria-label="' + esc(label) + (i ? ', highest' : ', lowest') + '" value="' + esc(r[i] == null ? '' : r[i]) + '"' + (off ? ' disabled' : '') + '>';
+      return '<div class="mk-range"><span>' + esc(label) + (ph ? ' <small class="meta">' + esc(ph) + '</small>' : '') + '</span><div>' + inp(0) + inp(1) + '</div></div>';
+    };
+    const group = (id, title, body) => { const c = setIn(id); return '<details class="card mk-group" data-g="' + id + '"' + (S.open[id] ? ' open' : '') + '><summary><b>' + title + '</b>' + (c ? '<span class="lad-tag mk-set">' + c + ' set</span>' : '') + '</summary><div class="mk-group-body">' + body + '</div></details>'; };
+    const short = x => x == null || !isFinite(x) ? '–' : x >= 1e9 ? (x / 1e9).toFixed(2) + 'B' : x >= 1e6 ? (x / 1e6).toFixed(x >= 1e7 ? 1 : 2) + 'M' : x >= 1e4 ? Math.round(x / 1e3) + 'k' : Math.round(x).toLocaleString('en-US');
+
+    function upBox() {
+      const F = S.F;
+      if (!who) return '<div class="card mk-up"><label class="mk-check"><input type="checkbox" disabled> <b>Upgrade finder</b></label><span class="meta">Load a character and pick its main skill to see what each listing would do to its damage.</span></div>';
+      const left = F.up ? upQueue.filter(l => !gainOf(l)).length : 0, total = upQueue.length;
+      const status = !F.up ? '' : !(S.up.base > 0) && S.up.key === who.key ? 'The sim has no damage number for ' + who.skill + ' on this character, so there is nothing to compare.'
+        : left ? 'Simming… ' + n(total - left) + ' of ' + n(total) + ' listings.' : total ? n(total) + ' listings simmed against ' + short(S.up.base) + ' DPS now.' : 'No listing here has a gear slot to sim.';
+      return '<div class="card mk-up' + (F.up ? ' on' : '') + '"><label class="mk-check"><input type="checkbox" id="mkUp"' + (F.up ? ' checked' : '') + '> <span><b>Upgrade finder</b>: what each listing does to <span class="notranslate">' + esc(who.name) + '</span>\'s ' + esc(who.skill) + ' damage</span></label>' +
+        (F.up ? '<label class="mk-check"><input type="checkbox" id="mkUpOnly"' + (F.upOnly ? ' checked' : '') + '> Only upgrades</label><span class="meta mk-up-status">' + esc(status) + '</span>' +
+          '<p class="hint mk-wide">Each listing takes its slot on your character and your main skill is simmed with your Damage Analysis settings, as the Item Simulator does. A ring is tried in both ring slots. Weapons, armour, belts, amulets and rings only. It does not check that you can wear the item, and it is a sim estimate.</p>' : '') + '</div>';
+    }
+
+    function gainChip(l) {
+      if (!upOn() || !SIM_SLOTS.has(l.slot)) return '';
+      const g = gainOf(l);
+      if (!g) return '<span class="lad-tag mk-gain wait">simming…</span>';
+      if (g.pct == null) return '<span class="lad-tag mk-gain none">no sim result</span>';
+      const p = g.pct, t = Math.abs(p) < 0.05 ? 'no change' : (p > 0 ? '+' : '−') + (Math.abs(p) >= 100 ? Math.round(Math.abs(p)) : Math.abs(p).toFixed(1)) + '% DPS';
+      return '<span class="lad-tag mk-gain ' + (Math.abs(p) < 0.05 ? 'same' : p > 0 ? 'up' : 'down') + '">' + t + '</span>';
+    }
+    function controls() {
+      const F = S.F, I = S.info || {}, fac = I.facets || {}, list = S.list || [], hero = ctx.hero ? ctx.hero() : null;
+      const ls = ((S.index && S.index.leagues) || []).filter(x => (x.total || 0) > 0 || x.league === S.league);
+      const lgOpt = x => '<option value="' + esc(x.league) + '"' + (x.league === S.league ? ' selected' : '') + '>' + esc((x.name || x.league) + ' · ' + (x.hardcore ? 'Hardcore' : 'Softcore') + ' (' + n(x.total) + ')') + '</option>';
+      const slots = SLOT_ORDER.filter(s => (fac.slot || {})[s]).concat(Object.keys(fac.slot || {}).filter(s => !SLOT_ORDER.includes(s)));
+      const curs = {}; for (const l of list) curs[l._p.cur] = (curs[l._p.cur] || 0) + 1;
+      if (F.cur && !curs[F.cur]) curs[F.cur] = 0;
+      const curList = Object.keys(curs).sort((a, b) => curs[b] - curs[a]);
+      const rar = {}; for (const l of list) rar[l.rarity] = (rar[l.rarity] || 0) + 1;
+
+      const modN = {}; for (const l of list) if (!F.slot || l.slot === F.slot) for (const id in l._vals) modN[id] = (modN[id] || 0) + 1;
+      for (const m of F.mods) if (m.id && !modN[m.id]) modN[m.id] = 0;
+      const modIds = Object.keys(modN).sort((a, b) => a.localeCompare(b));
+      const modRow = (m, i) => '<div class="mk-mod' + (m.not ? ' not' : '') + '">' +
+        '<select data-k="mod:' + i + ':not" aria-label="Mod ' + (i + 1) + ': has or does not have"><option value=""' + (m.not ? '' : ' selected') + '>Has</option><option value="1"' + (m.not ? ' selected' : '') + '>Does not have</option></select>' +
+        '<select data-k="mod:' + i + ':id" aria-label="Mod ' + (i + 1) + '"><option value="">Any mod</option>' + modIds.map(id => '<option value="' + esc(id) + '"' + (id === m.id ? ' selected' : '') + '>' + esc(id) + ' (' + modN[id] + ')</option>').join('') + '</select>' +
+        '<input type="number" inputmode="decimal" data-k="mod:' + i + ':min" placeholder="min" aria-label="Lowest value of mod ' + (i + 1) + '" value="' + esc(m.min) + '"' + (m.id ? '' : ' disabled') + '>' +
+        '<input type="number" inputmode="decimal" data-k="mod:' + i + ':max" placeholder="max" aria-label="Highest value of mod ' + (i + 1) + '" value="' + esc(m.max) + '"' + (m.id ? '' : ' disabled') + '>' +
+        '<button type="button" class="btn ghost mk-x" data-moddel="' + i + '" aria-label="Remove mod ' + (i + 1) + '"' + (F.mods.length < 2 && !m.id ? ' disabled' : '') + '>×</button></div>';
+      const wanted = F.mods.filter(m => m.id && !m.not).length;
+      const sortOpts = (upOn() ? [['gain', 'Biggest damage gain'], ['value', 'Most damage gain for the price']] : []).concat(SORTS.map(s => [s[0], s[1]])).concat(F.mods.map((m, i) => (m.id && !m.not ? ['mod:' + i, 'Highest: ' + m.id] : null)).filter(Boolean));
+      const chips = (F.pick ? '<span class="chip mk-chip">' + (F.pick.k === 'u' ? 'Unique: ' + esc(nameOf('uniques', F.pick.id)) : 'Base: ' + esc(baseNameOf(F.pick.id))) + '<button type="button" id="mkUnpick" aria-label="Remove the item filter">×</button></span>' : '') +
+        (F.seller.trim() ? '<span class="chip mk-chip">Seller: <span class="notranslate">' + esc(F.seller.trim()) + '</span><button type="button" id="mkUnseller" aria-label="Remove the seller filter">×</button></span>' : '');
+      const top = '<div class="lad-controls mk-top">' +
+        '<label class="field"><span>League</span><select id="mkLeague">' + ls.map(lgOpt).join('') + '</select></label>' +
+        '<button type="button" class="btn ghost lad-reset" id="mkRefresh"' + (S.loading ? ' disabled' : '') + '>Refresh</button>' +
+        '<button type="button" class="btn ghost lad-reset" id="mkLink">Copy link to this search</button>' +
+        '<button type="button" class="btn ghost lad-reset" id="mkHide" aria-expanded="' + !S.hide + '">' + (S.hide ? 'Show filters' : 'Hide filters') + '</button>' +
+        '</div>';
+      const search = '<div class="mk-searchrow"><div class="field lad-item-search mk-search"><label for="mkQ">Search</label>' +
+        '<input id="mkQ" type="search" autocomplete="off" role="combobox" aria-expanded="' + (S.sug ? 'true' : 'false') + '" aria-controls="mkSuggest" placeholder="Item, base, mod or seller, e.g. Gravecut or critical" value="' + esc(F.q) + '">' + suggestBox() +
+        (chips ? '<div class="mk-chips">' + chips + '</div>' : '') + '</div>' +
+        '<label class="field mk-sort"><span>Sort by</span><select id="mkSort">' + sortOpts.map(s => '<option value="' + esc(s[0]) + '"' + (s[0] === F.sort ? ' selected' : '') + '>' + esc(s[1]) + '</option>').join('') + '</select></label>' +
+        '<div class="cmp-modes mk-view" role="tablist" aria-label="Results as">' + [['cards', 'Cards'], ['list', 'Compact list']].map(v => '<button type="button" class="cmp-mode' + (S.view === v[0] ? ' on' : '') + '" role="tab" aria-selected="' + (S.view === v[0]) + '" data-view="' + v[0] + '">' + v[1] + '</button>').join('') + '</div>' +
+        '<button type="button" class="btn ghost lad-reset" id="mkReset"' + (filtered() ? '' : ' disabled') + '>Reset filters</button></div>';
+      const rarity = '<div class="lad-classes" role="tablist" aria-label="Rarity">' + RARITIES.map(r => '<button type="button" role="tab" class="lad-class' + (F.rarity === r ? ' on' : '') + '" aria-selected="' + (F.rarity === r) + '" data-rar="' + r + '">' + r + (r !== 'All' && rar[r] ? ' <small>' + n(rar[r]) + '</small>' : '') + '</button>').join('') + '</div>';
+      if (S.hide) { const c = GROUPS.reduce((a, g) => a + setIn(g[0]), 0); return top + search + rarity + upBox() + (c ? '<p class="hint">' + c + ' more filter' + (c > 1 ? 's' : '') + ' set (hidden).</p>' : ''); }
+      const gItem = '<label class="field"><span>Slot</span><select id="mkSlot"><option value="">All slots</option>' + slots.map(s => '<option value="' + esc(s) + '"' + (s === F.slot ? ' selected' : '') + '>' + esc(SLOT_NAME[s] || s) + ' (' + n(fac.slot[s]) + ')</option>').join('') + '</select></label>' +
+        rangeBox('ilvl', 'Item level') + rangeBox('req', 'Wearable at level') + rangeBox('sock', 'Sockets') +
+        '<label class="field"><span>Marked</span><select id="mkMark"><option value="">Any</option>' + MARKS.map(x => '<option value="' + x[0] + '"' + (x[0] === F.mark ? ' selected' : '') + '>' + (x[0] === 'top' ? TOP_FROM + ' or more top tier mods' : x[1]) + '</option>').join('') + '</select></label>' +
+        '<label class="mk-check"><input type="checkbox" id="mkUse"' + (F.use && hero ? ' checked' : '') + (hero ? '' : ' disabled') + '> <span>' + (hero ? 'Usable now by <span class="notranslate">' + esc(hero.name) + '</span> (level ' + hero.level + ')' : 'Usable now (load a character first)') + '</span></label>';
+      const gBase = rangeBox('dps', 'Weapon DPS') + rangeBox('hit', 'Average hit') + rangeBox('aps', 'Attacks per second') + rangeBox('crit', 'Critical chance %') +
+        rangeBox('arm', 'Armour') + rangeBox('eva', 'Evasion') + rangeBox('es', 'Energy Shield') +
+        '<p class="hint mk-wide">As the Build Planner adds an item up: base, Base Grade, quality and the item\'s own lines.</p>';
+      const gMods = '<div class="mk-match"><label class="field"><span>Listings must have</span><select id="mkMatch"><option value="all"' + (F.match === 'all' ? ' selected' : '') + '>All of the mods below</option><option value="count"' + (F.match === 'count' ? ' selected' : '') + '>At least this many of them</option></select></label>' +
+        (F.match === 'count' ? '<label class="field mk-count-n"><span>How many</span><input type="number" inputmode="numeric" min="1" max="' + Math.max(1, wanted) + '" data-k="count" value="' + esc(F.count) + '"></label>' : '') + '</div>' +
+        F.mods.map(modRow).join('') +
+        '<button type="button" class="btn ghost" id="mkAddMod"' + (F.mods.length >= MAX_MODS ? ' disabled' : '') + '>+ Add a mod</button>';
+      const gTrade = '<label class="field"><span>Priced in</span><select id="mkCur"><option value="">Anything</option>' + curList.map(c => '<option value="' + esc(c) + '"' + (c === F.cur ? ' selected' : '') + '>' + esc(curName(c)) + ' (' + n(curs[c]) + ')</option>').join('') + '</select></label>' +
+        rangeBox('price', 'Price', !F.cur, F.cur ? 'in ' + curName(F.cur) : 'pick "Priced in" first') +
+        '<label class="field"><span>Listed</span><select id="mkListed">' + LISTED.map(x => '<option value="' + x[0] + '"' + (x[0] === F.listed ? ' selected' : '') + '>' + x[1] + '</option>').join('') + '</select></label>' +
+        '<label class="field"><span>Seller</span><input type="search" autocomplete="off" data-k="seller" class="notranslate" placeholder="Hero name" value="' + esc(F.seller) + '"></label>' +
+        '<label class="mk-check"><input type="checkbox" id="mkOnline"' + (F.online ? ' checked' : '') + '> Seller online now</label>' +
+        '<label class="mk-check"><input type="checkbox" id="mkOne"' + (F.one ? ' checked' : '') + '> One listing per seller</label>';
+      const body = { item: gItem, base: gBase, mods: gMods, trade: gTrade };
+      return top + search + rarity + upBox() + '<div class="mk-groups">' + GROUPS.map(g => group(g[0], g[1], body[g[0]])).join('') + '</div>';
+    }
+
+    function view(l) {
+      if (l._v) return l._v;
+      const it = l.item || {}, uniq = l.unique && l.unique !== 'None' ? l.unique : '', rune = runeOfBase(l.base);
+      const base = baseNameOf(l.base);
+      const title = uniq ? (isHidden(uniq) ? 'Undiscovered unique' : nameOf('uniques', uniq)) : (l.rarity === 'Rare' && it.name ? it.name : base);
+      let lines = [];
+      if (rune) {
+        const side = (label, ms) => (ms || []).map(m => { try { return label + ': ' + ctx.modText(m); } catch (e) { return ''; } }).filter(Boolean);
+        lines = [...side('In a weapon', rune.Weapon), ...side('In armour', rune.Armour)];
+      } else { try { lines = ctx.itemLines(itemOf(l), '') || []; } catch (e) { lines = []; } }
+      const runes = (it.runes || []).filter(Boolean);
+      if (runes.length) lines.push('Runes: ' + runes.map(r => isHidden(r) ? 'Undiscovered' : nameOf('runes', r)).join(', '));
+      const facts = [l.item_level ? 'item level ' + l.item_level : '', l.req_level ? 'wearable at ' + l.req_level : '', it.quality ? 'quality ' + it.quality + '%' : '', it.baseGrade95 ? 'Base Grade ' + it.baseGrade95 : '',
+        it.sockets ? it.sockets + ' socket' + (it.sockets > 1 ? 's' : '') : '', it.forged79 ? 'forged' : '', it.count > 1 ? 'stack of ' + it.count : ''].filter(Boolean).join(' · ');
+      const flags = (it.affixes || []).reduce((o, a) => { if (a.bCrafted) o.c++; if (a.bOath83) o.o++; if (a.bScar93) o.s++; return o; }, { c: 0, o: 0, s: 0 });
+      const marks = [flags.o ? 'Oath line' : '', flags.c ? flags.c + ' forged line' + (flags.c > 1 ? 's' : '') : '', flags.s ? flags.s + ' Scarred' : ''].filter(Boolean).join(' · ');
+      const ico = ctx.art ? (uniq && !isHidden(uniq) && ctx.art('uniq', uniq, 'unique')) || (rune && ctx.art('rune', rune.Id, 'rune')) || ctx.art('base', lc(l.base), 'base') || '' : '';
+      const chip = (k, text) => '<span class="lad-tag mk-tag mk-tag-' + k + '">' + esc(text) + '</span>';
+      const tags = (l._m.sig ? chip('sig', 'Signature') : '') + (l._m.pin ? chip('pin', 'Pinnacle') : '') + (l._riven ? chip('riven', 'Riven line') : '') + (l._top >= TOP_FROM ? chip('top', l._top + ' top tier') : '');
+      return (l._v = { title, base, lines, facts, marks, ico, tags });
+    }
+
+
+
+    function tipBody(l) {
+      if (l._tip !== undefined) return l._tip;
+      let h = '';
+      if (!runeOfBase(l.base)) { try { h = ctx.itemTip ? ctx.itemTip(itemOf(l)) || '' : ''; } catch (e) { h = ''; } }
+      return (l._tip = h.replace(/^<b>[\s\S]*?<\/b>(<span class="pl-tip-sub">[\s\S]*?<\/span>)?/, ''));
+    }
+    const plainLines = v => '<ul>' + v.lines.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul>';
+    const tipInline = l => { const b = tipBody(l); return b ? '<div class="pl-tip mk-inline-tip">' + b + '</div>' : plainLines(view(l)); };
+    const tipHover = l => { const v = view(l), b = tipBody(l); return '<b>' + esc(v.title) + '</b><span class="pl-tip-sub">' + esc([v.title !== v.base ? v.base : '', SLOT_NAME[l.slot] || l.slot, l.rarity, v.facts].filter(Boolean).join(' · ')) + '</span>' + (b || plainLines(v)) + '<span class="pl-tip-desc">' + esc(priceText(l._p)) + '</span>'; };
+    function sellerBit(l) {
+
+
+
+
+      const raw = l.seller_code ? String(l.seller_code) : '', code = /^[A-Za-z0-9]{8}$/.test(raw) ? raw.slice(0, 4) + '-' + raw.slice(4) : raw, extra = more.get(l.seller) || 0;
+      return '<span class="lad-dot' + (l.seller_online ? ' on' : '') + '" role="img" aria-label="' + (l.seller_online ? 'Online' : 'Offline') + '"></span>' +
+        '<button type="button" class="mk-name notranslate" data-seller="' + esc(l.seller || '') + '" aria-label="Show all listings of ' + esc(l.seller || '') + '">' + esc(l.seller || '') + '</button>' +
+        '<small class="meta">' + (l.seller_online ? 'online' : 'offline') + (extra ? ' · ' + extra + ' more listed' : '') + '</small>' +
+        (code ? '<button type="button" class="btn ghost mk-copy" data-code="' + esc(code) + '" aria-label="Copy seller code ' + esc(code) + '"><code class="notranslate">' + esc(code) + '</code><span>Copy</span></button>' : '<small class="meta mk-nocode">seller code hidden</small>') +
+        '<button type="button" class="btn ghost mk-like" data-like="' + esc(l.id) + '">More like this</button>';
+    }
+    const times = l => esc(['listed ' + ago(l.listed_at), until(l.expires_at)].filter(x => x && x !== 'listed ').join(' · '));
+    function card(l) {
+      const v = view(l);
+      return '<div class="lad-item mk-card r-' + esc(lc(l.rarity || 'normal')) + '">' +
+        '<div class="mk-head">' + v.ico + '<div class="mk-title"><b>' + esc(v.title) + '</b>' + (v.title !== v.base ? '<small class="meta">' + esc(v.base) + '</small>' : '') +
+        '<small class="meta">' + esc((SLOT_NAME[l.slot] || l.slot || '') + ' · ' + (l.rarity || '')) + '</small></div></div>' +
+        '<div class="mk-price">' + esc(priceText(l._p)) + (v.tags || gainChip(l) ? '<span class="mk-tags">' + gainChip(l) + v.tags + '</span>' : '') + '</div>' +
+        (v.facts ? '<div class="meta lad-facts">' + esc(v.facts) + '</div>' : '') +
+        tipInline(l) + (v.marks ? '<div class="meta mk-marks">' + esc(v.marks) + '</div>' : '') +
+        '<div class="mk-seller">' + sellerBit(l) + '</div>' +
+        '<div class="meta mk-times">' + times(l) + '</div></div>';
+    }
+
+
+    function row(l) {
+      const v = view(l);
+      const open = S.openRows.has(l.id);
+      return '<div class="lad-item mk-row' + (open ? ' open' : '') + ' r-' + esc(lc(l.rarity || 'normal')) + '" data-id="' + esc(l.id) + '">' + v.ico +
+        '<div class="mk-title"><b>' + esc(v.title) + '</b><small class="meta">' + esc((v.title !== v.base ? v.base + ' · ' : '') + (SLOT_NAME[l.slot] || l.slot || '') + ' · ' + (l.rarity || '')) + '</small></div>' +
+        '<button type="button" class="mk-row-lines" aria-expanded="' + open + '" aria-label="Show the item: ' + esc(v.title) + '"><small class="meta">' + esc(v.facts) + '</small><span class="mk-row-text">' + esc(v.lines.join(' · ')) + '</span></button>' +
+        '<div class="mk-row-price"><b class="mk-price">' + esc(priceText(l._p)) + '</b>' + (v.tags || gainChip(l) ? '<span class="mk-tags">' + gainChip(l) + v.tags + '</span>' : '') + '<small class="meta">' + times(l) + '</small></div>' +
+        '<div class="mk-seller">' + sellerBit(l) + '</div>' +
+        '<div class="mk-row-tip"' + (open ? '' : ' hidden') + '>' + (open ? tipInline(l) : '') + '</div></div>';
+    }
+    function results() {
+      if (!S.league) return '<div class="card"><p class="hint">' + (S.loading ? 'Loading the market…' : 'No trade league has a market right now.') + '</p></div>';
+      if (!S.list) return '<div class="card"><p class="hint">' + (S.loading ? 'Loading the listings…' : 'No listings loaded.') + '</p></div>';
+      const part = S.pages && S.loaded < S.pages ? '<p class="hint">Reading listings… ' + S.loaded + ' of ' + S.pages + ' files.</p>' : '';
+      if (needNums() && !numsDone()) { ensureNums(); return part + '<div class="card"><p class="hint">Working out weapon and armour numbers… ' + n(S.numsN) + ' of ' + n(S.list.length) + ' listings.</p></div>'; }
+      const rs = rows();
+      if (upOn() && !S.up.busy && (S.up.key !== who.key || upQueue.some(l => !gainOf(l)))) gainLoop();
+      if (!rs.length) return part + '<div class="card"><p class="hint">' + (S.list.length ? 'No listings match these filters.' : 'Nothing is listed in this league.') + '</p></div>';
+      const shown = rs.slice(0, S.shown);
+      const mixed = !S.F.cur && (S.F.sort === 'cheap' || S.F.sort === 'dear') && new Set(rs.map(l => l._p.cur)).size > 1;
+      return part + '<p class="hint mk-count">' + n(rs.length) + (S.F.one ? ' seller' : ' listing') + (rs.length > 1 ? 's' : '') + (!S.F.one && rs.length < S.list.length ? ' of ' + n(S.list.length) : '') + (S.F.one ? ' (one listing each)' : '') + '.' +
+        (mixed ? ' Sellers ask different things (gold, Oathsteel, Gloomsilver…), so prices are grouped by what is asked. Pick "Priced in" to compare one kind.' : '') + '</p>' +
+        (S.view === 'list' ? '<div class="mk-list">' + shown.map(row).join('') + '</div>' : '<div class="mk-grid">' + shown.map(card).join('') + '</div>') +
+        (rs.length > shown.length ? '<div class="mk-more"><button type="button" class="btn" id="mkMore">Show ' + Math.min(PAGE, rs.length - shown.length) + ' more</button></div>' : '');
+    }
+
+
+
+
+    function howTo() {
+      return '<details class="card mk-group mk-how" data-g="how"' + (S.open.how !== false ? ' open' : '') + '><summary><b>How to buy</b></summary>' +
+        '<p>Find the item here, then buy it in the game: open the <b>Settler Wagon</b>, go to <b>Market</b>, type the item\'s name into "Name or base" and press <b>Buy</b> on the listing.</p>' +
+        '<p class="hint">To ask a seller something first, copy their seller code, open the <b>Social</b> window in the game, paste it into the box at the top and press <b>Add friend</b> (a hero name works there too). Listings here are a snapshot, so an item may already be sold.</p></details>';
+    }
+    function paint() {
+      const el = $('#marketPane'); if (!el) return;
+
+      const a = document.activeElement, inside = a && el.contains(a);
+      const sel = inside ? (a.id ? '#' + a.id : a.dataset.k ? '[data-k="' + a.dataset.k + '"]' : '') : '';
+      let caret = null; if (sel && a.type === 'search') try { caret = [a.selectionStart, a.selectionEnd]; } catch (e) { caret = null; }
+      hideTip();
+      try { who = ctx.upgrade ? ctx.upgrade.who() : null; } catch (e) { who = null; }
+      const res = results(); // first: it sets the upgrade finder's queue, which the box above the results reports on
+      el.innerHTML = header() + controls() + howTo() +
+        (S.err ? '<div class="card"><p class="hint bad">' + esc(S.err) + '</p></div>' : '') + res +
+        '<p class="hint lad-credit">A snapshot, refreshed every 5 minutes: an item may already be sold, so check in the game. Nothing can be bought or sold here. Numbers and items change with every patch. Data: <a href="https://store.steampowered.com/app/5452900/Broken_Oath/" target="_blank" rel="noopener noreferrer">Broken Oath public API</a>. A fan-made tool, not an official one.</p>';
+      const f = sel && el.querySelector(sel);
+      if (f) { f.focus(); if (caret) try { f.setSelectionRange(caret[0], caret[1]); } catch (e) { /* not a text box */ } }
+      syncHash();
+    }
+
+    let bound = false, started = false;
+    const byId = id => (S.list || []).find(l => l.id === id) || null;
+
+    let tipEl = null;
+    const hideTip = () => { if (tipEl) { tipEl.hidden = true; tipEl.dataset.key = ''; } };
+    function showTip(e) {
+      const row = e.target.closest && e.target.closest('.mk-row');
+      if (!row || row.classList.contains('open') || e.target.closest('.mk-name, .mk-copy, .mk-like')) return hideTip();
+      const l = byId(row.dataset.id); if (!l) return hideTip();
+      if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'pl-tip'; tipEl.setAttribute('role', 'tooltip'); document.body.appendChild(tipEl); }
+      if (tipEl.dataset.key !== l.id) { let h = ''; try { h = tipHover(l); } catch (err) { h = ''; } if (!h) return hideTip(); tipEl.innerHTML = h; tipEl.dataset.key = l.id; }
+      tipEl.hidden = false;
+      const r = row.getBoundingClientRect(), w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+      let y = r.bottom + 6; if (y + h > innerHeight - 8) y = Math.max(8, r.top - h - 6);
+      tipEl.style.left = Math.max(8, Math.min(r.left + 46, innerWidth - w - 8)) + 'px'; tipEl.style.top = y + 'px';
+    }
+    function bind() {
+      if (bound) return; bound = true;
+      const el = $('#marketPane'), F = () => S.F;
+      el.addEventListener('mouseover', showTip); el.addEventListener('focusin', showTip);
+      el.addEventListener('mouseleave', hideTip); el.addEventListener('focusout', hideTip);
+      window.addEventListener('scroll', hideTip, { passive: true });
+      const again = () => { S.shown = PAGE; paint(); };
+      const pickItem = v => { const i = String(v).indexOf(':'); F().pick = { k: v.slice(0, i), id: v.slice(i + 1) }; F().q = ''; S.sug = false; S.sugIdx = -1; again(); };
+      el.addEventListener('change', e => {
+        const t = e.target, id = t.id, k = (t.dataset.k || '').split(':');
+        if (id === 'mkLeague') { S.league = t.value; keep('marketLeague', S.league); S.F = blank(); refresh(loadLeague); }
+        else if (id === 'mkSlot') { F().slot = t.value; again(); }
+        else if (id === 'mkCur') { F().cur = t.value; if (!t.value) delete F().r.price; again(); }
+        else if (id === 'mkListed') { F().listed = t.value; again(); }
+        else if (id === 'mkMark') { F().mark = t.value; again(); }
+        else if (id === 'mkUse') { F().use = t.checked; again(); }
+        else if (id === 'mkUp') { F().up = t.checked; if (t.checked && F().sort === 'cheap') F().sort = 'gain'; if (!t.checked) { F().upOnly = false; if (F().sort === 'gain' || F().sort === 'value') F().sort = 'cheap'; } again(); }
+        else if (id === 'mkUpOnly') { F().upOnly = t.checked; again(); }
+        else if (id === 'mkSort') { F().sort = t.value; again(); }
+        else if (id === 'mkOnline') { F().online = t.checked; again(); }
+        else if (id === 'mkOne') { F().one = t.checked; again(); }
+        else if (id === 'mkMatch') { F().match = t.value; again(); }
+        else if (k[0] === 'mod' && (k[2] === 'id' || k[2] === 'not')) {
+          const m = F().mods[+k[1]]; if (!m) return;
+          if (k[2] === 'id') { m.id = t.value; if (!m.id) { m.min = ''; m.max = ''; } } else m.not = !!t.value;
+          if (/^mod:/.test(F().sort) && !(F().mods[+F().sort.slice(4)] || {}).id) F().sort = 'cheap';
+          again();
+        }
+      });
+      let typing = null;
+      el.addEventListener('input', e => {
+        const t = e.target, k = (t.dataset.k || '').split(':');
+        if (t.id === 'mkQ') { F().q = t.value; S.sug = true; S.sugIdx = -1; }
+        else if (k[0] === 'r') { const r = F().r[k[1]] || (F().r[k[1]] = ['', '']); r[+k[2]] = t.value; }
+        else if (k[0] === 'mod' && (k[2] === 'min' || k[2] === 'max')) { const m = F().mods[+k[1]]; if (m) m[k[2]] = t.value; }
+        else if (k[0] === 'count') F().count = Math.max(1, Math.round(+t.value) || 1);
+        else if (k[0] === 'seller') F().seller = t.value;
+        else return;
+        clearTimeout(typing); typing = setTimeout(again, 250);
+      });
+
+      el.addEventListener('keydown', e => {
+        if (e.target.id !== 'mkQ') return;
+        const list = [...el.querySelectorAll('.mk-sug')];
+        if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && list.length) {
+          e.preventDefault();
+          S.sugIdx = (S.sugIdx + (e.key === 'ArrowDown' ? 1 : -1) + list.length + (S.sugIdx < 0 && e.key === 'ArrowUp' ? 1 : 0)) % list.length;
+          list.forEach((b, i) => b.classList.toggle('on', i === S.sugIdx));
+        } else if (e.key === 'Enter') { if (S.sugIdx >= 0 && list[S.sugIdx]) { e.preventDefault(); pickItem(list[S.sugIdx].dataset.pick); } else if (S.sug) { S.sug = false; clearTimeout(typing); again(); } }
+        else if (e.key === 'Escape' && S.sug) { S.sug = false; const b = el.querySelector('#mkSuggest'); if (b) b.remove(); }
+      });
+      el.addEventListener('toggle', e => {
+        const g = e.target.dataset && e.target.dataset.g; if (!g) return;
+        S.open[g] = e.target.open; keep('marketOpen', JSON.stringify(S.open));
+      }, true);
+      el.addEventListener('click', async e => {
+        const t = e.target;
+        const p = t.closest('[data-pick]'); if (p) { pickItem(p.dataset.pick); return; }
+
+        if (S.sug && !t.closest('.mk-search')) { S.sug = false; const b = el.querySelector('#mkSuggest'); if (b) b.remove(); }
+        const r = t.closest('[data-rar]'); if (r) { F().rarity = r.dataset.rar; again(); return; }
+        const vw = t.closest('[data-view]'); if (vw) { S.view = vw.dataset.view; keep('marketView', S.view); paint(); return; }
+        if (t.closest('#mkReset')) { S.F = blank(); S.sug = false; again(); return; }
+        if (t.closest('#mkUnpick')) { F().pick = null; again(); return; }
+        if (t.closest('#mkUnseller')) { F().seller = ''; again(); return; }
+        if (t.closest('#mkHide')) { S.hide = !S.hide; paint(); return; }
+        if (t.closest('#mkMore')) { S.shown += PAGE; paint(); return; }
+        if (t.closest('#mkAddMod')) { if (F().mods.length < MAX_MODS) F().mods.push({ id: '', min: '', max: '', not: false }); paint(); return; }
+        const del = t.closest('[data-moddel]');
+        if (del) {
+          F().mods.splice(+del.dataset.moddel, 1); if (!F().mods.length) F().mods.push({ id: '', min: '', max: '', not: false });
+          if (/^mod:/.test(F().sort)) F().sort = 'cheap'; // the rows moved: the sort no longer names the same mod
+          again(); return;
+        }
+
+
+        const lk0 = t.closest('[data-like]');
+        if (lk0) {
+          const l = byId(lk0.dataset.like); if (!l) return;
+          const N = blank();
+          if (l._u) N.pick = { k: 'u', id: l._u };
+          else if (runeOfBase(l.base)) N.pick = { k: 'b', id: l._b };
+          else {
+            N.slot = l.slot; N.rarity = RARITIES.includes(l.rarity) ? l.rarity : 'All';
+            const seen = new Set(), ms = ((l.item || {}).affixes || []).filter(a => a && a.affixId && !isHidden(a.affixId) && !/^unique:/.test(a.affixId))
+              .slice().sort((a, b) => (a.tier || 0) - (b.tier || 0)).map(a => modLabel(a.affixId)).filter(x => !seen.has(x) && seen.add(x)).slice(0, 4);
+            if (ms.length) { N.mods = ms.map(id => ({ id, min: '', max: '', not: false })); if (ms.length > 2) { N.match = 'count'; N.count = 2; } }
+          }
+          S.F = N; S.open.mods = true; again(); el.querySelector('.mk-searchrow').scrollIntoView({ behavior: 'smooth', block: 'start' }); return;
+        }
+
+        const sl = t.closest('[data-seller]'); if (sl) { F().seller = sl.dataset.seller; F().one = false; again(); el.querySelector('.mk-searchrow').scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+
+
+        const rowEl = t.closest('.mk-row'), rl = rowEl && !t.closest('.mk-name, .mk-copy, .mk-like, a') && !String(window.getSelection && window.getSelection()).trim() && rowEl.querySelector('.mk-row-lines');
+        if (rl) {
+          const row = rowEl, id = row.dataset.id, l = byId(id), box = row.querySelector('.mk-row-tip'), open = !S.openRows.has(id);
+          if (open) S.openRows.add(id); else S.openRows.delete(id);
+          row.classList.toggle('open', open); rl.setAttribute('aria-expanded', open);
+          if (open && l && !box.innerHTML) box.innerHTML = tipInline(l);
+          box.hidden = !open; hideTip(); return;
+        }
+
+        if (t.closest('#mkRefresh')) { mem.clear(); refresh(async () => { await loadIndex(); await loadLeague(); }); return; }
+        const lk = t.closest('#mkLink');
+        if (lk) { const url = linkUrl(); try { await navigator.clipboard.writeText(url); lk.textContent = 'Link copied'; setTimeout(() => { lk.textContent = 'Copy link to this search'; }, 1600); } catch (err) { prompt('Copy this link:', url); } return; }
+        const c = t.closest('.mk-copy');
+        if (c) {
+          const code = c.dataset.code, lab = c.querySelector('span');
+          try { await navigator.clipboard.writeText(code); if (lab) { lab.textContent = 'Copied'; setTimeout(() => { lab.textContent = 'Copy'; }, 1600); } } catch (err) { try { prompt('Copy this seller code:', code); } catch (e2) { /* no prompt here */ } }
+        }
+      });
+    }
+    async function render() {
+      bind();
+
+
+      if (!started && /^#m=/.test(location.hash)) openFromHash(location.hash);
+      if (!started) { started = true; await refresh(async () => { await loadIndex(); await loadLeague(); }); return; }
+      paint();
+    }
+    return { render, openFromHash };
+  };
+  if (typeof module !== 'undefined') module.exports = { priceOf, itemOf };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 ;
@@ -18316,6 +19051,8 @@ window.BOStartApp = function () {
   let character = null; // the Character tab (character.js)
   let itemSearch = null; // the Item Search tab (itemsearch.js)
   let patches = null; // the Recent Patch tab (patches.js): what each game build changed, and each skill's or item's history
+  let ladderItemLines = null; // the Ladder tab's item lines, shared with the Market tab
+  let market = null; // the Market tab (market.js): Wagon Market listings, Broken Oath public API
   let ladder = null; // the Ladder tab (ladder.js): public ladders and top builds, Broken Oath public API
   let grail = null; // the Grail tab (grail.js): found uniques, held / craftable Oathwords, runes owned
   let brewery = null, breweryDirty = false; // the Brewery tab (brewery.js); dirty: potions changed since the last damage render
@@ -20616,6 +21353,7 @@ window.BOStartApp = function () {
     } catch (err) { alert('Could not open that share link:\n' + err.message); }
   }
   window.addEventListener('hashchange', () => {
+    if (/^#m=/.test(location.hash) && market && market.openFromHash(location.hash)) return showTab('market');
     if (/^#f=/.test(location.hash) && lootFilter && lootFilter.openFromHash(location.hash)) { history.replaceState(null, '', location.pathname + location.search); return showTab('lootfilter'); }
     const bdb = /^#b=/.test(location.hash) && brokedCode(location.hash);
     if (bdb) { history.replaceState(null, '', location.pathname + location.search); return openBroked(bdb); }
@@ -22727,10 +23465,10 @@ window.BOStartApp = function () {
 
 
   const ROUTES = { character: 'build/character', tree: 'build/tree', atlas: 'build/atlas', 'build:skills': 'build/skills', damage: 'build/damage',
-    compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', patch: 'patch', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', lootfilter: 'lootfilter', faq: 'faq',
+    compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', market: 'market', patch: 'patch', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', lootfilter: 'lootfilter', faq: 'faq',
     skillscaling: 'skills', minions: 'skills/minions', creator: 'creator', plan: 'plan', code: 'code', builds: 'savedbuilds' };
   const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', atlas: 'Riven Atlas', 'build:skills': 'Skills', damage: 'Damage Analysis',
-    compare: 'Item Simulator', items: 'Database', grail: 'Grail', ladder: 'Ladder', patch: 'Recent Patch', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery", lootfilter: 'Loot Filter',
+    compare: 'Item Simulator', items: 'Database', grail: 'Grail', ladder: 'Ladder', market: 'Market', patch: 'Recent Patch', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery", lootfilter: 'Loot Filter',
     faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code', builds: 'Saved Builds' };
 
   let skillsView = 'scaling';
@@ -22817,10 +23555,10 @@ window.BOStartApp = function () {
     document.body.classList.toggle('plan-page', tab === 'plan'); // the plan setup page: no Damage-tab controls beside it
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'builds' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'lootfilter' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character' || tab === 'atlas');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'builds' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'lootfilter' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'market' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character' || tab === 'atlas');
     document.body.classList.toggle('atlas-page', tab === 'atlas');
     document.body.classList.toggle('character-page', tab === 'character');
-    document.body.classList.toggle('ladder-page', tab === 'ladder');
+    document.body.classList.toggle('ladder-page', tab === 'ladder' || tab === 'market'); // the Market tab too: no character strip
     document.body.classList.toggle('lootfilter-page', tab === 'lootfilter'); // nor on the Loot Filter tab // no character strip on the Ladder tab
     document.body.classList.toggle('creator-page', tab === 'creator'); // the Save Creator has no use for the build views
     if (tab === 'supports') {
@@ -22833,7 +23571,7 @@ window.BOStartApp = function () {
 
     document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'atlas', 'damage'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
     if (tab === 'tree' || tab === 'damage' || tab === 'character' || tab === 'atlas') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#savedBuildsPane').hidden = tab !== 'builds'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#lootFilterPane').hidden = tab !== 'lootfilter'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character'; $('#atlasPane').hidden = tab !== 'atlas';
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#savedBuildsPane').hidden = tab !== 'builds'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#lootFilterPane').hidden = tab !== 'lootfilter'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#marketPane').hidden = tab !== 'market'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character'; $('#atlasPane').hidden = tab !== 'atlas';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     renderBuildStats();
@@ -22847,6 +23585,7 @@ window.BOStartApp = function () {
     if (tab === 'items') itemSearch.render();
     if (tab === 'grail') grail.render();
     if (tab === 'ladder') ladder.render();
+    if (tab === 'market') market.render();
     if (tab === 'patch') patches.render();
     if (tab === 'faq') faq.render();
     if (tab === 'skillscaling') renderSkillsTab();
@@ -23206,7 +23945,7 @@ window.BOStartApp = function () {
   ladder = window.BOLadder({ $, esc, gd: () => GD, num, gemDot, skillDot, classIcon,
     api: (new URLSearchParams(location.search).get('ladderapi') === 'local' ? 'http://localhost:8787' : SHARE_API) + '/api/',
 
-    itemLines: (item, classId) => {
+    itemLines: ladderItemLines = (item, classId) => {
       const out = [], it = Object.assign({}, item, { unique: item.unique && item.unique !== 'hidden' ? item.unique : 'None',
         affixes: (item.affixes || []).filter(a => a.id !== 'hidden').map(a => ({ id: a.id, tier: a.tier || 0, v: +a.value || 0, v2: +a.value2 || 0, crafted: !!a.crafted, oath: !!a.oath })),
         runes: item.runes_hidden ? [] : (item.runes || []).filter(r => r && r !== 'hidden'), level: item.item_level || 1 });
@@ -23233,6 +23972,60 @@ window.BOStartApp = function () {
     },
     openBuild: async ch => { if (!await leaveOk(ch.id)) return; addChars([ch], 'code', ch.id); showTab('character'); saveTip('Loaded a ladder build as a plan. Damage Analysis sims it; your own characters are unchanged.'); },
   });
+
+
+
+  const marketItem = item => Object.assign({}, item, { level: item.item_level || 1, name: '', unique: item.unique && item.unique !== 'hidden' ? item.unique : 'None',
+    affixes: (item.affixes || []).filter(a => a.id !== 'hidden').map(a => ({ id: a.id, tier: a.tier || 0, v: +a.value || 0, v2: +a.value2 || 0, crafted: !!a.crafted, oath: !!a.oath, scar: !!a.scar })),
+    runes: (item.runes || []).filter(r => r && r !== 'hidden') });
+  market =window.BOMarket({ $, esc, gd: () => GD,
+    api: (new URLSearchParams(location.search).get('ladderapi') === 'local' ? 'http://localhost:8787' : SHARE_API) + '/api/',
+    itemLines: (item, classId) => ladderItemLines(item, classId),
+    hero: () => (st.ch ? { name: st.ch.name, level: st.ch.level || 1 } : null), // the character on screen, for "Usable now"
+
+
+
+
+    upgrade: {
+      who: () => {
+        if (!st.ch || !st.skill) return null;
+        const sk = GD.skills[String(st.skill).toLowerCase()];
+        return { name: st.ch.name, level: st.ch.level || 1, skill: sk ? sk.Name : st.skill,
+          key: JSON.stringify([st.ch.id, st.skill, st.ch.level, st.ch.items, st.ch.passives, st.ch.sockets, st.ch.gemLevels, opts({})], (k, v) => v instanceof Set ? [...v].sort() : v) };
+      },
+      dps: item => {
+        const run = (ch, slot) => {
+          const o = opts(slot ? { off: new Set([...st.off].filter(k => k !== 'item:' + slot)) } : {});
+          const r = S.calcSkill(GD, ch, st.skill, o);
+          return r && !r.error && !r.unsupported && isFinite(r.totalDps) ? r.totalDps : null;
+        };
+        if (!item) return run(st.ch, '');
+        const it = marketItem(item), slots = it.slot === 'Ring1' || it.slot === 'Ring2' ? ['Ring1', 'Ring2'] : [it.slot];
+        let best = null;
+        for (const slot of slots) {
+          const items = st.ch.items.filter(i => i.slot !== slot); items.push(Object.assign({}, it, { slot }));
+          const d = run(Object.assign({}, st.ch, { items }), slot);
+          if (d != null && (best == null || d > best)) best = d;
+        }
+        return best;
+      },
+    },
+
+
+    itemTip: item => {
+      const it = marketItem(item);
+      return GD.bases[String(it.base).toLowerCase()] ? planner.gear.tip(it, it.slot) : '';
+    },
+
+    baseNums: item => {
+      const it = marketItem(item);
+      const KEY = { 'base|dps': 'dps', 'base|avg': 'hit', 'base|aps': 'aps', 'base|crit': 'crit', 'base|Armour': 'arm', 'base|Evasion': 'eva', 'base|EnergyShield': 'es' }, o = {};
+      for (const x of planner.gear.baseStats(it, it.slot)) if (KEY[x.key]) o[KEY[x.key]] = x.v;
+      return o;
+    },
+    modText: m => modLine(m),
+    modLabel: id => { const a = GD.affixes[id] || GD.affixes[String(id).toLowerCase()]; return a && a.Mod ? modLine(Object.assign({}, a.Mod, { Value: 1, Value2: 2 })).replace(/[+-]?\d+(\.\d+)?/g, '#').replace(/^#(?=[%\s])/, '+#') : ''; },
+    art: (cat, id, cls) => itemSearch && itemSearch.art ? itemSearch.art(cat, id, cls) : '' });
   atlas = window.BOAtlas({ $, esc, current: () => st.ch });
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, atlas, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '' });
   character = window.BOCharacter({
@@ -23279,7 +24072,7 @@ window.BOStartApp = function () {
   const LAND_TOOLS = [
     ['Your build', { build: 'Gear, passive tree, skills and a full damage breakdown for one character.', compare: 'Try an item or a whole gear set and see what it does to your damage.',
       supports: 'Find the strongest support gems for a skill.', builds: 'Your saved builds: open, copy, share or delete them.' }],
-    ['Game reference', { ladder: 'Public ladders and the top builds per class. Open any build in the planner.', items: 'Every item, unique, base type, item mod, rune and gem, newest first.',
+    ['Game reference', { ladder: 'Public ladders and the top builds per class. Open any build in the planner.', market: 'Search the Wagon Market: every item listed in the trade leagues, with the seller code to copy.', items: 'Every item, unique, base type, item mod, rune and gem, newest first.',
       skillscaling: 'How each skill and minion scales with level and quality.', patch: 'What the latest patch changed, with the history of each skill and item.',
       faq: 'How damage, defences, ailments, minions and rewards work.', grail: 'Track which uniques you have found.' }],
     ['Crafting and utilities', { lootfilter: 'Make a loot filter and copy its code into the game.', fossil: 'Plan your fossil crafting.',
@@ -23383,7 +24176,7 @@ window.BOStartApp = function () {
   cloud.start(); // back from Discord sign-in (#login=), or a sync of the account's plans
 
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
-  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'home'); if (['character', 'tree', 'atlas', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'home'); if (['character', 'tree', 'atlas', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'market', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
   else if (lastTab === 'home') goHome(false); // left on the landing page last time (the address stays as opened)
   routingReady = true; // from here on, switching tabs changes the address
 
@@ -23391,6 +24184,8 @@ window.BOStartApp = function () {
   if (bdbHash) { history.replaceState(null, '', location.pathname + location.search); openBroked(bdbHash); }
 
   if (/^#hero=/.test(location.hash) && ladder.openFromHash(location.hash)) showTab('ladder');
+
+  if (/^#m=/.test(location.hash) && market.openFromHash(location.hash)) showTab('market');
 
   if (/^#f=/.test(location.hash) && lootFilter.openFromHash(location.hash)) { history.replaceState(null, '', location.pathname + location.search); showTab('lootfilter'); }
   const sharedCode = linkCode(location.hash), sharedId = linkId(location.hash);

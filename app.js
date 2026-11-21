@@ -3018,7 +3018,7 @@ window.BOPlanner = function (ctx) {
     if (!a && n.Kind === 'Capstone' && n.AspectText && ch.dragonAspect) text = (typeof n.AspectText === 'object' ? n.AspectText[ch.dragonAspect] : n.AspectText) || text;
     return { name: a ? a.Name + ' (ascended ' + n.Name + ')' : n.Name, text: text || '' };
   }
-  function dragonCard(ch, edit, dis) {
+  function dragonCard(ch, edit, dis, q) {
     const T = dTree(ch), nodes = Object.values(T);
     if (!nodes.length) return '';
     const taken = dTaken(ch), pts = dPoints(ch), used = dUsed(ch), paths = [...new Set([...taken].map(id => T[id].Path).filter(Boolean))];
@@ -3045,6 +3045,7 @@ window.BOPlanner = function (ctx) {
       const ic = icon(n, st.s === 'taken' || n.Kind === 'Core');
 
       dots += '<g class="dl-n dl-' + st.s + ' dl-' + lc(n.Kind) + (ic ? ' dl-ic' : '') + '" data-dn="' + esc(n.Id) + '"' + (edit && n.Kind !== 'Core' ? ' data-act="dnode" data-id="' + esc(n.Id) + '"' : '') + '>' + ic + '<circle cx="' + n.X + '" cy="' + n.Y + '" r="' + (R[n.Kind] || 9) + '"/>' +
+        '<circle class="dl-find" cx="' + n.X + '" cy="' + n.Y + '" r="' + ((R[n.Kind] || 9) + 7) + '"/>' + // search ring (app.js paintDragonFind)
         (n.Kind === 'Core' && !ic ? '<text x="' + n.X + '" y="' + (n.Y + 4) + '">' + esc((ch.dragonAspect || 'Aspect').slice(0, 9)) + '</text>' : '') + (window.BOTreeTips ? '' : '<title>' + esc(tip) + '</title>') + '</g>';
     }
     const list = [...taken].map(id => T[id]).sort((a, b) => (a.Path || 'zz').localeCompare(b.Path || 'zz') || a.Y - b.Y)
@@ -3057,6 +3058,8 @@ window.BOPlanner = function (ctx) {
       (asc2() ? '<label class="field inline" title="' + esc('Points: one for each Dragon Rupture you have cleared, at Rupture Levels ' + (dRules().ruptures || []).join(', ') + ' (' + dExtraMax() + ' at most). A crown costs ' + (dRules().crownCost || 3) + ' points. This box follows the nodes you take.') + '"><span>Dragon Ruptures</span><input'
         : '<label class="field inline" title="' + esc('Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, +1 each for Gates 4 to 7' + (dSeal80() ? ', the Seal of 80' : '') + ' and the Pinnacle (' + (dBase({ level: 100 }) + dExtraMax()) + ' at most). This box follows the nodes you take.') + '"><span>Gate kills + Pinnacle</span><input') + ' type="number" min="0" max="' + dExtraMax() + '" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
       (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') + '</div>';
+
+    h += '<label class="field dl-search"><input type="search" data-f="dsearch" placeholder="Find a node or stat" autocomplete="off" value="' + esc(q || '') + '"><span class="tree-found-count" data-dl-count hidden></span></label>';
 
     const asp = GD.dragon.aspects && GD.dragon.aspects[ch.dragonAspect];
     h += asp ? '<p class="dl-aspect"><b>' + esc(asp.Name || ch.dragonAspect) + ' Aspect:</b> ' + esc(asp.Text || '') + '</p>'
@@ -4000,7 +4003,7 @@ window.BOPlanner = function (ctx) {
     const aspect = n.Kind === 'Core' && GD.dragon.aspects && GD.dragon.aspects[ch.dragonAspect];
     return { id, kind: n.Kind, path: n.Path || '', name: lab.name, text: aspect ? (aspect.Name || ch.dragonAspect) + ' Aspect: ' + aspect.Text : lab.text, mods: aspect ? aspect.Mods || [] : mods, state: st.s, why: st.why || '' };
   }
-  const dragon = { html: ch => dragonCard(ch, true, ''), toggle: dToggle, info: dInfo, points: ch => ({ total: dPoints(ch), used: dUsed(ch) }), extra: dExtra, levelNeed: ch => dLevelNeed(dTaken(ch).size) };
+  const dragon = { html: (ch, q) => dragonCard(ch, true, '', q), toggle: dToggle, info: dInfo, points: ch => ({ total: dPoints(ch), used: dUsed(ch) }), extra: dExtra, levelNeed: ch => dLevelNeed(dTaken(ch).size) };
 
 
 
@@ -20827,6 +20830,8 @@ window.BOStartApp = function () {
   });
   $('#treeTabs').addEventListener('dblclick', e => { if (e.target.closest('.tree-tab.active')) renameTreeTab(); });
   const dTipCache = new Map(); // Dragonling tooltip DPS values (cleared on each redraw)
+
+  let dFind = '';
   function renderDragon() {
     const btn = $('#dragonBtn'), panel = $('#dragonPanel'), badge = $('#dragonBadge');
     const has = !!(st.ch && Object.keys((GD.dragon.classes || {})[String(st.ch.classId).toLowerCase()] || {}).length);
@@ -20848,8 +20853,24 @@ window.BOStartApp = function () {
     badge.classList.toggle('over', free < 0);
     btn.title = 'Dragonling tree: ' + p.used + ' of ' + p.total + ' points' + (free > 0 ? ', ' + free + ' to spend' : free < 0 ? ' (' + -free + ' over)' : '');
     dTipCache.clear(); const tipEl = $('#dragonTip'); tipEl.hidden = true; tipEl.dataset.id = '';
-    if (!panel.hidden) $('#dragonBody').innerHTML = planner.dragon.html(st.ch) + '<p class="hint dragon-status" id="dragonStatus"></p>';
+    if (!panel.hidden) { $('#dragonBody').innerHTML = planner.dragon.html(st.ch, dFind) + '<p class="hint dragon-status" id="dragonStatus"></p>'; paintDragonFind(); }
   }
+  function paintDragonFind() {
+    const body = $('#dragonBody'), svg = body.querySelector('.dl-tree'); if (!svg || !st.ch) return;
+    const q = dFind.trim().toLowerCase(); let n = 0;
+    for (const g of svg.querySelectorAll('[data-dn]')) {
+      let hit = false;
+      if (q) {
+        const d = planner.dragon.info(st.ch, g.dataset.dn);
+        hit = !!d && [d.name, d.text, d.kind, d.path, ...d.mods.map(modLine)].join(' ').toLowerCase().includes(q);
+      }
+      g.classList.toggle('found', hit); if (hit) n++;
+    }
+    svg.classList.toggle('searching', !!q);
+    const c = body.querySelector('[data-dl-count]');
+    if (c) { c.hidden = !q; c.textContent = n ? n + ' found' : 'none found'; c.classList.toggle('none', !n); }
+  }
+  $('#dragonBody').addEventListener('input', e => { if (e.target.dataset.f === 'dsearch') { dFind = e.target.value; paintDragonFind(); } });
   $('#dragonBtn').onclick = () => { const p = $('#dragonPanel'); p.hidden = !p.hidden; $('#dragonBtn').setAttribute('aria-expanded', String(!p.hidden)); renderDragon(); };
   $('#dragonClose').onclick = () => { $('#dragonPanel').hidden = true; $('#dragonBtn').setAttribute('aria-expanded', 'false'); };
   $('#dragonBody').addEventListener('click', e => {

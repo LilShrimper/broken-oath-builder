@@ -787,6 +787,18 @@ tr.cmp-counted td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .dl-n.dl-ic.dl-open:hover circle { fill: rgba(255, 255, 255, .14); stroke-width: 4; }
 .dl-n.dl-ic.dl-blocked { opacity: .4; }
 .dl-n.dl-ic.dl-blocked circle, .dl-n.dl-ic.dl-locked circle { opacity: 1; }
+/* Dragonling search: a pulsing red ring on matches, the rest dimmed (like the Riven Atlas search). */
+.dl-side .dl-search { display: flex; flex-direction: row; align-items: center; width: 100%; margin: 8px 0; }
+.dl-search .tree-found-count { flex: none; }
+.dl-search input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; height: 34px; padding: 6px 10px; border: 1px solid var(--dashboard-gold); border-radius: 8px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 14px; }
+.dl-search input::placeholder { color: var(--muted); }
+.dl-search input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+:root[data-theme="light"] .dl-search input { border-color: #8a6a1e; }
+.dl-n circle.dl-find { display: none; fill: none !important; stroke: #ff3b3b !important; stroke-width: 4 !important; opacity: 1 !important; pointer-events: none; animation: at-find-pulse 1.4s ease-in-out infinite; }
+.dl-n.found circle.dl-find { display: inline; }
+@media (prefers-reduced-motion: reduce) { .dl-n circle.dl-find { animation: none; } }
+:root[data-theme="light"] .dl-n circle.dl-find { stroke: #d01818 !important; }
+.dl-tree.searching .dl-n:not(.found) { opacity: .4; }
 .dragon-tip { z-index: 7; }
 /* Dragonling button: the framed dragon tile for the chosen Aspect (6 tiles in one strip) */
 .dragon-btn.tiled { padding: 0; background: transparent; border: 0; box-shadow: var(--shadow); width: 60px; height: 60px; }

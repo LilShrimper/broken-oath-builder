@@ -502,6 +502,33 @@ window.PAGE_LANGS = {
       for (const n of list) into[n.Id] = Object.assign(pick(n, ['Id', 'Name', 'Kind', 'Path', 'Icon', 'Mods', 'AspectMods', 'AspectText', 'Text', 'X', 'Y', 'Links']), { Heart: true });
     }
 
+
+
+
+
+
+
+    const A2 = DT_.Asc2;
+    let asc2On = false;
+    try { asc2On = !!A2 && ((J('Gameplay/switches.json') || {}).switches || []).some(s => s.section === 'r112.DRAGON' && s.key === 'bAscension2' && s.value === 'True'); } catch (e) { /* not served */ }
+    if (asc2On) {
+      dragon.classes = {}; dragon.moved = {};
+      for (const [cls, list] of Object.entries(A2.Classes || {})) {
+        const into = dragon.classes[cls.toLowerCase()] = {}, moved = dragon.moved[cls.toLowerCase()] = {};
+        for (const n of list) {
+          const o = pick(n, ['Id', 'Name', 'Kind', 'Path', 'Icon', 'Mods', 'AspectMods', 'AspectText', 'Text', 'X', 'Y', 'Links', 'Cost']);
+          const p = n.Pos76; // the node without its downside, as for the old tree (the game runs Pos76)
+          if (p) Object.assign(o, { Mods: p.Mods, Text: p.Text }, p.AspectMods ? { AspectMods: p.AspectMods } : {}, p.AspectText ? { AspectText: p.AspectText } : {});
+          if (n.Heart103) o.Heart = true;
+          into[n.Id] = o;
+          if (n.From && n.From !== n.Id) moved[n.From] = n.Id;
+        }
+      }
+      dragon.ascend = { enabled: false, classes: [] }; // the old Ascend blocks belong to the old tree
+      Object.assign(dragon.tree, { asc2: true, version: A2.TreeVersion || 13, ruptures: (A2.DragonRuptures || {}).Levels || [], crownCost: A2.CrownCost || 3,
+        crownKinds: A2.CrownKinds || ['Keystone', 'WarCrown', 'WardCrown'] });
+    }
+
     const curses = {};
     for (const c of J('Gameplay/curses.json').curses) curses[c.Id] = pick(c, ['Id', 'Name', 'Kind', 'Skill', 'TakenPct', 'ElementTakenPct', 'ResistDown', 'BossEffect', 'Dread', 'Tough', 'Text', 'DotTakenPct', 'DealtLessPct']); // DotTakenPct: Sentence of Rot (patch 77); DealtLessPct: Woe of Faltering, Sentence of Chains (shown, not simmed)
     const blessings = {};
@@ -2786,7 +2813,7 @@ window.BOPlanner = function (ctx) {
     const p = JSON.parse(JSON.stringify(ch));
     for (const k of ['file', 'fromCode', 'fromPlanner', 'codeWarnings', 'from', 'auto']) delete p[k]; // auto: opened from a code, not saved by hand (app.js)
 
-    if (p.dragonExtra == null) { const R = GD.dragon.tree || {}; p.dragonExtra = Math.max(0, (p.dragonNodes || []).length - (R.milestones || []).filter(l => p.level >= l).length - (R.hatch || 0)); }
+    if (p.dragonExtra == null) { const R = GD.dragon.tree || {}; p.dragonExtra = R.asc2 ? (R.ruptures || []).filter(l => (+p.rupture || 0) >= l).length : Math.max(0, (p.dragonNodes || []).length - (R.milestones || []).filter(l => p.level >= l).length - (R.hatch || 0)); }
     return Object.assign(p, { id: newId(), name: ch.name.replace(/ \((code|edited)\)$/, '') + (ch.plan ? ' (copy)' : ''), plan: true, savedAt: new Date().toISOString() });
   }
 
@@ -2923,25 +2950,34 @@ window.BOPlanner = function (ctx) {
 
 
 
+
+
+
+
   const dTree = ch => (GD.dragon.classes || {})[lc(ch.classId)] || {};
   const dRules = () => GD.dragon.tree || { milestones: [40, 45, 50, 55, 60, 70, 80, 90], hatch: 1, maxCrowns: 1, crownKinds: ['Keystone', 'Capstone'] };
   const dCore = T => Object.values(T).find(n => n.Kind === 'Core');
   const isCrown = n => (dRules().crownKinds || []).includes(n.Kind);
+  const asc2 = () => !!dRules().asc2;
+  const dCost = n => asc2() && n && isCrown(n) ? (dRules().crownCost || 3) : 1;
+
+  const dRupturesAt = rl => (dRules().ruptures || []).filter(l => (+rl || 0) >= l).length;
   const ascOn = ch => !!(GD.dragon.ascend && GD.dragon.ascend.enabled && (GD.dragon.ascend.classes || []).includes(lc(ch.classId)));
 
-  const dBase = ch => { const R = dRules(); return (R.milestones || []).filter(l => ch.level >= l).length + (R.hatch || 0); };
+  const dBase = ch => { const R = dRules(); if (R.asc2) return 0; return (R.milestones || []).filter(l => ch.level >= l).length + (R.hatch || 0); };
 
 
   const DGATE_TOP = 7;
 
 
   const dSeal80 = () => +GD.apiBuild >= 79 ? 1 : 0;
-  const dExtraMax = () => { const R = dRules(); return Math.max(0, DGATE_TOP - (R.minGate || 4) + 1) * (R.perGate || 1) + (R.pinnacle != null ? R.pinnacle : 1) + dSeal80(); };
+  const dExtraMax = () => { const R = dRules(); if (R.asc2) return (R.ruptures || []).length; return Math.max(0, DGATE_TOP - (R.minGate || 4) + 1) * (R.perGate || 1) + (R.pinnacle != null ? R.pinnacle : 1) + dSeal80(); };
 
 
-  const dExtra = ch => Math.min(dExtraMax(), Math.max(+ch.dragonExtra || 0, (ch.dragonNodes || []).length - dBase(ch)));
+  const dExtra = ch => Math.min(dExtraMax(), Math.max(ch.dragonExtra != null ? +ch.dragonExtra || 0 : asc2() ? dRupturesAt(ch.rupture) : 0, dUsed(ch) - dBase(ch)));
 
   function dLevelNeed(count) {
+    if (asc2()) return 1; // Ascension 2.0: points come from Dragon Ruptures, not the hero's level
     const R = dRules(), need = count - dExtraMax() - (R.hatch || 0), ms = (R.milestones || []).slice().sort((x, y) => x - y);
     return need <= 0 ? 1 : ms[Math.min(need, ms.length) - 1] || 1;
   }
@@ -2951,7 +2987,9 @@ window.BOPlanner = function (ctx) {
     for (const n of Object.values(T)) for (const l of n.Links || []) if (T[l]) { adj[n.Id].add(l); (adj[l] = adj[l] || new Set()).add(n.Id); }
     return adj;
   }
-  const dTaken = ch => new Set((ch.dragonNodes || []).filter(id => dTree(ch)[id]));
+
+  const dTaken = ch => new Set(S.dragonIds ? S.dragonIds(GD, ch) : (ch.dragonNodes || []).filter(id => dTree(ch)[id]));
+  const dUsed = ch => { const T = dTree(ch); let n = 0; for (const id of dTaken(ch)) n += dCost(T[id]); return n; };
 
   function dConnected(T, set, drop) {
     const core = dCore(T); if (!core) return true;
@@ -2964,7 +3002,7 @@ window.BOPlanner = function (ctx) {
     if (n.Kind === 'Core') return { s: 'core' };
     if (taken.has(id)) return dConnected(T, taken, id) ? { s: 'taken' } : { s: 'taken', why: 'other picks hang from it: refund those first' };
 
-    if (isCrown(n) && [...taken].some(t => isCrown(T[t]))) return { s: 'blocked', why: 'one Keystone or Capstone at a time' };
+    if (isCrown(n) && [...taken].some(t => isCrown(T[t]))) return { s: 'blocked', why: asc2() ? 'one crown (Keystone, War or Ward crown) at a time' : 'one Keystone or Capstone at a time' };
     const adj = dAdj(T), core = dCore(T);
     if (![...adj[id] || []].some(v => taken.has(v) || (core && v === core.Id))) return { s: 'locked', why: 'not next to a node you hold' };
     return { s: 'open' };
@@ -2978,10 +3016,10 @@ window.BOPlanner = function (ctx) {
   function dragonCard(ch, edit, dis) {
     const T = dTree(ch), nodes = Object.values(T);
     if (!nodes.length) return '';
-    const taken = dTaken(ch), pts = dPoints(ch), used = taken.size, paths = [...new Set([...taken].map(id => T[id].Path).filter(Boolean))];
+    const taken = dTaken(ch), pts = dPoints(ch), used = dUsed(ch), paths = [...new Set([...taken].map(id => T[id].Path).filter(Boolean))];
     const aspects = Object.keys(GD.dragon.aspects || {});
     const I = window.TREE_ICONS;
-    const R = I ? { Core: 32, Small: 15, Shared: 15, Notable: 20, Keystone: 24, Capstone: 25 } : { Core: 26, Small: 9, Shared: 9, Notable: 14, Keystone: 17, Capstone: 18 };
+    const R = I ? { Core: 32, Small: 15, Shared: 15, Entry: 17, Notable: 20, Keystone: 24, Capstone: 25, WarCrown: 25, WardCrown: 25 } : { Core: 26, Small: 9, Shared: 9, Entry: 11, Notable: 14, Keystone: 17, Capstone: 18, WarCrown: 18, WardCrown: 18 };
 
     const icon = (n, on) => {
       const a = ascOn(ch) && n.Ascend && n.Ascend.Icon, key = I && [a, n.Icon].find(k => k && I.idx[k] != null);
@@ -2998,7 +3036,7 @@ window.BOPlanner = function (ctx) {
     let dots = '';
     for (const n of nodes) {
       const st = dState(ch, n.Id), lab = dLabel(ch, n);
-      const tip = lab.name + ' (' + n.Kind + (n.Path ? ', ' + n.Path : '') + ')\n' + lab.text + (st.why ? '\n— ' + st.why : '') + (edit && (st.s === 'open' || (st.s === 'taken' && !st.why)) ? '\n(click to ' + (st.s === 'taken' ? 'refund' : 'take') + ')' : '');
+      const tip = lab.name + ' (' + n.Kind + (n.Path ? ', ' + n.Path : '') + (dCost(n) > 1 ? ', ' + dCost(n) + ' points' : '') + ')\n' + lab.text + (st.why ? '\n— ' + st.why : '') + (edit && (st.s === 'open' || (st.s === 'taken' && !st.why)) ? '\n(click to ' + (st.s === 'taken' ? 'refund' : 'take') + ')' : '');
       const ic = icon(n, st.s === 'taken' || n.Kind === 'Core');
 
       dots += '<g class="dl-n dl-' + st.s + ' dl-' + lc(n.Kind) + (ic ? ' dl-ic' : '') + '" data-dn="' + esc(n.Id) + '"' + (edit && n.Kind !== 'Core' ? ' data-act="dnode" data-id="' + esc(n.Id) + '"' : '') + '>' + ic + '<circle cx="' + n.X + '" cy="' + n.Y + '" r="' + (R[n.Kind] || 9) + '"/>' +
@@ -3011,16 +3049,24 @@ window.BOPlanner = function (ctx) {
 
     let h = '<div class="card dl-card"><div class="dl-side"><h2>Dragonling <small>' + used + ' / ' + pts + ' points' + (paths.length ? ' · ' + esc(paths.join(' + ')) + (paths.length > 1 ? ' paths' : ' path') : '') + '</small></h2>';
     h += '<div class="pl-row">' + (aspects.length ? '<label class="field inline"><span>Aspect</span><select data-f="aspect"' + dis + '>' + opt('', 'None', !ch.dragonAspect) + aspects.map(a => opt(a, GD.dragon.aspects[a].Name || a, a === ch.dragonAspect)).join('') + '</select></label>' : '') +
-      '<label class="field inline" title="' + esc('Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, +1 each for Gates 4 to 7' + (dSeal80() ? ', the Seal of 80' : '') + ' and the Pinnacle (' + (dBase({ level: 100 }) + dExtraMax()) + ' at most). This box follows the nodes you take.') + '"><span>Gate kills + Pinnacle</span><input type="number" min="0" max="' + dExtraMax() + '" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
+      (asc2() ? '<label class="field inline" title="' + esc('Points: one for each Dragon Rupture you have cleared, at Rupture Levels ' + (dRules().ruptures || []).join(', ') + ' (' + dExtraMax() + ' at most). A crown costs ' + (dRules().crownCost || 3) + ' points. This box follows the nodes you take.') + '"><span>Dragon Ruptures</span><input'
+        : '<label class="field inline" title="' + esc('Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, +1 each for Gates 4 to 7' + (dSeal80() ? ', the Seal of 80' : '') + ' and the Pinnacle (' + (dBase({ level: 100 }) + dExtraMax()) + ' at most). This box follows the nodes you take.') + '"><span>Gate kills + Pinnacle</span><input') + ' type="number" min="0" max="' + dExtraMax() + '" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
       (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') + '</div>';
 
     const asp = GD.dragon.aspects && GD.dragon.aspects[ch.dragonAspect];
     h += asp ? '<p class="dl-aspect"><b>' + esc(asp.Name || ch.dragonAspect) + ' Aspect:</b> ' + esc(asp.Text || '') + '</p>'
       : '<p class="hint">No Aspect chosen: each one gives its own bonuses (pick one above to see them).</p>';
-    h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.' :
-      (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + 'Paths can be mixed; one Keystone or Capstone at a time.') + '</p>';
+    h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? 'This uses ' + used + ' points but the Dragonling has ' + pts + (asc2() ? ' from Dragon Ruptures: raise the Dragon Ruptures cleared, or refund some.' : ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.') :
+      (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + (asc2() ? 'Ascension 2.0 (patch 86): take nodes from any of your paths; a crown costs ' + (dRules().crownCost || 3) + ' points, one crown at a time (not checked in game yet).' : 'Paths can be mixed; one Keystone or Capstone at a time.')) + '</p>';
     if (list) h += '<h3 class="dl-list-h">Taken</h3><ul class="dl-list">' + list + '</ul>';
-    h += '</div><svg class="dl-tree" viewBox="-545 -625 1090 1065" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Dragonling tree">' + '<g class="dl-links">' + lines + '</g>' + dots + '</svg>';
+
+    let vb = '-545 -625 1090 1065';
+    if (asc2()) {
+      const xs = nodes.map(n => n.X), ys = nodes.map(n => n.Y), pad = 45;
+      const x0 = Math.min(...xs) - pad, y0 = Math.min(...ys) - pad, w = Math.max(...xs) + pad - x0, hh = Math.max(...ys) + pad - y0;
+      vb = [x0, y0, w, hh].map(v => Math.round(v)).join(' ');
+    }
+    h += '</div><svg class="dl-tree" viewBox="' + vb + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Dragonling tree">' + '<g class="dl-links">' + lines + '</g>' + dots + '</svg>';
     return h + '</div>';
   }
 
@@ -3949,7 +3995,7 @@ window.BOPlanner = function (ctx) {
     const aspect = n.Kind === 'Core' && GD.dragon.aspects && GD.dragon.aspects[ch.dragonAspect];
     return { id, kind: n.Kind, path: n.Path || '', name: lab.name, text: aspect ? (aspect.Name || ch.dragonAspect) + ' Aspect: ' + aspect.Text : lab.text, mods: aspect ? aspect.Mods || [] : mods, state: st.s, why: st.why || '' };
   }
-  const dragon = { html: ch => dragonCard(ch, true, ''), toggle: dToggle, info: dInfo, points: ch => ({ total: dPoints(ch), used: dTaken(ch).size }), extra: dExtra, levelNeed: ch => dLevelNeed(dTaken(ch).size) };
+  const dragon = { html: ch => dragonCard(ch, true, ''), toggle: dToggle, info: dInfo, points: ch => ({ total: dPoints(ch), used: dUsed(ch) }), extra: dExtra, levelNeed: ch => dLevelNeed(dTaken(ch).size) };
 
 
 
@@ -4328,16 +4374,22 @@ window.BOCreator = function (ctx) {
       done.push(Object.keys(gl).length + ' skill gems, ' + (ch.sockets || []).length + ' socketed skills');
     }
     if (parts.dragon) {
-      setArr(rec, 'DragonlingNodes', ch.dragonNodes || []);
+
+
+
+
+      const asc2 = !!(GD.dragon.tree && GD.dragon.tree.asc2);
+      const dIds = asc2 && window.BOSim && window.BOSim.dragonIds ? window.BOSim.dragonIds(GD, Object.assign({}, ch, { classId: ch.classId || S.ClassId })) : (ch.dragonNodes || []);
+      setArr(rec, 'DragonlingNodes', dIds);
 
 
       setV(rec, 'DragonlingAspect', ch.dragonAspect || val(rec, 'DragonlingAspect', '') || (GD.dragon.classAspect || {})[S.ClassId] || '');
       for (const f of ['oath_dragon', 'oathpaid_dragon', 'dragon_square_seen']) addFlag(f);
 
 
-      setV(rec, 'DragonlingTreeVersion', Math.max(7, val(rec, 'DragonlingTreeVersion', 0)));
-      const caged = getP(rec, 'bDragonlingCaged'); if (caged && caged.v && (ch.dragonNodes || []).length) caged.v = false;
-      done.push('Dragonling (' + (ch.dragonNodes || []).length + ' nodes)');
+      setV(rec, 'DragonlingTreeVersion', Math.max(asc2 ? GD.dragon.tree.version || 13 : 7, val(rec, 'DragonlingTreeVersion', 0)));
+      const caged = getP(rec, 'bDragonlingCaged'); if (caged && caged.v && dIds.length) caged.v = false;
+      done.push('Dragonling (' + dIds.length + ' nodes)');
     }
     if (parts.potions) {
       const n = copyPotions(ch); if (n) done.push(n + ' potions on the belt');
@@ -12810,15 +12862,16 @@ window.BOCharacter = function (ctx) {
     }
 
     const dcls = GD.dragon.classes[lc(ch.classId)] || {};
-    if (ch.dragonNodes.length || ch.dragonAspect) {
-      sources.push({ key: 'dragon', label: 'Dragonling (' + (ch.dragonAspect || 'no aspect') + ', ' + ch.dragonNodes.length + ' nodes)', group: 'Character' });
+    const dIds = dragonIds(GD, ch);
+    if (dIds.length || ch.dragonAspect) {
+      sources.push({ key: 'dragon', label: 'Dragonling (' + (ch.dragonAspect || 'no aspect') + ', ' + dIds.length + ' nodes)', group: 'Character' });
       if (!off.has('dragon')) {
         const asp = GD.dragon.aspects[ch.dragonAspect];
         if (asp) for (const m of asp.Mods) add(m, m.Value, m.Value2, 'Dragonling · ' + asp.Name + ' Aspect', 'dragon');
 
 
         const ascOn = GD.dragon.ascend && GD.dragon.ascend.enabled && GD.dragon.ascend.classes.includes(lc(ch.classId));
-        for (const id of ch.dragonNodes) {
+        for (const id of dIds) {
           const n = dcls[id]; if (!n) { notes.push('Dragonling node not found: ' + id); continue; }
           const a = ascOn && n.Ascend;
           let list = (a ? a.Mods : n.Mods) || [];
@@ -17676,7 +17729,16 @@ window.BOCharacter = function (ctx) {
     if (kind === 'attack') { const [fullB, fadedB] = bonusSplit(bonus); return (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB); }
     return spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, spellFade(GD));
   }
-  const api = { rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
+
+
+
+  function dragonIds(GD, ch) {
+    const cls = lc(ch.classId), T = (GD.dragon.classes || {})[cls] || {}, moved = ((GD.dragon.moved || {})[cls]) || {};
+    const out = [];
+    for (const id of ch.dragonNodes || []) { const k = T[id] ? id : moved[id]; if (k && T[k] && !out.includes(k)) out.push(k); }
+    return out;
+  }
+  const api = { dragonIds, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, NO_SINGLE_TARGET,
 
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;

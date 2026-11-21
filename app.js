@@ -513,8 +513,13 @@ window.PAGE_LANGS = {
     try { asc2On = !!A2 && ((J('Gameplay/switches.json') || {}).switches || []).some(s => s.section === 'r112.DRAGON' && s.key === 'bAscension2' && s.value === 'True'); } catch (e) { /* not served */ }
     if (asc2On) {
       dragon.classes = {}; dragon.moved = {};
-      for (const [cls, list] of Object.entries(A2.Classes || {})) {
+
+
+
+      for (const [cls, all] of Object.entries(A2.Classes || {})) {
         const into = dragon.classes[cls.toLowerCase()] = {}, moved = dragon.moved[cls.toLowerCase()] = {};
+        const unshipped = new Set(all.filter(n => n.Ship === false).map(n => n.Id));
+        const list = all.filter(n => !unshipped.has(n.Id)).map(n => Object.assign({}, n, { Links: (n.Links || []).filter(l => !unshipped.has(l)) }));
         for (const n of list) {
           const o = pick(n, ['Id', 'Name', 'Kind', 'Path', 'Icon', 'Mods', 'AspectMods', 'AspectText', 'Text', 'X', 'Y', 'Links', 'Cost']);
           const p = n.Pos76; // the node without its downside, as for the old tree (the game runs Pos76)

@@ -3471,6 +3471,22 @@ window.BOPlanner = function (ctx) {
 
   const ATTR_NAME = { Str: 'Strength (red)', Dex: 'Dexterity (green)', Int: 'Intelligence (blue)' };
 
+  const DT_CONV = ['Fire', 'Cold', 'Lightning', 'Poison'];
+
+
+  function convRule(id) {
+    const sk = GD.skills[lc(id)]; if (!sk) return '';
+    if ((sk.Tags || []).includes('Attack')) { // Gravereap / Marrow Lance carry a Minion block but are the hero's attacks
+      const to = sk.DamageType, share = sk.ConvertShare != null ? (sk.ConvertShare > 1 ? sk.ConvertShare : sk.ConvertShare * 100) : 100;
+      if (to && to !== 'Physical' && DT_CONV.includes(to)) {
+        const proven = ['lightning_arrow', 'hoarfrost_volley'].includes(lc(id)); // Copy stats 21-22 Nov 2026 (sim.js)
+        return share + '% of all its other damage → ' + to + ' (Poison at half); conversion from supports and gear shares the same 100%' + (proven ? '' : ' (proven on Lightning Arrow and Hoarfrost Volley)');
+      }
+      return 'Converts nothing by itself: it deals your weapon\'s damage types';
+    }
+    if (sk.SpellMin > 0 && !sk.Minion) return 'Converts nothing by itself: its own damage is ' + (sk.DamageType || 'Physical');
+    return '';
+  }
   function skillTip(ch, id, own = true, noScaling = false) {
     const sk = GD.skills[lc(id)]; if (!sk) return '';
     const li = t => '<li>' + esc(t) + '</li>';
@@ -3506,9 +3522,38 @@ window.BOPlanner = function (ctx) {
     if (tg.includes('Melee') && Hr.StrMeleePhysPer10) sc.push('Every 10 Strength: +' + Hr.StrMeleePhysPer10 + '% melee physical damage');
     if (tg.includes('Attack') && Hr.DexAttackSpeedPer10) sc.push('Every 10 Dexterity: +' + Hr.DexAttackSpeedPer10 + '% attack speed');
     const exLines = ctx.extras ? ctx.extras(id) : [];
-    if (sc.length) sc.push(sk.SpellMin > 0 || sk.Minion ? 'Levels from gear and the tree: the first 5 count like gem levels, each one after that is worth less than the last' : 'Levels from gear and the tree: the first 5 count like gem levels, after that each adds only about 1%');
+
+
+
+    if (sc.length) {
+      const fs = S.fadeSteps ? S.fadeSteps(GD) : null, x = v => '×' + (+v).toFixed(2).replace(/0$/, '');
+      if (sk.SpellMin > 0 || sk.Minion) {
+        const curve = fs ? (sk.Minion ? fs.minion : fs.spell) : [];
+        sc.push('Levels from gear and the tree: the first 5 count like gem levels (' + x(gm) + ' each)' + (curve.length ? ', then ' + curve.slice(0, -1).map(x).concat(x(curve[curve.length - 1]) + ' for each one after that').join(', ') : ', each one after that worth less than the last'));
+      } else {
+        const more = Gm.BonusLevelAttackMore || 1.03, fade = fs && fs.attack ? fs.attack : more;
+        sc.push('Levels from gear and the tree: ' + x(more) + ' more damage each' + (Math.abs(fade - more) > 1e-9 ? ' for the first 5, then ' + x(fade) + ' each' : ', with no drop past 5'));
+      }
+    }
     sc.push(...exLines);
     if (sc.length && !noScaling) h += '<span class="pl-tip-head">Scaling</span><ul class="pl-tip-base">' + sc.map(li).join('') + '</ul>';
+
+
+    const cv = [], own0 = convRule(id);
+    if (own0) cv.push(own0);
+    if (ok && r.convTrace && r.convTrace.length) {
+      const who = t => String(t.src || '').replace(/^Support · (.*)$/, '$1 (support)');
+      const groups = new Map(); // one line per source, share and target: "Ice (support): 60% of Physical, Lightning → Cold"
+
+      const pooled = r.convTrace.some(t => !t.extra && !/\(skill\)$/.test(t.src || '')) && r.convTrace.some(t => /\(skill\)$/.test(t.src || ''));
+      for (const t of r.convTrace) if (pooled || !/\(skill\)$/.test(t.src || '')) {
+        const k = [t.src, t.to, t.extra ? 1 : 0, t.pct.toFixed(4)].join('|');
+        if (!groups.has(k)) groups.set(k, Object.assign({ froms: [] }, t));
+        if (!groups.get(k).froms.includes(t.from)) groups.get(k).froms.push(t.from);
+      }
+      for (const t of groups.values()) cv.push(who(t) + ': ' + (t.extra ? '+' + fmt(t.pct, 2) + '% of ' + t.froms.join(', ') + ' as extra ' + t.to : fmt(t.pct, 1) + '% of ' + t.froms.join(', ') + ' → ' + t.to));
+    }
+    if (cv.length && !r?.minion) h += '<span class="pl-tip-head">Conversion</span><ul class="pl-tip-base">' + cv.map(li).join('') + '</ul>';
     const fit = ch && S.supportChoices ? S.supportChoices(GD, ch, id, {}).length : 0;
     if (fit) h += '<span class="pl-tip-sub pl-tip-fit">' + fit + ' support gems fit this skill</span>';
     if (ok) {
@@ -4083,7 +4128,7 @@ window.BOPlanner = function (ctx) {
     return status;
   }
   const classIds = () => Object.values(GD.classes).map(c => c.Id);
-  return { setPlanField, classIds, MAX_BONUS, bonusWarn, skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, supTip, oathwordForItem, wordRunes, slotName: SLOT_NAME, rows, render, fromCode, toCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
+  return { setPlanField, classIds, MAX_BONUS, bonusWarn, skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, convRule, supTip, oathwordForItem, wordRunes, slotName: SLOT_NAME, rows, render, fromCode, toCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
 };
 
 ;
@@ -10041,6 +10086,9 @@ window.BOScaling = function (ctx) {
     const tags = [ATTR[sk.Attribute] ? sk.Attribute : '', sk.Kind === 'Basic' ? 'Basic' : sk.Kind === 'Weapon' ? 'Weapon' : '', ...(sk.Tags || []), sk.DamageType && sk.DamageType !== 'Physical' ? sk.DamageType : ''].filter(Boolean);
     let h = '<article class="sc-card sc-' + col + '" data-name="' + esc((sk.Name + ' ' + (sk.Tags || []).join(' ') + ' ' + (sk.DamageType || '')).toLowerCase()) + '">' +
       '<header data-skill="' + esc(id) + '">' + (ctx.skillIcon ? ctx.skillIcon(id) : '') + '<div><h3>' + esc(sk.Name) + '</h3><span class="sc-tags">' + esc(tags.join(' · ')) + '</span></div></header>';
+
+    const conv = ctx.convRule ? ctx.convRule(id) : '';
+    if (conv) h += '<p class="sc-meta sc-conv"><b>Conversion:</b> ' + esc(conv) + '</p>';
     {
       h +='<div class="sc-row">' + SHOWN.filter(L => L <= max).map(L => '<div><span>LV ' + L + '</span><b>' + at(sk, G, L) + '</b></div>').join('') + '</div>';
       if (ext) h += '<div class="sc-row sc-ext">' + BONUS.map(b => '<div><span>LV ' + (max + b) + '</span><b>' + atBonus(sk, G, b) + '</b></div>').join('') + '</div><p class="sc-unit">' + unitOf(k) + '. Second row: levels past 20 come from gear; past LV 25 is estimated (0.56 curve).</p>';
@@ -14991,17 +15039,22 @@ window.BOCharacter = function (ctx) {
 
 
     let pieces = DT.filter(d => parts[d][1] > 0).map(d => ({ type: d, scales: new Set([d]), min: parts[d][0], max: parts[d][1] }));
+    const convTrace = []; // display only: what moved where ({ from, to, pct of that type's damage at that step, src })
 
 
 
+
+
+
+
+
+
+
+
+    let ownRule = null;
     if (isAttack && sk.DamageType && sk.DamageType !== 'Physical' && DT.includes(sk.DamageType)) {
       const share = sk.ConvertShare != null ? (sk.ConvertShare > 1 ? sk.ConvertShare / 100 : sk.ConvertShare) : 1;
-      const ph = pieces.find(p => p.type === 'Physical');
-      if (ph && share > 0) {
-        pieces.push({ type: sk.DamageType, scales: new Set(['Physical', sk.DamageType]), min: ph.min * share, max: ph.max * share, own: true }); // own: made by the skill's own ConvertShare
-        ph.min *= 1 - share; ph.max *= 1 - share;
-        if (ph.max <= 0) pieces = pieces.filter(p => p !== ph);
-      }
+      if (share > 0) ownRule = { to: sk.DamageType, pct: share * 100, from: () => 1, src: sk.Name + ' (skill)', own: true };
     }
 
 
@@ -15022,8 +15075,9 @@ window.BOCharacter = function (ctx) {
       if (rest.length) from = t => 1;
       else if (fromSupport) from = t => 1;
       else from = t => (t === 'Physical' ? 1 : 0);
-      convRules.push({ to, pct: m.v, from }); use(m, 'conversion');
+      convRules.push({ to, pct: m.v, from, src: m.src }); use(m, 'conversion');
     }
+    if (ownRule) convRules.unshift(ownRule);
     if (convRules.length) {
       const out = [];
       for (const p of pieces) {
@@ -15037,11 +15091,18 @@ window.BOCharacter = function (ctx) {
         const kept = 1 - Math.min(1, tot);
         if (kept > 0) out.push({ type: p.type, scales: p.scales, min: p.min * kept, max: p.max * kept, own: p.own });
         const byTo = {};
-        convRules.forEach((r, i) => { if (shares[i] > 0) byTo[r.to] = (byTo[r.to] || 0) + shares[i] * scale; });
+
+        convRules.forEach((r, i) => { if (!(shares[i] > 0)) return; if (r.own) out.push({ type: r.to, scales: new Set([...p.scales, r.to]), min: p.min * shares[i] * scale, max: p.max * shares[i] * scale, own: true }); else byTo[r.to] = (byTo[r.to] || 0) + shares[i] * scale; });
 
 
 
-        for (const [to, s] of Object.entries(byTo)) out.push({ type: to, scales: new Set([...p.scales, to]), moreScales: new Set(p.scales), min: p.min * s, max: p.max * s });
+        convRules.forEach((r, i) => { if (shares[i] > 0) convTrace.push({ from: p.type, to: r.to, pct: shares[i] * scale * 100, src: r.src }); });
+
+
+
+
+
+        for (const [to, s] of Object.entries(byTo)) out.push(Object.assign({ type: to, scales: new Set([...p.scales, to]), min: p.min * s, max: p.max * s, conv: true }, p.type === 'Physical' && !p.moreScales ? {} : { moreScales: new Set(p.moreScales || p.scales) }));
       }
       pieces = out;
     }
@@ -15087,6 +15148,7 @@ window.BOCharacter = function (ctx) {
           if (m.src && seen.has(k)) continue;
           seen.add(k); gotExtra.set(p, seen);
           extras.push({ type: to, scales: new Set([to]), min: p.min * m.v / 100, max: p.max * m.v / 100, from: p.type });
+          convTrace.push({ from: p.type, to, pct: m.v, src: m.src, extra: true });
         }
       }
     };
@@ -15094,7 +15156,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-    addExtras(extraRules.filter(r => r.to === 'Fire'), pieces.some(p => p.moreScales) ? pieces : pieces.concat(extras.slice()));
+    addExtras(extraRules.filter(r => r.to === 'Fire'), pieces.some(p => p.conv) ? pieces : pieces.concat(extras.slice()));
 
 
 
@@ -15111,6 +15173,7 @@ window.BOCharacter = function (ctx) {
     DT.forEach(d => parts[d] = [0, 0]);
     for (const p of pieces) addPart(p.type, p.min, p.max);
     res.convertedParts = clone(parts);
+    { const seen = new Set(); res.convTrace = convTrace.filter(t => { const k = [t.from, t.to, t.src, t.extra ? 1 : 0, t.pct.toFixed(6)].join('|'); if (seen.has(k)) return false; seen.add(k); return true; }); }
     DT.forEach(d => { if (parts[d][1] > 0) ctx.dealt.add(d); });
 
 
@@ -17399,7 +17462,7 @@ window.BOCharacter = function (ctx) {
       const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { _noFort: true, barShock: false, off: new Set([...(o.off || []), 'fortify']) }));
       if (p && p.hit && isFinite(p.panelDps)) {
         res.fortified = { hitAvg: res.hitAvg, sheetHitDps: res.sheetHitDps, panelDps: res.panelDps };
-        for (const k of ['hit', 'hitAvg', 'hitAvgCrit', 'scaleInfo', 'convertedParts', 'baseParts', 'sheetHitDps', 'panelDps']) if (p[k] !== undefined) res[k] = p[k];
+        for (const k of ['hit', 'hitAvg', 'hitAvgCrit', 'scaleInfo', 'convertedParts', 'convTrace', 'baseParts', 'sheetHitDps', 'panelDps']) if (p[k] !== undefined) res[k] = p[k];
         res.notes.push('Fortified is counted in the vs-enemy DPS only (full stacks in a fight); the hit, its breakdown and the panel DPS are the character sheet\'s, out of combat (no stacks).');
       }
     }
@@ -17426,7 +17489,7 @@ window.BOCharacter = function (ctx) {
           stacks = next;
         }
         if (r && isFinite(r.totalDps)) {
-          for (const k of ['hit', 'hitAvg', 'hitAvgCrit', 'scaleInfo', 'convertedParts', 'baseParts', 'sheetHitDps', 'panelDps', 'fortified']) if (res[k] !== undefined) r[k] = res[k];
+          for (const k of ['hit', 'hitAvg', 'hitAvgCrit', 'scaleInfo', 'convertedParts', 'convTrace', 'baseParts', 'sheetHitDps', 'panelDps', 'fortified']) if (res[k] !== undefined) r[k] = res[k];
           r.kindling = { stacks, rl, lifePerKill: per, dpsWithout: res.totalDps };
           r.notes.push('Kindling: ' + stacks.toFixed(1) + ' of ' + KINDLE_MAX + ' stacks on this Guardian (every ' + Math.round(per).toLocaleString('en-US') + ' damage, 4% of its life at Rupture ' + rl + ', counts as a kill; each stack lasts ' + KINDLE_SECONDS + ' s): +' + (KINDLE_DMG * stacks).toFixed(1) + '% increased spell damage and +' + (KINDLE_SPEED * stacks).toFixed(1) + '% increased cast speed in the fight. From the support\'s text, not yet checked in game.');
           return r;
@@ -19189,6 +19252,30 @@ window.BOStartApp = function () {
   };
   const pct = x => (x >= 0 ? '+' : '') + num(x * 100, 1) + '%';
   const typeColor = d => 'var(--t-' + d.toLowerCase() + ')';
+
+
+  function conversionBlock(r) {
+    const tr = r.convTrace || [];
+    if (!tr.length) return '';
+    const chip = d => '<span class="type" style="--c:' + typeColor(d) + '">' + d + '</span>';
+    const src = t => esc(String(t.src || '').replace(/^Support · (.*)$/, '$1 (support)'));
+    const range = p => num(p[0]) + '–' + num(p[1]);
+    const before = Object.keys(r.baseParts || {}).filter(d => r.baseParts[d][1] > 0);
+
+    const groups = new Map();
+    for (const t of tr) {
+      const k = [t.src, t.to, t.extra ? 1 : 0, t.pct.toFixed(4)].join('|');
+      if (!groups.has(k)) groups.set(k, Object.assign({ froms: [] }, t));
+      if (!groups.get(k).froms.includes(t.from)) groups.get(k).froms.push(t.from);
+    }
+    const all = [...groups.values()], conv = all.filter(t => !t.extra), extra = all.filter(t => t.extra);
+    const chips = t => t.froms.map(chip).join(', ');
+    return '<div class="conv-block"><h3>Conversion</h3>' +
+      (before.length ? '<p class="conv-line"><span class="conv-lbl">Before</span>' + before.map(d => chip(d) + ' ' + range(r.baseParts[d])).join(' · ') + '</p>' : '') +
+      conv.map(t => '<p class="conv-line">' + num(t.pct, t.pct % 1 ? 1 : 0) + '% of ' + chips(t) + ' → ' + chip(t.to) + ' <small>' + src(t) + '</small></p>').join('') +
+      extra.map(t => '<p class="conv-line">+' + num(t.pct, t.pct % 1 ? 2 : 0) + '% of ' + chips(t) + ' as extra ' + chip(t.to) + ' <small>' + src(t) + '</small></p>').join('') +
+      '<p class="hint">' + (conv.length ? 'Converted damage scales with the lines of both types. ' : '') + 'The Base column below is after this step. Each line is a share of the damage of that type at that point.</p></div>';
+  }
   const NOTES_MAX = 4000; // build notes: short enough to stay inside a share link
   const store = {
     get(k, def) { try { const v = localStorage.getItem('bods:' + k); return v == null ? def : JSON.parse(v); } catch (e) { return def; } },
@@ -20025,7 +20112,7 @@ window.BOStartApp = function () {
     if (!document.body.classList.contains('support-page')) html += optimizerCard() + optCard(r);
     html += '</div><div class="analysis-details">';
 
-    html += '<details class="advanced-statistics"><summary>Advanced Statistics</summary><div class="card damage-breakdown-card"><h2>Damage Breakdown <small>' + esc(r.skill.Name) + ' · gem ' + r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus : '') + ' · ' + (r.base.kind === 'attack' ? 'attack with ' + esc(r.base.weapon.name) : 'spell') + '</small></h2><div class="table-wrap"><table><thead><tr><th>Type</th><th>Base</th><th>Increased</th><th>More</th><th>Hit range</th><th>Enemy res</th><th>Taken</th><th>DPS</th></tr></thead><tbody>' +
+    html += '<details class="advanced-statistics"><summary>Advanced Statistics</summary><div class="card damage-breakdown-card"><h2>Damage Breakdown <small>' + esc(r.skill.Name) + ' · gem ' + r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus : '') + ' · ' + (r.base.kind === 'attack' ? 'attack with ' + esc(r.base.weapon.name) : 'spell') + '</small></h2>' + conversionBlock(r) + '<div class="table-wrap"><table><thead><tr><th>Type</th><th title="After conversion and extra damage">Base</th><th>Increased</th><th>More</th><th>Hit range</th><th>Enemy res</th><th>Taken</th><th>DPS</th></tr></thead><tbody>' +
       hitTypes.map(d => {
         const b = r.convertedParts[d], si = r.scaleInfo[d], h = r.hit[d], m = r.mitig[d];
         return '<tr><td><span class="type" style="--c:' + typeColor(d) + '">' + d + '</span></td><td>' + num(b[0]) + '–' + num(b[1]) + '</td><td>+' + num(si.inc, 0) + '%</td><td>×' + num(si.more, 2) + '</td><td>' + num(h.min) + '–' + num(h.max) + '</td><td title="' + esc('Resistance ' + num(r.enemy.resist[d], 1) + '% minus ' + num(r.enemy.pen[d], 0) + '% penetration' + (d === 'Physical' && r.mitig.armourReduction ? '; armour stops ' + num(r.mitig.armourReduction, 1) + '%' : '')) + '">' + num(m.effRes, 1) + '%' + (d === 'Physical' && r.mitig.armourReduction ? ' <small>(arm. −' + num(r.mitig.armourReduction, 1) + '%)</small>' : '') + '</td><td>×' + num(m.taken, 2) + '</td><td><b>' + num(r.hitDpsByType[d]) + '</b></td></tr>';
@@ -24072,7 +24159,7 @@ window.BOStartApp = function () {
     skillName: () => st.skill ? ((GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill) : '', onChange: () => { breweryDirty = true; },
     redraw: () => { if (character) character.render(); if (planner) planner.render(); } }); // the belt cards behind the slot overlay
   const skillIcon = id => (window.GEM_ICONS && window.GEM_ICONS.idx[String(id).toLowerCase()] != null ? skillDot(id) : ''); // the icon only, no colour dot fallback
-  scaling = window.BOScaling({ $, esc, gd: () => GD, skillIcon, tip: id => planner.skillTip(null, id, false, true) }); // hover tooltip on a card's title (the Build tab's skill tooltip, game data only)
+  scaling = window.BOScaling({ $, esc, gd: () => GD, skillIcon, tip: id => planner.skillTip(null, id, false, true), convRule: id => planner.convRule(id) }); // hover tooltip on a card's title (the Build tab's skill tooltip, game data only)
 
   grail = window.BOGrail({ $, esc, gd: () => GD, current: () => st.ch, icons: () => itemSearch,
     onChange: () => { if (!$('#itemSearchPane').hidden) itemSearch.render(); } });

@@ -2998,3 +2998,9 @@ details.sw-sub.sw-sup { background: var(--panel); }
 .mk-watch { margin-bottom: 10px; }
 .market-pane #mkWatch.on { border-color: var(--good); color: var(--good); }
 .mk-copy.mk-find { margin-left: 0; }
+/* Damage Breakdown: conversion block (conversionBlock in app.js) */
+.conv-block { margin: 0 0 12px; }
+.conv-block h3 { margin: 0 0 6px; }
+.conv-line { margin: 2px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.conv-line small { color: var(--faint); }
+.conv-lbl { color: var(--faint); min-width: 52px; }

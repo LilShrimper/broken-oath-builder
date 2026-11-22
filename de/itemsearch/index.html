@@ -50,7 +50,7 @@
   var b = new URL("../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/de.json'), langCode: 'de' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../../style.css?v=451">
+<link rel="stylesheet" href="../../style.css?v=452">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -540,6 +540,8 @@
         <label class="field"><span>Hits per second</span><input type="number" id="hpsOverride" min="0" step="0.1" placeholder="auto"></label>
         <label class="field" id="rowLeech" title="Only matters for skills with the Life Leech support: 15% more damage only while you leech, and leech needs you below full life. Default: 40% of the fight (the sim cannot see your life). Raise it to sim higher, 100 = always on."><span>Time spent leeching (%)</span><input type="number" id="leechUptime" min="0" max="100" step="5" placeholder="40"></label>
         <label class="field" id="rowWindburst" title="Windburst: every third movement skill bursts for 200% of your last Bow hit. How many movement skills you use a second in the fight (0.5 = one every 2 s). Blank = not counted." hidden><span>Movement skills a second</span><input type="number" id="windburstMoves" min="0" step="0.1" placeholder="0"></label>
+        <label class="field" id="rowCorpseKind" title="Which corpse Pyre Burst and Kindled Remains burn. Their extra damage is a share of the corpse's life at this Rupture Level (counted up to 150). A Husk (Gravesown) has 60% of a normal monster's life." hidden><span>Corpse</span><select id="corpseKind"><option value="">Normal monster</option><option value="magic">Magic monster</option><option value="rare">Rare monster</option><option value="husk">Husk (Gravesown)</option><option value="none">None</option></select></label>
+        <label class="field" id="rowCorpses" title="Kindled Remains: how many fresh corpses a second lie next to you or the enemy (it bursts at most 4 a second). Blank = only Gravesown's Husks, if it is linked." hidden><span>Fresh corpses a second</span><input type="number" id="corpsesPerSec" min="0" step="0.1" placeholder="auto"></label>
         <p class="hint enemy-life-note">Enemy life sets the size of Shock: lower life means a bigger Shock. Blank = the sim's estimate.</p>
       </div>
       <div class="enemy-toggles">
@@ -664,7 +666,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":451,"at":"2026-11-22T18:57:19.119Z"};
+window.SITE_VERSION = {"v":452,"at":"2026-11-22T21:52:41.330Z"};
 window.SITE_LANG = 'de';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -673,6 +675,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=c0ae2407","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../../app.js?v=451"></script>
+<script src="../../app.js?v=452"></script>
 </body>
 </html>

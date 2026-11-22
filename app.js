@@ -675,7 +675,8 @@ window.PAGE_LANGS = {
     const ruleVal = v => v === 'True' ? true : v === 'False' ? false : v !== '' && v != null && isFinite(+v) ? +v : v;
 
 
-    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK|CRAFT|CURSE)$/;
+
+    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK|CRAFT|CURSE|TRUST)$/;
     try { for (const s of (J('Gameplay/switches.json') || {}).switches || []) if (RULE_SECTIONS.test(s.section)) gameRules[s.section + '.' + s.key] = ruleVal(s.value); } catch (e) { /* not served */ }
     try { for (const [k, v] of Object.entries((J('Gameplay/rules.json') || {}).values || {})) gameRules[k] = ruleVal(v && v.value); } catch (e) { /* older game data */ }
     let trapPrice = {};
@@ -1930,7 +1931,8 @@ window.PAGE_LANGS = {
 
 
     const basicOnly = !!cfg.basicOnly, noCore = !!cfg.noCore || basicOnly;
-    const ctBan = b => !!b && ((noCore && (b.Tags || []).includes('CoreTouched')) || (basicOnly && (b.Tags || []).includes('Ashen')));
+
+    const ctBan = b => !!b && ((noCore && (b.Tags || []).includes('CoreTouched')) || (basicOnly && (b.Tags || []).some(t => t === 'Ashen' || t === 'GnomeMade')));
     const coreBan = it => !!it && ctBan(GD.bases[lc(it.base)]);
 
     const lim = (v, max) => v == null || v === '' || !isFinite(+v) ? max : Math.max(0, Math.min(max, Math.round(+v)));
@@ -13264,6 +13266,8 @@ window.BOCharacter = function (ctx) {
 
     'KindlingOnKill', 'ChannelRepeats', 'TrapChainLink', 'ValourMax',
 
+    'KindlePct', 'Gravesown',
+
     'WoeWeave103', 'WoeWeaveLess103', 'BleedTear103', 'HeraldFocus103', 'MinionQuarry103', 'MinionQuarryLess103',
 
     'DexAttackMore', 'ChannelRamp', 'OrbitMovingDamage', 'CooldownRecovery', 'VowEffect', 'HeraldEffect', 'TrogNote100', 'BleedStacks', 'BallistaVolley76', 'GolemAuraStack76',
@@ -13454,6 +13458,40 @@ window.BOCharacter = function (ctx) {
     const model = gate ? (GUARDIAN_GATE[rl] || logLine(rl <= 30 ? GATE_PTS : GATE_PTS.slice(2), rl)) : (GUARDIAN_MODEL[rl] || logLine(MODEL_PTS, rl));
     return model * deepZoneAt(rl)[0];
   };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const CORPSE_PACK = { 1: 1, 22: 3.88, 30: 6.121, 42: 16.49, 48: 24.14, 60: 44.2, 62: 47.6, 90: 38.22 };
+  const CORPSE_PACK_PTS = tablePts(CORPSE_PACK, v => v);
+  const CORPSE_KIND = { normal: 1, magic: 2, rare: 5, husk: 0.6 };
+  const corpseLifeAt = (GD, rl, kind, onBoss) => {
+    const D = GD.deep || {}, max = D.MapMaxLevel || 80, mls = (D.LadderMonsterLevels || []).length ? D.LadderMonsterLevels : [81, 82, 83, 84];
+    const ML = ((GD.scaling || {}).Monster || {}).Life || {};
+    const K = ML.K > 0 ? ML.K : 0.3487, P = ML.P > 0 ? ML.P : 0.6066;
+    const r = Math.max(1, Math.min(150, Math.round(+rl || 1)));
+    const ml = r <= max ? r : mls[Math.min(r - max, mls.length) - 1];
+    const pack = onBoss || r >= 105 ? 1 : r > 90 ? CORPSE_PACK[90] : (CORPSE_PACK[r] || logLine(CORPSE_PACK_PTS, r));
+    return { life: 30 * Math.exp(K * (Math.pow(ml, P) - 1)) * deepZoneAt(r)[0] * pack * (CORPSE_KIND[kind] || 1), pack, rl: r };
+  };
+
+
+  const KINDLED_BANDS = [[50, 13], [100, 5], [150, 54], [200, 99], [Infinity, 360]], KINDLED_BASE = 18;
 
   const is081 = GD => apiBuildAtLeast(GD, 81, '2026-11-17T15');
 
@@ -15988,7 +16026,6 @@ window.BOCharacter = function (ctx) {
     } else if (sk.Delivery === 'CorpseBurst') {
 
 
-      res.notes.push(sk.Name + ': every cast needs a corpse or one of your minions; this sheet assumes one is always there and leaves out the extra fire from the corpse\'s life.');
     } else if (sk.Delivery === 'Orb' && sk.Orb && sk.Orb.Interval > 0) {
 
 
@@ -17327,6 +17364,59 @@ window.BOCharacter = function (ctx) {
           byType.Physical = (byType.Physical || 0) + dps; hitDpsVs += dps; res.hitDps = hitDpsVs;
           (res.triggers = res.triggers || []).push({ src: 'Dragonling · Windburst', when: 'Move', nth: every, pct: pct * 100, count: 1, element: 'Physical', perSec: events, dps });
           res.notes.push('Windburst: every ' + nth + ' movement skill (' + moves + ' a second) bursts for ' + (+pct * 100) + '% of your last Bow hit (' + Math.round(stored).toLocaleString('en-US') + ' dealt, the average hit) as Physical, ' + events.toFixed(2) + ' a second = +' + Math.round(dps / hitDpsNow * 100) + '% hit damage on one enemy. The game stores the hit\'s number when it lands and keeps it even with the bow taken off (game log, 17 Nov 2026).');
+        }
+      }
+
+
+
+
+
+
+
+
+
+
+      {
+        const kindIn = lc(o.corpseKind || ''), noCorpse = kindIn === 'none';
+        const kindSet = CORPSE_KIND[kindIn] ? kindIn : 'normal';
+        const kindName = { normal: 'a normal monster', magic: 'a magic monster', rare: 'a rare monster', husk: 'a Husk' };
+        const rl = guardianRL(GD, o, lvl), supply = +o.corpsesPerSec > 0 ? +o.corpsesPerSec : 0;
+        const fmt = n => Math.round(n).toLocaleString('en-US');
+        const vs = (size, d) => {
+          const mt = mitig[d]; if (!mt) return size;
+          let k = mt.k;
+          if (d === 'Physical') { const dr = Math.min(H.ArmourMaxReduction, 100 * armour / (armour + H.ArmourFactor * size)); k = (1 - dr / 100) * (1 - mt.effRes / 100); }
+          return size * k * mt.taken * shockF;
+        };
+        const where = c => 'Rupture Level ' + c.rl + (rl > c.rl ? ' (corpse life stops growing there)' : '') + (isBoss ? ', pack life left out against a Guardian' : c.pack > 1 ? ', pack life x' + +c.pack.toFixed(2) + ' counted' : '');
+        if (sk.Delivery === 'CorpseBurst') {
+          const s1 = ruleNum(GD, 'r85.TRUST.PyreBurstLife1', 10), s20 = ruleNum(GD, 'r85.TRUST.PyreBurstLife20', 20);
+          const L = Math.max(1, Math.min(20, (res.gem || {}).total || 1)), share = s1 + (s20 - s1) * (L - 1) / 19;
+          if (noCorpse) res.notes.push(sk.Name + ': every cast needs a corpse or one of your minions; the corpse is set to "none" in Configure Enemy, so the ' + +share.toFixed(1) + '% of the slain\'s life is left out.');
+          else {
+            const c = corpseLifeAt(GD, rl, kindSet, isBoss), size = c.life * share / 100, dps = vs(size, 'Fire') * usesPerSec;
+            byType.Fire = (byType.Fire || 0) + dps; hitDpsVs += dps; res.hitDps = hitDpsVs;
+            res.corpse = { kind: kindSet, life: c.life, rl: c.rl, pack: c.pack, share, perCast: size, dps };
+            (res.triggers = res.triggers || []).push({ src: sk.Name + ' · corpse life', when: 'Use', nth: 1, pct: share, count: 1, element: 'Fire', perSec: usesPerSec, dps });
+            res.notes.push(sk.Name + ': every cast also deals ' + +share.toFixed(1) + '% of the corpse\'s life as Fire: ' + kindName[kindSet] + ' at ' + where(c) + ' has ' + fmt(c.life) + ' life, so ' + fmt(size) + ' a cast before resistance = +' + Math.round(hitDpsNow > 0 ? dps / hitDpsNow * 100 : 0) + '% hit damage. Corpse life is from the game log (22 Nov 2026). Assumes a corpse for every cast and that your damage lines and crits do not raise this part (not checked in a fight yet). Pick the corpse in Configure Enemy.');
+          }
+        }
+        const kp = sumMod('KindlePct', 'Flat');
+        if (kp > 0) {
+          const channel = !!(sk.Channel && sk.Channel.Tick), sown = sumMod('Gravesown', 'Flat') > 0;
+          const husks = sown ? (channel ? 1 / 0.7 : 0.10 * hitsPerSec) : 0;
+          const have = noCorpse ? 0 : supply > 0 ? supply : husks, kind = supply > 0 ? kindSet : 'husk';
+          const band = KINDLED_BANDS.find(b => rl < b[0])[1] * kp / KINDLED_BASE;
+          if (!(have > 0)) res.notes.push('Kindled Remains: bursts a fresh corpse next to you or the enemy for ' + +band.toFixed(1) + '% of its life (at this Rupture Level). No corpses are counted in this fight: set "Fresh corpses a second" in Configure Enemy, or link Gravesown for Husks.');
+          else {
+            const rate = Math.min(4, channel ? usesPerSec : hitsPerSec, have);
+            const d = mitig[sk.DamageType] ? sk.DamageType : 'Physical';
+            const c = corpseLifeAt(GD, rl, kind, isBoss), size = c.life * band / 100, dps = vs(size, d) * rate;
+            byType[d] = (byType[d] || 0) + dps; hitDpsVs += dps; res.hitDps = hitDpsVs;
+            res.kindled = { kind, life: c.life, rl: c.rl, pct: band, perSec: rate, perBurst: size, dps };
+            (res.triggers = res.triggers || []).push({ src: 'Support · Kindled Remains', when: channel ? 'Use' : 'Hit', nth: 1, pct: band, count: 1, element: d, perSec: rate, dps });
+            res.notes.push('Kindled Remains: ' + rate.toFixed(2) + ' corpse bursts a second (at most 4; ' + (supply > 0 ? supply + ' fresh corpses a second, your setting' : 'Gravesown\'s Husks, ' + husks.toFixed(2) + ' a second' + (channel ? ', one every 0.7 s taken' : '')) + '), each ' + +band.toFixed(1) + '% of the life of ' + kindName[kind] + ' at ' + where(c) + ' (' + fmt(c.life) + ') as ' + d + ' = ' + fmt(size) + ' before resistance, +' + Math.round(hitDpsNow > 0 ? dps / hitDpsNow * 100 : 0) + '% hit damage. Corpse life is from the game log (22 Nov 2026); the burst is taken as not raised by your damage lines (not checked in a fight yet).');
+          }
         }
       }
     }
@@ -20101,7 +20191,7 @@ window.BOStartApp = function () {
 
   const st = {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0, gatherFury: 2 }, // gatherFury: Fury charges counted while Gather Fury is linked (owner, 19 Nov 2026: default 2)
-    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: null, hallowCG: false, enemyLife: null, graveCall: false, flashfire: false, windburstMoves: null, leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
+    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: null, hallowCG: false, enemyLife: null, graveCall: false, flashfire: false, windburstMoves: null, corpseKind: '', corpsesPerSec: null, leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
     penFloor: false, potionsOn: store.get('potionsOn', true) !== false, opt: null, optJob: null, last: null,
     keepSup: new Set(), blockSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
   };
@@ -20347,7 +20437,7 @@ window.BOStartApp = function () {
     for (const d of DT) if (st.res[d] !== '' && st.res[d] != null && isFinite(+st.res[d])) res[d] = +st.res[d];
     return Object.assign({
       off: st.off, vowbreak: st.vowbreak, tryHeralds: st.tryHeralds, charges: st.charges, supportsOverride: st.supports, gemLevel: st.gemLevel || undefined,
-      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: hallowOn(st.ch), hallowedCG: st.hallowCG, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire, windburstMoves: +st.windburstMoves > 0 ? +st.windburstMoves : undefined, leechUptime: st.leechUptime !== null && st.leechUptime !== '' && !isNaN(+st.leechUptime) ? +st.leechUptime / 100 : undefined, mainSkill: st.skill, execSim: st.execOn || {},
+      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: hallowOn(st.ch), hallowedCG: st.hallowCG, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire, windburstMoves: +st.windburstMoves > 0 ? +st.windburstMoves : undefined, corpseKind: st.corpseKind || undefined, corpsesPerSec: +st.corpsesPerSec > 0 ? +st.corpsesPerSec : undefined, leechUptime: st.leechUptime !== null && st.leechUptime !== '' && !isNaN(+st.leechUptime) ? +st.leechUptime / 100 : undefined, mainSkill: st.skill, execSim: st.execOn || {},
       projOnTarget: +st.projOnTarget || undefined, totemCount: st.totemCount > 0 ? +st.totemCount : undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, castsPerSecOverride: st.cps > 0 ? +st.cps : undefined, penFloor: st.penFloor,
       conduit: st.conduit == null ? undefined : st.conduit,
       coc: st.coc === false ? false : undefined, cocSource: typeof st.coc === 'string' ? st.coc : undefined,
@@ -20551,6 +20641,8 @@ window.BOStartApp = function () {
     const dragonFlags = new Set(); try { S.collectMods(GD, ch, opts()).mods.forEach(m => { if (m.stat === 'Dragonling') (m.tags || []).forEach(t => dragonFlags.add(t)); }); } catch (e) { /* keep them hidden */ }
     $('#rowFlashfire').hidden = !(dragonFlags.has('Asc71_Flashfire') || st.flashfire);
     $('#rowWindburst').hidden = !(dragonFlags.has('Asc71_Windburst') || st.windburstMoves);
+    $('#rowCorpseKind').hidden = !(r.corpse || r.kindled || st.corpseKind || (r.skill && r.skill.Delivery === 'CorpseBurst') || (r.supports || []).some(x => /kindled_remains/i.test(x.id || x.Id || x)));
+    $('#rowCorpses').hidden = !(r.kindled || st.corpsesPerSec || (r.supports || []).some(x => /kindled_remains/i.test(x.id || x.Id || x)));
     $('#rowGraveCall').hidden = !(r.minion || st.graveCall);
 
     const isBoss = st.rarity === 'boss';
@@ -21631,7 +21723,7 @@ window.BOStartApp = function () {
   const supName = id => (GD.supports[String(id).toLowerCase()] || { Name: id }).Name;
   function optSig() {
     const o = opts();
-    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.hallowedCG, o.enemyLife, o.graveCall, o.flashfire, o.windburstMoves, o.leechUptime, o.execSim, o.mainSkill, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
+    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.hallowedCG, o.enemyLife, o.graveCall, o.flashfire, o.windburstMoves, o.corpseKind, o.corpsesPerSec, o.leechUptime, o.execSim, o.mainSkill, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
       off: [...st.off].filter(k => !k.startsWith('support:')).sort(), vb: [...st.vowbreak].sort(), th: o.tryHeralds, ch: o.charges, po: o.potions });
   }
   function runSearch() {
@@ -21983,6 +22075,8 @@ window.BOStartApp = function () {
   $('#enemyLife').addEventListener('input', e => { st.enemyLife = e.target.value === '' ? null : +e.target.value; render(); });
   $('#leechUptime').addEventListener('input', e => { st.leechUptime = e.target.value === '' ? null : e.target.value; render(); });
   $('#windburstMoves').addEventListener('input', e => { st.windburstMoves = e.target.value === '' ? null : e.target.value; render(); });
+  $('#corpseKind').addEventListener('change', e => { st.corpseKind = e.target.value; render(); });
+  $('#corpsesPerSec').addEventListener('input', e => { st.corpsesPerSec = e.target.value === '' ? null : e.target.value; render(); });
   $('#flashfire').addEventListener('change', e => { st.flashfire = e.target.checked; render(); });
   $('#graveCall').addEventListener('change', e => { st.graveCall = e.target.checked; render(); });
   $('#projOnTarget').addEventListener('input', e => { st.projOnTarget = e.target.value; render(); });
@@ -23972,7 +24066,7 @@ window.BOStartApp = function () {
       chk('ignoreAttr', 'Ignore attribute requirements', 'Off: every item must fit your Strength, Dexterity and Intelligence with the gear found') +
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
       chk('vows', 'Vows on uniques', 'A red item takes up to 6 lines from rares at the cube; the best ones are added') +
-      chk('basicOnly', 'Basic items only', 'Plain bases only: the search skips Core Touched and Ashen bases' + (gear ? ', and one you wear now is not kept either' : '')) +
+      chk('basicOnly', 'Basic items only', 'Plain bases only: the search skips Core Touched, Ashen and Gnome-made bases' + (gear ? ', and one you wear now is not kept either' : '')) +
       chk('noCore', 'No Core Touched items', S_.basicOnly ? 'Already covered by Basic items only' : gear ? 'The search skips Core Touched bases, and a Core Touched item you wear now is not kept either' : 'Skip Core Touched bases', S_.basicOnly) +
       chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') + '</div></div></div>';
   };

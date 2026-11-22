@@ -10932,7 +10932,7 @@ window.BOFaq = function (ctx) {
 
 
       '<b>In short: same kind = add, different kind = multiply.</b> Two Woes add. A Woe and a Sentence multiply. Marks and the War Banner add with each other and multiply with curses.',
-      'The five kinds are from the game\'s own log (build 84). The developer\'s stacking table in the public API (build 85) says where the rest belong: "more Fire (Cold, Lightning, Physical) damage taken" lines and Unravel count with the <b>Woes</b>; shock, chill\'s damage taken and Brittle are one kind; hallowed ground, Maim and the golem\'s blessing are one kind. Lowered resistance is never part of these: it changes the resistance itself.',
+      'The five kinds are from the game\'s own log (build 84). The developer\'s stacking table in the public API (build 85) says where the rest belong: "more Fire (Cold, Lightning, Physical) damage taken" lines and Unravel count with the <b>Woes</b>; shock, chill\'s damage taken and Brittle are one kind (they add together; poison, ignite and bleed ticks do not take chill or Brittle); hallowed ground, Maim and the golem\'s blessing are one kind. Lowered resistance is never part of these: it changes the resistance itself.',
       'Some item and support texts still say Marks "add with curses". The game log and the developer\'s table both make Marks their own kind, so they multiply with curses.',
     ] : +GD.apiBuild >= 82 ? [
 
@@ -16348,8 +16348,12 @@ window.BOCharacter = function (ctx) {
     const snap = s => (o.combatDuration ? Math.max(0.5, Math.floor(s / 0.5) * 0.5) : s);
 
 
-    let shockF = 1; // set below once the ailment modifiers are read; shocks raise all damage taken
-    const dotTakenFor = d => (o.dotElementTaken && (rule === 'add' || rule === 'kinds') ? takenOf(d, false, true) : o.dotElementTaken ? mitig[d].taken * takenOf(undefined, false, true) / takenOf(undefined, false) : takenOf(undefined, false, true)) * shockF;
+    let shockF = 1; // set below once the ailment modifiers are read; shock + chill + Brittle (added) raise hit damage taken
+
+
+
+    let dotShockF = 1;
+    const dotTakenFor = d => (o.dotElementTaken && (rule === 'add' || rule === 'kinds') ? takenOf(d, false, true) : o.dotElementTaken ? mitig[d].taken * takenOf(undefined, false, true) / takenOf(undefined, false) : takenOf(undefined, false, true)) * dotShockF;
     let dotMulti = 0;
     for (const m of pickMods(mods, 'DotMulti', 'Flat')) { dotMulti += m.v; use(m); }
     const sumMod = (stat, mode) => { let s = mode === 'More' ? 1 : 0; for (const m of pickMods(mods, stat, mode)) if (applies(ctx, m)) { s = mode === 'More' ? s * (1 + m.v / 100) : s + m.v; use(m); } return s; };
@@ -16493,6 +16497,7 @@ window.BOCharacter = function (ctx) {
         }
       }
     }
+    dotShockF = shockF;
 
 
 
@@ -16520,11 +16525,17 @@ window.BOCharacter = function (ctx) {
       const cLife = o.enemyLife || (isBoss ? guardianLifeAt(GD, guardianRL(GD, o, lvl)) : (() => { const ML = M.Life || { Base: 20, K: 0.225, P: 0.7 }, rar = (M.Rarity || {})[{ normal: 0, magic: 1, rare: 2 }[rarity]] || {}; return 30 * ML.Base * Math.exp(ML.K * Math.pow(lvl, ML.P)) * (rar.Life || 1); })());
       const coldHit = hit.Cold && mitig.Cold ? hit.Cold.avg * critFactor * mitig.Cold.k * mitig.Cold.taken : 0;
       const coldPctLife = cLife > 0 ? 100 * Math.max(0, coldHit) / cLife : 0;
-      const chill = Math.min(cMax, (cMin + (cMax - cMin) * Math.min(1, coldPctLife / cFull)) * Math.max(0, 1 + ce / 100));
+
+
+
+      const chill = Math.min(50, (cMin + (cMax - cMin) * Math.min(1, coldPctLife / cFull)) * Math.max(0, 1 + ce / 100));
       const coldRate = hitsPerSec * perHitFactor * hitFactor;
       const up = 1 - Math.exp(-coldRate * 2);
       const chillF = 1 + ruleNum(GD, 'r103.AILMENTS.ChillTakenPer103', 0.5) * chill * up / 100;
-      ail.chill = { size: chill, uptime: up, taken: (chillF - 1) * 100, counted: chillF > shockF, coldPctLife, life: cLife };
+      ail.chill = { size: chill, uptime: up, taken: (chillF - 1) * 100, coldPctLife, life: cLife };
+
+
+
 
 
 
@@ -16535,7 +16546,7 @@ window.BOCharacter = function (ctx) {
         ail.chill.counted = true; ail.chill.addedTo = (shockF - 1) * 100;
         for (const d of Object.keys(byType)) byType[d] *= k;
         hitDpsVs *= k; res.hitDps = hitDpsVs; shockF += chillPct / 100;
-        res.notes.push('Chill: ' + Math.round(chill) + '% chill makes the enemy take ' + chillPct.toFixed(1) + '% more damage, added to your shock (shock, chill and Brittle add together: developer stacking table, game tooltip 20 Nov 2026). Chill is ' + cMin + '% for a small cold hit up to ' + cMax + '% at a hit worth ' + cFull + '% of the enemy\'s life (game log 19 Nov 2026); yours is about ' + (coldPctLife < 0.1 ? 'under 0.1' : coldPctLife.toFixed(1)) + '% of its ~' + Math.round(cLife).toLocaleString('en-US') + ' life' + (isBoss || o.enemyLife ? '.' : ' (a typical rare of this level: an estimate).'));
+        res.notes.push('Chill: ' + Math.round(chill) + '% chill makes the enemy take ' + (chillPct / Math.max(up, 1e-9)).toFixed(1) + '% more damage from hits (' + ruleNum(GD, 'r103.AILMENTS.ChillTakenPer103', 0.5) + '% per 1% chill), on ' + Math.round(up * 100) + '% of the time, added to your shock (shock, chill and Brittle add together: developer stacking table, game tooltips). Poison, ignite and bleed ticks do not take it. Chill is ' + cMin + '% for a small cold hit up to ' + cMax + '% at a hit worth ' + cFull + '% of the enemy\'s life (game log 19 Nov 2026), chill effect raises it up to 50%; yours is about ' + (coldPctLife < 0.1 ? 'under 0.1' : coldPctLife.toFixed(1)) + '% of its ~' + Math.round(cLife).toLocaleString('en-US') + ' life' + (isBoss || o.enemyLife ? '.' : ' (a typical rare of this level: an estimate).'));
       }
       if (rarity === 'rare' || rarity === 'unique' || isBoss) { // text: "a rare, unique or Guardian stores 25% of the cold damage it takes"
         let fd = 0; for (const m of pickMods(mods, 'FreezeDuration', 'Inc')) if (applies(ctx, m)) { fd += m.v; use(m, 'Crack'); }
@@ -17220,6 +17231,7 @@ window.BOCharacter = function (ctx) {
         }
         const uptime = fightSec > 0 ? Math.min(1, covered / fightSec) : 0;
         const bAdd = brittlePct / 100 * uptime, kB = 1 + bAdd / shockF; // adds to shock + chill (hits only)
+        shockF += bAdd;
         const k = 1 + more / 100 * uptime;
         Object.assign(res.freeze, { frostbreak: hasFrostbreak, helpers, bars, uptime, fightSec, life, share, firstFillSec: cold > 0 ? barPct / 100 * life / cold : 0, more: (k - 1) * 100, brittleTaken: bAdd * 100 });
         const kAll = k * kB;

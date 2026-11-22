@@ -14768,14 +14768,27 @@ window.BOCharacter = function (ctx) {
     if (engine0565) {
       const tot = {}, get = s => tot[s] != null ? tot[s] : (tot[s] = defenceTotal(GD, ch, mods, attr, s));
       const label = { Armour: 'armour', Evasion: 'evasion', EnergyShield: 'energy shield', Life: 'life', Block: '% block' };
-      for (const m of mods.filter(m => DEF_ENGINE[m.stat] && m.mode === 'Flat' && !m.local)) {
+
+
+
+
+      const best = new Map();
+      for (const m of mods.filter(m => DEF_ENGINE[m.stat] && (m.mode === 'Flat' || m.mode === 'Highest') && !m.local)) {
         if (!applies(ctx, m)) continue;
         const [s, knee] = DEF_ENGINE[m.stat], t = get(s);
+        if (m.mode === 'Highest') {
+          const units = (is0568(GD) ? t : Math.min(t, knee) + Math.max(0, t - knee) / 4) / 1000;
+          const row = { def: true, v: m.v * units, types: splitTags(m.tags).types, src: m.src + ' (' + Math.round(t).toLocaleString('en-US') + ' ' + label[s] + ', estimated, your best defence)' };
+          const k = (m.src || '') + '|' + (m.key || ''), was = best.get(k), why = 'more per 1,000 ' + label[s];
+          if (!was || row.v > was.row.v) { if (was) use(was.m, 'not your best defence'); best.set(k, { m, row, why }); } else use(m, 'not your best defence');
+          continue;
+        }
         if (s === 'Evasion' && noEvasion(mods) && !res.notes.some(n => n.startsWith('Glass Cannon:'))) res.notes.push('Glass Cannon: your Evasion is 0, so lines that pay more damage per 1,000 Evasion give nothing (game panel and log, 12 Nov 2026).');
         const units = s === 'Block' ? t : (is0568(GD) ? t : Math.min(t, knee) + Math.max(0, t - knee) / 4) / 1000; // 0.56.8: no knee
         use(m, s === 'Block' ? 'more per 1% block' : 'more per 1,000 ' + label[s]);
         engine.push({ def: true, v: m.v * units, types: splitTags(m.tags).types, src: m.src + ' (' + Math.round(t).toLocaleString('en-US') + (s === 'Block' ? '' : ' ') + label[s] + ', estimated)' });
       }
+      for (const { m, row, why } of best.values()) { use(m, why); engine.push(row); }
 
 
       for (const m of pickMods(mods, 'BlockToDamage', 'Flat')) if (applies(ctx, m) && ctx.tags.has('shield')) {

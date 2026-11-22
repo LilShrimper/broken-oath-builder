@@ -3256,10 +3256,11 @@ window.BOPlanner = function (ctx) {
     const lim = (lo, hi) => lo == null || hi == null ? '' : ' min="' + Math.min(lo, hi) + '" max="' + Math.max(lo, hi) + '" title="Rolls ' + lo + ' to ' + hi + '"';
     const out = (x, lo, hi) => lo != null && hi != null && (x < Math.min(lo, hi) || x > Math.max(lo, hi));
     const off = t && (out(a.v, t.Min, t.Max) || (two && out(a.v2, t.Min2, t.Max2)));
+    const gs = S.affixLineShown(GD, it, a), scNote = gs.k !== 1 ? ' <span class="meta" title="The game multiplies this line by ' + +gs.k.toFixed(2) + '. The box holds the roll as the save stores it; the text and the tier list are what the game shows and counts.">(game counts x' + +gs.k.toFixed(2) + ')</span>' : '';
     return '<div class="pl-affix" data-ai="' + ai + '">' + (mv || '') + '<span class="pl-type" title="' + (tag ? tag + ' · ' : '') + af.Type + '">' + (tag ? tag[0] : af.Type[0]) + '</span>' +
-      '<select data-f="tier"' + dis + '>' + af.Tiers.map((y, ti) => opt(ti, (af.Kind || 'T' + (ti + 1)) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')', ti === a.tier)).join('') + '</select>' +
+      '<select data-f="tier"' + dis + '>' + af.Tiers.map((y0, ti) => { const y = gs.tier(y0); return opt(ti, (af.Kind || 'T' + (ti + 1)) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')', ti === a.tier); }).join('') + '</select>' +
       '<input class="mini" type="number" step="any" data-f="v" value="' + a.v + '"' + (t ? lim(t.Min, t.Max) : '') + dis + '>' + (two ? '<input class="mini" type="number" step="any" data-f="v2" value="' + a.v2 + '"' + lim(t.Min2, t.Max2) + dis + '>' : '') +
-      '<span class="pl-text">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(modLine(af.Mod, a.v, a.v2)) + (tag && tag.startsWith('Vow') ? vowLevelNote(a) : '') + (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') + (off ? ' <span class="bad">outside its range</span>' : '') + (note || '') + '</span>' + x + '</div>';
+      '<span class="pl-text">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(modLine(af.Mod, gs.v, gs.v2)) + scNote + (tag && tag.startsWith('Vow') ? vowLevelNote(a) : '') + (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') + (off ? ' <span class="bad">outside its range</span>' : '') + (note || '') + '</span>' + x + '</div>';
   }
   function itemEditor(it, slot, idx, edit, dis, k = K) {
     const key = it ? idx : slot; // idols are found by index, other slots by name
@@ -3438,8 +3439,8 @@ window.BOPlanner = function (ctx) {
       } else {
         const af = GD.affixes[lc(a.id)];
         if (!af) { other.push(li('Unknown affix ' + a.id, 'bad')); continue; }
-        const xt = u ? '' : extraTag(a);
-        (u ? vows : xt ? extra : af.Type === 'Prefix' ? pre : af.Type === 'Suffix' ? suf : other).push(roll((u ? vowTag(vi++, a) + ' ' : '') + (af.Kind || 'T' + ((a.tier || 0) + 1)), modLine(af.Mod, a.v, a.v2) + (xt ? ' (' + xt + ')' : ''), af.Tiers[a.tier] || af.Tiers[0]).replace('</li>', (u ? vowLevelNote(a) : '') + '</li>'));
+        const xt = u ? '' : extraTag(a), gs = S.affixLineShown(GD, Object.assign({ slot }, it), a); // value and range as the game shows them
+        (u ? vows : xt ? extra : af.Type === 'Prefix' ? pre : af.Type === 'Suffix' ? suf : other).push(roll((u ? vowTag(vi++, a) + ' ' : '') + (af.Kind || 'T' + ((a.tier || 0) + 1)), modLine(af.Mod, gs.v, gs.v2) + (xt ? ' (' + xt + ')' : ''), gs.tier(af.Tiers[a.tier] || af.Tiers[0])).replace('</li>', (u ? vowLevelNote(a) : '') + '</li>'));
       }
     }
     if (!u && it.rarity !== 'Normal') {
@@ -12673,11 +12674,13 @@ window.BOCharacter = function (ctx) {
     const lim = (lo, hi) => lo == null || hi == null ? '' : ' min="' + Math.min(lo, hi) + '" max="' + Math.max(lo, hi) + '" title="Rolls ' + lo + ' to ' + hi + '"';
     const out = (x, lo, hi) => lo != null && hi != null && (x < Math.min(lo, hi) || x > Math.max(lo, hi));
     const off = t && (out(a.v, t.Min, t.Max) || (two && out(a.v2, t.Min2, t.Max2)));
-    return '<div class="io-aff" data-ai="' + ai + '">' + (mv || '') + '<span class="io-afftext">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(safe(() => G.modLine(af.Mod, a.v, a.v2))) + (af.Kind ? ' <span class="meta">(' + esc(af.Kind) + ')</span>' : '') +
+
+    const gs = window.BOSim.affixLineShown(GD(), it, a), scNote = gs.k !== 1 ? ' <span class="meta" title="The game multiplies this line by ' + +gs.k.toFixed(2) + '. The box holds the roll as the save stores it; the text and the tier list are what the game shows and counts.">(game counts x' + +gs.k.toFixed(2) + ')</span>' : '';
+    return '<div class="io-aff" data-ai="' + ai + '">' + (mv || '') + '<span class="io-afftext">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(safe(() => G.modLine(af.Mod, gs.v, gs.v2))) + scNote + (af.Kind ? ' <span class="meta">(' + esc(af.Kind) + ')</span>' : '') +
       chanceHtml(rollChance(af, GD().bases[lc(it.base)])) + (after ? ' <span class="io-extra">(' + esc(after) + ')</span>' : '') +
       (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') +
       (off ? ' <span class="bad">outside this tier\'s range (' + t.Min + ' to ' + t.Max + (two ? ' / ' + t.Min2 + ' to ' + t.Max2 : '') + ')</span>' : '') + (note || '') + '</span>' + fxSpan('rm:' + ai) +
-      '<select data-f="tier" aria-label="Tier">' + af.Tiers.map((y, ti) => '<option value="' + ti + '"' + (ti === a.tier ? ' selected' : '') + '>T' + (ti + 1) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')</option>').join('') + '</select>' +
+      '<select data-f="tier" aria-label="Tier">' + af.Tiers.map((y0, ti) => { const y = gs.tier(Object.assign({}, y0)); return '<option value="' + ti + '"' + (ti === a.tier ? ' selected' : '') + '>T' + (ti + 1) + ' ' + y.Min + '-' + y.Max + (y.Min2 != null ? ' / ' + y.Min2 + '-' + y.Max2 : '') + ' (ilvl ' + y.ILvl + ')</option>'; }).join('') + '</select>' +
       '<input class="mini" type="number" step="any" data-f="v" value="' + a.v + '" aria-label="Value"' + (t ? lim(t.Min, t.Max) : '') + '>' + (two ? '<input class="mini" type="number" step="any" data-f="v2" value="' + a.v2 + '" aria-label="Second value"' + lim(t.Min2, t.Max2) + '>' : '') +
       '<button class="io-rm" type="button" data-io="rmaffix" data-ai="' + ai + '" title="Remove">×</button></div>';
   }
@@ -13705,6 +13708,19 @@ window.BOCharacter = function (ctx) {
     if (k == null) { let best = ''; const T = is085(GD) ? IDOL_SCALE_85 : IDOL_SCALE; for (const p in T) if (id.startsWith(p) && p.length > best.length) best = p; if (!best) return 1; k = T[best]; }
     if (is084(GD) && k < 0.7 && itemLevel >= 84 && (tier === 1 || lines >= 5)) k = 0.7;
     return k;
+  }
+
+
+
+
+  function affixLineShown(GD, it, a) {
+    const af = GD.affixes[lc(a.id)], idol = it.slot === 'Idol' || ((GD.bases[lc(it.base)] || {}).Slot === 'Idol');
+    const ok = af && af.Mod && af.Mod.Mode !== 'Flag';
+    const k = !ok ? 1 : idol ? (RARE_COUNT_STATS.has(af.Mod.Stat) ? 1 : idolLineScale(GD, a.id, a.tier, it.level || 0, it.affixes.length)) : affixLineScale(GD, a.id);
+    const rf = k < 1 && !idol ? rivenFloor(GD, a.id) : null;
+    const val = (x, lo) => { const y = idolRound(x, k); return rf && lo > 0 && typeof x === 'number' && x > 0 ? Math.max(y, Math.min(x, Number.isInteger(x) ? Math.round(lo) : Math.round(lo * 10) / 10)) : y; };
+    const tier = t => { if (!t || k === 1) return t; const o = Object.assign({}, t); for (const [f, i] of [['Min', 0], ['Max', 0], ['Min2', 1], ['Max2', 1]]) if (o[f] != null) o[f] = val(o[f], rf && rf[i]); return o; };
+    return { k, v: val(a.v, rf && rf[0]), v2: val(a.v2, rf && rf[1]), tier };
   }
   function itemLabel(GD, it) {
     const base = GD.bases[lc(it.base)];
@@ -18806,7 +18822,7 @@ window.BOCharacter = function (ctx) {
     for (const id of ch.dragonNodes || []) { const k = T[id] ? id : moved[id]; if (k && T[k] && !out.includes(k)) out.push(k); }
     return out;
   }
-  const api = { dragonIds, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
+  const api = { dragonIds, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, affixLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
 
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;

@@ -8491,6 +8491,7 @@ window.BOItemSearch = function (ctx) {
 
 
 
+
     const riven = r => (r && typeof r.riven_tier === 'number' && r.riven_tier >= 0) ? r.riven_tier : null;
     const rupText = r => (r.rupture_level || 0) + (riven(r) != null ? ' · T' + riven(r) : '');
 
@@ -8538,6 +8539,9 @@ window.BOItemSearch = function (ctx) {
       const lg = (S.leagues || []).find(l => l.id === S.league);
       return '<div class="lad-top"><div class="cmp-intro"><div class="eyebrow">PUBLIC LEAGUES</div><h2>Ladder</h2>' +
         '<p>Top heroes of every class in the public leagues, from the game\'s public API. Pick a hero to read the build, or load it into the Build Planner and run the sim on it. Numbers, skills and the meta change with every patch.</p>' +
+
+
+        '<p class="hint">Rank order and the hero list are the public API\'s (top 200 of each class) and can differ from the in-game ladder.</p>' +
         '<div class="lad-status"><span class="lad-dot' + (fresh ? ' on' : '') + '" aria-hidden="true"></span>' + (L && L.generated_at ? 'Ladder ' + esc(ago(L.generated_at)) : S.loading ? 'Loading…' : 'Not loaded') + (build ? ' · game build ' + esc(String(build)) : '') + '</div></div>' +
         '<div class="build-summary lad-kpis">' +
         kpi('League', lg ? esc((lg.hardcore ? 'Hardcore' : 'Softcore') + ' ' + (lg.trade ? 'Trade' : SOLO)) : '–', lg ? esc(lg.season_name || lg.name) : '') +

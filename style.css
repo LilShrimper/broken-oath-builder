@@ -3004,3 +3004,44 @@ details.sw-sub.sw-sup { background: var(--panel); }
 .conv-line { margin: 2px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .conv-line small { color: var(--faint); }
 .conv-lbl { color: var(--faint); min-width: 52px; }
+
+/* The question chat (chat.js; owner, 22 Nov 2026): only for invited accounts. A round button bottom right opens a
+   panel at the right edge (full width on a phone). Answers use a small Markdown subset (chat-h, lists, tables). */
+.chat-btn { position: fixed; right: 18px; bottom: 18px; z-index: 900; padding: 11px 18px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--dashboard-gold) 55%, var(--line));
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent-2)); color: var(--accent-ink); font: inherit; font-weight: 700; cursor: pointer; box-shadow: var(--shadow), 0 6px 20px #0006; }
+.chat-btn:hover { filter: brightness(1.1); }
+.chat-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chat-panel { position: fixed; right: 18px; bottom: 74px; z-index: 950; width: min(460px, calc(100vw - 36px)); height: min(680px, calc(100vh - 100px)); display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid color-mix(in srgb, var(--dashboard-gold) 40%, var(--line)); border-radius: var(--radius); box-shadow: var(--shadow), 0 10px 40px #0008; overflow: hidden; }
+.chat-panel[hidden] { display: none; }
+.chat-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
+.chat-head b { color: var(--dashboard-gold); }
+.chat-left { flex: 1; font-size: 11.5px; color: var(--faint); }
+.chat-x { background: none; border: 0; color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+.chat-x:hover { color: var(--text); background: var(--panel); }
+.chat-msgs { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.chat-msg { padding: 8px 11px; border-radius: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.chat-msg p { margin: 0 0 6px; } .chat-msg p:last-child { margin-bottom: 0; }
+.chat-msg ul, .chat-msg ol { margin: 4px 0 6px; padding-left: 20px; }
+.chat-me { align-self: flex-end; max-width: 88%; background: color-mix(in srgb, var(--accent-strong) 22%, var(--panel-2)); white-space: normal; }
+.chat-bot { align-self: stretch; background: var(--panel-2); border: 1px solid var(--line); }
+.chat-h { font-weight: 700; color: var(--dashboard-gold); }
+.chat-tbl { font-size: 12px; margin: 6px 0; }
+.chat-tool { font-size: 11.5px; color: var(--faint); padding-left: 4px; }
+.chat-tool::before { content: '· '; }
+.chat-think { font-size: 12px; color: var(--muted); }
+.chat-think summary { cursor: pointer; color: var(--faint); }
+.chat-note { font-size: 12px; color: var(--muted); padding: 4px; }
+.chat-note.busy { color: var(--accent); }
+.chat-empty { color: var(--muted); font-size: 13px; }
+.chat-report { border: 1px solid color-mix(in srgb, var(--dashboard-gold) 45%, var(--line)); border-radius: 10px; padding: 10px; background: var(--panel-2); }
+.chat-report input, .chat-report textarea { width: 100%; box-sizing: border-box; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 7px 9px; font: inherit; resize: vertical; }
+.chat-report-btns { display: flex; gap: 8px; }
+.chat-form { display: flex; gap: 8px; padding: 10px 12px 4px; border-top: 1px solid var(--line); align-items: flex-end; }
+.chat-form textarea { flex: 1; resize: none; min-height: 58px; max-height: 160px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; font: inherit; }
+.chat-form textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 0; border-color: var(--accent); }
+.chat-foot { margin: 0; padding: 2px 12px 9px; font-size: 11px; color: var(--faint); }
+@media (max-width: 640px) {
+  .chat-panel { right: 0; left: 0; bottom: 0; width: 100%; height: calc(100vh - 56px); border-radius: var(--radius) var(--radius) 0 0; }
+  .chat-btn { right: 12px; bottom: 12px; }
+}

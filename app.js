@@ -11587,7 +11587,9 @@ window.BOFaq = function (ctx) {
     nav.onclick = e => { const b = e.target.closest('[data-s]'); if (!b) return; section = b.dataset.s; try { localStorage.setItem('bo_faq_section', section); } catch (x) { /* storage blocked */ } show(); };
     show();
   }
-  return { render, renderMinions };
+
+  const sections = () => ALL.map(([id, label]) => { let html = ''; try { html = RENDER[id](ctx.gd() || {}); } catch (e) { /* a section that needs the page */ } return { id, label, html }; });
+  return { render, renderMinions, sections };
 };
 
 ;
@@ -18913,6 +18915,493 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(function (root) {
+  'use strict';
+  const ELEMENTS = { physical: 'Physical', phys: 'Physical', fire: 'Fire', cold: 'Cold', lightning: 'Lightning', poison: 'Poison', chaos: 'Poison' };
+  const DEFAULT_ORDER = ['Physical', 'Fire', 'Cold', 'Lightning', 'Poison'];
+
+  function toNum(s) {
+    const t = String(s == null ? '' : s).trim().replace(/^[x×]/i, '').replace(/[%s]$/i, '').replace(/,(?=\d{3}(\D|$))/g, '');
+    if (t === '' || t === '-' || /^(none|n\/a|nan)$/i.test(t)) return null;
+    const v = Number(t);
+    return isFinite(v) ? v : null;
+  }
+  const list = s => String(s || '').split('/').map(x => toNum(x));
+
+  function pair(seg) { const m = /^\s*([A-Za-z_][\w]*)\s*[:=]?\s*(.*?)\s*$/.exec(seg); return m ? [m[1].toLowerCase(), m[2]] : null; }
+
+  function parse(text) {
+    const out = { ok: false, build: null, cls: '', level: null, code: '', skills: [], defence: {}, attributes: {}, res: null, order: null, unread: [] };
+    let cur = null;
+    for (const raw of String(text || '').replace(/\r/g, '').split('\n')) {
+      const line = raw.trim(); if (!line) continue;
+      const segs = line.split('|').map(s => s.trim()), head = segs[0].toLowerCase();
+      if (/^broken oath sheet/.test(head)) {
+        out.ok = out.header = true; cur = null;
+        for (const s of segs.slice(1)) { const p = pair(s); if (!p) continue; if (p[0] === 'build') out.build = toNum(p[1]); else if (p[0] === 'class') out.cls = p[1]; else if (p[0] === 'level') out.level = toNum(p[1]); }
+      } else if (/^code\b/.test(head)) { out.code = line.replace(/^code\s*/i, '').trim(); cur = null; }
+      else if (/^skill\b/.test(head)) {
+        cur = { id: segs[0].replace(/^skill\s*/i, '').trim().toLowerCase(), gem: null, supports: [], granted: [], f: {}, capped: false, min: null, max: null, pen: null };
+        for (const s of segs.slice(1)) {
+          const p = pair(s); if (!p) continue;
+          if (p[0] === 'gem') cur.gem = toNum(p[1]);
+          else if (p[0] === 'supports' && !/^(none|-)?$/i.test(p[1])) for (const x of p[1].split(',').map(y => y.trim()).filter(Boolean)) (x === x.toLowerCase() ? cur.supports : cur.granted).push(x.toLowerCase());
+        }
+        if (/^[a-z0-9_]+$/.test(cur.id) && out.header) out.skills.push(cur); else cur = null;
+      } else if (/^(defence|defense)\b/.test(head)) { cur = null; for (const s of segs.slice(1)) { const p = pair(s); if (p) out.defence[p[0]] = toNum(p[1]); } }
+      else if (/^attributes\b/.test(head)) { cur = null; for (const s of segs.slice(1)) { const p = pair(s); if (p) out.attributes[p[0]] = toNum(p[1]); } }
+      else if (/^res\b/.test(head)) {
+        cur = null;
+        const names = segs[0].replace(/^res\s*/i, '').split('/').map(x => ELEMENTS[x.trim().toLowerCase()] || x.trim()).filter(Boolean);
+        const rest = segs.slice(1).join(' | '), par = /\(([^)]*)\)/.exec(rest);
+        const r = { names, values: list(rest.replace(/\(.*$/, '')), max: null, uncapped: null };
+        if (par) { const mx = /max\s+([^,]+)/i.exec(par[1]), un = /uncapped\s+(.+)$/i.exec(par[1]); if (mx) r.max = list(mx[1]); if (un) r.uncapped = list(un[1]); }
+        out.res = r; if (names.length) out.order = names;
+      } else if (cur) {
+        for (const s of segs) {
+          const p = pair(s); if (!p) { out.unread.push(s); continue; }
+          if (p[0] === 'speed_capped') cur.capped = !/^(0|false|no)$/i.test(p[1]);
+          else if (p[0] === 'min' || p[0] === 'max' || p[0] === 'pen') cur[p[0]] = list(p[1]);
+          else cur.f[p[0]] = toNum(p[1]);
+        }
+      } else out.unread.push(line);
+    }
+    return out;
+  }
+
+
+
+  function sameScale(game, sim) {
+    if (!(game > 0) || !(sim > 0)) return game;
+    let best = game, err = Math.abs(Math.log(game / sim));
+    for (const k of [100, 0.01]) { const e = Math.abs(Math.log(game * k / sim)); if (e < err && e < 0.25) { best = game * k; err = e; } }
+    return best;
+  }
+  const row = (label, game, sim, o) => Object.assign({ label, game, sim, diff: game != null && sim != null && isFinite(sim) && game !== 0 ? sim / game - 1 : (game === 0 && sim === 0 ? 0 : null) }, o || {});
+
+
+
+  function skillRows(b, r, order) {
+    const rows = [], f = b.f, has = k => f[k] != null, m = r.minion;
+    if (b.gem != null && r.gem) rows.push(row('Gem level', b.gem, r.gem.total, { digits: 0, exact: true }));
+    if (has('dps_shown')) rows.push(row('Tooltip DPS', f.dps_shown, r.panelDps, { main: true }));
+    if (m) {
+      if (has('avg_hit') && m.specAvg != null) rows.push(row('Summon gem hit', f.avg_hit, m.specAvg, { digits: 2 }));
+      return rows;
+    }
+    if (has('avg_hit')) rows.push(row('Average hit', f.avg_hit, r.hitAvg, { digits: 1 }));
+    if (has('dps_hits')) rows.push(row('Hit DPS', f.dps_hits, r.sheetHitDps));
+    if (has('cycle_s') && r.speed && r.speed.usesPerSec > 0) rows.push(row('Time per use', f.cycle_s, 1 / r.speed.usesPerSec, { digits: 3, unit: ' s' }));
+    if (has('use_s') && r.speed && !m) rows.push(row('Cast or attack time', f.use_s, r.speed.useTime * (r.speed.animRate || 1), { digits: 3, unit: ' s' })); // the sheet's time is before the skill's animation rate, which the sim adds from the log
+    if (has('cooldown_s') && r.speed && !m) rows.push(row('Cooldown', f.cooldown_s, r.speed.cooldown || 0, { digits: 2, unit: ' s' }));
+    if (has('crit_chance') && r.crit) rows.push(row('Crit chance', sameScale(f.crit_chance, r.crit.chance), r.crit.chance, { digits: 1, unit: '%' }));
+    if (has('crit_multi') && r.crit) rows.push(row('Crit multiplier', sameScale(f.crit_multi, r.crit.multi), r.crit.multi, { digits: 0, unit: '%' }));
+    if (r.hits) {
+      if (has('projectiles') && r.hits.projectiles > 0) rows.push(row('Projectiles', f.projectiles, r.hits.projectiles || 0, { digits: 0, exact: true }));
+      if (has('repeats') && (f.repeats || r.hits.repeats)) rows.push(row('Repeats', f.repeats, r.hits.repeats || 0, { digits: 0, exact: true }));
+    }
+    if (has('mana_cost') && r.mana && r.mana.cost != null) rows.push(row('Mana cost', f.mana_cost, r.mana.listed != null ? r.mana.listed : r.mana.cost, { digits: 2 }));
+    const names = order && order.length ? order : DEFAULT_ORDER;
+    if (b.min && b.max && r.hit) names.forEach((d, i) => {
+      const h = r.hit[d], gmin = b.min[i], gmax = b.max[i];
+      if (!(gmax > 0) && !(h && h.max > 0)) return;
+      rows.push(row(d + ' min', gmin || 0, h ? h.min : 0, { digits: 1, element: d }));
+      rows.push(row(d + ' max', gmax || 0, h ? h.max : 0, { digits: 1, element: d }));
+    });
+    return rows;
+  }
+
+  function heroRows(p, hero) {
+    const rows = [], d = p.defence, a = p.attributes;
+    if (d.life != null && hero.life != null) rows.push(row('Life', d.life, hero.life, { digits: 0 }));
+    if (d.es != null && hero.es != null) rows.push(row('Energy shield', d.es, hero.es, { digits: 0 }));
+    if (d.mana != null && hero.mana != null) rows.push(row('Mana', d.mana, hero.mana, { digits: 0 }));
+    for (const [k, n] of [['str', 'Str'], ['dex', 'Dex'], ['int', 'Int']]) if (a[k] != null && hero.attr && hero.attr[n] != null) rows.push(row({ Str: 'Strength', Dex: 'Dexterity', Int: 'Intelligence' }[n], a[k], hero.attr[n], { digits: 0 }));
+
+    const r = p.res;
+    if (r && hero.res) { const vals = r.uncapped && r.uncapped.length === r.names.length ? r.uncapped : r.values; r.names.forEach((n, i) => { if (vals[i] != null && hero.res[n] != null) rows.push(row(n + ' resistance' + (vals === r.uncapped ? ' (uncapped)' : ''), vals[i], hero.res[n], { digits: 0, unit: '%', element: n })); }); }
+    return rows;
+  }
+
+  function reportText(p, blocks, hero) {
+    const n = (v, r) => r.text ? String(v) : v == null ? '-' : String(Math.round(v * 1000) / 1000);
+    const lines = ['Copy stats check | game build ' + (p.build == null ? '?' : p.build) + ' | ' + (p.cls || '?') + ' level ' + (p.level == null ? '?' : p.level)];
+    for (const b of blocks) {
+      lines.push('', b.id + ' | gem ' + (b.gem == null ? '?' : b.gem) + ' | ' + (b.supports.concat((b.granted || []).map(x => x + ' (granted)')).join(', ') || 'no supports') + (b.note ? ' | ' + b.note : ''));
+      for (const r of b.rows) lines.push('  ' + r.label + ': game ' + n(r.game, r) + ', sim ' + n(r.sim, r) + (r.diff != null ? ' (' + (r.diff >= 0 ? '+' : '') + (r.diff * 100).toFixed(1) + '%)' : ''));
+    }
+    if (hero && hero.length) { lines.push('', 'character'); for (const r of hero) lines.push('  ' + r.label + ': game ' + n(r.game, r) + ', sim ' + n(r.sim, r) + (r.diff != null ? ' (' + (r.diff >= 0 ? '+' : '') + (r.diff * 100).toFixed(1) + '%)' : '')); }
+    return lines.join('\n');
+  }
+
+  const api = { parse, skillRows, heroRows, reportText, toNum };
+  root.BOSheet = api;
+  if (typeof module !== 'undefined') module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+
+
+
+
+if (typeof require !== 'undefined' && require.main === module) {
+  const fs = require('fs'), path = require('path'), ROOT = path.join(__dirname, '..');
+  const B = module.exports, S = require('../src/sim.js');
+  const [file, name] = process.argv.slice(2);
+  if (!file) { console.error('node tools/sheet-check.js <file with the copied text> ["Character name"]'); process.exit(1); }
+  const GD = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'gamedata.json'), 'utf8'));
+  const cs = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'characters.json'), 'utf8')), list = cs.characters || cs;
+  const p = B.parse(fs.readFileSync(file, 'utf8'));
+  if (!p.ok || !p.skills.length) { console.error('Not a Copy stats text (no "Broken Oath sheet" line or no skill blocks).'); process.exit(1); }
+  const low = x => String(x || '').toLowerCase();
+  const ch = name ? list.find(c => low(c.name) === low(name)) : list.find(c => low(c.classId) === low(p.cls) && c.level === p.level) || list.find(c => low(c.classId) === low(p.cls));
+  if (!ch) { console.error('No character' + (name ? ' named ' + name : ' of class ' + p.cls) + ' in data/characters.json (run node build.js --data-only).'); process.exit(1); }
+  console.log('Copy: game build ' + p.build + ', ' + p.cls + ' ' + p.level + '. Sim: ' + ch.classId + ' ' + ch.level + ' from the save' + (ch.level !== p.level ? '  <- not the same level' : '') + '.');
+  const show = rows => { for (const r of rows) console.log('  ' + r.label.padEnd(30) + String(r.game).padStart(12) + String(typeof r.sim === 'number' ? +r.sim.toFixed(4) : r.sim).padStart(14) + (r.diff == null ? '' : ((r.diff >= 0 ? '+' : '') + (r.diff * 100).toFixed(2) + '%').padStart(10) + (Math.abs(r.diff) > 0.01 ? '  <-' : ''))); };
+  let mana = null;
+  for (const b of p.skills) {
+    const sups = b.supports.filter(s => GD.supports[s]);
+    let r; try { r = S.calcSkill(GD, ch, b.id, { supportsOverride: sups }); } catch (e) { r = { error: e.message }; }
+    if (!GD.skills[b.id] || r.error || r.unsupported) { console.log('\n' + b.id + ': ' + (!GD.skills[b.id] ? 'not a skill the sim knows' : b.f.dps_shown === 0 ? 'no damage of its own (game and sim)' : r.error || r.unsupported)); continue; }
+    if (mana == null && r.mana && r.mana.max != null) mana = r.mana.max;
+    console.log('\n' + b.id + ' | gem ' + b.gem + ' | ' + (sups.join(', ') || 'no supports') + (b.granted.length ? ' | granted: ' + b.granted.join(', ') : ''));
+    show(B.skillRows(b, r, p.order));
+  }
+
+  const a = S.calcSkill(GD, ch, (p.skills.find(b => GD.skills[b.id]) || {}).id, {});
+  console.log('\ncharacter'); show(B.heroRows(p, { mana, attr: a && a.attr }));
+}
+
+;
+
+
+
+
+
+
+
+
+
+
+window.BOChat = function (ctx) {
+  'use strict';
+  const { $, esc } = ctx;
+  const KEY = 'bods:chat';
+  const MAX_ROUNDS = 25;       // tool rounds for one question
+  const MAX_RESULT = 24000;    // characters of one tool result sent back
+  const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* off or full */ } }, del(k) { try { localStorage.removeItem(k); } catch (e) { /* off */ } } };
+  let M = [];                  // the conversation as the API takes it
+  try { const s = JSON.parse(ls.get(KEY) || '[]'); if (Array.isArray(s)) M = s; } catch (e) { /* damaged: start clean */ }
+  const keep = () => ls.set(KEY, JSON.stringify(M));
+  let open = false, busy = false, status = null, built = false, note = '';
+
+
+  const round = v => typeof v === 'number' && isFinite(v) ? (Math.abs(v) >= 1000 ? Math.round(v) : +v.toPrecision(5)) : v;
+
+  function compact(o, skip) {
+    const walk = (v, d) => {
+      if (v instanceof Set) v = [...v];
+      if (typeof v === 'number') return round(v);
+      if (typeof v === 'function' || v === undefined) return undefined;
+      if (v === null || typeof v !== 'object') return v;
+      if (d > 5) return '…';
+      if (Array.isArray(v)) { const a = v.slice(0, 30).map(x => walk(x, d + 1)); if (v.length > 30) a.push('… ' + (v.length - 30) + ' more'); return a; }
+      const out = {};
+      for (const [k, x] of Object.entries(v)) { if (skip && skip.includes(k)) continue; const w = walk(x, d + 1); if (w !== undefined) out[k] = w; }
+      return out;
+    };
+    return walk(o, 0);
+  }
+  const cut = s => { s = String(s); return s.length > MAX_RESULT ? s.slice(0, MAX_RESULT) + '\n… (cut, ' + (s.length - MAX_RESULT) + ' more characters)' : s; };
+  const htmlText = html => { const d = new DOMParser().parseFromString('<div>' + (html || '') + '</div>', 'text/html'); d.querySelectorAll('br').forEach(b => b.replaceWith('\n')); d.querySelectorAll('li,tr,p,h2,h3,h4,div').forEach(e => e.append('\n')); d.querySelectorAll('td,th').forEach(e => e.append(' | ')); return (d.body.textContent || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim(); };
+  const skillName = id => { const s = (ctx.gd().skills || {})[String(id).toLowerCase()]; return s ? s.Name : id; };
+
+
+
+  let srcLines = null;
+  async function source() {
+    if (srcLines) return srcLines;
+    const parts = [];
+    for (const s of document.scripts) {
+      if (s.src && /\/app\.js(\?|$)/.test(s.src)) { try { parts.push(await (await fetch(s.src)).text()); } catch (e) { /* offline */ } }
+      else if (!s.src && /BOSim|BOPlanner|BOChat/.test(s.textContent || '')) parts.push(s.textContent);
+    }
+    srcLines = parts.join('\n').split('\n');
+    return srcLines;
+  }
+  const API_PATH = /^(version\.json|leagues\.json|(?:ladder|meta)\/[a-z0-9-]{1,40}\.json|builds\/[a-z0-9-]{1,40}\/[A-Za-z]{2,20}(?:\/[A-Za-z0-9]{8,32})?\.json)$/;
+  const PERSONAL = /^(hero_?name|character_?name|char_?name|player\w*|steam\w*|account\w*|friend_?code|seller\w*)$/i;
+
+  const TOOLS = {
+    current_character() {
+      const ch = ctx.current(), GD = ctx.gd();
+      if (!ch) return { error: 'No character is open on the page. Ask the player to load their save or a plan.' };
+      const sock = id => (ch.sockets || []).find(s => s.skill === id);
+      return {
+        name: ch.name, class: ch.classId, level: ch.level, league: ch.league || undefined, from: ch.plan ? 'plan' : 'save',
+        damage_tab: ctx.settings(),
+        bar: (ch.hotbar || []).map(id => ({ id, name: skillName(id), gem_level: (ch.gemLevels || {})[id], supports: (sock(id) || {}).supports || [], tags: ((GD.skills || {})[id] || {}).Tags })),
+        gear: (ch.items || []).map(it => ({ slot: it.slot, text: ctx.itemText(it) })),
+        passives: (ch.passives || []).length, oaths: ch.oaths, dragon_nodes: (ch.dragonNodes || []).length, dragon_aspect: ch.dragonAspect || undefined,
+        rupture: ch.rupture || undefined,
+      };
+    },
+    sim_skill(a) {
+      const ch = ctx.current(); if (!ch) return { error: 'No character is open on the page.' };
+      const id = String(a.skill || '').toLowerCase();
+      if (!(ctx.gd().skills || {})[id]) return { error: 'Not a skill id: ' + a.skill + '. Use current_character or game_data to find the id.' };
+      const r = ctx.sim(id, { supports: Array.isArray(a.supports) ? a.supports.map(s => String(s).toLowerCase()) : null, gemLevel: a.gem_level });
+      if (!r || r.error || r.unsupported) return { error: (r && (r.error || r.unsupported)) || 'The sim gave no result.' };
+      const out = compact(r, ['skill', 'mods', 'used', 'fortified']);
+      out.skill = { id, name: skillName(id) };
+
+      out.lines = (r.mods || []).filter(m => m && m.v).slice(0, 150).map(m => m.stat + ' ' + m.mode + ' ' + round(m.v) + (m.tags && m.tags.length ? ' [' + m.tags.join(',') + ']' : '') + ' · ' + (m.src || ''));
+      if ((r.mods || []).length > 150) out.lines.push('… ' + (r.mods.length - 150) + ' more lines');
+      return out;
+    },
+    compare_copy_stats(a) {
+      const B = window.BOSheet, ch = ctx.current(), GD = ctx.gd();
+      if (!B) return { error: 'The Copy stats reader is not on this page.' };
+      if (!ch) return { error: 'No character is open on the page.' };
+      const p = B.parse(a.text || '');
+      if (!p.ok || !p.skills.length) return { error: 'Not a Copy stats text (no "Broken Oath sheet" line or no skill blocks).' };
+      const blocks = [];
+      for (const b of p.skills) {
+        const sups = b.supports.filter(s => (GD.supports || {})[s]);
+        if (!GD.skills[b.id]) { blocks.push({ id: b.id, supports: sups, granted: b.granted, gem: b.gem, rows: [], note: 'not a skill the sim knows' }); continue; }
+        const r = ctx.sim(b.id, { supports: sups });
+        if (!r || r.error || r.unsupported) { blocks.push({ id: b.id, supports: sups, granted: b.granted, gem: b.gem, rows: [], note: b.f.dps_shown === 0 ? 'no damage of its own (game and sim)' : (r && (r.error || r.unsupported)) || 'no sim result' }); continue; }
+        blocks.push({ id: b.id, supports: sups, granted: b.granted, gem: b.gem, rows: B.skillRows(b, r, p.order) });
+      }
+      let hero = [];
+      try { hero = B.heroRows(p, ctx.hero()); } catch (e) { /* no hero rows */ }
+      const head = 'Page character: ' + ch.classId + ' level ' + ch.level + (ch.level !== p.level ? ' (the copy says level ' + p.level + ': not the same moment)' : '') + (String(ch.classId).toLowerCase() !== String(p.cls).toLowerCase() ? ' (the copy is a ' + p.cls + ': a different character)' : '');
+      return head + '\n\n' + B.reportText(p, blocks, hero);
+    },
+    game_data(a) {
+      const GD = ctx.gd(), sec = String(a.section || '').trim(), q = String(a.query || '').trim().toLowerCase();
+      const ALIAS = { oathwords: 'runewords', words: 'runewords', passives: 'nodes', tree: 'nodes', mods: 'affixes' };
+      const key = ALIAS[sec.toLowerCase()] || sec;
+      if (key === 'sections' || !GD[key]) return { sections: Object.keys(GD).filter(k => GD[k] && typeof GD[k] === 'object').sort(), note: GD[key] ? undefined : 'Unknown section ' + sec };
+      const v = GD[key];
+      const entries = Array.isArray(v) ? v.map((x, i) => [x && (x.Id || x.id) || String(i), x]) : Object.entries(v);
+      if (!q) return { count: entries.length, ids: entries.slice(0, 200).map(e => e[0]) };
+      const hit = entries.filter(([id, x]) => String(id).toLowerCase() === q).concat(entries.filter(([id, x]) => String(id).toLowerCase() !== q && (String(id).toLowerCase().includes(q) || JSON.stringify(x || '').toLowerCase().includes(q))));
+      return { count: hit.length, entries: hit.slice(0, 8).map(([id, x]) => ({ id, data: compact(x) })) };
+    },
+    faq(a) {
+      const words = String(a.query || '').toLowerCase().split(/\s+/).filter(Boolean);
+      const cards = [];
+      for (const s of ctx.faqSections()) {
+        const d = new DOMParser().parseFromString('<div>' + s.html + '</div>', 'text/html');
+        const parts = d.querySelectorAll('.faq-card').length ? [...d.querySelectorAll('.faq-card')] : [d.body];
+        for (const c of parts) { const t = htmlText(c.innerHTML); if (words.every(w => t.toLowerCase().includes(w))) cards.push('[' + s.label + '] ' + t); }
+      }
+      return cards.length ? cut(cards.slice(0, 6).join('\n\n----\n\n')) : 'No FAQ card has all of: ' + words.join(', ');
+    },
+    async sim_code(a) {
+      const lines = await source(), q = String(a.query || '').trim().toLowerCase();
+      if (!q) return { error: 'Give a word to look for.' };
+
+      const simAt = Math.max(0, lines.findIndex(l => l.includes('window.BOSim'))), hits = [], total = [];
+      for (const i of lines.map((_, i) => i).sort((x, y) => (x >= simAt ? 0 : 1) - (y >= simAt ? 0 : 1) || x - y)) {
+        if (!lines[i].toLowerCase().includes(q)) continue;
+        total.push(i);
+        if (hits.length < 8 && !hits.some(h => Math.abs(h - i) < 8)) hits.push(i);
+      }
+      if (!hits.length) return 'No line has "' + a.query + '".';
+      const block = i => { const out = []; for (let k = Math.max(0, i - 6); k < Math.min(lines.length, i + 9); k++) if (lines[k].trim()) out.push((k + 1) + ': ' + lines[k].slice(0, 400)); return out.join('\n'); };
+      return cut((ctx.commentsBlanked ? 'Note: on the site, lines that held only a comment are blank here; comments after code remain.\n' : '') +
+        total.length + ' matching lines, showing ' + hits.length + ' places:\n\n' + hits.map(block).join('\n\n----\n\n'));
+    },
+    async public_api(a) {
+      const p = String(a.path || '').replace(/^\/+/, '');
+      if (!API_PATH.test(p)) return { error: 'Not a file this tool reads. Paths: version.json, leagues.json, ladder/<league>.json, meta/<league>.json, builds/<league>/<Class>.json, builds/<league>/<Class>/<hero id>.json' };
+      let r; try { r = await fetch(ctx.api() + '/api/' + p, { cache: 'no-store' }); } catch (e) { return { error: 'Could not reach the Builder\'s API cache.' }; }
+      if (r.status === 404) return { error: 'No such file (or the hero is no longer published).' };
+      if (!r.ok) return { error: 'The API cache answered ' + r.status + '.' };
+      let j; try { j = await r.json(); } catch (e) { return { error: 'Not JSON.' }; }
+      const strip = v => Array.isArray(v) ? v.map(strip) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([k]) => !PERSONAL.test(k)).map(([k, x]) => [k, strip(x)])) : v;
+      return cut(JSON.stringify(compact(strip(j))));
+    },
+    draft_report() {
+      return 'Shown to the player as a card in the chat. They read it, can edit it, and decide whether to send it; nothing is sent yet.';
+    },
+  };
+  const ACTION = { current_character: () => 'Reading your character', sim_skill: a => 'Running the sim: ' + skillName(a.skill) + (a.supports ? ' (other supports)' : '') + (a.gem_level ? ' (gem ' + a.gem_level + ')' : ''),
+    compare_copy_stats: () => 'Comparing your Copy stats with the sim', game_data: a => 'Looking up ' + a.section + ': ' + a.query, faq: a => 'Searching the FAQ: ' + a.query,
+    sim_code: a => 'Reading the sim code: ' + a.query, public_api: a => 'Reading the public API: ' + a.path, draft_report: () => 'Writing a report for you to check' };
+
+  async function runTool(b) {
+    const f = TOOLS[b.name];
+    if (!f) return { type: 'tool_result', tool_use_id: b.id, content: 'Unknown tool ' + b.name, is_error: true };
+    try {
+      const out = await f(b.input || {});
+      const err = out && typeof out === 'object' && out.error;
+      return Object.assign({ type: 'tool_result', tool_use_id: b.id, content: cut(typeof out === 'string' ? out : JSON.stringify(out)) }, err ? { is_error: true } : {});
+    } catch (e) { return { type: 'tool_result', tool_use_id: b.id, content: 'The tool failed: ' + (e && e.message || e), is_error: true }; }
+  }
+
+
+  async function ask(text) {
+    if (busy || !text.trim()) return;
+    M.push({ role: 'user', content: text.trim() }); keep(); note = ''; busy = true; draw();
+    try {
+      for (let round = 0; round < MAX_ROUNDS; round++) {
+        const r = await ctx.call('POST', '/chat', { messages: M });
+        if (r.s !== 200 || !r.j || !Array.isArray(r.j.content)) { note = (r.j && r.j.error) || (r.s ? 'The chat answered ' + r.s + '.' : 'Could not reach the chat. Check your connection.'); break; }
+        if (r.j.spent && status) { status.day_left = r.j.spent.day_left; status.month_left = r.j.spent.month_left; }
+        M.push({ role: 'assistant', content: r.j.content }); keep(); draw();
+        if (r.j.stop_reason === 'tool_use') {
+          const calls = r.j.content.filter(b => b.type === 'tool_use');
+          const results = [];
+          for (const b of calls) { note = (ACTION[b.name] || (() => b.name))(b.input || {}) + '…'; draw(); results.push(await runTool(b)); }
+          note = ''; M.push({ role: 'user', content: results }); keep(); draw();
+          continue;
+        }
+        if (r.j.stop_reason === 'pause_turn') continue;
+        if (r.j.stop_reason === 'max_tokens') note = 'The answer was cut off (too long). Ask it to continue.';
+        if (r.j.stop_reason === 'refusal') note = 'The chat declined to answer this one.';
+        break;
+      }
+    } finally { busy = false; draw(); }
+  }
+
+
+
+  function md(src) {
+    const inline = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<i>$2</i>');
+    const out = [], lines = String(src || '').replace(/\r/g, '').split('\n');
+    let list = null;
+    const close = () => { if (list) { out.push('</' + list + '>'); list = null; } };
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (/^\s*\|.*\|\s*$/.test(l) && i + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
+        close();
+        const cells = r => r.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+        let h = '<div class="table-wrap"><table class="tbl chat-tbl"><thead><tr>' + cells(l).map(c => '<th>' + inline(c) + '</th>').join('') + '</tr></thead><tbody>';
+        i += 2;
+        while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { h += '<tr>' + cells(lines[i]).map(c => '<td>' + inline(c) + '</td>').join('') + '</tr>'; i++; }
+        i--; out.push(h + '</tbody></table></div>'); continue;
+      }
+      let m;
+      if ((m = /^(#{1,4})\s+(.*)$/.exec(l))) { close(); out.push('<p class="chat-h">' + inline(m[2]) + '</p>'); continue; }
+      if ((m = /^\s*[-*]\s+(.*)$/.exec(l))) { if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; } out.push('<li>' + inline(m[1]) + '</li>'); continue; }
+      if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(l))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push('<li>' + inline(m[1]) + '</li>'); continue; }
+      close();
+      if (l.trim()) out.push('<p>' + inline(l) + '</p>');
+    }
+    close();
+    return out.join('');
+  }
+  function msgHtml() {
+    const h = [];
+    for (const m of M) {
+      if (m.role === 'user') {
+        if (typeof m.content === 'string') h.push('<div class="chat-msg chat-me">' + esc(m.content).replace(/\n/g, '<br>') + '</div>');
+        continue;
+      }
+      for (const b of m.content || []) {
+        if (b.type === 'text' && b.text.trim()) h.push('<div class="chat-msg chat-bot">' + md(b.text) + '</div>');
+        else if (b.type === 'thinking' && b.thinking && b.thinking.trim()) h.push('<details class="chat-think"><summary>Thinking</summary>' + md(b.thinking) + '</details>');
+        else if (b.type === 'tool_use' && b.name === 'draft_report') h.push(reportHtml(b));
+        else if (b.type === 'tool_use') h.push('<div class="chat-tool">' + esc((ACTION[b.name] || (() => b.name))(b.input || {})) + '</div>');
+      }
+    }
+    return h.join('');
+  }
+  const money = v => '$' + (Math.round((v || 0) * 100) / 100).toFixed(2);
+  function draw() {
+    if (!built) return;
+    const box = $('#chatMsgs');
+    box.innerHTML = (M.length ? msgHtml() : '<div class="chat-empty"><p>Ask about how the game\'s damage works, what the sim does, or your character on this page. It can run the sim, read the game data and the FAQ, and compare a pasted <b>Copy stats</b> text with the sim.</p><p class="hint">Answers can be wrong. The sim is a fan model, not the game. Not official.</p></div>') +
+      (note || busy ? '<div class="chat-note' + (busy ? ' busy' : '') + '">' + esc(note || 'Thinking…') + '</div>' : '');
+    box.scrollTop = box.scrollHeight;
+    $('#chatSend').disabled = busy; $('#chatNew').disabled = busy || !M.length;
+    $('#chatLeft').textContent = status ? 'Left today ' + money(status.day_left) + ' · this month ' + money(status.month_left) : '';
+  }
+
+
+  let R = {};
+  try { R = JSON.parse(ls.get(KEY + 'Reports') || '{}') || {}; } catch (e) { R = {}; }
+  const keepR = () => ls.set(KEY + 'Reports', JSON.stringify(R));
+  function reportHtml(b) {
+    const a = b.input || {}, s = R[b.id];
+    if (s === 'dropped') return '<div class="chat-tool">Report dismissed</div>';
+    if (s === 'sent') return '<div class="chat-report"><p class="chat-h">Report sent</p><p class="hint">' + esc(a.title || '') + '</p></div>';
+    return '<div class="chat-report" data-rid="' + esc(b.id) + '"><p class="chat-h">Report for the owner</p><label class="field"><span>Title</span><input type="text" value="' + esc(String(a.title || '').slice(0, 200)) + '"></label>' +
+      '<label class="field"><span>Text</span><textarea rows="8">' + esc(String(a.text || '').slice(0, 20000)) + '</textarea></label>' +
+      '<p class="hint">Check and edit it first. Sending adds your Discord name so the owner can reply.</p><div class="chat-report-btns"><button type="button" class="btn" data-r="send">Send</button><button type="button" class="btn ghost" data-r="drop">Dismiss</button></div></div>';
+  }
+  async function reportClick(e) {
+    const k = e.target.closest('[data-r]'), d = k && k.closest('[data-rid]'); if (!d) return;
+    const id = d.dataset.rid;
+    if (k.dataset.r === 'drop') { R[id] = 'dropped'; keepR(); draw(); return; }
+    k.disabled = true;
+    const t = d.querySelector('input').value.trim(), x = d.querySelector('textarea').value.trim();
+    if (await ctx.report(t + '\n\n' + x + '\n\n(written with the question chat)')) { R[id] = 'sent'; keepR(); draw(); }
+    else { k.disabled = false; ctx.tip('Could not send the report. Try again later, or use Report a problem.'); }
+  }
+  function build() {
+    if (built) return;
+    built = true;
+    const b = document.createElement('button');
+    b.type = 'button'; b.id = 'chatBtn'; b.className = 'chat-btn'; b.textContent = 'Ask'; b.setAttribute('aria-expanded', 'false'); b.setAttribute('aria-controls', 'chatPanel');
+    const p = document.createElement('section');
+    p.id = 'chatPanel'; p.className = 'chat-panel'; p.hidden = true; p.setAttribute('aria-label', 'Question chat');
+    p.innerHTML = '<header class="chat-head"><b>Question chat</b><span id="chatLeft" class="chat-left"></span><button type="button" id="chatNew" class="btn ghost small">New chat</button><button type="button" id="chatClose" class="chat-x" aria-label="Close">×</button></header>' +
+      '<div id="chatMsgs" class="chat-msgs" aria-live="polite"></div>' +
+      '<form id="chatForm" class="chat-form"><textarea id="chatIn" rows="3" placeholder="Ask a question, or paste a Copy stats text"></textarea><button type="submit" id="chatSend" class="btn">Send</button></form>' +
+      '<p class="chat-foot">Sent to Anthropic (Claude) to answer: your messages and what the tools read on this page (your character, game data). Not the game log. Kept in this browser until New chat.</p>';
+    document.body.append(b, p);
+    const show = on => { open = on; p.hidden = !on; b.setAttribute('aria-expanded', String(on)); if (on) { draw(); $('#chatIn').focus(); } };
+    b.addEventListener('click', () => show(!open));
+    $('#chatClose').addEventListener('click', () => { show(false); b.focus(); });
+    $('#chatNew').addEventListener('click', () => { if (busy) return; M = []; keep(); R = {}; keepR(); note = ''; draw(); });
+    $('#chatMsgs').addEventListener('click', reportClick);
+    $('#chatForm').addEventListener('submit', e => { e.preventDefault(); const t = $('#chatIn').value; if (!t.trim() || busy) return; $('#chatIn').value = ''; ask(t); });
+    $('#chatIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#chatForm').requestSubmit(); } });
+    p.addEventListener('keydown', e => { if (e.key === 'Escape') { show(false); b.focus(); } });
+  }
+
+  async function check() {
+    if (!ctx.signedIn()) { if (built) { $('#chatBtn').hidden = true; $('#chatPanel').hidden = true; } return; }
+    const r = await ctx.call('GET', '/chat/status');
+    status = r.s === 200 && r.j && r.j.allowed ? r.j : null;
+    if (!status) { if (built) { $('#chatBtn').hidden = true; $('#chatPanel').hidden = true; } return; }
+    build(); $('#chatBtn').hidden = false; draw();
+  }
+  return { check };
+};
+
+;
+
+
+
+
+
+
+
+
 window.BOCloud = function (ctx) {
   'use strict';
   const { $, esc } = ctx;
@@ -18978,12 +19467,14 @@ window.BOCloud = function (ctx) {
     if (!r.ok || !j || !(j.token || j.cookie)) return ctx.tip((j && j.error) || 'Sign-in failed. Try again.');
     S = Object.assign(blank(), { token: j.cookie ? COOKIE : j.token, name: j.name || 'Signed in', localOnly: S.localOnly });
     save(); render();
+    if (ctx.onAccount) ctx.onAccount(); // the question chat (chat.js) asks whether it is open for this account
     await sync(true);
   }
   const ERRORS = { cancelled: 'Sign-in cancelled.', expired: 'That sign-in took too long. Try again.', full: 'Too many new accounts today. Try again tomorrow.',
     unavailable: 'Sign-in is not available right now.', failed: 'Discord sign-in failed. Try again.' };
   function signedOut(msg) {
     S = Object.assign(blank(), { localOnly: [] }); save(); state = 'idle'; render();
+    if (ctx.onAccount) ctx.onAccount();
     if (msg) ctx.tip(msg);
   }
   async function signOut(everywhere) {
@@ -19212,7 +19703,8 @@ window.BOCloud = function (ctx) {
     if (isDirty(id) || S.revs[id] == null) return 'saving';
     return 'saved';
   }
-  return { start, check, removed, reset, badge, enabled: () => on, signedIn: () => !!S.token };
+
+  return { start, check, removed, reset, badge, enabled: () => on, signedIn: () => !!S.token, call, api: API, name: () => S.name };
 };
 
 ;
@@ -24416,8 +24908,9 @@ window.BOStartApp = function () {
     else if (!CHARS.some(c => c.id === cur)) { if (CHARS.length) selectChar(CHARS[0].id); else { st.ch = st.chOrig = null; render(); planner.render(); } }
     if (charPick) charPick.box.innerHTML = charPickHtml();
   }
+  let chatbox = null; // the question chat (chat.js), made below
   cloud = window.BOCloud({
-    $, esc, api: SHARE_API, confirm: confirmInPage, tip: saveTip,
+    $, esc, api: SHARE_API, confirm: confirmInPage, tip: saveTip, onAccount: () => { if (chatbox) chatbox.check(); },
     plans: () => CHARS.filter(c => c.plan && !c.file && !c.auto), // opened, unsaved builds stay out of the account
 
 
@@ -24443,6 +24936,28 @@ window.BOStartApp = function () {
   });
 
 
+
+
+  chatbox = window.BOChat({ $, esc, gd: () => GD, current: () => st.ch, tip: saveTip,
+    call: (m, p, b) => cloud.call(m, p, b), signedIn: () => cloud.signedIn(), api: () => cloud.api,
+    commentsBlanked: [...document.scripts].some(s => /\/app\.js(\?|$)/.test(s.src || '')),
+    settings: () => ({ main_skill: st.skill, main_supports: st.supports, gem_level: st.gemLevel || undefined, enemy_level: st.enemyLevel || 'same as the character', enemy_rarity: st.rarity,
+      guardian_element: st.gElem || undefined, curses: st.curses, charges: st.charges, switched_off: [...(st.off || [])], potions_on: !!st.potionsOn }),
+    sim: (id, o) => {
+      if (!st.ch) return null;
+      const main = id === st.skill, opt = main ? opts() : comboOpts();
+      if (!main) opt.gemLevel = st.ch.gemLevels[id] || undefined;
+      if (o && o.supports) opt.supportsOverride = o.supports;
+      if (o && o.gemLevel > 0) opt.gemLevel = +o.gemLevel;
+      return S.calcSkill(GD, st.ch, id, opt);
+    },
+    itemText: it => { try { const d = new DOMParser().parseFromString('<div>' + planner.gear.tip(it, it.slot) + '</div>', 'text/html'); d.querySelectorAll('li,div,p,b,span').forEach(e => e.append(' ')); return (d.body.textContent || '').replace(/\s+/g, ' ').trim(); } catch (e) { return it.base; } },
+    hero: () => { const r = st.skill ? S.calcSkill(GD, st.ch, st.skill, opts()) : null; let res = null; try { res = Object.fromEntries(heroDefence(st.ch).resParts.map(x => [x[0], +x[1]])); } catch (e) { /* none */ } return { attr: r && r.attr, mana: r && r.mana ? r.mana.max : null, res }; },
+    faqSections: () => faq.sections(),
+    report: async text => { try { const r = await fetch(SHARE_API + '/r', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ kind: 'problem', text, page: location.pathname, contact: String(cloud.name() || '').slice(0, 40) }) }); return r.ok; } catch (e) { return false; } },
+  });
+
+
   try {
     for (const ch of JSON.parse(localStorage.getItem('bods:chars') || '[]')) {
       const old = CHARS.find(c => c.id === ch.id);
@@ -24459,6 +24974,7 @@ window.BOStartApp = function () {
   snapsReady = true; snapSync(); syncUnsaved();
   setInterval(syncUnsaved, 3000); // notes, tree tabs and potions change without a redraw of the page
   cloud.start(); // back from Discord sign-in (#login=), or a sync of the account's plans
+  chatbox.check(); // the question chat's button, for an account it is open to
 
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
   const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'home'); if (['character', 'tree', 'atlas', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'market', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);

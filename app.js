@@ -251,7 +251,7 @@ window.PAGE_LANGS = {
     'Gameplay/potions.json', 'Gameplay/forge.json', 'Items/cube_recipes.json', 'Rifts/sigils.json', 'Gameplay/monster_affixes.json', 'Gameplay/monsters.json', 'Gameplay/oath_masteries.json'];
   const PART_FILES = ['skills.json', 'classes.json', 'animsets.json'];
 
-  const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json', 'Items/quality_stones.json', 'Gameplay/league_rules.json', 'Gameplay/new_gems85.json', 'Items/base_implicits95.json', 'Gameplay/late2_98.json'];
+  const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json', 'Items/quality_stones.json', 'Gameplay/league_rules.json', 'Gameplay/new_gems85.json', 'Items/base_implicits95.json', 'Gameplay/late2_98.json', 'Gameplay/archetypes.json'];
 
   const SCHEMA = 32; // 32: Guardian signature runes (Grail, Item Search tabs); 31: armour / shield / axe family lines (base_implicits95.json; Damage tab); 30: per-gem base poison chance (new_gems85.json; Damage tab); 29: the game's rule numbers (rules.json, switches.json; Damage tab); 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
@@ -543,7 +543,8 @@ window.PAGE_LANGS = {
     const noDocs = o => Object.fromEntries(Object.entries(o).filter(([k]) => !k.startsWith('_')));
     const scaling = {
       Hero: noDocs(sc.Hero), Gem: noDocs(sc.Gem), Ailments: noDocs(sc.Ailments),
-      Monster: { ResistPerLevel: sc.MonsterResistPerLevel, ResistMax: sc.MonsterResistMax, ArmourPerLevel: sc.MonsterArmourPerLevel,
+
+      Monster: { ResistPerLevel: sc.MonsterResistPerLevel, ResistMax: sc.MonsterResistMax, ResistRLFrom: sc.MonsterResistRLFrom, ResistPerRL: sc.MonsterResistPerRL, ResistRLMax: sc.MonsterResistRLMax, ArmourPerLevel: sc.MonsterArmourPerLevel,
 
 
         Life: sc.MonsterLife && noDocs(sc.MonsterLife), Damage: sc.MonsterDamage && noDocs(sc.MonsterDamage), Rarity: sc.Rarity },
@@ -562,6 +563,19 @@ window.PAGE_LANGS = {
     for (const gd of B.guardians || []) guardians[gd.Id] = { sigRune: sigRunes[gd.Id] || sigRunes['g_' + gd.Id] || sigRunes[Object.keys(sigRunes).find(k => ('g_' + gd.Id).startsWith(k + '_'))] || '', name: gd.Name, variants: (gd.Variants || []).map(v => ({ id: v.Id, name: v.Name, element: v.Element, resist: (v.Resist || {})[v.Element] || 0 })),
 
       sig: gd.SignatureUniques || [], chase: gd.ChaseUnique || '', chaseChance: gd.ChaseChance || 0 };
+
+
+
+
+    {
+      const mons = (J('Gameplay/monsters.json').monsters || []), monArr = Array.isArray(mons) ? mons : Object.values(mons);
+      const have = new Set((B.guardians || []).map(gd => gd.Monster || 'g_' + gd.Id));
+      for (const [k, rune] of Object.entries(sigRunes)) {
+        const id = k.replace(/^g_/, ''), m = monArr.find(x => x.Id === k && x.bGuardian);
+        if (!m || have.has(k) || guardians[id] || Object.keys(guardians).some(g => ('g_' + g).startsWith(k + '_'))) continue;
+        guardians[id] = { sigRune: rune, name: m.Name, variants: [], sig: [], chase: '', chaseChance: 0, added: true };
+      }
+    }
     const ward = (B.Tiers || []).filter(t => t.Id === 'ward').map(t => ({ fromRL: t.FromRL, gateFromRL: t.GateFromRL, resist: t.Resist })).sort((a, b) => a.fromRL - b.fromRL);
 
 
@@ -613,7 +627,7 @@ window.PAGE_LANGS = {
 
 
     const P = J('Gameplay/potions.json');
-    const potions = Object.assign(pick(P, ['Slots', 'Charges', 'Unlock', 'Vessels', 'Pour', 'Costs', 'Drops', 'Early80']), {
+    const potions = Object.assign(pick(P, ['Slots', 'Charges', 'Unlock', 'Vessels', 'Pour', 'Costs', 'Imbue113', 'Drops', 'Early80']), {
       Types: (P.Types || []).map(t => pick(t, ['Id', 'Name', 'Role', 'RecoverPct', 'Seconds', 'Mods', 'Text', 'Ward', 'OnDrinkCharge', 'Weight'])),
       Mods: (P.Mods || []).map(m => pick(m, ['Id', 'Name', 'Kind', 'Roles', 'Effect', 'Seconds', 'Stat', 'Sign', 'Charge', 'Material', 'Tiers', 'Text', 'Weight', 'Later', 'Recipe'])),
       Uniques: (P.Uniques || []).map(u => pick(u, ['Id', 'Name', 'Type', 'Source', 'Lines', 'Text', 'Later'])),
@@ -624,6 +638,14 @@ window.PAGE_LANGS = {
 
 
     const vowShares = ((J('Items/cube_recipes.json').Rules || {}).Vows83 || {}).Shares || [];
+
+
+
+
+    let archetypes = null;
+    try { const a = J('Gameplay/archetypes.json'); if (a && a.Format) archetypes = pick(a, ['Format', 'FormatKeystone', 'ClassShort', 'KeystonePriority', 'SkillAlias']); } catch (e) { /* older game data: none */ }
+    const vowRunes =((J('Items/cube_recipes.json').Rules || {}).Vows83 || {}).Runes || [];
+    const idolRecipes = (J('Items/cube_recipes.json').recipes || []).filter(r => /^idol_/.test(r.Id) && !r.bHidden && r.Name && r.Recipe).map(r => pick(r, ['Id', 'Name', 'Recipe', 'Result']));
 
 
 
@@ -699,7 +721,7 @@ window.PAGE_LANGS = {
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {}, { loot },
       { skills, classes, supports, nodes, masteries, oaths, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, late2, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, sigRuneRule, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice, gemPoison, rules: gameRules });
+        affixes, late2, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, sigRuneRule, vowRunes, idolRecipes, archetypes, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice, gemPoison, rules: gameRules });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, OPTIONAL, SCHEMA };
@@ -5797,7 +5819,7 @@ window.BOBrewery = function (ctx) {
   const P = () => ctx.gd().potions || null;
   const ROLE_NAME = { Life: 'Life potion', Mana: 'Mana potion', Utility: 'Utility potion' };
   const PRICE = [['Steep', 'Steep'], ['Distil', 'Distil'], ['ResteepMagic', 'Re-steep (magic)'], ['ResteepRare', 'Re-steep (rare)'], ['Tincture', 'Tincture'],
-    ['Seal', 'Seal'], ['Oath', 'Oath line'], ['Core', 'Core line'], ['Pour', 'Pour'], ['QualityPer2', 'Quality, each 2%']];
+    ['Seal', 'Seal'], ['Oath', 'Oath line'], ['Core', 'Core line'], ['Pour', 'Pour'], ['Imbue', 'Imbue'], ['QualityPer2', 'Quality, each 2%']]; // Imbue: potions.json Costs.Imbue + Imbue113.GoldPerRL, API game data 87
 
 
   const emptySlot = () => ({ type: '', unique: '', vessel: '', pre: [], suf: [], oath: null, core: null, pour: '', q: 20 }); // q: quality (Brewmaw sells up to 20%)
@@ -6072,7 +6094,7 @@ window.BOBrewery = function (ctx) {
     h += '<div class="bw-grid">' + [0, 1, 2, 3].map(slotCard).join('') + '</div>';
     const c = p.Costs || {};
     h += '<div class="card"><h2>Brewmaw\'s prices</h2><dl class="kv bw-prices">' + PRICE.filter(([k]) => c[k] && Object.keys(c[k]).length).map(([k, label]) =>
-      '<div><dt>' + label + '</dt><dd>' + Object.entries(c[k]).map(([m, n]) => n + ' ' + esc(matName(m))).join(', ') + (k === 'QualityPer2' && c.QualityMax ? ', up to ' + c.QualityMax + '%' : '') + (k === 'Oath' ? ' + the line\'s material' : '') + '</dd></div>').join('') +
+      '<div><dt>' + label + '</dt><dd>' + Object.entries(c[k]).map(([m, n]) => n + ' ' + esc(matName(m))).join(', ') + (k === 'QualityPer2' && c.QualityMax ? ', up to ' + c.QualityMax + '%' : '') + (k === 'Oath' ? ' + the line\'s material' : '') + (k === 'Imbue' && p.Imbue113 && p.Imbue113.GoldPerRL ? ' + ' + p.Imbue113.GoldPerRL.toLocaleString('en-US') + ' gold per Rupture Level' : '') + '</dd></div>').join('') +
       '<div><dt>Equip</dt><dd>Free</dd></div></dl></div>';
     el.innerHTML = h;
   }
@@ -6400,14 +6422,14 @@ window.BOLootFilter = function (ctx) {
     colours: [[0, 'ember', [0.91, 0.56, 0.11], true], [1, 'jade', [0.30, 0.92, 0.52]], [2, 'frost', [0.36, 0.78, 1.0]], [3, 'bone', [1.0, 0.95, 0.84]],
       [4, 'gold', [1.0, 0.6, 0.05], true], [5, 'blood', [0.5, 0.01, 0.01], true], [6, 'ash', [0.3, 0.3, 0.3], true], [7, 'white', [1.0, 1.0, 1.0], true]],
     type: [[0, 'Any gear'], [1, 'Weapons'], [2, 'Armour'], [3, 'Jewellery'], [4, 'Rune bases'], [5, 'Helms'], [6, 'Body armour'], [7, 'Gloves'], [8, 'Boots'],
-      [9, 'Shields & foci'], [10, 'Rings'], [11, 'Amulets'], [12, 'Belts'], [13, 'Core-touched'], [14, 'Idols'], [15, '4+ sockets'], [16, 'Truesworn'],
+      [9, 'Shields, foci & quivers'], [10, 'Rings'], [11, 'Amulets'], [12, 'Belts'], [13, 'Core-touched'], [14, 'Idols'], [15, '4+ sockets'], [16, 'Truesworn'],
       [17, 'Gems'], [18, 'Bows'], [19, 'Claws'], [20, 'Daggers'], [21, 'Dual blades'], [22, 'Fist weapons'], [23, '2H swords'], [24, '2H axes'], [25, '2H maces'], [26, 'Mace & shield'],
-      [27, '1H axes'], [28, '1H maces'], [29, '1H swords'], [30, 'Scythes'], [31, 'Staves'], [32, 'Wands']], // 17-32: loot_filter.md, build 85
+      [27, '1H axes'], [28, '1H maces'], [29, '1H swords'], [30, 'Scythes'], [31, 'Staves'], [32, 'Wands'], [33, 'Dwarven Runes'], [34, 'Quivers']], // 17-32: loot_filter.md, build 85; 33, 34 and quivers in 9: build 87
     rarity: [[0, 'Any rarity'], [1, 'Normal'], [2, 'Magic'], [3, 'Normal & magic'], [4, 'Rare'], [5, 'Rare & unique']],
     level: [[0, 'Any level'], [1, 'Below 20'], [2, 'Below 40'], [3, 'Below 60'], [4, 'Below 75'], [5, '60+'], [6, '75+'], [7, '82+']],
     line: [[0, 'Any lines'], [1, 'Life'], [2, 'Resistance'], [3, 'Minion'], [4, 'Move speed'], [5, '+Skill levels'], [6, 'Spell'], [7, 'Critical'], [8, 'Attack speed'],
       [9, 'Cast speed'], [10, 'Mana'], [11, 'Fire damage'], [12, 'Cold damage'], [13, 'Lightning damage'], [14, 'Physical damage'], [15, 'Poison & ignite'], [16, 'Fire res'],
-      [17, 'Cold res'], [18, 'Lightning res'], [19, 'Poison res'], [20, 'Attributes'], [21, 'Defence'], [22, 'Leech & recovery'], [23, 'Area'], [24, 'Bleed & DoT'], [25, 'Curses'], [26, 'Cooldown recovery']],
+      [17, 'Cold res'], [18, 'Lightning res'], [19, 'Poison res'], [20, 'Attributes'], [21, 'Defence'], [22, 'Leech & recovery'], [23, 'Area'], [24, 'Bleed & DoT'], [25, 'Curses'], [26, 'Cooldown recovery'], [27, 'Vow effect']], // 27: loot_filter.md, build 87
     quality: [[0, 'Any roll'], [1, 'Good roll'], [2, 'Top roll']],
     count: [[0, '1 line'], [1, '2+ lines'], [2, '3+ lines']],
     action: [[0, 'Hide'], [1, 'Show'], [2, 'Highlight'], [3, 'Highlight + beam']],
@@ -6525,7 +6547,7 @@ window.BOLootFilter = function (ctx) {
     wk('bow', 'Bow', 18, 'Bow'), wk('scythe', 'Scythe', 30, 'Scythe'), wk('staff', 'Staff', 31, 'Staff'),
     ['shield', 'Shield', [9], b => b.Class === 'Shield'],
     ['tome', 'Tome (focus)', [9], b => b.Class === 'Tome'],
-    ['quiver', 'Quiver', [], b => b.Class === 'Quiver'],
+    ['quiver', 'Quiver', [9, 34], b => b.Class === 'Quiver'], // loot_filter.md build 87: "9 = Shields, foci & quivers", "34 = Quivers" (before 87: in no group)
     ['helm', 'Helm', [2, 5], b => b.Slot === 'Helm'],
     ['chest', 'Body armour', [2, 6], b => b.Slot === 'Chest'],
     ['gloves', 'Gloves', [2, 7], b => b.Slot === 'Gloves'],
@@ -6540,7 +6562,7 @@ window.BOLootFilter = function (ctx) {
 
 
   const FLAG_TYPES = { rune: 4, core: 13 };
-  const SPECIAL = { 4: it => !!it.flags.rune, 13: it => !!it.flags.core, 15: it => it.sockets >= 4, 16: it => it.grade >= 90, 17: () => false };
+  const SPECIAL = { 4: it => !!it.flags.rune, 13: it => !!it.flags.core, 15: it => it.sockets >= 4, 16: it => it.grade >= 90, 17: () => false, 33: () => false }; // 33 Dwarven Runes: not one of the tester's gear kinds (and never hidden)
   const typeKnown = t => has(SPECIAL, t) || KINDS.some(k => k[2].includes(t));
   const typeFits = (t, it) => has(SPECIAL, t) ? SPECIAL[t](it) : kind(it.kind)[2].includes(t);
 
@@ -6557,7 +6579,7 @@ window.BOLootFilter = function (ctx) {
   const lineGroups = l => l.gs ? new Set(l.gs) : groupsOf(l.g); // a sample drop's line knows all its groups (affixGroups)
   const READING = [
     'A rule that is off is skipped. Only the first ' + DEFAULTS.maxRules + ' rules count.',
-    'Weapons = every weapon kind. Armour = helms, body armour, gloves and boots. Jewellery = rings, amulets and belts. A tome counts as a focus; a quiver only as "Any gear".',
+    'Weapons = every weapon kind. Armour = helms, body armour, gloves and boots. Jewellery = rings, amulets and belts. A tome counts as a focus; a quiver counts with shields and foci, and as "Quivers".',
     '"4+ sockets" takes an item with 4 or more sockets, "Truesworn" one with Base Grade 90 or higher. No gear is in "Gems".',
     '"Normal & magic" and "Rare & unique" take either rarity. "Below 40" means item level 39 or lower; "60+" means 60 or higher.',
     'The line conditions count the item\'s lines that are in the picked group (any group if "Any lines") and roll at least as well as picked ("Good roll" takes good and top rolls). The rule needs at least that many: 1, 2 or 3. With all three left on Any / 1 line, the lines are not tested at all.',
@@ -6749,7 +6771,7 @@ window.BOLootFilter = function (ctx) {
   const STAT_GROUP = { Life: 1, MinionDamage: 3, MinionLife: 3, MinionSpeed: 3, MinionCap: 3, MoveSpeed: 4, SkillLevel: 5, CritChance: 7, CritMulti: 7, AttackSpeed: 8, CastSpeed: 9,
     Mana: 10, ManaRegen: 10, IgniteChance: 15, IgniteDamage: 15, PoisonDamage: 15, Str: 20, Dex: 20, Int: 20, Attributes: 20, Armour: 21, Evasion: 21, EnergyShield: 21, Defences: 21,
     LifeLeech: 22, ManaLeech: 22, EnergyShieldLeech: 22, LifeRegen: 22, LifeOnKill: 22, ManaOnKill: 22, Area: 23, BleedChance: 24, BleedDamage: 24, DotMulti: 24,
-    CurseEffect: 25, CurseLimit: 25, CooldownRecovery: 26 };
+    CurseEffect: 25, CurseLimit: 25, CooldownRecovery: 26, VowEffect: 27 };
   function affixGroups(a) {
     const m = a.Mod || {}, tags = m.Tags || [], out = new Set();
     if (has(STAT_GROUP, m.Stat)) out.add(STAT_GROUP[m.Stat]);
@@ -8352,6 +8374,17 @@ window.BOItemSearch = function (ctx) {
     const listCell = (names, hiddenN) => names.length || hiddenN ? '<div class="lad-tags">' + names.map(n => '<span class="chip lad-sup">' + esc(n) + '</span>').join('') + (hiddenN ? '<span class="chip lad-sup meta">' + hiddenN + ' undiscovered</span>' : '') + '</div>' : '<span class="meta">–</span>';
     const clsIco = c => (ctx.classIcon ? ctx.classIcon(c) : '');
     const skillName = id => name('skills', id), supportName = id => name('supports', id), uniqueName = id => name('uniques', id);
+
+
+
+    const archetypeOf = h => {
+      const A = GD().archetypes, main = mainSkillOf(h);
+      if (!A || !A.Format || !main || isHidden(main)) return '';
+      const taken = new Set(((h.build || {}).passive_nodes || []).filter(id => !isHidden(id)).map(id => String(nodeId(id)).toLowerCase()));
+      const key = (A.KeystonePriority || []).find(k => taken.has(String(k).toLowerCase())), kn = key && (GD().nodes || {})[key];
+      const fill = f => f.replace('{Skill}', skillName((A.SkillAlias || {})[main] || main)).replace('{Class}', (A.ClassShort || {})[h.class] || h.class || '').replace('{Keystone}', kn ? kn.Name : '');
+      return fill(kn && A.FormatKeystone ? A.FormatKeystone : A.Format).trim();
+    };
     const ago = iso => {
       const t = Date.parse(iso || ''); if (!t) return '';
       const m = Math.round((Date.now() - t) / 60000);
@@ -8657,6 +8690,7 @@ window.BOItemSearch = function (ctx) {
       if (!h) return '<div class="card lad-hero"><p class="hint">Loading the build…</p></div>';
       if (h.gone) return '<div class="card lad-hero"><p class="hint">This build is no longer published (the hero left the top 50, or its player hid it).</p></div>';
       const b = h.build || {}, m = h.measured || {}, main = mainSkillOf(h);
+      const arch = archetypeOf(h);
 
       const used = usedSkills(b), on = s => isUsed(b, used, s.skill) || s.skill === main;
       const skills = (b.skills || []).filter(s => s.skill).map((s, i) => [s, i]).sort((x, y) => on(y[0]) - on(x[0]) || x[1] - y[1]).map(([s]) => {
@@ -8685,6 +8719,7 @@ window.BOItemSearch = function (ctx) {
       const measuredAll = measured + (extraHint ? '<p class="hint">' + extraHint + '</p>' : '');
       return '<div class="card lad-hero">' +
         '<div class="lad-hero-head"><div><div class="eyebrow">' + esc(h.league || '') + ' · hero ' + esc(String(h.hero).slice(0, 8)) + '</div><h3 class="lad-hero-title">' + esc(h.class) + (h.ascendancy && h.ascendancy !== 'None' ? ' · ' + esc(h.ascendancy) : '') + ' · level ' + (h.level || '?') + ' · Rupture ' + (h.rupture_level || 0) + '</h3>' +
+        (arch ? '<div class="lad-arch">' + esc(arch) + '</div>' : '') +
         '<small class="meta">Class rank ' + (h.class_rank || '?') + (h.dead ? ' · dead' : '') + (h.updated_at ? ' · build updated ' + esc(ago(h.updated_at)) : '') + '</small></div>' +
         '<div class="lad-actions"><button type="button" class="btn" id="ladOpen">Open in Build Planner</button><button type="button" class="btn ghost" id="ladLink">Copy link</button><button type="button" class="btn ghost" id="ladClose" aria-label="Close hero">Close</button></div></div>' +
         measuredAll + (keptNote(h) && !emptyBuild(b) ? '<p class="warn">' + esc(keptNote(h)) + '</p>' : '') +
@@ -10783,6 +10818,8 @@ window.BOFaq = function (ctx) {
       ['Elemental resistance'].concat(lv.map(L => r1(resAt(L)) + '%')),
       ['Armour'].concat(lv.map(L => Math.round(L * M.ArmourPerLevel))),
     ], 'faq-num') + hint('Every monster gains ' + M.ResistPerLevel + '% resistance to Fire, Cold and Lightning per level (Poison: see below), up to ' + M.ResistMax + '% (reached at level ' + capAt + '). Physical damage has no resistance; armour works against it instead (' + M.ArmourPerLevel + ' armour per level).') +
+
+      (M.ResistPerRL > 0 ? hint('Past Rupture ' + M.ResistRLFrom + ' enemies gain another ' + M.ResistPerRL + '% elemental resistance per Rupture Level, up to ' + M.ResistRLMax + '% (reached at Rupture ' + Math.round(M.ResistRLFrom + M.ResistRLMax / M.ResistPerRL) + '). Seen in the game log, patch 87.') : '') +
       hint('<b>Poison</b> is not settled: the game\'s keyword text says monsters resist Poison at half their elemental resistance, but test fights have not confirmed that yet. The sim currently gives Poison the full resistance.'));
 
 
@@ -10889,7 +10926,7 @@ window.BOFaq = function (ctx) {
     h += card('Elite affixes', affixTable(elite) + hint('Rupture level is the Rift level; it equals the monster level from 1 to 80. Greyed rows are in the file but not rolled in the game yet.'), 'rare and elite monsters in Rifts');
     const gs = Object.values(GD.guardians || {});
     if (gs.length) h += card('Guardian colour variants', hint('A Guardian spawns as a colour with one element and extra resistance to it' + ((GD.ward || []).length ? '. On top of that, Ward adds resistance to that element: ' + GD.ward.map(w => w.resist + '% from Rupture ' + w.fromRL).join(', ') : '') + '.') +
-      table(['Guardian', 'Variants (element, resistance)'], gs.map(g => ['<b>' + esc(g.name) + '</b>', g.variants.map(v => esc(v.name) + ' (' + esc(v.element) + ' ' + v.resist + '%)').join(' · ')])), 'the sim uses these');
+      table(['Guardian', 'Variants (element, resistance)'], gs.map(g => ['<b>' + esc(g.name) + '</b>', g.variants.map(v => esc(v.name) + ' (' + esc(v.element) + ' ' + v.resist + '%)').join(' · ') || 'New in patch 87: colours not known yet'])), 'the sim uses these');
 
     const idn = gs.filter(g => g.identity), side = (g, f) => Object.entries(g.identity).filter(([, v]) => f(v)).map(([el, v]) => esc(el) + ' ' + (v > 0 ? '+' : '') + v + '%').join(', ') || 'none';
     if (idn.length) h += card('Guardian strong and weak elements', hint('Every Guardian resists one element more and another less, whatever colour it spawns as. It adds to the colour and level resistance (checked in the game, 12 Nov 2026). The sim counts it when you set it under Configure Enemy.') +
@@ -11335,7 +11372,8 @@ window.BOFaq = function (ctx) {
 
 
   function cube(GD) {
-    const sh = GD.vowShares || [], runes = [1, 2, 4, 6, 8, 10, 13, 17, 22, 28, 36];
+
+    const sh = GD.vowShares || [], runes = (GD.vowRunes || []).length ? GD.vowRunes : [1, 2, 4, 6, 8, 10, 13, 17, 22, 28, 36];
     let h = intro('Cube, Vows & Runes', 'What the Oathstone Cube can do with reds, rares and runes, and why runes give less on most items.');
     h += card('Putting a Vow on a red', list([
       'A <b>Vow</b> moves the best mod of a rare of the same slot onto a unique (a red). The rare is used up.',
@@ -11361,6 +11399,10 @@ window.BOFaq = function (ctx) {
       '<b>Red Unmaking</b>: a red alone breaks into two jewels, finer at higher tiers.',
       '<b>Red Reawakening</b> and <b>Red Retempering</b> reroll a red\'s lines (2 jewels; a Tier IV+ rune and a Faceted or Radiant jewel).',
     ]));
+
+
+    const cap = t => t.charAt(0).toUpperCase() + t.slice(1);
+    if ((GD.idolRecipes || []).length) h += card('Idol recipes', list(GD.idolRecipes.map(r => '<b>' + esc(r.Name) + '</b>: ' + esc(r.Recipe) + '. ' + esc(cap(r.Result || '')) + '.')), 'from the game\'s data');
     h += card('Runes in items', list([
       '<b>Runes give half value</b> in magic, rare and red items. Only white (normal) items keep the full value, and only white items can hold an Oathword.',
       'A runeword needs exactly its socket count. Runesmith\'s Base sets how many sockets a white item gets (up to 4 on a two-hander).',
@@ -13047,6 +13089,14 @@ window.BOCharacter = function (ctx) {
 
 
   const NON_DAMAGE = new Set(['Life', 'Mana', 'EnergyShield', 'Armour', 'Evasion', 'Defences', 'Block', 'Resist', 'MaxResist',
+
+
+
+
+
+
+    'EntropyShare', 'EntropyMore',
+    'ManaBeforeLife', 'ShatterOnKill', 'LeechVsBleeding113', 'MaxBlock113', 'BlockRestorePct113', 'ShockDurVsUnique113', 'PierceBleed113',
     'LifeRegen', 'LifeRegenPct', 'ManaRegen', 'MinionReservation', 'LifeLeech', 'ManaLeech', 'LifeOnKill', 'LifeOnKillPct', 'ManaOnKill', 'ManaOnHit', 'LifeOnBlock',
     'MoveSpeed', 'GoldFind', 'ItemRarity', 'EsRecharge', 'EsRechargeDelay', 'DamageTaken', 'PhysTakenAsElemental', 'ManaCost',
     'Reservation', 'StunKnockback', 'Str', 'Dex', 'Int', 'Attributes', 'MinionLife', 'TotemLife', 'ChannelCostLess', 'Area',
@@ -13091,7 +13141,9 @@ window.BOCharacter = function (ctx) {
 
     'AfterimageDamage',
 
-    'HallowStill']);
+    'HallowStill',
+
+    'CritVsChilled113', 'IgniteVsUnique113', 'SureCritVsSentenced113', 'SpellCritVsFaltering113', 'BallistaVsSentenced113', 'BleedDotVsSentenced113', 'HeraldEffectPerHerald113']);
 
 
 
@@ -13605,7 +13657,11 @@ window.BOCharacter = function (ctx) {
 
 
   const TRIG_WHEN = new Set(['Hit', 'Crit', 'SkillUse', 'Kill', 'Roll', 'Block', 'WhenHit', 'MinionDeath', 'Pulse']);
-  const TRIG_SHAPE = new Set(['Nova', 'DawnPillar', 'SkySwords', 'Eruption', 'Whirl', 'StormWolf']);
+
+
+
+
+  const TRIG_SHAPE = new Set(['Nova', 'DawnPillar', 'SkySwords', 'Eruption', 'Whirl', 'StormWolf', 'Afterimage']);
   const TRIG_STATE = new Set(['VsBurning', 'VsBurningOrShocked']);
   function trigParse(m) {
     const p = {}; let when = null, shape = null; const conds = [], types = [], state = [];
@@ -14008,7 +14064,14 @@ window.BOCharacter = function (ctx) {
 
       const herald = /herald/i.test(b.Id);
       let eff = 1;
-      if (herald) eff = 1 + modsOf(mods, 'HeraldEffect').filter(m => m.stat === 'HeraldEffect' && m.mode === 'Inc').reduce((x, m) => x + m.v, 0) / 100;
+      if (herald) {
+
+
+
+        const perH = modsOf(mods, 'HeraldEffectPerHerald113').filter(m => m.stat === 'HeraldEffectPerHerald113').reduce((x, m) => x + m.v, 0);
+        const swornH = perH ? Object.values(GD.blessings).filter(x => x.Kind === 'Vow' && /herald/i.test(x.Id) && x.Skill && (ch.hotbar.includes(x.Skill) || (tryH[x.Id] > 0))).length : 0;
+        eff = 1 + (modsOf(mods, 'HeraldEffect').filter(m => m.stat === 'HeraldEffect' && m.mode === 'Inc').reduce((x, m) => x + m.v, 0) + perH * swornH) / 100;
+      }
       else {
         const inc = modsOf(mods, 'VowEffect').filter(m => m.stat === 'VowEffect' && m.mode === 'Inc').reduce((x, m) => x + m.v, 0);
         const so = (ch.sockets || []).find(s => lc(s.skill) === lc(b.Skill));
@@ -16152,6 +16215,20 @@ window.BOCharacter = function (ctx) {
 
 
 
+    {
+      const from = +M.ResistRLFrom, per = +M.ResistPerRL, mx = +M.ResistRLMax, rl = guardianRL(GD, o, lvl);
+      const add = per > 0 && rl > from ? Math.min(mx > 0 ? mx : Infinity, (rl - from) * per) : 0;
+      if (add > 0) {
+        for (const d of ['Fire', 'Cold', 'Lightning']) if (!(o.enemyRes && o.enemyRes[d] != null)) resist[d] += add;
+        res.notes.push('Rupture ' + rl + ': enemies resist Fire, Cold and Lightning ' + +add.toFixed(2) + '% more (' + per + '% per Rupture Level past ' + from + ', at most ' + mx + '%; game log, 22 Nov 2026).');
+      }
+    }
+
+
+
+
+
+
 
 
 
@@ -17168,6 +17245,49 @@ window.BOCharacter = function (ctx) {
         if (ail.poison) ail.poison.dps = poisonDps; if (ail.ignite) ail.ignite.dps = igniteDps; if (ail.bleed) ail.bleed.dps = bleedDps;
         res.feeders = { F, ail: ailF, engineU, hitFactor: kh };
         res.notes.push('Engine feeders (patch 85/86 tree lines): ' + why.join(', ') + ' = +' + F.toFixed(1) + '% added into your damage engine (' + engineU.toFixed(1) + '% before), x' + kh.toFixed(3) + ' on hits' + (ailF.bleed ? ', x' + kOf(F + ailF.bleed).toFixed(3) + ' on bleeds' : '') + (ailF.poison ? ', x' + kOf(F + ailF.poison).toFixed(3) + ' on poisons' : '') + ' (developer stacking table and formulas.md: they add, then the engine multiplies once). From the line texts; not checked in game.');
+      }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    if (pickMods(mods, 'EntropyShare').some(m => applies(ctx, m))) res.notes.push('Chaos support: Entropy is switched off in the game for now (build 87 launch log: "Entropy114: off"), so the support changes nothing but the mana cost.');
+    {
+      const sentenced = activeCurses.some(r => r.kind === 'Sentence'), faltering = activeCurses.some(r => lc(r.id) === 'woe_of_faltering');
+      const sumOf = st => { let s = 0; for (const m of pickMods(mods, st)) if (applies(ctx, m)) { s += m.v; use(m); } return s; };
+      const sure = sumOf('SureCritVsSentenced113'), fal = sumOf('SpellCritVsFaltering113'), cvc = sumOf('CritVsChilled113');
+      const bal = sumOf('BallistaVsSentenced113'), igu = sumOf('IgniteVsUnique113'), bds = sumOf('BleedDotVsSentenced113');
+      let c2 = critChance, m2 = effectiveMulti; const why87 = [];
+      if (fal && isSpell && faltering) { const add = fal * (1 + critInc / 100) * critMore; c2 = Math.min(95, c2 + add); why87.push('+' + fal + '% base crit against Woe of Faltering (' + critChance.toFixed(1) + '% -> ' + c2.toFixed(1) + '%)'); }
+      if (sure && sentenced && hitsPerSec > 0) { const s = Math.min(1, 1 / hitsPerSec), b4 = c2; c2 = c2 + (100 - c2) * s; why87.push('one sure crit a second on the Sentenced enemy (' + b4.toFixed(1) + '% -> ' + c2.toFixed(1) + '% of ' + hitsPerSec.toFixed(1) + ' hits a second)'); }
+      const chillUp = ail.chill ? Math.min(1, ail.chill.uptime || 0) : 0;
+      if (cvc && chillUp > 0) { m2 *= 1 + cvc / 100 * chillUp; why87.push('crits deal ' + cvc + '% more to the Chilled enemy (chilled ' + Math.round(chillUp * 100) + '% of the time)'); }
+      let k87 = ((1 - c2 / 100) * nonCritMult + c2 / 100 * m2 / 100) / (critFactor || 1);
+      if (bal && sentenced && lc(skillId) === 'summon_ballista') { k87 *= 1 + bal / 100; why87.push('Ballistas deal ' + bal + '% more to the Sentenced enemy'); }
+      if (k87 !== 1 && isFinite(k87)) {
+        for (const d of Object.keys(byType)) byType[d] *= k87;
+        hitDpsVs *= k87; res.hitDps = hitDpsVs;
+        res.notes.push('Patch 87 unique lines: ' + why87.join('; ') + ' = x' + k87.toFixed(3) + ' on hits (from the lines\' texts, not checked in game).');
+      }
+      if (igu && igniteDps > 0) {
+        const big = isBoss || rarity === 'unique', k = 1 + (big ? igu : -igu) / 100;
+        igniteDps *= k; if (ail.ignite) ail.ignite.dps = igniteDps;
+        res.notes.push('Ignite: ' + igu + '% ' + (big ? 'more against a Unique or Guardian' : 'less against this enemy (more only against Uniques and Guardians)') + ' (patch 87 unique line, from its text).');
+      }
+      if (bds && sentenced && bleedDps > 0) {
+        const k = (1 + (dotMulti + bds) / 100) / (1 + dotMulti / 100);
+        bleedDps *= k; if (ail.bleed) ail.bleed.dps = bleedDps;
+        res.notes.push('Bleeding: +' + bds + '% Damage over Time Multiplier on the Sentenced enemy, x' + k.toFixed(3) + ' (patch 87 unique line, from its text).');
       }
     }
     res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
@@ -18321,6 +18441,9 @@ window.BOCharacter = function (ctx) {
 
 
     if (stat === 'Evasion' && noEvasion(mods)) return 0;
+
+
+    if (stat === 'EnergyShield' && modsOf(mods, 'Keystone').some(m => m.stat === 'Keystone' && m.mode === 'Flag' && (m.tags || []).includes('NoEnergyShield113'))) return 0;
     if (stat === 'Life') return heroMaxLife(GD, ch, mods, attr);
     if (stat === 'Block') {
       let b = 0;

@@ -577,6 +577,7 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 .opt-cols li .v { white-space: nowrap; color: var(--muted); }
 .opt-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 .tn.opt-add { fill: var(--good); stroke: var(--good); stroke-width: 16; }
+.tm.opt-add { fill: var(--good); stroke: var(--good); stroke-width: 16; opacity: 1; }
 .tn.opt-rem { fill: var(--panel-2); stroke: var(--bad); stroke-width: 16; }
 .tn.ban { stroke: var(--bad); stroke-width: 14; }
 .tban { stroke: var(--bad); stroke-width: 13; stroke-linecap: round; fill: none; pointer-events: none; }

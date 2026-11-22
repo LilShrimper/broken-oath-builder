@@ -1338,6 +1338,16 @@ window.PAGE_LANGS = {
 
 
 
+
+
+
+
+
+
+
+
+
+
 (function (root) {
   'use strict';
 
@@ -1359,7 +1369,8 @@ window.PAGE_LANGS = {
 
 
     const ban = new Set((cfg.ban || []).map(realId));
-    const walkable = id => { const n = nodes[id]; return !!n && n.Kind !== 'Start' && !ban.has(id); };
+    const isSeat = id => /^om103_/.test(id);
+    const walkable = id => { const n = nodes[id]; return !!n && n.Kind !== 'Start' && !ban.has(id) && !isSeat(id); };
     const altarOf = id => (nodes[id] || {}).Choice || null;
     const otherAtAltar = (set, id) => { const a = altarOf(id); if (!a) return null; for (const x of set) if (x !== id && altarOf(x) === a) return x; return null; };
 
@@ -1367,9 +1378,14 @@ window.PAGE_LANGS = {
     const cache = new Map(); let calcs = 0, tries = 0;
     const multi = Array.isArray(skill);
     let goals = (multi ? skill : [{ id: skill, w: 1 }]).filter(g => g && g.id && g.w > 0).map(g => ({ id: g.id, w: +g.w, opt: g.opt || simOpt }));
+
+    const oaths0 = Object.assign({}, ch.oaths || {});
+    let oathMap = oaths0, oKey = '';
+    const setOaths = map => { oathMap = map; oKey = map === oaths0 ? '' : '|' + Object.keys(map).sort().map(k => k + '=' + map[k]).join(','); };
+    const defence = list => cfg.defence(list, oathMap);
     const dpsOf = (g, list) => {
       calcs++;
-      const r = g.r = S.calcSkill(GD, Object.assign({}, ch, { passives: list }), g.id, g.opt);
+      const r = g.r = S.calcSkill(GD, Object.assign({}, ch, { passives: list, oaths: oathMap }), g.id, g.opt);
       let v = r && r.totalDps > 0 ? r.totalDps : 0;
 
 
@@ -1378,7 +1394,9 @@ window.PAGE_LANGS = {
         if (c && cfg.conduitMargin > 0 && c.ticks === 1 && c.tick < c.interval * (1 + cfg.conduitMargin)) v *= 0.5;
       return v;
     };
-    const taken = new Set((ch.passives || []).map(realId).filter(id => nodes[id] && nodes[id].Kind !== 'Start'));
+    const all0 = (ch.passives || []).map(realId).filter(id => nodes[id] && nodes[id].Kind !== 'Start');
+    const seats0 = [...new Set(all0.filter(isSeat))]; // taken Oath seats: no point each, back in the result while their notable stays
+    const taken = new Set(all0.filter(id => !isSeat(id)));
     const have = new Set([...taken].filter(id => walkable(id)));
     const budget = taken.size + Math.max(0, cfg.extraPoints | 0); // cfg.extraPoints: unspent points to plan too
     const haveList = [...have].sort();
@@ -1388,9 +1406,9 @@ window.PAGE_LANGS = {
     const wSum = goals.reduce((a, g) => a + g.w, 0);
 
     const defW = typeof cfg.defence === 'function' ? Math.max(0, Math.min(1, +cfg.defWeight || 0)) : 0, scored = defW > 0;
-    const def0 = scored ? cfg.defence(haveList) : null;
+    const def0 = scored ? defence(haveList) : null;
     const V = set => {
-      const list = [...set].sort(); const key = list.join(',');
+      const list = [...set].sort(); const key = list.join(',') + oKey;
       let v = cache.get(key);
       if (v === undefined) {
         if (goals.length === 1 && !multi && !scored) v = dpsOf(goals[0], list);
@@ -1400,7 +1418,7 @@ window.PAGE_LANGS = {
           v = 0; goals.forEach((g, i) => { if (!lost[i]) v += g.w * d[i] / g.base; }); v /= wSum;
         }
 
-        if (scored && v > 0) v = Math.pow(v, 1 - defW) * Math.pow(Math.max(1, cfg.defence(list).ehp) / Math.max(1, def0.ehp), defW);
+        if (scored && v > 0) v = Math.pow(v, 1 - defW) * Math.pow(Math.max(1, defence(list).ehp) / Math.max(1, def0.ehp), defW);
         cache.set(key, v);
       }
       return v;
@@ -1465,14 +1483,91 @@ window.PAGE_LANGS = {
     };
 
 
+    const lc = x => String(x || '').toLowerCase();
+    const seatsOk = cfg.oaths ? Object.values(GD.masteries || {}).filter(m => (m.Oaths || []).some(o => (GD.oaths || {})[o]) && (!m.Class || lc(m.Class) === lc(ch.classId))) : [];
+    const oathsOn = seatsOk.length > 0;
+    const seatOpen = (m, set) => m.Notables.some(n => set.has(n));
+    const swornAt = (m, map) => { const o = map[m.Id]; return o && m.Oaths.includes(o) && GD.oaths[o] ? o : null; };
+
+    const active0 = new Map(), fixed = new Set();
+    for (const m of seatsOk) {
+      const o = seatOpen(m, have) && swornAt(m, oaths0); if (!o) continue;
+      active0.set(m.Id, o);
+      const mods = GD.oaths[o].Mods || [];
+      if (!(mods.some(isUncounted) || (cfg.keepDefence && !mods.some(dmgish)))) continue;
+      fixed.add(m.Id);
+
+      if (!m.Notables.some(n => kept.has(n))) { const nb = m.Notables.find(n => have.has(n)); if (nb) { why[nb] = why[nb] || 'opens the seat of ' + GD.oaths[o].Name; kept.add(nb); } }
+    }
+
+    function* settle(set, from) {
+      const map = Object.assign({}, from);
+      const open = seatsOk.filter(m => seatOpen(m, set)).sort((a, b) => (fixed.has(b.Id) ? 1 : 0) - (fixed.has(a.Id) ? 1 : 0));
+      const seen = new Set();
+      for (const m of open) { const o = swornAt(m, map); if (!o || seen.has(o)) delete map[m.Id]; else seen.add(o); }
+      for (let pass = 0; pass < 3; pass++) {
+        let changed = false;
+        for (const m of open) {
+          if (fixed.has(m.Id)) continue;
+          const now = map[m.Id] || null, elsewhere = new Set(open.filter(x => x !== m).map(x => map[x.Id]).filter(Boolean));
+          setOaths(map); const cur = V(set);
+
+          let pick = null, pv = cur * (1 + (now && now === active0.get(m.Id) ? MIN_GAIN : 1e-6));
+          for (const oid of m.Oaths) {
+            if (!GD.oaths[oid] || oid === now || elsewhere.has(oid)) continue;
+            setOaths(Object.assign({}, map, { [m.Id]: oid }));
+            const v = V(set); if (v > pv) { pick = oid; pv = v; }
+            if (++tries % 6 === 0) yield null;
+          }
+          if (pick) { map[m.Id] = pick; changed = true; }
+        }
+        if (!changed) break;
+      }
+      setOaths(map);
+      return map;
+    }
+    if (oathsOn) {
+      yield { phase: 'Choosing Oaths', p: 0, q: 0 };
+      const plan = yield* settle(have, oaths0);
+
+      const b0 = bfs(have, v => !!otherAtAltar(have, v));
+      const far = [];
+      for (const m of seatsOk) {
+        if (seatOpen(m, have)) continue;
+        delete plan[m.Id]; // a leftover from a seat that is not open counts for nothing today
+        let nb = null, nd = Infinity;
+        for (const n of m.Notables) { const d = b0.dist.get(n); if (d !== undefined && d < nd) { nb = n; nd = d; } }
+        if (nb) far.push({ m, nb, nd });
+      }
+      far.sort((a, b) => a.nd - b.nd);
+      const planned = new Set(seatsOk.map(m => plan[m.Id]).filter(Boolean));
+      let fi = 0;
+      for (const { m, nb } of far) {
+        const s = new Set(have); for (const x of pathOf(b0, have, nb)) s.add(x);
+        setOaths(plan); const cur = V(s);
+        let pick = null, pv = cur * (1 + 1e-6);
+        for (const oid of m.Oaths) {
+          if (!GD.oaths[oid] || planned.has(oid)) continue;
+          setOaths(Object.assign({}, plan, { [m.Id]: oid }));
+          const v = V(s); if (v > pv) { pick = oid; pv = v; }
+        }
+        if (pick) { plan[m.Id] = pick; planned.add(pick); }
+        if (++fi % 3 === 0) yield { phase: 'Choosing Oaths', p: fi / far.length, q: 0.08 * fi / far.length };
+      }
+      setOaths(plan);
+    }
+    const q0 = oathsOn ? 0.08 : 0;
+    const baseW = oathsOn ? V(have) : base; // the tree as it is, with its open seats' planned Oaths
+
+
     const own = {};
     let k = 0;
 
     const qVal = cfg.addOnly ? 0.4 : 0.3;
     for (const id of have) {
       const s = new Set(have); s.delete(id);
-      own[id] = 1 - V(s) / base;
-      if (++k % 8 === 0) yield { phase: 'Valuing your nodes', p: k / have.size, q: qVal * k / have.size };
+      own[id] = 1 - V(s) / baseW;
+      if (++k % 8 === 0) yield { phase: 'Valuing your nodes', p: k / have.size, q: q0 + (qVal - q0) * k / have.size };
     }
     const targets = [...have].filter(id => kept.has(id) || own[id] >= OWN_KEEP).concat(keepIds.filter(id => !have.has(id)));
 
@@ -1599,7 +1694,7 @@ window.PAGE_LANGS = {
     }
 
     const missing0 = keepIds.some(id => !have.has(id));
-    let best = new Set(have), bestV = missing0 ? -Infinity : base;
+    let best = new Set(have), bestV = missing0 ? -Infinity : baseW;
 
     const steps = [];
     if (cfg.addOnly) {
@@ -1612,7 +1707,7 @@ window.PAGE_LANGS = {
       if (v > bestV) { best = t; bestV = v; }
       yield { phase: 'Re-routing', p: (i + 1) / starts.length, q: 0.3 + 0.3 * (i + 1) / starts.length };
     }
-    if (bestV === -Infinity) { best = new Set(have); bestV = base; } // no tree within the points reaches them all: shown as missed
+    if (bestV === -Infinity) { best = new Set(have); bestV = baseW; } // no tree within the points reaches them all: shown as missed
 
 
     for (let iter = 0; iter < (cfg.addOnly ? 0 : 14); iter++) {
@@ -1643,6 +1738,37 @@ window.PAGE_LANGS = {
 
 
     const finalSet = connected(best);
+
+
+    let oathOut = null; const oathRows = [], oathsLost = [];
+    if (oathsOn) {
+      yield { phase: 'Choosing Oaths', p: 1, q: 1 };
+      const map = yield* settle(finalSet, oathMap);
+
+
+      const openF = seatsOk.filter(m => seatOpen(m, finalSet));
+      for (let again = true; again;) {
+        again = false;
+        for (const x of openF) {
+          const o = map[x.Id]; if (!o || active0.get(x.Id) === o) continue;
+          const y = openF.find(y => y !== x && active0.get(y.Id) === o && map[y.Id] !== o && x.Oaths.includes(map[y.Id]));
+          if (y) { map[x.Id] = map[y.Id]; map[y.Id] = o; again = true; }
+        }
+      }
+      oathOut = Object.assign({}, oaths0);
+      for (const m of seatsOk) if (seatOpen(m, finalSet)) { if (map[m.Id]) oathOut[m.Id] = map[m.Id]; else delete oathOut[m.Id]; }
+      setOaths(oathOut);
+      const vAll = V(finalSet);
+      for (const m of seatsOk) {
+        const from = active0.get(m.Id) || null;
+        if (!seatOpen(m, finalSet)) { if (from) oathsLost.push({ mid: m.Id, oid: from }); continue; }
+        const to = oathOut[m.Id] || null; if (!to || to === from) continue;
+        const without = Object.assign({}, oathOut); delete without[m.Id]; setOaths(without);
+        oathRows.push({ mid: m.Id, from, to, d: 1 - V(finalSet) / vAll });
+      }
+      oathRows.sort((a, b) => b.d - a.d);
+      setOaths(oathOut);
+    }
     const value = V(finalSet);
     const finalList = [...finalSet].sort();
     const skills = goals.map(g => { const v = dpsOf(g, finalList); return { id: g.id, w: g.w, base: g.base, value: v, gain: v / g.base - 1 }; });
@@ -1653,13 +1779,14 @@ window.PAGE_LANGS = {
     const order = set => { const out = [], seen = new Set([s0]), q = [s0]; for (let i = 0; i < q.length; i++) for (const v of adj[q[i]] || []) if (set.has(v) && !seen.has(v)) { seen.add(v); out.push(v); q.push(v); } return out; };
     return {
       base, value, gain: value / base - 1, points: budget, used: finalSet.size,
-      list: order(finalSet),
+      list: order(finalSet).concat(seats0.filter(id => (adj[id] || []).some(x => finalSet.has(x)))),
+      oathMap: oathOut, oaths: oathRows, oathsLost,
       add: add.map(id => ({ id, d: worth(finalSet, id) })).sort((a, b) => b.d - a.d),
       remove: remove.map(id => ({ id, d: own[id] })).sort((a, b) => b.d - a.d),
       kept: [...kept].filter(id => why[id]).map(id => ({ id, why: why[id] })), steps, addOnly: !!cfg.addOnly,
       keepMissed: keepIds.filter(id => !finalSet.has(id)),
       skills, dropped, multi: multi && goals.length > 1,
-      scored, defWeight: defW, def: scored ? { before: def0, after: cfg.defence(finalList) } : null,
+      scored, defWeight: defW, def: scored ? { before: def0, after: defence(finalList) } : null,
       attrs: { Str: a1.Str - a0.Str, Dex: a1.Dex - a0.Dex, Int: a1.Int - a0.Int },
       calcs, ms: Date.now() - t0,
     };
@@ -12772,7 +12899,9 @@ window.BOCharacter = function (ctx) {
     const off = t && (out(a.v, t.Min, t.Max) || (two && out(a.v2, t.Min2, t.Max2)));
 
     const gs = window.BOSim.affixLineShown(GD(), it, a), scNote = gs.k !== 1 ? ' <span class="meta" title="The game multiplies this line by ' + +gs.k.toFixed(2) + '. The box holds the roll as the save stores it; the text and the tier list are what the game shows and counts.">(game counts x' + +gs.k.toFixed(2) + ')</span>' : '';
-    return '<div class="io-aff" data-ai="' + ai + '">' + (mv || '') + '<span class="io-afftext">' + (tag ? '<span class="meta">' + esc(tag) + ':</span> ' : '') + esc(safe(() => G.modLine(af.Mod, gs.v, gs.v2))) + scNote + (af.Kind ? ' <span class="meta">(' + esc(af.Kind) + ')</span>' : '') +
+
+    if (tag && gs.sh < 1) tag += ' · counts ' + Math.round(gs.sh * 100) + '%';
+    return '<div class="io-aff" data-ai="' + ai + '">' + (mv || '') + '<span class="io-afftext">' + (tag ? '<span class="meta"' + (gs.sh < 1 ? ' title="The box holds the roll as the save stores it; the text and the tier list are what the game shows and counts for a Vow in this place."' : '') + '>' + esc(tag) + ':</span> ' : '') + esc(safe(() => G.modLine(af.Mod, gs.v, gs.v2))) + scNote + (af.Kind ? ' <span class="meta">(' + esc(af.Kind) + ')</span>' : '') +
       chanceHtml(rollChance(af, GD().bases[lc(it.base)])) + (after ? ' <span class="io-extra">(' + esc(after) + ')</span>' : '') +
       (t && t.ILvl > (it.level || 1) ? ' <span class="bad">needs item level ' + t.ILvl + '</span>' : '') +
       (off ? ' <span class="bad">outside this tier\'s range (' + t.Min + ' to ' + t.Max + (two ? ' / ' + t.Min2 + ' to ' + t.Max2 : '') + ')</span>' : '') + (note || '') + '</span>' + fxSpan('rm:' + ai) +
@@ -13827,10 +13956,26 @@ window.BOCharacter = function (ctx) {
     const af = GD.affixes[lc(a.id)], idol = it.slot === 'Idol' || ((GD.bases[lc(it.base)] || {}).Slot === 'Idol');
     const ok = af && af.Mod && af.Mod.Mode !== 'Flag';
     const k = !ok ? 1 : idol ? (RARE_COUNT_STATS.has(af.Mod.Stat) ? 1 : idolLineScale(GD, a.id, a.tier, it.level || 0, it.affixes.length)) : affixLineScale(GD, a.id);
-    const rf = k < 1 && !idol ? rivenFloor(GD, a.id) : null;
-    const val = (x, lo) => { const y = idolRound(x, k); return rf && lo > 0 && typeof x === 'number' && x > 0 ? Math.max(y, Math.min(x, Number.isInteger(x) ? Math.round(lo) : Math.round(lo * 10) / 10)) : y; };
-    const tier = t => { if (!t || k === 1) return t; const o = Object.assign({}, t); for (const [f, i] of [['Min', 0], ['Max', 0], ['Min2', 1], ['Max2', 1]]) if (o[f] != null) o[f] = val(o[f], rf && rf[i]); return o; };
-    return { k, v: val(a.v, rf && rf[0]), v2: val(a.v2, rf && rf[1]), tier };
+
+
+
+
+    let sh = 1, vowN = 0;
+    if (ok && it.rarity === 'Unique' && !a.crafted && !/^unique:/i.test(a.id)) {
+      const vows = (it.affixes || []).filter(x => !/^unique:/i.test(x.id) && !x.crafted && GD.affixes[lc(x.id)]), n = vows.indexOf(a);
+      if (n >= 0) { vowN = n + 1; sh = vowShare(GD, n) * (af.Mod.Stat === 'SkillLevel' ? vowLevelShare(GD) : 1); }
+    }
+    const cnt = x => sh === 1 || !x || typeof x !== 'number' ? x : Number.isInteger(x) ? (Math.round(x * sh) || Math.sign(x)) : Math.round(x * sh * 10) / 10;
+    const rf = k < 1 && sh === 1 && !idol ? rivenFloor(GD, a.id) : null;
+    const top = sh !== 1 && k === 1 && !idol ? rivenFloor(GD, a.id) : null; // [T1 top x1.05, ...]: the Riven range's true low end
+    const val = (x, lo) => { const y = idolRound(cnt(x), k); return rf && lo > 0 && typeof x === 'number' && x > 0 ? Math.max(y, Math.min(x, Number.isInteger(x) ? Math.round(lo) : Math.round(lo * 10) / 10)) : y; };
+    const tier = t => {
+      if (!t || (k === 1 && sh === 1)) return t;
+      const o = Object.assign({}, t);
+      for (const [f, i] of [['Min', 0], ['Max', 0], ['Min2', 1], ['Max2', 1]]) if (o[f] != null) o[f] = f[1] === 'i' && top && top[i] > o[f] && top[i] < o[f] + 1 && Number.isInteger(o[f]) ? Math.round(top[i] * sh) || 1 : val(o[f], rf && rf[i]);
+      return o;
+    };
+    return { k, sh, vowN, v: val(a.v, rf && rf[0]), v2: val(a.v2, rf && rf[1]), tier };
   }
   function itemLabel(GD, it) {
     const base = GD.bases[lc(it.base)];
@@ -14623,11 +14768,15 @@ window.BOCharacter = function (ctx) {
     const shapeIds = res.supports.filter(s => s.ok && !(o.off && o.off.has(s.key))).map(s => lc(s.id));
 
 
-    const shapeId = (shapeIds.includes('trap_support') && shapeIds.find(id => TRAP_HOSTS.includes(id))) || shapeIds.find(id => SHAPE_TAG[id]) || null;
+
+
+
+    const shapeId =(shapeIds.includes('trap_support') && shapeIds.find(id => TRAP_HOSTS.includes(id))) || shapeIds.find(id => SHAPE_TAG[id]) || null;
 
 
 
     if (shapeId) ctx.tags.add(SHAPE_TAG[shapeId]);
+    if (shapeId && TRAP_HOSTS.includes(shapeId) && shapeIds.includes('trap_support')) ctx.tags.add('trap');
 
 
     if (ctx.tags.has('chain')) ctx.tags.add('firsttarget');
@@ -22511,9 +22660,10 @@ window.BOStartApp = function () {
     const level = Math.max(base, Math.min(100, 1 + Math.ceil(Math.max(0, pointsIn(list) - bonus) / pointsPer())), planner.dragon.levelNeed(ch));
     return { level, levelBase: level !== base ? base : undefined };
   }
-  function setPassives(list, undo) {
-    if (undo !== false) T.undo.push(st.ch.passives.slice());
-    const lv = levelFor(st.ch, list);
+
+  function setPassives(list, undo, oaths) {
+    if (undo !== false) { const u = st.ch.passives.slice(); if (oaths) u.oaths = Object.assign({}, st.ch.oaths || {}); T.undo.push(u); }
+    const lv = Object.assign(levelFor(st.ch, list), oaths ? { oaths: Object.assign({}, oaths) } : null);
     if (st.chOrig && st.chOrig.plan) { Object.assign(st.chOrig, lv, { passives: list }); st.ch = st.chOrig; keepChars(); }
     else st.ch = Object.assign({}, st.ch, lv, { passives: list }); // keeps Dragonling edits made on this tab
     st.pinned = null; stopSearch(); st.opt = null;
@@ -22991,6 +23141,7 @@ window.BOStartApp = function () {
       p.classList.toggle('open', masteryOpen(m, have)); p.classList.toggle('sworn', sw.has(m.Id)); p.classList.toggle('sel', m.Id === T.selM);
       p.classList.toggle('found', !!q && masteryText(m).includes(q));
       p.classList.toggle('unsworn', unsworn.has(m.Id));
+      p.classList.toggle('opt-add', !!(T.opt && T.opt.oathSet && T.opt.oathSet.has(m.Id)));
 
       const os = heat && !sw.has(m.Id) ? oh.get(m.Id) : null;
       p.style.fill = os && os.d > 0.0005 ? heatFill(rank(perPt(os))) : '';
@@ -23391,7 +23542,7 @@ window.BOStartApp = function () {
 
 
 
-  const optKey = () => GS.set.prio + JSON.stringify(GS.set.layers) + '|' + st.skill + '|' + JSON.stringify(optExtra()) + '|' + [...allocSet()].sort().join(',') + '|' + [...(st.ban || [])].sort().join(',') + '|' + [...(st.keep || [])].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
+  const optKey = () => GS.set.prio + JSON.stringify(GS.set.layers) + '|' + ($('#optOaths').checked ? JSON.stringify(st.ch.oaths || {}) : '') + '|' + st.skill + '|' + JSON.stringify(optExtra()) + '|' + [...allocSet()].sort().join(',') + '|' + [...(st.ban || [])].sort().join(',') + '|' + [...(st.keep || [])].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
   function clearOpt() {
     T.optJob = (T.optJob || 0) + 1; T.opt = null; $('#treeOpt').hidden = true;
     const b = $('#treeOptimize'); b.disabled = false; b.textContent = 'Optimize tree';
@@ -23418,8 +23569,8 @@ window.BOStartApp = function () {
     $('#treePlan').disabled = true; $('#treePlanAll').disabled = true; $('#treeOptimize').disabled = true;
     card.hidden = false; card.innerHTML = '<p class="hint">' + (plan ? 'Planning your next ' + extra + ' point' + (extra > 1 ? 's' : '') : 'Optimizing the tree') + ' for ' + esc(skillName) + '…</p>';
 
-    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])], keep: [...(st.keep || [])],
-      defWeight: GS.set.prio / 100, defStats: gsDefStats(), defence: list => gsDefence(Object.assign({}, st.ch, { passives: list })) });
+    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])], keep: [...(st.keep || [])], oaths: $('#optOaths').checked,
+      defWeight: GS.set.prio / 100, defStats: gsDefStats(), defence: (list, oaths) => gsDefence(Object.assign({}, st.ch, { passives: list }, oaths ? { oaths } : null)) });
 
     let phase = 'Starting', q = 0;
     const busy = on => { btn.classList.toggle('opt-busy', on); btn.style.setProperty('--q', on ? q : 0); btn.setAttribute('aria-busy', on ? 'true' : 'false'); };
@@ -23439,7 +23590,7 @@ window.BOStartApp = function () {
       if (res.error) { card.innerHTML = '<p class="hint">' + esc(res.error) + '</p>'; return; }
       if (key !== optKey()) { card.innerHTML = '<p class="hint">The tree or a setting changed while optimizing: press ' + label + ' again.</p>'; return; }
       const worth = res.gain > 0.001;
-      Object.assign(res, { list: optOrder(res, st.ch.passives), key, skill: st.skill, skillName, base0: res.points - extra, addSet: new Set(worth ? res.add.map(x => x.id) : []), remSet: new Set(worth ? res.remove.map(x => x.id) : []) });
+      Object.assign(res, { list: optOrder(res, st.ch.passives), key, skill: st.skill, skillName, base0: res.points - extra, addSet: new Set(worth ? res.add.map(x => x.id) : []), remSet: new Set(worth ? res.remove.map(x => x.id) : []), oathSet: new Set(worth ? (res.oaths || []).map(x => x.mid) : []) });
       T.opt = res; showOpt(); paintTree();
     };
     step();
@@ -23457,6 +23608,23 @@ window.BOStartApp = function () {
     }
     return rows.join('') || '<li><span class="c">nothing</span></li>';
   }
+
+
+  function optOathCol(o) {
+    const rows = (o.oaths || []).filter(x => GD.masteries[x.mid] && GD.oaths[x.to]).map(x => '<li data-seat="' + esc(x.mid) + '"><span>' + esc(GD.oaths[x.to].Name) + ' <span class="c">' + esc(GD.masteries[x.mid].Name) +
+      (x.from && GD.oaths[x.from] ? ' · in place of ' + esc(GD.oaths[x.from].Name) : '') + '</span></span><span class="v">' + pct(x.d || 0) + '</span></li>');
+    return rows.length ? '<div><h3 class="add">Swear (green diamonds)</h3><ul>' + rows.join('') + '</ul></div>' : '';
+  }
+  function optOathNote(o) {
+    const lost = (o.oathsLost || []).filter(x => GD.oaths[x.oid]).map(x => GD.oaths[x.oid].Name);
+    return ((o.oaths || []).length ? '<p class="hint">Oaths: Apply swears them here; in the game, swear each one at its seat from the Oath panel (changing a sworn Oath costs gold there). An Oath\'s value is its share of the result, like a node\'s.</p>' : '') +
+      (lost.length ? '<p class="hint gain down">No longer counted, their seat is not open on this tree: ' + esc(lost.join(', ')) + '.</p>' : '');
+  }
+  const optOathMsg = o => { const n = (o.oaths || []).length; return n ? ' ' + n + ' Oath' + (n > 1 ? 's' : '') + ' sworn.' : ''; };
+  function optCardClicks(card) {
+    card.querySelectorAll('[data-focus]').forEach(li => li.onclick = () => focusNode(li.dataset.focus));
+    card.querySelectorAll('[data-seat]').forEach(li => li.onclick = () => { focusSeat(li.dataset.seat); $('#treeView').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
+  }
   function showOpt() {
     const o = T.opt, card = $('#treeOpt'); if (!o) { card.hidden = true; return; }
     card.hidden = false;
@@ -23469,14 +23637,14 @@ window.BOStartApp = function () {
       const at = Object.entries(o.attrs).filter(([, v]) => v).map(([k, v]) => k + ' ' + (v > 0 ? '+' : '−') + Math.abs(v));
       card.innerHTML = '<h2>Optimized for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.scored ? 'score' : o.multi ? 'weighted DPS' : 'DPS') + '</span> <span class="hint">same ' + o.points + ' points' + (o.multi || o.scored ? '' : ' · ' + num(o.base) + ' → ' + num(o.value)) + '</span></h2>' + optScoredRows(o) + optSkillRows(o) +
         '<div class="opt-cols"><div><h3 class="rem">Refund (red on the tree)</h3><ul>' + optRows(o.remove, -1) + '</ul></div>' +
-        '<div><h3 class="add">Take (green on the tree)</h3><ul>' + optRows(o.add, 1) + '</ul></div></div>' +
+        '<div><h3 class="add">Take (green on the tree)</h3><ul>' + optRows(o.add, 1) + '</ul></div>' + optOathCol(o) + '</div>' + optOathNote(o) +
         (at.length ? '<p class="hint">Attributes from the tree: ' + esc(at.join(', ')) + '. Check your gear and gem requirements still fit.</p>' : '') + kept +
         '<p class="hint">Each value is that node\'s share of the ' + (o.scored ? 'score (DPS and defence, weighed as set)' : 'DPS') + '. The sim cannot weigh lines it does not count (see a node\'s tooltip), so check the picks fit how you play. Click a row to find it on the tree.</p>' +
         '<div class="opt-actions"><button class="btn small" type="button" id="optApply">Apply to my tree</button><button class="btn small ghost" type="button" id="optDismiss">Dismiss</button></div>';
-      $('#optApply').onclick = () => { const list = o.list; clearOpt(); setPassives(list); $('#treeStatus').textContent = 'Optimized tree applied. Undo goes back; Copy build code gives it to the game.'; };
+      $('#optApply').onclick = () => { const list = o.list, msg = optOathMsg(o); clearOpt(); setPassives(list, true, (o.oaths || []).length ? o.oathMap : null); $('#treeStatus').textContent = 'Optimized tree applied.' + msg + ' Undo goes back; Copy build code gives it to the game.'; };
     }
     $('#optDismiss').onclick = () => { clearOpt(); paintTree(); };
-    card.querySelectorAll('[data-focus]').forEach(li => li.onclick = () => focusNode(li.dataset.focus));
+    optCardClicks(card);
   }
 
   function optScoredRows(o) {
@@ -23513,13 +23681,14 @@ window.BOStartApp = function () {
     const left = o.points - o.used;
     card.innerHTML = '<h2>Next ' + (o.points - o.base0) + ' points for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.scored ? 'score' : o.multi ? 'weighted DPS' : 'DPS') + '</span>' + (o.multi || o.scored ? '' : ' <span class="hint">' + num(o.base) + ' → ' + num(o.value) + '</span>') + '</h2>' + optScoredRows(o) + optSkillRows(o) +
       (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">No node within reach adds ' + (o.scored ? 'anything at this setting' : 'DPS to this skill') + '.</p>') + keepMissedHtml(o) +
+      (optOathCol(o) ? '<div class="opt-cols">' + optOathCol(o) + '</div><p class="hint">A row\'s gain counts the Oath sworn at a seat its notable opens.</p>' : '') + optOathNote(o) +
       (left > 0 && rows ? '<p class="hint">' + left + ' point' + (left > 1 ? 's' : '') + ' left over: nothing else within reach adds DPS.</p>' : '') +
       (at.length ? '<p class="hint">Attributes from these picks: ' + esc(at.join(', ')) + '.</p>' : '') +
       '<p class="hint">Take them top to bottom: each row is worth most per point at that moment, its path included (gains are on top of the rows above). Keystones and skill-changing nodes are left out; Channel Conduit builds keep their channel 1% slower than the cast interval. Green on the tree. Click a row to find it.</p>' +
-      '<div class="opt-actions">' + (rows ? '<button class="btn small" type="button" id="optApply">Add to my tree</button>' : '') + '<button class="btn small ghost" type="button" id="optDismiss">Dismiss</button></div>';
-    if (rows) $('#optApply').onclick = () => { const list = o.list; clearOpt(); setPassives(list); $('#treeStatus').textContent = 'Planned points added. Copy build code gives the game a code to follow; Undo goes back.'; };
+      '<div class="opt-actions">' + (rows || (o.oaths || []).length ? '<button class="btn small" type="button" id="optApply">Add to my tree</button>' : '') + '<button class="btn small ghost" type="button" id="optDismiss">Dismiss</button></div>';
+    if (rows || (o.oaths || []).length) $('#optApply').onclick = () => { const list = o.list, msg = optOathMsg(o); clearOpt(); setPassives(list, true, (o.oaths || []).length ? o.oathMap : null); $('#treeStatus').textContent = 'Planned points added.' + msg + ' Copy build code gives the game a code to follow; Undo goes back.'; };
     $('#optDismiss').onclick = () => { clearOpt(); paintTree(); };
-    card.querySelectorAll('[data-focus]').forEach(li => li.onclick = () => focusNode(li.dataset.focus));
+    optCardClicks(card);
   }
   function focusNode(id) {
     const n = GD.nodes[id]; if (!n || !T.vb) return;
@@ -23527,6 +23696,7 @@ window.BOStartApp = function () {
     setVB([n.X - w / 2, n.Y - h / 2, w, h]);
     $('#treeView').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
+  $('#optOaths').onchange = () => { if (T.opt) { clearOpt(); paintTree(); } };
   $('#treeOptimize').onclick = () => runOptimize(false);
   $('#treePlan').onclick = () => runOptimize(true);
   $('#treePlanAll').onclick = () => runOptimize(true, true);
@@ -24642,7 +24812,7 @@ window.BOStartApp = function () {
   $('#treeLegendBtn').onclick = () => { T.heat = T.heat === false; store.set('treeHeat', T.heat); paintTree(); };
 
   $('#treeSeats').onclick = () => { const list = T.unsworn || []; if (list.length) focusSeat(list[(list.indexOf(T.selM) + 1) % list.length]); };
-  $('#treeUndo').onclick = () => { if (T.undo.length) setPassives(T.undo.pop(), false); };
+  $('#treeUndo').onclick = () => { if (T.undo.length) { const u = T.undo.pop(); setPassives(u, false, u.oaths); } };
   $('#treeReset').onclick = () => { if (st.chOrig) { clearOpt(); T.undo.push(st.ch.passives.slice()); st.ch = st.chOrig; st.pinned = null; T.job++; T.scores = new Map(); render(); } };
   $('#treeCopy').onclick = async () => {
     try {

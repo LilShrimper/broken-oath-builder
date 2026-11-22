@@ -50,7 +50,7 @@
   var b = new URL("../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/ru.json'), langCode: 'ru' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../style.css?v=450">
+<link rel="stylesheet" href="../style.css?v=451">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -428,6 +428,7 @@
         </details>
         <label class="check-row" title="Notables with no damage lines (life, armour, mana, Skyfall speed ...) stay where they are"><input type="checkbox" id="optKeepDef" checked><span>Keep defence notables</span></label>
         <label class="check-row" title="Glass Cannon and the like: the sim sees the damage, not the price. Ticked for you when the character already has a keystone."><input type="checkbox" id="optKeys"><span>Allow new keystones</span></label>
+        <label class="check-row" title="Optimize and Plan also choose the Oath for each open Oath seat, and count a seat's best Oath when they weigh the notable that opens it. An Oath you have sworn is only replaced when another one at that seat is worth more; with Keep defence notables ticked, sworn Oaths with no damage line stay."><input type="checkbox" id="optOaths" checked><span>Pick Oaths</span></label>
         <label class="field gs-prio opt-prio" title="What Optimize tree and Plan value. Defence is an estimate; tick the defences that count next to it. The same setting as in the Item Simulator"><span>Prioritize <b id="optPrioText">DPS only</b></span>
           <span class="gs-prio-row"><span>DPS</span><input type="range" id="optPrio" min="0" max="100" step="10" value="0" aria-label="Prioritize DPS or defence"><span>Defence</span></span></label>
         <span class="gs-layers" id="optLayers"></span>
@@ -663,7 +664,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":450,"at":"2026-11-22T17:28:21.480Z"};
+window.SITE_VERSION = {"v":451,"at":"2026-11-22T18:57:19.119Z"};
 window.SITE_LANG = 'ru';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../", location.href).pathname.replace(/[^/]*$/, '');
@@ -672,6 +673,6 @@ window.GEM_ICONS = {"src":"icons/gems.webp?v=c0ae2407","T":64,"cols":10,"rows":1
 window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
 (function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
 </script>
-<script src="../app.js?v=450"></script>
+<script src="../app.js?v=451"></script>
 </body>
 </html>

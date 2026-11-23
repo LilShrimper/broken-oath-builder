@@ -6290,6 +6290,46 @@ window.BOBrewery = function (ctx) {
       '<div><dt>' + label + '</dt><dd>' + Object.entries(c[k]).map(([m, n]) => n + ' ' + esc(matName(m))).join(', ') + (k === 'QualityPer2' && c.QualityMax ? ', up to ' + c.QualityMax + '%' : '') + (k === 'Oath' ? ' + the line\'s material' : '') + (k === 'Imbue' && p.Imbue113 && p.Imbue113.GoldPerRL ? ' + ' + p.Imbue113.GoldPerRL.toLocaleString('en-US') + ' gold per Rupture Level' : '') + '</dd></div>').join('') +
       '<div><dt>Equip</dt><dd>Free</dd></div></dl></div>';
     el.innerHTML = h;
+    fxFill(el);
+  }
+
+
+
+
+
+
+
+  let fxJob = 0;
+  function fxFill(root) {
+    const job = ++fxJob;
+    if (!ctx.score || !(ctx.current && ctx.current()) || !B) return;
+    const sels = [...root.querySelectorAll('.bw-mod select[data-f]')].filter(x => /^(pre|suf|oath|core)$/.test(x.dataset.f));
+    if (!sels.length) return;
+    const base = clone(B), memo = new Map(), q = [];
+    const beltWith = (i, f, k, pick) => { const b = clone(base), sl = b.slots[i]; if (f === 'pre' || f === 'suf') sl[f][k] = pick; else sl[f] = pick; return b; };
+    for (const sel of sels) {
+      const i = +sel.dataset.slot, f = sel.dataset.f, k = +sel.dataset.k || 0;
+      const cur = f === 'pre' || f === 'suf' ? base.slots[i][f][k] : base.slots[i][f];
+      const none = 'none|' + i + '|' + f + '|' + k;
+      q.push({ key: none, run: () => scoreOf(beltWith(i, f, k, null), true, true) });
+      for (const o of sel.options) {
+        if (!o.value || o.disabled) continue;
+        if (o.dataset.txt == null) o.dataset.txt = o.textContent;
+        const key = o.value + '|' + i + '|' + f + '|' + k;
+        q.push({ key, run: () => scoreOf(beltWith(i, f, k, { id: o.value, tier: cur && cur.id === o.value ? cur.tier : 99 }), true, true), paint: () => {
+          const a = memo.get(key), z = memo.get(none); if (!(z > 0) || a == null) return;
+          const v = Math.round((a / z - 1) * 10000) / 100;
+          o.textContent = o.dataset.txt + (Math.abs(v) >= 0.01 ? ' · ' + (v > 0 ? '+' : '') + v.toFixed(2) + '% DPS' : '');
+        } });
+      }
+    }
+    const tick = () => {
+      if (job !== fxJob) return;
+      const t0 = performance.now();
+      while (q.length && performance.now() - t0 < 14) { const x = q.shift(); if (!memo.has(x.key)) { try { memo.set(x.key, x.run()); } catch (e) { memo.set(x.key, null); } } if (x.paint) x.paint(); }
+      if (q.length) (ctx.soon || setTimeout)(tick);
+    };
+    (ctx.soon || setTimeout)(tick);
   }
 
 
@@ -6464,6 +6504,7 @@ window.BOBrewery = function (ctx) {
     use(); if (!Bid || !P() || !P().Types) return closeOv();
     ov.innerHTML = '<div class="io-win bw-win"><div class="io-head"><span class="io-slotname">Potion slot ' + (ovSlot + 1) + '</span><button class="io-x" type="button" data-bw-close="1" aria-label="Close">×</button></div>' +
       '<div class="io-body">' + slotCard(ovSlot) + '<p class="hint io-foot">Changes count in Damage Analysis straight away. More options (Rupture Level, prices) are on the Brewery tab.</p></div></div>';
+    fxFill(ov);
   }
   function openSlot(i) {
     if (!P() || !P().Types || !(i >= 0 && i < 4)) return;
@@ -21217,7 +21258,7 @@ window.BOStartApp = function () {
     if (brewery && !$('#breweryPane').hidden) brewery.render(); // the Brewery shows this character's potions
     if (lootFilter && !$('#lootFilterPane').hidden) setTimeout(() => lootFilter.render(), 0); // its preset fits the character (after the skill is picked)
     st.curses = {};
-    for (const c of Object.values(GD.curses)) st.curses[c.Id] = { on: ch.hotbar.includes(c.Skill), dread: 0 };
+    for (const c of Object.values(GD.curses)) st.curses[c.Id] = { on: curseOnBar(ch, c), dread: 0 };
     st.enemyLevel = null; $('#enemyLevel').value = ''; $('#enemyLevel').placeholder = ch.level;
 
 
@@ -21280,9 +21321,18 @@ window.BOStartApp = function () {
 
 
 
+
+
+
+  function curseSkill(c) {
+    if (c.Skill) return c.Skill;
+    if (c.Kind !== 'Banner') return '';
+    return Object.keys(GD.skills).find(k => (GD.skills[k].Tags || []).includes('Banner')) || '';
+  }
+  function curseOnBar(ch, c) { const id = String(curseSkill(c)).toLowerCase(); return !!id && (ch.hotbar || []).some(h => String(h || '').toLowerCase() === id); }
   function syncCurseBar() {
     if (!st.ch || !st.curses) return;
-    const now = new Set(Object.values(GD.curses).filter(c => c.Skill && (st.ch.hotbar || []).includes(c.Skill)).map(c => c.Id));
+    const now = new Set(Object.values(GD.curses).filter(c => curseOnBar(st.ch, c)).map(c => c.Id));
     if (st.curseBar && st.curseBarCh === st.ch.id) for (const c of Object.values(GD.curses)) {
       const was = st.curseBar.has(c.Id), is = now.has(c.Id);
       if (was !== is) st.curses[c.Id] = Object.assign({ dread: 0 }, st.curses[c.Id] || {}, { on: is });
@@ -21409,7 +21459,7 @@ window.BOStartApp = function () {
 
     const total = (c, skip) => {
       let ex;
-      if (skip) { const cs = {}; for (const [k, v] of Object.entries(st.curses || {})) cs[k] = (GD.curses[k] || {}).Skill && lc(GD.curses[k].Skill) === lc(skip) ? Object.assign({}, v, { on: false }) : v; ex = { curses: cs }; }
+      if (skip) { const cs = {}; for (const [k, v] of Object.entries(st.curses || {})) cs[k] = GD.curses[k] && curseSkill(GD.curses[k]) && lc(curseSkill(GD.curses[k])) === lc(skip) ? Object.assign({}, v, { on: false }) : v; ex = { curses: cs }; }
       return counted.reduce((a, id) => lc(id) === lc(skip) ? a : a + dpsOf(S.calcSkill(GD, c, id, id === st.skill ? opts(ex) : comboOpts(ex))), 0);
     };
     const without = id => {
@@ -21586,13 +21636,13 @@ window.BOStartApp = function () {
     $('#curseList').innerHTML = Object.values(GD.curses).filter(c => c.Kind !== 'Ailment').map(c => {
       const cs = st.curses[c.Id] || { on: false, dread: 0 };
       const row = (r.enemy && r.enemy.curses || []).find(x => x.id === c.Id);
-      const onBar = ch.hotbar.includes(c.Skill);
+      const onBar = curseOnBar(ch, c);
       const parts = row ? [].concat(row.taken ? ['+' + num(row.taken, 1) + '% taken'] : [],
         Object.entries(row.elem).map(([d, v]) => '+' + num(v, 1) + '% ' + d + ' taken'),
         Object.entries(row.resDown || {}).map(([d, v]) => '-' + num(v, 1) + '% ' + d + ' resistance')) : [];
       const effect = row ? (parts.length ? 'now: ' + parts.join(', ') : 'does not change your damage')
         : (c.Text || '').replace('{0}', c.TakenPct || 0).replace('{1}', Object.values(c.ElementTakenPct || {})[0] || '').replace('{3}', Object.values(c.ResistDown || {})[0] || '').replace(/[;,]? ?[^;]*\{[24]\}[^;]*/g, '').trim() || 'does not change your damage';
-      return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + '<span class="meta">' + esc(effect) + (cs.on && !onBar && c.Skill ? ' · <span class="off-bar">not on your skill bar, counted anyway</span>' : '') + (cs.on && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · not counted: an enemy holds ' + (c.Kind === 'Woe' ? 'two Woes' : 'one ' + c.Kind) + ' at a time' : '') + '</span></span></label>' +
+      return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + '<span class="meta">' + esc(effect) + (cs.on && !onBar && curseSkill(c) ? ' · <span class="off-bar">not on your skill bar, counted anyway</span>' : '') + (cs.on && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · not counted: an enemy holds ' + (c.Kind === 'Woe' ? 'two Woes' : 'one ' + c.Kind) + ' at a time' : '') + '</span></span></label>' +
         (c.Dread && c.Dread.Cap && cs.on ? '<input class="mini" type="number" min="0" max="' + (row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c)) + '" value="' + (cs.dread || 0) + '" title="' + (c.Kind === 'Banner' ? 'Valour' : 'Dread') + ' on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + (row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c)) + (c.Kind === 'Banner' ? '' : ', bosses ' + c.Dread.BossCap) + ')" data-dread="' + esc(c.Id) + '">' : '') + '</li>';
     }).join('') + hallowedItem(r, ch);
   }

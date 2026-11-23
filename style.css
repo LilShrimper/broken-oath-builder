@@ -1922,6 +1922,8 @@ body.lootfilter-page #buildSummary { display: none !important; } /* the characte
 .gem-badge.buy { color: var(--muted); background: var(--panel-2); }
 .gem-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
 .gem-tile { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); font-size: 13px; }
+.gem-tile[data-skill], .gem-tile[data-sup] { cursor: help; }
+.gem-tile[data-skill]:hover, .gem-tile[data-sup]:hover, .gem-tile:focus-visible { border-color: var(--dashboard-gold); }
 .gem-tile > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gem-tile .gem-ico { width: 28px; height: 28px; margin: 0; vertical-align: 0; }
 .gem-tile .gem { margin: 0 6px; }

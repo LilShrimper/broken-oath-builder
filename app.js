@@ -11725,13 +11725,14 @@ window.BOFaq = function (ctx) {
   function fill(pane, html) {
     pane.innerHTML = html;
 
+
     if (!pane.dataset.uniqTips) {
       pane.dataset.uniqTips = '1';
       let tip = null;
       const hide = () => { if (tip) tip.hidden = true; };
       const show = e => {
-        const t = e.target.closest && e.target.closest('[data-uniq]'); if (!t) return hide();
-        const html = ctx.uniqueTip ? ctx.uniqueTip(t.dataset.uniq) : ''; if (!html) return hide();
+        const t = e.target.closest && e.target.closest('[data-uniq],[data-skill],[data-sup]'); if (!t) return hide();
+        const d = t.dataset, html = d.uniq ? (ctx.uniqueTip ? ctx.uniqueTip(d.uniq) : '') : d.skill ? (ctx.skillTip ? ctx.skillTip(d.skill) : '') : (ctx.supTip ? ctx.supTip(d.sup) : ''); if (!html) return hide();
         if (!tip) { tip = document.createElement('div'); tip.className = 'pl-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
         tip.innerHTML = html; tip.hidden = false; tip.style.left = '0px'; tip.style.top = '0px'; // measure at full width
         const r = t.getBoundingClientRect(), w = tip.offsetWidth, hg = tip.offsetHeight;
@@ -11943,9 +11944,9 @@ window.BOFaq = function (ctx) {
     const gems = Object.values(GD.skills || {}).filter(s => s.Kind === 'Gem');
     const has = (arr, c) => (arr || []).some(x => lc(x) === lc(c));
     const byName = (a, b) => a.Name.localeCompare(b.Name);
-    const tile = (ico, n, cls) => '<li class="gem-tile' + (cls ? ' ' + cls : '') + '">' + ico + '<span>' + esc(n) + '</span></li>';
+    const tile = (ico, n, cls, data) => '<li class="gem-tile' + (cls ? ' ' + cls : '') + '"' + (data || '') + ' tabindex="0">' + ico + '<span>' + esc(n) + '</span></li>';
     const tiles = arr => arr.length ? '<ul class="gem-tiles">' + arr.join('') + '</ul>' : '<p class="hint">None.</p>';
-    const skillTile = s => tile(ctx.skillIcon ? ctx.skillIcon(s.Id) || '<i class="gem-ico gem-none"></i>' : '', s.Name);
+    const skillTile = s => tile(ctx.skillIcon ? ctx.skillIcon(s.Id) || '<i class="gem-ico gem-none"></i>' : '', s.Name, '', ' data-skill="' + esc(s.Id) + '"');
     if (classes.length && gems.some(s => s.HomeClasses)) {
       let pick = classes[0]; try { const v = localStorage.getItem('bo_gem_class'); if (classes.includes(v)) pick = v; } catch (e) { /* storage blocked */ }
       const group = (badge, cls, title, arr) => '<div class="gem-group"><div class="gem-group-head"><span class="gem-badge ' + cls + '">' + badge + '</span><b>' + title + '</b> <small>' + arr.length + '</small></div>' + tiles(arr.map(skillTile)) + '</div>';
@@ -11974,7 +11975,7 @@ window.BOFaq = function (ctx) {
       const levels = [...new Set(sups.map(s => +s.Level))].sort((a, b) => a - b);
       h += card('Support gems by level', '<ol class="gem-ladder">' + levels.map(L => {
         const at = sups.filter(s => +s.Level === L).sort(byName);
-        return '<li><span class="gem-ladder-lv"><small>from</small>' + L + '</span><div><span class="gem-ladder-n">' + at.length + ' support' + (at.length === 1 ? '' : 's') + '</span>' + tiles(at.map(s => tile(supIco(s), s.Name, 'sup sup-' + (COL[s.Attribute] || 'none')))) + '</div></li>';
+        return '<li><span class="gem-ladder-lv"><small>from</small>' + L + '</span><div><span class="gem-ladder-n">' + at.length + ' support' + (at.length === 1 ? '' : 's') + '</span>' + tiles(at.map(s => tile(supIco(s), s.Name, 'sup sup-' + (COL[s.Attribute] || 'none'), ' data-sup="' + esc(s.Id) + '"'))) + '</div></li>';
       }).join('') + '</ol>' +
         hint('A support drops, and the Gemwright stocks or commissions it, from its level on (the game data\'s level for each support; his stock follows your Monster Level). A support\'s attribute need follows the level it dropped at.'));
     }
@@ -26538,7 +26539,8 @@ window.BOStartApp = function () {
     modLabel: id => { const a = GD.affixes[id] || GD.affixes[String(id).toLowerCase()]; return a && a.Mod ? modLine(Object.assign({}, a.Mod, { Value: 1, Value2: 2 })).replace(/[+-]?\d+(\.\d+)?/g, '#').replace(/^#(?=[%\s])/, '+#') : ''; },
     art: (cat, id, cls) => itemSearch && itemSearch.art ? itemSearch.art(cat, id, cls) : '' });
   atlas = window.BOAtlas({ $, esc, current: () => st.ch });
-  faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, atlas, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '' });
+  faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, atlas, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '',
+    skillTip: id => planner.skillTip(null, id, false, true), supTip: id => planner.supTip(id) }); // Gem Levels tiles: the Build tab's tooltips
   character = window.BOCharacter({
     beltCard: () => brewery ? brewery.beltCard() : '',
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, num, pct, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),

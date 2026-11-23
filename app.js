@@ -15974,7 +15974,12 @@ window.BOCharacter = function (ctx) {
 
 
 
-        if (ruleNum(GD, 'r99.META.bConverge99', 0) && o.convergence !== false && ['rare', 'boss'].includes(o.enemyRarity || 'rare')) {
+
+
+
+
+        if (host && res.notes) res.notes.push('Convergence: not counted while Channel Conduit casts the Sparks: each conduit cast replaces them, so they never build it (game log, 22 Nov 2026).');
+        if (!host && ruleNum(GD, 'r99.META.bConverge99', 0) && o.convergence !== false && ['rare', 'boss'].includes(o.enemyRarity || 'rare')) {
           const isSparkSk = id => { const k = GD.skills[lc(id)]; return k && k.Delivery === 'Brand'; };
           const kinds = o.sparkSkills > 0 ? Math.floor(o.sparkSkills) : new Set((ch.hotbar || []).map(lc).filter(isSparkSk).concat(lc(skillId))).size;
           const cMax = ruleNum(GD, 'r99.META.fConvergeMax99', 0.5), cPer = ruleNum(GD, 'r99.META.fConvergePerSec99', 0.02);

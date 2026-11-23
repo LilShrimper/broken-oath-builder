@@ -11887,6 +11887,54 @@ window.BOFaq = function (ctx) {
     update();
   }
   function renderMinions() { const p = $('#minionsPane'); if (p) fill(p, minions(ctx.gd() || {})); }
+
+
+
+
+
+
+
+
+
+
+  function gemLevels(GD) {
+    let h = intro('Gem Levels', 'When support sockets open, what each gem level needs, and which gems each class starts with. For guides: there are no unlock levels for single skills or supports.');
+    const G = (GD.scaling || {}).Gem;
+    if (!G || !(G.CharLevelForGemLevel || []).length) return needData(h);
+    const CL = G.CharLevelForGemLevel, SOCK = G.SocketsAtLevel || [], MANA = G.ManaCostAtGemLevel || [];
+    const need = (L, floor) => { const v = (G.ReqBase || 0) + (G.ReqPerCharLevel || 0) * ((CL[L - 1] || 1) - (G.ReqLevelOffset || 0)) + floor; return v < (G.ReqMinimum || 0) ? 0 : Math.round(v); };
+    const share = Math.round((G.HomeClassGemShare || 0) * 100);
+    h += card('No unlock levels', list([
+      'Any skill gem can drop at any level: no skill waits for a hero level or a Rupture Level.',
+      'Before the Gemwright (Tobin) joins your camp, only your class\'s <b>starting gems</b> drop (list below). After that, at least ' + share + '% of the skill gems that drop are your class\'s own (its <b>home gems</b>); the rest can be any class\'s.',
+      'The Gemwright also sells skills and supports for gold.',
+      'Supports have no unlock level either: they drop from kills and Guardians.' + (G.EmptySocketPityToLevel ? ' Until Rupture Level ' + G.EmptySocketPityToLevel + ', while you have an empty socket and no spare support, supports drop ' + r1(G.EmptySocketSupportMult || 1) + '× as often and a Guardian always drops one.' : ''),
+      'A gem you find or buy starts at gem level ' + (G.FoundGemStartLevel || 1) + (G.bXpOnlyInUse ? ' and only gains experience while it is on your skill bar' : '') + '. Weapon skills (from the weapon you hold) follow your hero level.',
+    ]) + '<p class="faq-note">The game\'s own Guide text and the game data (scaling.json); numbers follow patches.</p>');
+    h += card('Support sockets', table(['Socket', 'Opens at gem level', 'Earliest hero level'],
+      SOCK.map((L, i) => ['<b>' + (i + 1) + '</b>', L, CL[L - 1] || ''])) +
+      hint('A socket opens when the <b>skill gem</b> reaches that level, not the hero. A gem can\'t level past what your hero level allows (next table), so the right column is the soonest it can happen. A socket that already holds a support stays open.'));
+    const other = G.OffClassReqFloor || 0;
+    h += card('Gem levels', table(['Gem level', 'Hero level needed', 'Attribute needed', 'Another class\'s gem', 'Support sockets', 'Mana cost'],
+      CL.map((c, i) => { const L = i + 1; return [L, c, need(L, 0) || '–', need(L, other) || '–', SOCK.filter(s => L >= s).length, MANA[i] ? '×' + MANA[i] : '']; })) +
+      hint('Attribute needed = the gem\'s attribute (Strength, Dexterity or Intelligence; a gem that asks for two needs half of it in each). A gem whose attribute is too low still works: it plays at the highest level your attributes meet. A support\'s requirement follows the level it dropped at. Mana cost = the skill\'s cost at that gem level.'));
+    const classes = Object.values(GD.classes || {}).map(c => c.Id).filter(Boolean);
+    const gems = Object.values(GD.skills || {}).filter(s => s.Kind === 'Gem');
+    const has = (arr, c) => (arr || []).some(x => lc(x) === lc(c));
+    const name = s => (ctx.skillIcon ? ctx.skillIcon(s.Id) : '') + esc(s.Name);
+    const byName = (a, b) => a.Name.localeCompare(b.Name);
+    if (classes.length && gems.some(s => s.HomeClasses)) {
+      h += card('Starting and home gems', table(['Class', 'Starting gems (drop before the Gemwright joins)', 'Other home gems (' + share + '% of drops after)'],
+        classes.map(c => [
+          '<b>' + esc(c) + '</b>',
+          gems.filter(s => has(s.StarterClasses, c)).sort(byName).map(name).join(', ') || '–',
+          gems.filter(s => has(s.HomeClasses, c) && !has(s.StarterClasses, c)).sort(byName).map(name).join(', ') || '–'])) +
+        hint('Gems shared by every class (Heralds, most Vows, Sentences) count as home gems for all. Another class\'s gem needs about ' + other + ' more of its attribute at each level.'));
+    }
+    return h;
+  }
+  const lc = s => String(s || '').toLowerCase();
+  function renderGemLevels() { const p = $('#gemLevelsPane'); if (p) fill(p, gemLevels(ctx.gd() || {})); }
   function render() {
     const nav = $('#faqNav'); if (!nav) return;
     nav.onclick = e => { const b = e.target.closest('[data-s]'); if (!b) return; section = b.dataset.s; try { localStorage.setItem('bo_faq_section', section); } catch (x) { /* storage blocked */ } show(); };
@@ -11894,7 +11942,7 @@ window.BOFaq = function (ctx) {
   }
 
   const sections = () => ALL.map(([id, label]) => { let html = ''; try { html = RENDER[id](ctx.gd() || {}); } catch (e) { /* a section that needs the page */ } return { id, label, html }; });
-  return { render, renderMinions, sections };
+  return { render, renderMinions, renderGemLevels, sections };
 };
 
 ;
@@ -12208,7 +12256,9 @@ window.BOCharacter = function (ctx) {
         '<span class="meta">level ' + (ch.gemLevels[r.skill] || 1) + (bar.has(r.skill) ? '' : ' · off the bar') + (lc(r.skill) === main ? ' · main skill' : '') + '</span>' +
         '<span class="ch-skill-acts">' + (canSim ? '<button class="btn small ghost ch-simsup" type="button" data-simsup="' + esc(r.skill) + '" title="Opens this skill: pin or block supports, then run Sim Supports there">Sim Supports</button>' : '') +
         '<button class="x ch-skill-x" type="button" data-rmskill="' + esc(r.skill) + '" aria-label="Remove ' + esc(sk ? sk.Name : r.skill) + '">×</button></span></div>' +
-        sups.map(id => '<div class="ch-sup" data-tip="sup" data-id="' + esc(id) + '" tabindex="0">' + ctx.gemDot(id) + esc((gd.supports[lc(id)] || { Name: id }).Name) + '</div>').join('') + skillChecks(r.skill, main) + '</div>';
+
+
+        sups.map((id, i) => '<div class="ch-sup" data-tip="sup" data-id="' + esc(id) + '" tabindex="0"><span class="ch-sup-n" aria-label="Socket ' + (i + 1) + '">' + (i + 1) + '</span>' + ctx.gemDot(id) + esc((gd.supports[lc(id)] || { Name: id }).Name) + '</div>').join('') + skillChecks(r.skill, main) + '</div>';
     }
     return h + '</div>';
   }
@@ -21424,6 +21474,17 @@ window.BOStartApp = function () {
     const n = supSockets(), used = [...inSet].length;
     const pinned = [...st.keepSup].filter(id => inSet.has(id)).length; // a pin on a support not socketed here waits (the Build tab may have it in)
     $('#supportCount').textContent = used + ' / ' + n + ' sockets' + (pinned ? ' · ' + pinned + ' pinned' : '') + (st.blockSup.size ? ' · ' + st.blockSup.size + ' blocked' : '');
+
+
+
+    const cBox = $('#supportConduit');
+    if (cBox) {
+      const host = conduitHostNow(st.conduit), possible = host ? null : conduitHostNow(true), sn = esc(sName(st.skill));
+      cBox.hidden = !host && !possible;
+      cBox.innerHTML = host
+        ? sn + ' is cast by ' + esc(host.name) + '\'s Channel Conduit, so it uses ' + esc(host.name) + '\'s sockets and supports here (as in the game), not its own. <button type="button" class="linkish" data-conduit="off">Use ' + sn + '\'s own supports</button>'
+        : possible ? sn + ' is cast by hand with its own supports. <button type="button" class="linkish" data-conduit="on">Cast it by ' + esc(possible.name) + '\'s Channel Conduit</button>' : '';
+    }
     const tag = c => {
       const on = inSet.has(c.id), s = status[c.id], bad = on && s && !s.ok, kept = on && st.keepSup.has(c.id), blk = st.blockSup.has(c.id);
       return '<span class="sup' + (on ? ' on' : '') + (bad ? ' bad' : '') + (blk ? ' blocked' : '') + '"><button type="button" class="sup-name" data-sup="' + esc(c.id) + '" aria-pressed="' + on + '">' + gemDot(c.id) + esc(c.name) + '</button>' +
@@ -22972,7 +23033,9 @@ window.BOStartApp = function () {
   $('#totemCount').addEventListener('input', e => { st.totemCount = +e.target.value || null; render(); });
   $('#hpsOverride').addEventListener('input', e => { st.hps = +e.target.value || null; render(); });
   $('#cocSelect').addEventListener('change', e => { const v = e.target.value; st.coc = v === 'auto' ? undefined : v === 'none' ? false : v; st.pinned = null; stopSearch(); st.opt = null; render(); });
-  $('#conduitToggle').addEventListener('change', e => { st.conduit = e.target.checked; st.pinned = null; stopSearch(); st.opt = null; resetSupports(); render(); });
+  const setConduit = on => { st.conduit = on; st.pinned = null; stopSearch(); st.opt = null; resetSupports(); render(); };
+  $('#conduitToggle').addEventListener('change', e => setConduit(e.target.checked));
+  $('#supportConduit').addEventListener('click', e => { const b = e.target.closest('[data-conduit]'); if (b) setConduit(b.dataset.conduit === 'on'); });
 
   $('#optBtn').addEventListener('click', () => {
     const moved = !document.body.classList.contains('support-page');
@@ -25722,18 +25785,19 @@ window.BOStartApp = function () {
 
   const ROUTES = { character: 'build/character', tree: 'build/tree', atlas: 'build/atlas', 'build:skills': 'build/skills', damage: 'build/damage',
     compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', market: 'market', patch: 'patch', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', lootfilter: 'lootfilter', faq: 'faq',
-    skillscaling: 'skills', minions: 'skills/minions', creator: 'creator', plan: 'plan', code: 'code', builds: 'savedbuilds' };
+    skillscaling: 'skills', minions: 'skills/minions', gemlevels: 'skills/levels', creator: 'creator', plan: 'plan', code: 'code', builds: 'savedbuilds' };
   const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', atlas: 'Riven Atlas', 'build:skills': 'Skills', damage: 'Damage Analysis',
     compare: 'Item Simulator', items: 'Database', grail: 'Grail', ladder: 'Ladder', market: 'Market', patch: 'Recent Patch', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery", lootfilter: 'Loot Filter',
-    faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code', builds: 'Saved Builds' };
+    faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', gemlevels: 'Gem Levels', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code', builds: 'Saved Builds' };
+
 
   let skillsView = 'scaling';
   function renderSkillsTab() {
 
-    $('#skillsNav').innerHTML = '<div class="cmp-modes" role="tablist">' + [['scaling', 'Skill Scaling', 'M12 3l2.4 5.6L20 9.3l-4.2 3.9 1.2 5.8-5-3-5 3 1.2-5.8L4 9.3l5.6-.7z'], ['minions', 'Minion Scaling', 'M12 3a6 6 0 0 0-6 6v3l-1.5 3H8v3h2v-2h4v2h2v-3h3.5L18 12V9a6 6 0 0 0-6-6']].map(v =>
+    $('#skillsNav').innerHTML = '<div class="cmp-modes" role="tablist">' + [['scaling', 'Skill Scaling', 'M12 3l2.4 5.6L20 9.3l-4.2 3.9 1.2 5.8-5-3-5 3 1.2-5.8L4 9.3l5.6-.7z'], ['minions', 'Minion Scaling', 'M12 3a6 6 0 0 0-6 6v3l-1.5 3H8v3h2v-2h4v2h2v-3h3.5L18 12V9a6 6 0 0 0-6-6'], ['gemlevels', 'Gem Levels', 'M4 20h4v-5H4zM10 20h4V10h-4zM16 20h4V4h-4z']].map(v =>
       '<button type="button" class="cmp-mode' + (skillsView === v[0] ? ' on' : '') + '" role="tab" aria-selected="' + (skillsView === v[0]) + '" data-v="' + v[0] + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + v[2] + '"/></svg>' + v[1] + '</button>').join('') + '</div>';
-    $('#scalingPane').hidden = skillsView !== 'scaling'; $('#minionsPane').hidden = skillsView !== 'minions';
-    if (skillsView === 'scaling') scaling.render(); else faq.renderMinions();
+    $('#scalingPane').hidden = skillsView !== 'scaling'; $('#minionsPane').hidden = skillsView !== 'minions'; $('#gemLevelsPane').hidden = skillsView !== 'gemlevels';
+    if (skillsView === 'scaling') scaling.render(); else if (skillsView === 'gemlevels') faq.renderGemLevels(); else faq.renderMinions();
   }
   $('#skillsNav').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; skillsView = b.dataset.v; renderSkillsTab(); syncUrl('skillscaling'); });
   const ROUTING = typeof window.SITE_BASE === 'string';
@@ -25750,13 +25814,13 @@ window.BOStartApp = function () {
   }
 
   function openRoute(key) {
-    if (key === 'skillscaling' || key === 'minions') { skillsView = key === 'minions' ? 'minions' : 'scaling'; return 'skillscaling'; }
+    if (key === 'skillscaling' || key === 'minions' || key === 'gemlevels') { skillsView = key === 'skillscaling' ? 'scaling' : key; return 'skillscaling'; }
     const [tab, sub] = key.split(':');
     if (tab === 'build') planner.setSubTab(sub);
     return tab;
   }
   function syncUrl(tab) {
-    const key = tab === 'build' ? 'build:' + planner.subTab() : tab === 'skillscaling' && skillsView === 'minions' ? 'minions' : tab, route = ROUTES[key]; if (!route) return;
+    const key = tab === 'build' ? 'build:' + planner.subTab() : tab === 'skillscaling' && skillsView !== 'scaling' ? skillsView : tab, route = ROUTES[key]; if (!route) return;
     document.title = ROUTE_TITLES[key] + ' · Broken Oath Builder';
     if (!ROUTING || !routingReady || noPush) return;
     const url = siteRoot() + (window.SITE_LANG && window.PAGE_LANGS && window.PAGE_LANGS[window.SITE_LANG] ? window.SITE_LANG + '/' : '') + route + '/';

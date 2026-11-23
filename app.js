@@ -16211,7 +16211,7 @@ window.BOCharacter = function (ctx) {
     }
     if (host) {
       const hostSup = supportList.map(s => s.replace('@granted', '')).filter(s => lc(s) !== 'channel_conduit');
-      const hr = calcSkill(GD, ch, host.skill, { _col: col, _gfHeld: gfHeld, off: o.off, supportsOverride: hostSup, conduit: false, barShock: false, _noBrittle: true, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyHallowedGround: o.enemyHallowedGround, flashfire: o.flashfire });
+      const hr = calcSkill(GD, ch, host.skill, { _col: col, _gfHeld: gfHeld, _barProbe: !!o._barProbe, off: o.off, supportsOverride: hostSup, conduit: false, barShock: false, _noBrittle: true, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyHallowedGround: o.enemyHallowedGround, flashfire: o.flashfire });
       const interval = conduitInterval(GD, col.mods);
       if (hr.speed && hr.speed.usesPerSec > 0) {
         const tick = 1 / hr.speed.usesPerSec, ticks = Math.max(1, Math.ceil(interval / tick - 1e-9));
@@ -22633,7 +22633,7 @@ window.BOStartApp = function () {
     if (window.BOGrail.isGrailFile(file.name)) { try { grail.addSources([window.BOGrail.compact(window.parseGvas(new Uint8Array(await file.arrayBuffer())), file.name, new Date(file.lastModified).toISOString())]); } catch (e) { /* read below */ } }
     if (/^BO_Stash_/i.test(file.name)) { saveTip('Read the stash for the Grail tab.'); return; }
     try { const ch = await readSave(file); if (!await leaveOk(ch.id)) return; if (!addChars([ch], 'file', ch.id)) saveTip('Loaded ' + ch.name + '.' + KEEP_FAIL); }
-    catch (err) { alert('Could not read ' + file.name + ':\n' + err.message); }
+    catch (err) { console.error(err); alert('Could not read ' + file.name + ':\n' + err.message); }
   }
 
   async function readGrail(files) {

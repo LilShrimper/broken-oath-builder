@@ -25005,13 +25005,15 @@ window.BOStartApp = function () {
 
 
 
-  const RV = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ n: 1, roll: 'avg', vows: false }, store.get('rivenSim', {})) };
+
+  const RV = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ n: 1, roll: 'avg' }, store.get('rivenSim', {})) };
+  delete RV.set.vows; // a tick box until the game check above
   const RV_ROLLS = { lo: 'Lowest roll', avg: 'Average roll', hi: 'Highest roll' };
   if (!RV_ROLLS[RV.set.roll]) RV.set.roll = 'avg';
   const rvKey = () => gsKey() + '|' + JSON.stringify(RV.set);
   const rvTwin = id => { const a = GD.affixes['riven95_' + lc(id)]; return a && a.Kind === 'Riven' && a.Tiers && a.Tiers[0] ? a : null; };
 
-  function rvCands(ch, vows) {
+  function rvCands(ch) {
     const list = [], no = { riven: 0, tier: 0, crafted: 0, oath: 0, vow: 0, none: 0 };
     (ch.items || []).forEach((it, ii) => {
       if (it.slot === 'Idol' || !GD.bases[lc(it.base)]) return;
@@ -25024,7 +25026,7 @@ window.BOStartApp = function () {
         if (a.oath || a.scar) { no.oath++; return; }
         if (a.crafted) { no.crafted++; return; }
         if (a.tier !== 0) { no.tier++; return; }
-        if (it.rarity === 'Unique' && !vows) { no.vow++; return; }
+        if (it.rarity === 'Unique') { no.vow++; return; }
         list.push({ ii, ai, slot: it.slot, tw });
       });
     });
@@ -25061,7 +25063,7 @@ window.BOStartApp = function () {
       const dr = ws ? 1 + wg / ws : 1, ehp = w > 0 ? gsDefence(ch).ehp : 0, er = w > 0 && ref.ehp > 0 ? ehp / ref.ehp : 1;
       return { rs, ehp, dps: sum(rs), dr, er, score: w >= 1 ? er : w <= 0 ? dr : Math.pow(Math.max(dr, 0), 1 - w) * Math.pow(Math.max(er, 0), w) };
     };
-    const { list, no } = rvCands(ch0, set.vows), n = Math.max(1, Math.min(set.n, list.length));
+    const { list, no } = rvCands(ch0), n = Math.max(1, Math.min(set.n, list.length));
     let total = list.length * 3, done = 0; for (let k = 1; k < n; k++) total += list.length - k;
     const tick = phase => ({ phase, p: total ? done / total : 1 });
 
@@ -25085,7 +25087,7 @@ window.BOStartApp = function () {
       const tot = ev(rvWith(ch0, taken, set.roll), base); cur = { rs: tot.rs, ehp: tot.ehp, dps: tot.dps };
       picks.push({ c: best.c, step: best.e.score - 1, total: tot.score - 1, dps: tot.dps, dr: tot.dr, er: tot.er });
     }
-    return { rows, picks, no, base, n: set.n, roll: set.roll, vows: set.vows, w, multi: goals.length > 1, lostAny: lost.some(Boolean), ms: performance.now() - t0, ch: ch0 };
+    return { rows, picks, no, base, n: set.n, roll: set.roll, w, multi: goals.length > 1, lostAny: lost.some(Boolean), ms: performance.now() - t0, ch: ch0 };
   }
   function rvRun() {
     if (!st.ch || !st.skill || RV.running) return;
@@ -25123,8 +25125,8 @@ window.BOStartApp = function () {
     const nowCell = c => { const it = r.ch.items[c.ii], a = it.affixes[c.ai], af = GD.affixes[lc(a.id)]; return esc(modLine(Object.assign({}, af.Mod, { Value: a.v, Value2: a.v2 || 0 }))) + (it.rarity === 'Unique' ? ' <span class="meta">Vow</span>' : ''); };
     const rng = (a, b) => a === b ? num(a) : num(a) + '–' + num(b);
     const rivenCell = c => { const t = c.tw.Tiers[0]; return '<b>' + rng(t.Min, t.Max) + (t.Min2 != null && t.Max2 ? ' / ' + rng(t.Min2, t.Max2) : '') + '</b>'; };
-    const no = r.no, why = [[no.tier, 'not at T1'], [no.none, 'with no Riven version'], [no.crafted, 'crafted'], [no.oath, 'Oathsworn or Scarred'], [no.riven, 'Riven already'], [no.vow, 'Vows on uniques (tick the box to try them)']].filter(x => x[0]).map(x => x[0] + ' ' + x[1]).join(', ');
-    if (!r.rows.length) return '<div class="card cmp-result"><h2>No line can take a Rivenstone</h2><p class="hint">A Rivenstone takes a T1 line that dropped on the item and has a Riven version. Crafted, Oathsworn and Scarred lines cannot take it.' + (why ? ' Your lines: ' + why + '.' : '') + '</p></div>';
+    const no = r.no, why = [[no.tier, 'not at T1'], [no.none, 'with no Riven version'], [no.crafted, 'crafted'], [no.oath, 'Oathsworn or Scarred'], [no.riven, 'Riven already'], [no.vow, 'Vows on uniques (the Forge offers no Rivenstone on a unique)']].filter(x => x[0]).map(x => x[0] + ' ' + x[1]).join(', ');
+    if (!r.rows.length) return '<div class="card cmp-result"><h2>No line can take a Rivenstone</h2><p class="hint">A Rivenstone takes a T1 line that dropped on the item and has a Riven version. Crafted, Oathsworn and Scarred lines and Vows on uniques cannot take it.' + (why ? ' Your lines: ' + why + '.' : '') + '</p></div>';
     const last = r.picks[r.picks.length - 1], many = r.n > 1, np = r.picks.length;
     let h = '<div class="card cmp-result"><h2>' + (many ? 'Your ' + r.n + ' Rivenstones' : 'Your Rivenstone') + ' <span class="hint">' + esc(skillName) + ', vs the configured enemy · ' + RV_ROLLS[r.roll].toLowerCase() + '</span></h2>';
     if (!np) h += '<p class="hint">None of the ' + r.rows.length + ' lines that can take a Rivenstone raises ' + what + ' of this skill.' + (r.w > 0 ? '' : ' Lines like life and resistances only count with the slider moved towards Defence.') + '</p>';
@@ -25142,7 +25144,7 @@ window.BOStartApp = function () {
       r.rows.map((x, i) => '<tr><td>' + (i + 1) + '</td><td>' + itemCell(x.c) + '</td><td>' + nowCell(x.c) + '</td><td>' + rivenCell(x.c) + '</td><td>' + sp(x.gain) + '</td><td>' + sp(x.lo) + ' to ' + sp(x.hi) + '</td></tr>').join('') + '</tbody></table></div>';
     h += '<p class="hint">A Rivenstone turns one T1 line that dropped on the item into its Riven version, with a new roll in the range shown (the game: "the T1 top ×1.05 to ×1.20"). The game counts most Riven damage lines a little under the number on the item; the sim does the same.' +
       (many ? ' With several stones each next line is picked on top of the ones before.' : '') + (why ? ' Lines that cannot take one here: ' + why + '.' : '') +
-      (r.vows ? ' Whether a Rivenstone takes a Vow on a unique is not checked in the game.' : '') + (r.lostAny ? ' Legion of One: only the strongest summon counts.' : '') + (r.w > 0 ? ' ' + gsDefNote() : '') + '</p>';
+      (r.lostAny ? ' Legion of One: only the strongest summon counts.' : '') + (r.w > 0 ? ' ' + gsDefNote() : '') + '</p>';
     return h + '</div>';
   }
   function rvHtml() {
@@ -25153,8 +25155,7 @@ window.BOStartApp = function () {
     let h = '<div class="card gs-card"><div class="cmp-pick-head"><div class="gs-head-text"><h2>Best Rivenstone</h2><p class="hint">A Rivenstone turns one T1 line on an item into its Riven version. This tries every line on the gear you wear that can take one and lists them by what they add. With more than one stone, enter how many: that many lines are picked.</p></div><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + dis + '>' + cmpSkillOptions() + '</select></label>' + (off ? '' : cmpMultiHtml() + enemyBtn()) + '</span></div>' +
       bareItemsNote() +
       '<div class="gs-controls rv-controls"><label class="field inline" title="How many Rivenstones you have: that many lines are picked, one after another"><span>Rivenstones you have</span><input type="number" min="1" max="30" id="rvCount" value="' + RV.set.n + '"' + dis + '></label>' +
-      '<div class="gs-tier rv-roll"><span class="meta">Riven roll to sim</span><div class="cmp-modes gs-tiers" role="radiogroup" aria-label="Riven roll to sim">' + Object.keys(RV_ROLLS).map(k => '<button type="button" class="cmp-mode' + (k === RV.set.roll ? ' on' : '') + '" role="radio" aria-checked="' + (k === RV.set.roll) + '" data-rv-roll="' + k + '"' + dis + '><span>' + RV_ROLLS[k] + '</span></button>').join('') + '</div></div>' +
-      '<label class="check-row" title="Vows are lines bound to a unique. Whether a Rivenstone takes one is not checked in the game"><input type="checkbox" id="rvVows"' + (RV.set.vows ? ' checked' : '') + dis + '><span>Try Vows on uniques too (not checked in the game)</span></label></div>' +
+      '<div class="gs-tier rv-roll"><span class="meta">Riven roll to sim</span><div class="cmp-modes gs-tiers" role="radiogroup" aria-label="Riven roll to sim">' + Object.keys(RV_ROLLS).map(k => '<button type="button" class="cmp-mode' + (k === RV.set.roll ? ' on' : '') + '" role="radio" aria-checked="' + (k === RV.set.roll) + '" data-rv-roll="' + k + '"' + dis + '><span>' + RV_ROLLS[k] + '</span></button>').join('') + '</div></div></div>' +
       '<div class="gs-controls gs-goal">' + gsPrioHtml(off) + gsLayersHtml(off) + '</div>' +
       '<div class="cmp-actions">' + (off ? '<button class="btn ghost" type="button" data-rv="cancel">Stop</button>' :
         '<button class="btn" type="button" data-rv="run"' + (st.skill ? '' : ' disabled') + '>Find the best ' + (RV.set.n > 1 ? RV.set.n + ' lines' : 'line') + '</button>') +
@@ -25247,7 +25248,6 @@ window.BOStartApp = function () {
       if (t.id === 'gsResTarget') { const v = Math.max(1, Math.min(200, Math.round(+t.value) || 0)); GS.set.resTarget = v === gsResCap() ? 0 : v; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsRareSock') { GS.set.rareSockets = Math.max(0, Math.min(2, Math.round(+t.value) || 0)); gsTierTouch('rareSockets'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'rvCount') { RV.set.n = Math.max(1, Math.min(30, Math.round(+t.value) || 1)); store.set('rivenSim', RV.set); RV.msg = ''; return renderCompare(); }
-      if (t.id === 'rvVows') { RV.set.vows = t.checked; store.set('rivenSim', RV.set); RV.msg = ''; return renderCompare(); }
       if (t.id === 'gsIdol') { GS.set.idolAffixes = t.value === '' ? '' : Math.max(1, Math.min(6, Math.round(+t.value) || 1)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsMaxRiven') { const v = String(t.value).trim(); GS.set.maxRiven = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(99, Math.round(+v))); gsTierTouch('maxRiven'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsMaxVows') { const v = String(t.value).trim(); GS.set.maxVows = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(6, Math.round(+v))); gsTierTouch('maxVows'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }

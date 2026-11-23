@@ -14848,7 +14848,7 @@ window.BOCharacter = function (ctx) {
       const ex = exTagsFor(sd, sk, GD).filter(t => !(totemAttack && lc(t) === 'totem' && ['trap_support', 'skyfall'].includes(lc(id))));
 
       const engShare = minionEngine(GD, sd, sk) ? minionEngShare(GD) : 0;
-      const ok = (!req.length || req.some(t => ctx.tags.has(lc(t)))) && !ex.some(t => ctx.tags.has(lc(t))) && !noFit(sd, sk);
+      const ok = (!req.length || engShare > 0 || req.some(t => ctx.tags.has(lc(t)))) && !ex.some(t => ctx.tags.has(lc(t))) && !noFit(sd, sk);
 
 
 
@@ -15335,7 +15335,7 @@ window.BOCharacter = function (ctx) {
             const id = lc(String(y).replace('@granted', '')), sd = GD.supports[id];
             if (!sd || id === 'cast_on_crit' || have.has(id)) continue;
             const req = sd.RequiresAnyTag || [], ex = exTagsFor(sd, sk, GD);
-            if ((!req.length || req.some(t => ctx.tags.has(lc(t)))) && !ex.some(t => ctx.tags.has(lc(t))) && !noFit(sd, sk)) { add++; have.add(id); }
+            if ((!req.length || minionEngine(GD, sd, sk) || req.some(t => ctx.tags.has(lc(t)))) && !ex.some(t => ctx.tags.has(lc(t))) && !noFit(sd, sk)) { add++; have.add(id); }
           }
           if (add) { links += add; res.notes.push('Links: ' + add + ' of the supports in ' + hostSock.skill.replace(/_/g, ' ') + ' fit ' + sk.Name + ' and count as links here (the game tooltip, build 84).'); }
         }
@@ -16723,6 +16723,7 @@ window.BOCharacter = function (ctx) {
       markHeld = held;
       markPct = held * per * (1 + eff / 100);
     }
+    if (!markPct) { const am = armyMarkPct(GD, ch); if (am > 0) { markPct = am; markHeld = 10; res.notes.push('Hunter\'s Marks from your minions (Hunter\'s Mark Support on a summon gem): the enemy takes ' + +am.toFixed(1) + '% more damage at 10 Marks (Guardian debuff in the game, 23 Nov 2026).'); } }
     res.marks = markPct ? { pct: markPct } : null;
 
 
@@ -18725,6 +18726,8 @@ window.BOCharacter = function (ctx) {
 
 
     const gExtra = golem && golem.taken > 0 ? [golem.taken] : [];
+    const aMark = armyMarkPct(GD, ch);
+    if (aMark > 0) { gExtra.push({ k: 'mark', v: aMark }); res.notes.push('Hunter\'s Marks from your minions: the enemy takes ' + +aMark.toFixed(1) + '% more damage at 10 Marks (the Marks kind; Guardian debuff in the game, 23 Nov 2026).'); }
     let curseK = 1;
     if ((activeCurses.length || gExtra.length) && avg > 0) {
 
@@ -19383,6 +19386,21 @@ window.BOCharacter = function (ctx) {
 
   const MINION_ENGINE = new Set(['added_poison', 'honed_edge', 'deathblow', 'rend', 'deep_wounds', 'living_storm', 'contagion_flame',
     'shatter', 'vicious_projectiles', 'hunters_mark_support', 'bloodlust_support', 'gather_fury']);
+
+
+
+
+
+
+
+  const armyMarkPct = (GD, ch) => {
+    if (!(minionEngShare(GD) > 0)) return 0;
+    const bar = new Set((ch.hotbar || []).filter(Boolean).map(lc));
+    const on = (ch.sockets || []).some(x => x && bar.has(lc(x.skill)) && minionSummon(GD.skills[lc(x.skill)]) && (x.supports || []).some(y => lc(String(y).replace('@granted', '')) === 'hunters_mark_support'));
+    if (!on) return 0;
+    const t = /([\d.]+)% more damage for each Mark, up to (\d+)/i.exec((GD.supports.hunters_mark_support || {}).Description || '');
+    return t ? +t[1] * +t[2] : 0;
+  };
   const MINION_ENGINE_COUNTED = new Set(['added_poison', 'honed_edge', 'deathblow', 'vicious_projectiles']);
   const minionEngShare = GD => {
     const on = (GD.rules || {})['r74.MINIONENG.bOn'], onV = on && typeof on === 'object' ? on.value : on;
@@ -19545,7 +19563,7 @@ window.BOCharacter = function (ctx) {
     const host = conduitHost(GD, ch, skillId, mods0, (o || {}).conduit);
     const base = host ? GD.skills[lc(host.skill)] || sk : sk;
     const tags = socketTags(base);
-    const fits = sp => (!(sp.RequiresAnyTag || []).length || sp.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(sp, base, GD).some(t => tags.has(lc(t))) && !noFit(sp, base);
+    const fits = sp => (!(sp.RequiresAnyTag || []).length || minionEngine(GD, sp, base) || sp.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(sp, base, GD).some(t => tags.has(lc(t))) && !noFit(sp, base);
     const list = Object.values(GD.supports).filter(fits).map(sp => ({ id: lc(sp.Id), name: sp.Name, desc: sp.Description || '', packOnly: isSummon(sk) ? !(minionCounts(sp, sk) || furyForMinions(sp, sk, mods0)) : NO_SINGLE_TARGET.has(lc(sp.Id)) && !['cast_on_crit', 'channel_conduit'].includes(lc(sp.Id)), shape: SHAPES.includes(lc(sp.Id)) }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -19580,7 +19598,7 @@ window.BOCharacter = function (ctx) {
     const host = conduitHost(GD, ch, skillId, mods0, o.conduit);
     const tagSets = [socketTags(sk)];
     if (host) tagSets.push(socketTags(GD.skills[lc(host.skill)]));
-    const fitsTags = (s, tags) => (!(s.RequiresAnyTag || []).length || s.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(s, host ? GD.skills[lc(host.skill)] : sk, GD).some(t => tags.has(lc(t))) && !noFit(s, host ? GD.skills[lc(host.skill)] : sk);
+    const fitsTags = (s, tags) => (!(s.RequiresAnyTag || []).length || minionEngine(GD, s, host ? GD.skills[lc(host.skill)] : sk) || s.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(s, host ? GD.skills[lc(host.skill)] : sk, GD).some(t => tags.has(lc(t))) && !noFit(s, host ? GD.skills[lc(host.skill)] : sk);
     const owned = ownedSupports(ch);
 
     const fits = Object.values(GD.supports).filter(s => host ? fitsTags(s, tagSets[1]) : fitsTags(s, tagSets[0]));

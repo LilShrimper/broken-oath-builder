@@ -16681,7 +16681,10 @@ window.BOCharacter = function (ctx) {
       if (ks.length) res.notes.push('Unravel: the enemy takes ' + ks.map(d => +unravel[d].toFixed(1) + '% more ' + d.toLowerCase()).join(', ') + ' damage at full stacks (counted for this spell\'s hits, added with your other "takes more damage" effects; ailments left out).');
     }
     res.unravel = Object.keys(unravel).length ? unravel : null;
+
+
     const takenOf = (d, phys, dot) => {
+
 
       const extras = [o.extraTakenPct || 0, markPct]; if (phys) extras.push(maimPct);
       if (!dot && unravel[d]) extras.push(unravel[d]);
@@ -16763,6 +16766,9 @@ window.BOCharacter = function (ctx) {
       for (const m of pickMods(mods, 'EntropyShare', 'Flat')) if (applies(ctx, m)) { const k = m.src || m.key || ''; if (!bySrc.has(k) || bySrc.get(k).v < m.v) bySrc.set(k, m); }
       const share = clamp([...bySrc.values()].reduce((a, m) => (use(m, 'Entropy share'), a + m.v), 0), 0, 100) / 100;
       if (share > 0) {
+
+
+
         const raw = Object.keys(hit).reduce((a, d) => a + hit[d].avg, 0) * critFactor * hitsPerSec * perHitFactor * groundTaken;
         let multi = 0;
         for (const m of pickMods(mods, 'EntropyMulti', 'Flat')) if (applies(ctx, m)) { multi += m.v; use(m, 'Entropy multiplier'); }

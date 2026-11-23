@@ -3631,7 +3631,13 @@ window.BOPlanner = function (ctx) {
       const to = sk.DamageType, share = sk.ConvertShare != null ? (sk.ConvertShare > 1 ? sk.ConvertShare : sk.ConvertShare * 100) : 100;
       if (to && to !== 'Physical' && DT_CONV.includes(to)) {
         const proven = ['lightning_arrow', 'hoarfrost_volley'].includes(lc(id)); // Copy stats 21-22 Nov 2026 (sim.js)
-        return share + '% of all its other damage → ' + to + ' (Poison at half); conversion from supports and gear shares the same 100%' + (proven ? '' : ' (proven on Lightning Arrow and Hoarfrost Volley)');
+        const others = ['Physical'].concat(DT_CONV.filter(d => d !== to && d !== 'Poison'));
+        const from = to === 'Poison' ? others.slice(0, -1).join(', ') + ' and ' + others[others.length - 1] + ' damage turns into Poison. '
+          : others.join(', ') + ' and Poison damage turns into ' + to + ' (Poison converts at half that rate). ';
+        return share + '% of its ' + from
+          + 'Conversion from supports and gear adds on top. If all of it together goes over 100%, every source is cut by the same factor'
+          + ' so the total is 100% (e.g. ' + share + '% + 80% = ' + (share + 80) + '% → each × ' + (100 / (share + 80)).toFixed(2) + ').'
+          + (proven ? '' : ' Shown on Lightning Arrow and Hoarfrost Volley in game.');
       }
       return 'Converts nothing by itself: it deals your weapon\'s damage types';
     }

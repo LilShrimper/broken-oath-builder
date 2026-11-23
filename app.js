@@ -16683,18 +16683,18 @@ window.BOCharacter = function (ctx) {
     res.unravel = Object.keys(unravel).length ? unravel : null;
 
 
-    const takenOf = (d, phys, dot) => {
+    const takenOf = (d, phys, dot, nohit) => {
 
-
+      const onHit = !dot && !nohit;
       const extras = [o.extraTakenPct || 0, markPct]; if (phys) extras.push(maimPct);
-      if (!dot && unravel[d]) extras.push(unravel[d]);
+      if (onHit && unravel[d]) extras.push(unravel[d]);
 
       if (rule === 'kinds') {
 
-        const vuln = [o.extraTakenPct || 0].concat(phys ? [maimPct] : [], golemTaken - 1 ? [(golemTaken - 1) * 100] : [], !dot && groundPct ? [groundPct] : []);
-        return curseTakenK(activeCurses, d, dot, 'kinds', [{ k: 'mark', v: markPct }, { k: 'curse', v: !dot && unravel[d] ? unravel[d] : 0 }].concat(vuln));
+        const vuln = [o.extraTakenPct || 0].concat(phys ? [maimPct] : [], golemTaken - 1 ? [(golemTaken - 1) * 100] : [], onHit && groundPct ? [groundPct] : []);
+        return curseTakenK(activeCurses, d, dot, 'kinds', [{ k: 'mark', v: markPct }, { k: 'curse', v: onHit && unravel[d] ? unravel[d] : 0 }].concat(vuln));
       }
-      if (rule === 'add') return curseTakenK(activeCurses, d, dot, 'add',extras.concat(golemTaken - 1 ? [(golemTaken - 1) * 100] : [], !dot && groundPct ? [groundPct] : []));
+      if (rule === 'add') return curseTakenK(activeCurses, d, dot, 'add',extras.concat(golemTaken - 1 ? [(golemTaken - 1) * 100] : [], onHit && groundPct ? [groundPct] : []));
 
 
 
@@ -16769,7 +16769,14 @@ window.BOCharacter = function (ctx) {
 
 
 
-        const raw = Object.keys(hit).reduce((a, d) => a + hit[d].avg, 0) * critFactor * hitsPerSec * perHitFactor * groundTaken;
+
+
+
+
+
+
+
+        const raw = Object.keys(hit).reduce((a, d) => a + hit[d].avg, 0) * critFactor * hitsPerSec * perHitFactor / (heroDamage(GD) || 1);
         let multi = 0;
         for (const m of pickMods(mods, 'EntropyMulti', 'Flat')) if (applies(ctx, m)) { multi += m.v; use(m, 'Entropy multiplier'); }
         if (markPct > 0) for (const m of pickMods(mods, 'EntropyMarkedMulti', 'Flat')) if (applies(ctx, m)) { multi += m.v; use(m, 'Entropy multiplier, Marked enemy'); }
@@ -16792,7 +16799,7 @@ window.BOCharacter = function (ctx) {
         } else if (flag('EntropyMarks') && markPct > 0) { trig = 1.25; why.push('10 Hunter\'s Marks implode it at once for 25% more (Ruin Fletching)'); }
         const rl = guardianRL(GD, o, lvl);
         const chaosRes = Math.max(0, (+M.ChaosResPerRL || 0) * Math.max(0, rl || 0) - sumFlat('ChaosPen'));
-        const taken = takenOf('Chaos', false);
+        const taken = takenOf('Chaos', false, false, true);
         const dps = raw * share * Math.max(0, 1 + multi / 100) * more * trig * taken * (1 - Math.min(90, chaosRes) / 100);
         const keep = 1 - share;
         res.hit = Object.assign({}, hit); // the page shows the full hit; the struck part below is what lands
@@ -17756,8 +17763,20 @@ window.BOCharacter = function (ctx) {
     }
     res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
 
+
+
+
+
+
+
+    let panelAil = 1;
+    if (res.entropy) {
+      const shown = 1 - res.entropy.share + res.entropy.share * Math.max(0, 1 + res.entropy.multi / 100) * res.entropy.more;
+      res.sheetHitDps *= shown;
+      panelAil = res.entropy.share < 1 ? shown / (1 - res.entropy.share) : 0;
+    }
     const panelHitDps = res.sheetHitDps * (1 + (hit.Physical ? hit.Physical.avg / (hitAvg || 1) : 0) * maimPct / 100);
-    res.panelDps = panelHitDps + (ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * ail.ignite.panelBurning : 0) + (ail.bleed ? ail.bleed.dps1 * ail.bleed.uptime : 0);
+    res.panelDps = panelHitDps + panelAil * ((ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * ail.ignite.panelBurning : 0) + (ail.bleed ? ail.bleed.dps1 * ail.bleed.uptime : 0));
 
 
 
@@ -19662,16 +19681,22 @@ window.BOCharacter = function (ctx) {
 
 
 
-  function skillRows(b, r, order) {
-    const rows = [], f = b.f, has = k => f[k] != null, m = r.minion;
+
+
+
+
+
+  const copyK = (p, GD) => +(p && p.build) >= 88 ? 1 / (+(((GD || {}).rules || {})['r108.BAL.fHeroDamage108']) || 1) : 1;
+  function skillRows(b, r, order, k) {
+    const rows = [], f = b.f, has = k => f[k] != null, m = r.minion, K = m ? 1 : (k || 1);
     if (b.gem != null && r.gem) rows.push(row('Gem level', b.gem, r.gem.total, { digits: 0, exact: true }));
-    if (has('dps_shown')) rows.push(row('Tooltip DPS', f.dps_shown, r.panelDps, { main: true }));
+    if (has('dps_shown')) rows.push(row('Tooltip DPS', f.dps_shown, r.panelDps * K, { main: true }));
     if (m) {
       if (has('avg_hit') && m.specAvg != null) rows.push(row('Summon gem hit', f.avg_hit, m.specAvg, { digits: 2 }));
       return rows;
     }
-    if (has('avg_hit')) rows.push(row('Average hit', f.avg_hit, r.hitAvg, { digits: 1 }));
-    if (has('dps_hits')) rows.push(row('Hit DPS', f.dps_hits, r.sheetHitDps));
+    if (has('avg_hit')) rows.push(row('Average hit', f.avg_hit, r.hitAvg * K, { digits: 1 }));
+    if (has('dps_hits')) rows.push(row('Hit DPS', f.dps_hits, r.sheetHitDps * K));
     if (has('cycle_s') && r.speed && r.speed.usesPerSec > 0) rows.push(row('Time per use', f.cycle_s, 1 / r.speed.usesPerSec, { digits: 3, unit: ' s' }));
     if (has('use_s') && r.speed && !m) rows.push(row('Cast or attack time', f.use_s, r.speed.useTime * (r.speed.animRate || 1), { digits: 3, unit: ' s' })); // the sheet's time is before the skill's animation rate, which the sim adds from the log
     if (has('cooldown_s') && r.speed && !m) rows.push(row('Cooldown', f.cooldown_s, r.speed.cooldown || 0, { digits: 2, unit: ' s' }));
@@ -19686,8 +19711,8 @@ window.BOCharacter = function (ctx) {
     if (b.min && b.max && r.hit) names.forEach((d, i) => {
       const h = r.hit[d], gmin = b.min[i], gmax = b.max[i];
       if (!(gmax > 0) && !(h && h.max > 0)) return;
-      rows.push(row(d + ' min', gmin || 0, h ? h.min : 0, { digits: 1, element: d }));
-      rows.push(row(d + ' max', gmax || 0, h ? h.max : 0, { digits: 1, element: d }));
+      rows.push(row(d + ' min', gmin || 0, h ? h.min * K : 0, { digits: 1, element: d }));
+      rows.push(row(d + ' max', gmax || 0, h ? h.max * K : 0, { digits: 1, element: d }));
     });
     return rows;
   }
@@ -19715,7 +19740,7 @@ window.BOCharacter = function (ctx) {
     return lines.join('\n');
   }
 
-  const api = { parse, skillRows, heroRows, reportText, toNum };
+  const api = { parse, skillRows, heroRows, reportText, toNum, copyK };
   root.BOSheet = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -19741,12 +19766,15 @@ if (typeof require !== 'undefined' && require.main === module) {
   const show = rows => { for (const r of rows) console.log('  ' + r.label.padEnd(30) + String(r.game).padStart(12) + String(typeof r.sim === 'number' ? +r.sim.toFixed(4) : r.sim).padStart(14) + (r.diff == null ? '' : ((r.diff >= 0 ? '+' : '') + (r.diff * 100).toFixed(2) + '%').padStart(10) + (Math.abs(r.diff) > 0.01 ? '  <-' : ''))); };
   let mana = null;
   for (const b of p.skills) {
-    const sups = b.supports.filter(s => GD.supports[s]);
+
+
+    const own = new Set(((ch.sockets || []).find(s => s.skill === b.id) || {}).supports || []);
+    const sups = b.supports.concat(b.granted.filter(g => own.has(g))).filter(s => GD.supports[s]);
     let r; try { r = S.calcSkill(GD, ch, b.id, { supportsOverride: sups }); } catch (e) { r = { error: e.message }; }
     if (!GD.skills[b.id] || r.error || r.unsupported) { console.log('\n' + b.id + ': ' + (!GD.skills[b.id] ? 'not a skill the sim knows' : b.f.dps_shown === 0 ? 'no damage of its own (game and sim)' : r.error || r.unsupported)); continue; }
     if (mana == null && r.mana && r.mana.max != null) mana = r.mana.max;
     console.log('\n' + b.id + ' | gem ' + b.gem + ' | ' + (sups.join(', ') || 'no supports') + (b.granted.length ? ' | granted: ' + b.granted.join(', ') : ''));
-    show(B.skillRows(b, r, p.order));
+    show(B.skillRows(b, r, p.order, B.copyK(p, GD)));
   }
 
   const a = S.calcSkill(GD, ch, (p.skills.find(b => GD.skills[b.id]) || {}).id, {});
@@ -19848,11 +19876,12 @@ window.BOChat = function (ctx) {
       if (!p.ok || !p.skills.length) return { error: 'Not a Copy stats text (no "Broken Oath sheet" line or no skill blocks).' };
       const blocks = [];
       for (const b of p.skills) {
-        const sups = b.supports.filter(s => (GD.supports || {})[s]);
+        const own = new Set(((ch.sockets || []).find(s => s.skill === b.id) || {}).supports || []); // a capital id the save socketed is socketed (sheet-check.js)
+        const sups = b.supports.concat(b.granted.filter(g => own.has(g))).filter(s => (GD.supports || {})[s]);
         if (!GD.skills[b.id]) { blocks.push({ id: b.id, supports: sups, granted: b.granted, gem: b.gem, rows: [], note: 'not a skill the sim knows' }); continue; }
         const r = ctx.sim(b.id, { supports: sups });
         if (!r || r.error || r.unsupported) { blocks.push({ id: b.id, supports: sups, granted: b.granted, gem: b.gem, rows: [], note: b.f.dps_shown === 0 ? 'no damage of its own (game and sim)' : (r && (r.error || r.unsupported)) || 'no sim result' }); continue; }
-        blocks.push({ id: b.id, supports: sups, granted: b.granted, gem: b.gem, rows: B.skillRows(b, r, p.order) });
+        blocks.push({ id: b.id, supports: sups, granted: b.granted, gem: b.gem, rows: B.skillRows(b, r, p.order, B.copyK ? B.copyK(p, GD) : 1) });
       }
       let hero = [];
       try { hero = B.heroRows(p, ctx.hero()); } catch (e) { /* no hero rows */ }

@@ -2266,6 +2266,8 @@ input.io-add::placeholder { color: var(--faint); }
 .is-mbody .is-tiers { max-width: 560px; }
 .is-filters.with-affix { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .is-filters.with-affix .grow { grid-column: span 2; }
+/* Uniques: Red Tier and Base kind make 8 fields; the search box takes one column so they fit two rows of 4 */
+@media (min-width: 1101px) { .is-filters.with-affix.with-eight .grow { grid-column: span 1; } }
 .is-tiers th, .is-tiers td { text-align: left; }
 /* Rune card: what it fuses into */
 .is-upgrade { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }

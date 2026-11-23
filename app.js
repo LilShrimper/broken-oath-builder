@@ -7621,6 +7621,9 @@ window.BOItemSearch = function (ctx) {
 
 
     const special = b => (b.Tags || []).includes('CoreTouched') ? 'Core Touched' : (b.Tags || []).includes('GnomeMade') ? 'Gnome-made' : '';
+
+
+    const kindOf = b => !b ? '' : special(b) || ((b.Tags || []).includes('Ashen') ? 'Ashen' : 'Plain');
     const groups = {};
     for (const b of bases) if (!special(b)) (groups[b.Slot + '|' + baseType(b)] = groups[b.Slot + '|' + baseType(b)] || []).push(b);
     const baseTier = {};
@@ -7629,16 +7632,16 @@ window.BOItemSearch = function (ctx) {
     for (const b of bases) {
       const sp = special(b), t = baseTier[b.Id];
       ALL.push({ cat: 'base', id: b.Id, name: b.Name, level: b.Level || 1, slots: [slotName(b.Slot)], types: [baseType(b)],
-        tiers: [sp || 'T' + t], tierSort: sp ? 100 : t, icon: baseIcon(b), b,
-        text: [b.Name, baseType(b), slotName(b.Slot), ...allImp(b).map(m => plain(GD, m))].join(' ') });
+        tiers: [sp || 'T' + t], tierSort: sp ? 100 : t, icon: baseIcon(b), b, bkind: kindOf(b),
+        text: [b.Name, kindOf(b) === 'Plain' ? '' : kindOf(b), baseType(b), slotName(b.Slot), ...allImp(b).map(m => plain(GD, m))].join(' ') });
     }
     for (const u of Object.values(GD.uniques || {})) {
       const b = GD.bases[lc(u.BaseId)];
       const tier = window.BOItemSearch.tierOf(u);
       const lines = (u.Mods || []).map((m, i) => uniqueLine(GD, S.uniqueLineShown(u.Id, i, m))); // ranges as the game shows them (sim.js UNIQUE_LINE_SCALE)
       ALL.push({ cat: 'unique', id: u.Id, name: u.Name, level: u.Level || (b && b.Level) || 1, slots: b ? [slotName(b.Slot)] : [], types: b ? [baseType(b)] : [],
-        tiers: [tier], tierSort: window.BOItemSearch.TIERS.indexOf(tier), gtier: window.BOItemSearch.redTier(GD, u), icon: baseIcon(b), u, b, lines,
-        text: [u.Name, b && b.Name, b && baseType(b), ...lines].join(' ') });
+        tiers: [tier], tierSort: window.BOItemSearch.TIERS.indexOf(tier), gtier: window.BOItemSearch.redTier(GD, u), icon: baseIcon(b), u, b, lines, bkind: kindOf(b),
+        text: [u.Name, b && b.Name, kindOf(b) === 'Plain' ? '' : kindOf(b), b && baseType(b), ...lines].join(' ') });
     }
     for (const w of GD.runewords || []) {
       const bs = wordBases(GD, w);
@@ -7695,7 +7698,7 @@ window.BOItemSearch = function (ctx) {
   const CATS = [['unique', 'Uniques'], ['oathword', 'Oathwords'], ['base', 'Item bases'], ['mod', 'Item mods'], ['rune', 'Runes & jewels'], ['skill', 'Skill gems'], ['support', 'Support gems'], ['all', 'All']];
   const CAT_NAME = { unique: 'Unique', oathword: 'Oathword', base: 'Item base', mod: 'Item mod', rune: 'Rune', skill: 'Skill gem', support: 'Support gem' };
 
-  const BLANK = { cat: 'unique', q: '', slot: '', type: '', tier: '', gtier: '', affix: '', min: '', max: '', sort: 'level', sortBy: {}, secrets: false, craft: false, newFirst: false }; // craft: Oathwords you can make or hold; newFirst: the "New first" toggle beside Sort (all categories)
+  const BLANK = { cat: 'unique', q: '', slot: '', type: '', tier: '', gtier: '', bkind: '', affix: '', min: '', max: '', sort: 'level', sortBy: {}, secrets: false, craft: false, newFirst: false }; // craft: Oathwords you can make or hold; newFirst: the "New first" toggle beside Sort (all categories)
   let F = Object.assign({}, BLANK, { sortBy: {} }), shown = PAGE;
   try { const s = JSON.parse(localStorage.getItem('bods:itemsearch') || 'null'); if (s && typeof s === 'object') for (const k of Object.keys(BLANK)) if (s[k] != null && typeof s[k] === typeof BLANK[k]) F[k] = s[k]; } catch (e) { /* storage off */ }
 
@@ -7723,6 +7726,7 @@ window.BOItemSearch = function (ctx) {
       if (stage === 'tier') return true;
       if (F.tier && !e.tiers.includes(F.tier)) return false;
       if (F.cat === 'unique' && F.gtier && String(e.gtier) !== F.gtier) return false; // Red Tier (redTier)
+      if (F.bkind && e.bkind !== F.bkind) return false; // Base kind (bases, uniques; in All the rest drop out)
       if (F.cat === 'mod' && F.affix && e.affixType !== F.affix) return false;
       if (F.cat === 'oathword' && F.craft) { const inv = owned(); if (inv && inv.loaded) { const s = ctx.owned().wordStatus(e.w, inv); if (!s.held.length && !(s.craftable && (!e.secret || F.secrets))) return false; } }
       const lv = levelOf(e); if (!GEM_CATS[e.cat] && (lv < min || lv > max)) return false; // gems have no level
@@ -8009,17 +8013,21 @@ window.BOItemSearch = function (ctx) {
 
     const gtiers = F.cat === 'unique' ? [...new Set(pick('tier').map(e => e.gtier).filter(Boolean))].sort((a, b) => a - b) : [];
     if (F.cat !== 'unique' || (F.gtier && !gtiers.includes(+F.gtier))) F.gtier = '';
+
+    const kindOk = ['base', 'unique', 'all'].includes(F.cat), BKINDS = ['Plain', 'Core Touched', 'Ashen', 'Gnome-made'];
+    if (!kindOk || !BKINDS.includes(F.bkind)) F.bkind = '';
     const sorts = (F.cat === 'rune' ? [['path', 'Upgrade path']] : []).concat(GEM_CATS[F.cat] ? [['name', 'Name, A to Z']] : [['level', 'Level, low to high'], ['leveldesc', 'Level, high to low'], ['name', 'Name, A to Z']].concat(['unique', 'base', 'mod', 'all'].includes(F.cat) ? [['rare', 'Drop weight, rarest first'], ['common', 'Drop weight, commonest first']] : []), mods ? [['affix', 'Prefixes, then suffixes']] : F.cat === 'all' ? [['cat', 'Category']] : []);
     if (!sorts.some(s => s[0] === F.sort)) F.sort = sorts[0][0];
 
     const newBtn = '<button type="button" id="isNew" class="is-cat is-newfirst' + (F.newFirst ? ' active' : '') + '" aria-pressed="' + !!F.newFirst + '" title="Items new this patch on top; the sort orders the rest">New first</button>';
     return '<div class="is-cats" role="group" aria-label="Category">' + CATS.map(([k, t]) => (k === 'all' && NEWEST ? newBtn : '') + '<button type="button" class="is-cat' + (F.cat === k ? ' active' : '') + '" data-cat="' + k + '" aria-pressed="' + (F.cat === k) + '">' + esc(t) + ' <small>' + (k === 'all' ? all.length : counts[k] || 0) + '</small></button>').join('') + '</div>' +
-      '<div class="is-filters' + (mods || F.cat === 'unique' ? ' with-affix' : '') + '">' +
+      '<div class="is-filters' + (mods || kindOk ? ' with-affix' : '') + (F.cat === 'unique' ? ' with-eight' : '') + '">' +
       field('Search', '<input type="text" id="isQ" enterkeyhint="search" placeholder="Name or mod text, e.g. critical, life, &quot;fire damage&quot;" value="' + esc(F.q) + '" autocomplete="off">', 'grow') +
       field(L[0], '<select id="isSlot">' + opt('', L[1], !F.slot) + slots.map(s => opt(s, s, F.slot === s)).join('') + '</select>') +
       field(L[2], '<select id="isType">' + opt('', L[3], !F.type) + types.map(s => opt(s, s, F.type === s)).join('') + '</select>') +
       field(L[4], '<select id="isTier"' + (tierOk ? '' : ' disabled title="Pick a category first: each one has its own tiers"') + '>' + opt('', tierOk ? L[5] : 'Pick a category', !F.tier) + (tierOk ? tiers.map(s => opt(s, s, F.tier === s)).join('') : '') + '</select>') +
       (F.cat === 'unique' ? field('Red Tier', '<select id="isGTier" title="The red&#39;s tier in the game&#39;s Collection, by the level it drops from. The Cube&#39;s red recipes go by it">' + opt('', 'Any tier', !F.gtier) + gtiers.map(t => opt(String(t), window.BOItemSearch.redTierName(t), F.gtier === String(t))).join('') + '</select>') : '') +
+      (kindOk ? field('Base kind', '<select id="isBKind" title="Plain bases, or the special ones: Core Touched, Ashen and Gnome-made">' + opt('', 'Any base', !F.bkind) + BKINDS.map(k => opt(k, k, F.bkind === k)).join('') + '</select>') : '') +
       (mods ? field('Prefix / suffix', '<select id="isAffix">' + opt('', 'Both', !F.affix) + opt('Prefix', 'Prefixes only', F.affix === 'Prefix') + opt('Suffix', 'Suffixes only', F.affix === 'Suffix') + '</select>') : '') +
       (GEM_CATS[F.cat] ? '' : field('Level', '<span class="is-range"><input type="number" id="isMin" min="0" max="200" placeholder="min" value="' + esc(F.min) + '"><span>–</span><input type="number" id="isMax" min="0" max="200" placeholder="max" value="' + esc(F.max) + '"></span>')) +
       field('Sort', '<select id="isSort">' + sorts.map(([k, t]) => opt(k, t, F.sort === k)).join('') + '</select>') +
@@ -8074,7 +8082,7 @@ window.BOItemSearch = function (ctx) {
       else if (t.id === 'isMin' || t.id === 'isMax') { F[t.id === 'isMin' ? 'min' : 'max'] = t.value === '' ? '' : String(Math.max(0, Math.min(999, Math.round(+t.value || 0)))); shown = PAGE; clearTimeout(timer); timer = setTimeout(() => refresh(true), 200); }
     });
     el.addEventListener('change', e => {
-      const t = e.target, k = { isSlot: 'slot', isType: 'type', isTier: 'tier', isGTier: 'gtier', isAffix: 'affix', isSort: 'sort' }[t.id];
+      const t = e.target, k = { isSlot: 'slot', isType: 'type', isTier: 'tier', isGTier: 'gtier', isBKind: 'bkind', isAffix: 'affix', isSort: 'sort' }[t.id];
       if (k) { F[k] = t.value; if (k === 'sort') F.sortBy[F.cat] = t.value; shown = PAGE; return refresh(); }
       if (t.id === 'isSecrets') { F.secrets = t.checked; refresh(); }
       if (t.id === 'isCraft') { F.craft = t.checked; shown = PAGE; refresh(); }

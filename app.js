@@ -15772,7 +15772,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-    let speedOverK = 1;
+    let speedOverK = 1, speedCapNote = -1;
 
 
 
@@ -15790,7 +15790,7 @@ window.BOCharacter = function (ctx) {
 
 
       const over = usesPerSec * floor, overK = Math.sqrt(over);
-      speedOverK = overK; res.speedOver = { over, damage: overK };
+      speedOverK = overK; res.speedOver = { over, damage: overK }; speedCapNote = res.notes.length - 1;
       res.notes[res.notes.length - 1] = res.notes[res.notes.length - 1].replace('so more attack speed adds nothing to this skill.', 'and the speed past the cap becomes damage: x' + overK.toFixed(3) + ' (the square root of the overshoot; game log, 12 Nov 2026).');
       usesPerSec = 1 / floor; useTime = floor; res.speedCapped = true;
     }
@@ -15802,6 +15802,16 @@ window.BOCharacter = function (ctx) {
       res.notes.push(sk.Name + ': a use is the swing to its release (' + (swing * STRIKE_RELEASE).toFixed(3) + ' s), ' + (strikeSeq.Count - 1) + ' more strikes ' + strikeSeq.Interval + ' s apart (not sped up by attack speed), then the end of the swing: ' + useTime.toFixed(3) + ' s, ' + usesPerSec.toFixed(2) + ' uses a second (game log and skill panel, Viper Fang, 17 Nov 2026).');
     }
     const animUses = animOn ? usesPerSec : null;
+
+
+
+
+
+
+    const dropOver = () => {
+      if (speedOverK !== 1 && speedCapNote >= 0) res.notes[speedCapNote] = 'Speed cap: your ' + (isAttack ? 'attack' : 'cast') + ' speed is past this skill\'s cap, but a totem uses it on its own clock, so the overshoot adds no damage here.';
+      speedOverK = 1; delete res.speedOver; delete res.speedCapped;
+    };
     let cooldown = 0;
     if (sk.Cooldown > 0) {
       let cdInc = 0;
@@ -15886,7 +15896,7 @@ window.BOCharacter = function (ctx) {
       let tsInc = 0; for (const m of pickMods(mods, 'TotemSpeed', 'Inc')) if (applies(ctx, m)) { tsInc += m.v; use(m); }
       const baseEvery = every, spellEvery = baseEvery / Math.max(0.1, 1 + tsInc / 100);
       usesPerSec = tcount / spellEvery; useTime = 1 / usesPerSec;
-      res.totem = { count: tcount, every: spellEvery };
+      res.totem = { count: tcount, every: spellEvery }; dropOver();
       res.notes.push('Totem: ' + tcount + ' totem' + (tcount > 1 ? 's' : '') + ', each ' + (isAttack ? 'firing' : 'casting') + ' it every ' + spellEvery.toFixed(2) + ' s' + (tsInc ? ' (' + baseEvery + ' s with ' + Math.round(tsInc) + '% increased totem speed)' : '') + '; your ' + (isAttack ? 'attack' : 'cast') + ' speed only places totems faster; assumes every totem ' + (isAttack ? 'shoots' : 'casts at') + ' this enemy.');
 
       if (is0565(GD) && tcount > 1) {
@@ -16145,7 +16155,7 @@ window.BOCharacter = function (ctx) {
         usesPerSec += extra; useTime = 1 / usesPerSec;
         res.notes.push("Bina's Spotter's Helm: crits make each Ballista fire an extra volley (at most one every " + gap + ' s each): +' + extra.toFixed(2) + ' volleys a second.');
       }
-      res.totem = { count, every };
+      res.totem = { count, every }; dropOver();
 
 
 

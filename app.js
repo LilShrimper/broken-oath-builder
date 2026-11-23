@@ -13913,6 +13913,8 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
   const siegeLift = (GD, mods) => bSwitch(GD, 'r92.BUGSE.bSiegeLift92', is073(GD)) && modsOf(mods, 'TotemCount').some(m => m.stat === 'TotemCount' && /Siege Line/i.test(m.src || '')) ? 1 : 0;
   const moreKnee = m => m <= 8 ? m : 8 * Math.pow(1.41, Math.log2(m / 8));
 
@@ -15405,6 +15407,11 @@ window.BOCharacter = function (ctx) {
       for (const m of pickMods(mods, 'TotemCountMore', 'Flat')) if (totemish) {
         let n = o.totemCount > 0 ? Math.floor(o.totemCount) : (sk.Totem ? (sk.Totem.Max || 1) : 1);
         if (!(o.totemCount > 0)) for (const t of pickMods(mods, 'TotemCount', 'Flat')) if (applies(ctx, t)) n += t.v;
+
+
+
+        const bowEng = (sk.Totem && sk.Totem.Kind === 'Ballista') || (!sk.Totem && supportList.some(s => lc(s) === 'arrow_totem'));
+        n = Math.min(n, (bowEng ? ruleNum(GD, 'r80.CAPS.Ballistas', 7) : ruleNum(GD, 'r80.CAPS.Totems', 10)) + siegeLift(GD, mods));
         use(m, 'more per totem');
         engine.push({ v: m.v * Math.max(1, n), types: [], src: m.src + ' (' + Math.max(1, n) + ' totems or ballistas)' });
       }
@@ -16104,6 +16111,8 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
       let tcount = 1;
       for (const m of pickMods(mods, 'TotemCount', 'Flat')) if (applies(ctx, m)) { tcount += m.v; use(m); }
       if (o.totemCount > 0) tcount = Math.max(1, Math.floor(o.totemCount));
@@ -16758,10 +16767,11 @@ window.BOCharacter = function (ctx) {
 
 
 
+
     const overF = ruleNum(GD, 'r107.TOTEMPOOL.fOverflow107', 0);
     if (totemOver > 0 && overF > 0) {
       countFactor *= 1 + totemOver * overF;
-      res.notes.push('Bow engine limit: ' + totemOver + ' count' + (totemOver > 1 ? 's' : '') + ' past it, so every bow engine deals ' + Math.round(totemOver * overF * 100) + '% more (Ballista text; not checked in game).');
+      res.notes.push('Bow engine limit: ' + totemOver + ' count' + (totemOver > 1 ? 's' : '') + ' past it, so every bow engine deals ' + Math.round(totemOver * overF * 100) + '% more (Ballista text; checked in game).');
     }
     if (res.totem) Object.assign(res.totem, { share: countFactor, over: totemOver });
     perHitFactor *= countFactor * shapeWeight;
@@ -24160,6 +24170,7 @@ window.BOStartApp = function () {
     if (over > 0) ov.textContent = 'You have ' + nHave + '/' + cap + ' passive points (' + cap + ' is the most at level 100, the ' + QUARTZ + ' quartz points included): refund ' + over + ' point' + (over > 1 ? 's' : '') + '.';
     $('#treePoints').innerHTML = '<span class="tp-n' + (over > 0 ? ' over' : '') + '">' + nHave + ' / ' + cap + '</span> points taken' + (nHave !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level + (free ? ' · ' + free + ' free' : '') + (sw.size ? ' · ' + sw.size + ' Oath' + (sw.size > 1 ? 's' : '') + ' sworn' : '');
     const pp = $('#planPoints'), who = (st.chOrig || st.ch).id + '|' + (st.chOrig || st.ch).level;
+    pp.max = Math.max(1, cap - pointsIn([...have]));
     if (pp.dataset.for !== who) {
       pp.dataset.for = who; pp.value = free > 0 ? free : 5;
 
@@ -24528,7 +24539,8 @@ window.BOStartApp = function () {
   function runOptimize(plan, all) {
     if (!st.ch || !st.skill) return;
     clearOpt();
-    let extra = plan ? Math.max(1, Math.min(60, Math.round(+$('#planPoints').value || 1))) : 0;
+
+    let extra = plan ? Math.max(1, Math.min(Math.max(1, pointsCap() - pointsIn(st.ch.passives)), Math.round(+$('#planPoints').value || 1))) : 0;
     if (all) {
       const free = S.freePoints(GD, st.ch);
       if (free == null) { const c = $('#treeOpt'); c.hidden = false; c.innerHTML = '<p class="hint">This tree has no known point total (a build code). Set the Points box and press Plan next points.</p>'; return; }

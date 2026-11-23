@@ -1889,6 +1889,54 @@ body.lootfilter-page #buildSummary { display: none !important; } /* the characte
 .sc-card header { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
 .sc-card header .gem-ico { width: 40px; height: 40px; margin: 0; border-radius: 6px; }
 .faq-card h2 .gem-ico { width: 30px; height: 30px; margin-right: 10px; vertical-align: -8px; border-radius: 5px; }
+/* Skills tab, Gem Levels: the road to your gems (milestone track), skill gems by class, supports by level. */
+.gem-road-wrap { container-type: inline-size; }
+.gem-road { list-style: none; margin: 4px 0 14px; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; position: relative; }
+.gem-road::before { content: ''; position: absolute; left: 22px; right: 22px; top: 21px; height: 2px; background: linear-gradient(90deg, var(--line), var(--dashboard-gold), var(--line)); z-index: 0; }
+.gem-step { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 4px; padding: 0 4px; }
+.gem-step-dot { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 50%; font-size: 18px; color: var(--muted); background: var(--panel); border: 2px solid var(--line); }
+.gem-step.key .gem-step-dot { color: var(--dashboard-gold); border-color: var(--dashboard-gold); box-shadow: 0 0 0 4px color-mix(in srgb, var(--dashboard-gold) 15%, transparent); }
+.gem-step-rl { width: fit-content; margin-top: 4px; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; letter-spacing: .03em; color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 13%, var(--panel)); }
+.gem-step > b { font-size: 13.5px; }
+.gem-step-text { color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+@container (max-width: 640px) {
+  .gem-road { grid-auto-flow: row; grid-template-columns: 1fr; gap: 14px; }
+  .gem-road::before { left: 20px; right: auto; top: 20px; bottom: 20px; width: 2px; height: auto; background: linear-gradient(180deg, var(--line), var(--dashboard-gold), var(--line)); }
+  .gem-step { display: grid; grid-template-columns: 42px 1fr; column-gap: 12px; row-gap: 2px; }
+  .gem-step-dot { grid-row: 1 / span 3; }
+  .gem-step-rl { margin-top: 0; }
+}
+.gem-cls-modes { flex-wrap: wrap; }
+.gem-cls-modes .cmp-mode { min-width: 0; min-height: 36px; padding: 6px 14px; }
+@media (max-width: 520px) { .gem-cls-modes .cmp-mode { flex: 1 1 calc(33.333% - 6px); } }
+.gem-group { margin: 0 0 14px; }
+.gem-group-head, .gem-more > summary { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13.5px; }
+.gem-group-head small, .gem-more > summary small { color: var(--faint); font-weight: 600; }
+.gem-more > summary { cursor: pointer; list-style: none; }
+.gem-more > summary::-webkit-details-marker { display: none; }
+.gem-more > summary::after { content: '▸'; color: var(--muted); margin-left: 2px; }
+.gem-more[open] > summary::after { content: '▾'; }
+.gem-badge { flex: none; min-width: 52px; text-align: center; padding: 2px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 700; }
+.gem-badge.start { color: var(--dashboard-green); background: color-mix(in srgb, var(--dashboard-green) 14%, var(--panel)); }
+.gem-badge.home { color: var(--dashboard-gold); background: color-mix(in srgb, var(--dashboard-gold) 14%, var(--panel)); }
+.gem-badge.buy { color: var(--muted); background: var(--panel-2); }
+.gem-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
+.gem-tile { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); font-size: 13px; }
+.gem-tile > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gem-tile .gem-ico { width: 28px; height: 28px; margin: 0; vertical-align: 0; }
+.gem-tile .gem { margin: 0 6px; }
+.gem-ico.gem-none { background: var(--panel); }
+.gem-tile.sup { border-left: 3px solid var(--line); }
+.gem-tile.sup-red { border-left-color: var(--gem-str); } .gem-tile.sup-green { border-left-color: var(--gem-dex); } .gem-tile.sup-purple { border-left-color: var(--gem-int); }
+.gem-art { flex: none; width: 28px; height: 28px; }
+.gem-art img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.gem-ladder { list-style: none; margin: 0 0 6px; padding: 0; position: relative; }
+.gem-ladder::before { content: ''; position: absolute; left: 25px; top: 8px; bottom: 8px; width: 2px; background: linear-gradient(180deg, var(--dashboard-gold), var(--line)); }
+.gem-ladder > li { position: relative; display: grid; grid-template-columns: 52px 1fr; gap: 12px; padding: 0 0 14px; }
+.gem-ladder-lv { position: relative; z-index: 1; width: 52px; height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid var(--dashboard-gold); background: var(--panel); color: var(--dashboard-gold); font-weight: 800; font-size: 17px; line-height: 1; }
+.gem-ladder-lv small { font-size: 9.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+.gem-ladder-n { display: block; margin: 2px 0 6px; color: var(--muted); font-size: 12px; }
+@media (max-width: 520px) { .gem-tiles { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 5px; } .gem-tile { gap: 5px; padding: 4px 5px; font-size: 11.5px; } .gem-tile > span:last-child { white-space: normal; line-height: 1.2; } .gem-tile .gem-ico, .gem-art { width: 24px; height: 24px; } .gem-ladder > li { grid-template-columns: 40px 1fr; gap: 8px; } .gem-ladder-lv { width: 40px; height: 40px; font-size: 14px; } .gem-ladder-lv small { font-size: 8px; } .gem-ladder::before { left: 19px; } }
 .sc-card h3 { margin: 0; font: 600 16px/1.2 Georgia, "Times New Roman", serif; color: var(--text); }
 .sc-tags { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
 .sc-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding: 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; }

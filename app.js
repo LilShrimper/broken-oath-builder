@@ -312,7 +312,8 @@ window.PAGE_LANGS = {
     }
 
     const supports = {};
-    for (const s of J('Gameplay/supports.json').supports) supports[s.Id.toLowerCase()] = pick(s, ['Id', 'Name', 'Description', 'RequiresAnyTag', 'ExcludeTags', 'Mods', 'ManaMultiplier', 'Attribute']);
+    for (const s of J('Gameplay/supports.json').supports) supports[s.Id.toLowerCase()] = pick(s, ['Id', 'Name', 'Description', 'RequiresAnyTag', 'ExcludeTags', 'Mods', 'ManaMultiplier', 'Attribute', 'Level']);
+
 
 
 
@@ -548,6 +549,7 @@ window.PAGE_LANGS = {
 
 
         Life: sc.MonsterLife && noDocs(sc.MonsterLife), Damage: sc.MonsterDamage && noDocs(sc.MonsterDamage), Rarity: sc.Rarity },
+      Journey: noDocs(sc.Journey68 || {}), // early gem gifts (SupportFromClear, VowFromClear); display only (Gem Levels)
       Meta: noDocs(sc.Meta59 || {}),   // game-wide rule switches (Rain cooldown by speed, Ballista + Rain waves, ...)
     };
 
@@ -11741,6 +11743,14 @@ window.BOFaq = function (ctx) {
       pane.addEventListener('click', show);
       window.addEventListener('scroll', hide, { passive: true });
     }
+
+    const gemModes = pane.querySelector('.gem-cls-modes');
+    if (gemModes) gemModes.onclick = e => {
+      const b = e.target.closest('[data-gem-cls]'); if (!b) return; const c = b.dataset.gemCls;
+      gemModes.querySelectorAll('[data-gem-cls]').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', String(on)); });
+      pane.querySelectorAll('[data-gem-pane]').forEach(p => { p.hidden = p.dataset.gemPane !== c; });
+      try { localStorage.setItem('bo_gem_class', c); } catch (x) { /* storage blocked */ }
+    };
     const f = pane.querySelector('#skillFilter');
     if (f) f.oninput = () => { const q = f.value.trim().toLowerCase(); pane.querySelectorAll('#skillFilter ~ .table-wrap tbody tr').forEach(r => { r.hidden = !!q && !r.textContent.toLowerCase().includes(q); }); };
     const controls = pane.querySelector('.faq-xp-controls');
@@ -11900,39 +11910,80 @@ window.BOFaq = function (ctx) {
 
 
   function gemLevels(GD) {
-    let h = intro('Gem Levels', 'When support sockets open, what each gem level needs, and which gems each class starts with. For guides: there are no unlock levels for single skills or supports.');
+    let h = intro('Gem Levels', 'When each skill and support gem drops or can be bought, when support sockets open, and what each gem level needs.');
     const G = (GD.scaling || {}).Gem;
     if (!G || !(G.CharLevelForGemLevel || []).length) return needData(h);
     const CL = G.CharLevelForGemLevel, SOCK = G.SocketsAtLevel || [], MANA = G.ManaCostAtGemLevel || [];
     const need = (L, floor) => { const v = (G.ReqBase || 0) + (G.ReqPerCharLevel || 0) * ((CL[L - 1] || 1) - (G.ReqLevelOffset || 0)) + floor; return v < (G.ReqMinimum || 0) ? 0 : Math.round(v); };
     const share = Math.round((G.HomeClassGemShare || 0) * 100);
-    h += card('No unlock levels', list([
-      'Any skill gem can drop at any level: no skill waits for a hero level or a Rupture Level.',
-      'Before the Gemwright (Tobin) joins your camp, only your class\'s <b>starting gems</b> drop (list below). After that, at least ' + share + '% of the skill gems that drop are your class\'s own (its <b>home gems</b>); the rest can be any class\'s.',
-      'The Gemwright also sells skills and supports for gold.',
-      'Supports have no unlock level either: they drop from kills and Guardians.' + (G.EmptySocketPityToLevel ? ' Until Rupture Level ' + G.EmptySocketPityToLevel + ', while you have an empty socket and no spare support, supports drop ' + r1(G.EmptySocketSupportMult || 1) + '× as often and a Guardian always drops one.' : ''),
-      'A gem you find or buy starts at gem level ' + (G.FoundGemStartLevel || 1) + (G.bXpOnlyInUse ? ' and only gains experience while it is on your skill bar' : '') + '. Weapon skills (from the weapon you hold) follow your hero level.',
-    ]) + '<p class="faq-note">The game\'s own Guide text and the game data (scaling.json); numbers follow patches.</p>');
-    h += card('Support sockets', table(['Socket', 'Opens at gem level', 'Earliest hero level'],
-      SOCK.map((L, i) => ['<b>' + (i + 1) + '</b>', L, CL[L - 1] || ''])) +
-      hint('A socket opens when the <b>skill gem</b> reaches that level, not the hero. A gem can\'t level past what your hero level allows (next table), so the right column is the soonest it can happen. A socket that already holds a support stays open.'));
     const other = G.OffClassReqFloor || 0;
-    h += card('Gem levels', table(['Gem level', 'Hero level needed', 'Attribute needed', 'Another class\'s gem', 'Support sockets', 'Mana cost'],
-      CL.map((c, i) => { const L = i + 1; return [L, c, need(L, 0) || '–', need(L, other) || '–', SOCK.filter(s => L >= s).length, MANA[i] ? '×' + MANA[i] : '']; })) +
-      hint('Attribute needed = the gem\'s attribute (Strength, Dexterity or Intelligence; a gem that asks for two needs half of it in each). A gem whose attribute is too low still works: it plays at the highest level your attributes meet. A support\'s requirement follows the level it dropped at. Mana cost = the skill\'s cost at that gem level.'));
+
+
+
+
+
+
+    const J = (GD.scaling || {}).Journey || {}, GW = 5;
+    const steps = [
+      { rl: 'Start', icon: '◆', title: 'Starting gems', text: 'Only your class\'s starting gems drop.' },
+      { rl: 'RL ' + GW, icon: '⚒', title: 'Gemwright joins', text: 'Tobin sells skills and supports for gold. <b>Commission</b>: he makes any gem you name, at double price. From now at least ' + share + '% of skill drops are your class\'s home gems.', key: 1 },
+      J.SupportFromClear && { rl: 'RL ' + J.SupportFromClear, icon: '✚', title: 'Support gift', text: 'Clearing it drops a support gem for your skills.' },
+      J.VowFromClear && { rl: 'RL ' + J.VowFromClear, icon: '✦', title: 'Vow gift', text: 'Clearing it drops a Vow gem.' },
+      { rl: 'Gates', icon: '♛', title: 'Oath Gifts', text: 'The first kill of each early Gate boss leaves up to 3 skill or support gems: you keep one.' },
+    ].filter(Boolean);
+    h += card('When you can get gems', '<div class="gem-road-wrap"><ol class="gem-road">' + steps.map(s => '<li class="gem-step' + (s.key ? ' key' : '') + '"><span class="gem-step-dot" aria-hidden="true">' + s.icon + '</span><span class="gem-step-rl">' + s.rl + '</span><b>' + s.title + '</b><span class="gem-step-text">' + s.text + '</span></li>').join('') + '</ol>' +
+      list([
+        'No skill or support waits for a hero level: any gem can drop at any time, and the Gemwright sells any skill once he joins.',
+        G.EmptySocketPityToLevel ? 'Until Rupture Level ' + G.EmptySocketPityToLevel + ', while you have an empty socket and no spare support, supports drop ' + r1(G.EmptySocketSupportMult || 1) + '× as often and a Guardian always drops one.' : '',
+        'A gem you find or buy starts at gem level ' + (G.FoundGemStartLevel || 1) + (G.bXpOnlyInUse ? ' and only gains experience while it is on your skill bar' : '') + '. Weapon skills (from the weapon you hold) follow your hero level.',
+      ]) + '<p class="faq-note">The game\'s own texts and game data (scaling.json); RL 7 and 8 gifts are read from the game data, not checked in game. Numbers follow patches.</p>');
+
+
     const classes = Object.values(GD.classes || {}).map(c => c.Id).filter(Boolean);
     const gems = Object.values(GD.skills || {}).filter(s => s.Kind === 'Gem');
     const has = (arr, c) => (arr || []).some(x => lc(x) === lc(c));
-    const name = s => (ctx.skillIcon ? ctx.skillIcon(s.Id) : '') + esc(s.Name);
     const byName = (a, b) => a.Name.localeCompare(b.Name);
+    const tile = (ico, n, cls) => '<li class="gem-tile' + (cls ? ' ' + cls : '') + '">' + ico + '<span>' + esc(n) + '</span></li>';
+    const tiles = arr => arr.length ? '<ul class="gem-tiles">' + arr.join('') + '</ul>' : '<p class="hint">None.</p>';
+    const skillTile = s => tile(ctx.skillIcon ? ctx.skillIcon(s.Id) || '<i class="gem-ico gem-none"></i>' : '', s.Name);
     if (classes.length && gems.some(s => s.HomeClasses)) {
-      h += card('Starting and home gems', table(['Class', 'Starting gems (drop before the Gemwright joins)', 'Other home gems (' + share + '% of drops after)'],
-        classes.map(c => [
-          '<b>' + esc(c) + '</b>',
-          gems.filter(s => has(s.StarterClasses, c)).sort(byName).map(name).join(', ') || '–',
-          gems.filter(s => has(s.HomeClasses, c) && !has(s.StarterClasses, c)).sort(byName).map(name).join(', ') || '–'])) +
+      let pick = classes[0]; try { const v = localStorage.getItem('bo_gem_class'); if (classes.includes(v)) pick = v; } catch (e) { /* storage blocked */ }
+      const group = (badge, cls, title, arr) => '<div class="gem-group"><div class="gem-group-head"><span class="gem-badge ' + cls + '">' + badge + '</span><b>' + title + '</b> <small>' + arr.length + '</small></div>' + tiles(arr.map(skillTile)) + '</div>';
+      h += card('Skill gems by class', '<div class="cmp-modes gem-cls-modes" role="radiogroup" aria-label="Class">' + classes.map(c => '<button type="button" class="cmp-mode' + (c === pick ? ' on' : '') + '" role="radio" aria-checked="' + (c === pick) + '" data-gem-cls="' + esc(c) + '"><span>' + esc(c) + '</span></button>').join('') + '</div>' +
+        classes.map(c => {
+          const start = gems.filter(s => has(s.StarterClasses, c)).sort(byName);
+          const home = gems.filter(s => has(s.HomeClasses, c) && !has(s.StarterClasses, c)).sort(byName);
+          const rest = gems.filter(s => !has(s.HomeClasses, c)).sort(byName);
+          return '<div class="gem-cls-pane" data-gem-pane="' + esc(c) + '"' + (c === pick ? '' : ' hidden') + '>' +
+            group('Start', 'start', 'Starting gems: drop from the start', start) +
+            group('RL ' + GW, 'home', 'Home gems: drop and sell from RL ' + GW + ' (' + share + '% of drops)', home) +
+            '<details class="gem-group gem-more"><summary><span class="gem-badge buy">RL ' + GW + '</span><b>Other classes\' gems: buy or commission</b> <small>' + rest.length + '</small></summary>' + tiles(rest.map(skillTile)) + '</details>' +
+            '</div>';
+        }).join('') +
         hint('Gems shared by every class (Heralds, most Vows, Sentences) count as home gems for all. Another class\'s gem needs about ' + other + ' more of its attribute at each level.'));
     }
+
+
+
+    const sups = Object.values(GD.supports || {}).filter(s => s.Level != null);
+    if (sups.length) {
+
+      const ART = window.SITE_VERSION && window.SITE_VERSION.local ? (location.protocol === 'file:' ? '' : '/') + 'data/game-icons/site/' : (window.SITE_BASE || '') + 'ic/';
+      const icons = (GD.itemIcons || {}).sup || {}, COL = { Str: 'red', Dex: 'green', Int: 'purple' };
+      const supIco = s => { const f = icons[lc(s.Id)]; return f ? '<span class="gem-art"><img src="' + ART + esc(f) + '.webp" alt="" loading="lazy" decoding="async"></span>' : '<i class="gem gem-' + (COL[s.Attribute] || 'none') + '"></i>'; };
+      const levels = [...new Set(sups.map(s => +s.Level))].sort((a, b) => a - b);
+      h += card('Support gems by level', '<ol class="gem-ladder">' + levels.map(L => {
+        const at = sups.filter(s => +s.Level === L).sort(byName);
+        return '<li><span class="gem-ladder-lv"><small>from</small>' + L + '</span><div><span class="gem-ladder-n">' + at.length + ' support' + (at.length === 1 ? '' : 's') + '</span>' + tiles(at.map(s => tile(supIco(s), s.Name, 'sup sup-' + (COL[s.Attribute] || 'none')))) + '</div></li>';
+      }).join('') + '</ol>' +
+        hint('A support drops, and the Gemwright stocks or commissions it, from its level on (the game data\'s level for each support; his stock follows your Monster Level). A support\'s attribute need follows the level it dropped at.'));
+    }
+    h += card('Support sockets', table(['Socket', 'Opens at gem level', 'Earliest hero level'],
+      SOCK.map((L, i) => ['<b>' + (i + 1) + '</b>', L, CL[L - 1] || ''])) +
+      hint('A socket opens when the <b>skill gem</b> reaches that level, not the hero. A gem can\'t level past what your hero level allows (next table), so the right column is the soonest it can happen. A socket that already holds a support stays open.'));
+    h += card('Gem levels', table(['Gem level', 'Hero level needed', 'Attribute needed', 'Another class\'s gem', 'Support sockets', 'Mana cost'],
+      CL.map((c, i) => { const L = i + 1; return [L, c, need(L, 0) || '–', need(L, other) || '–', SOCK.filter(s => L >= s).length, MANA[i] ? '×' + MANA[i] : '']; })) +
+      hint('Attribute needed = the gem\'s attribute (Strength, Dexterity or Intelligence; a gem that asks for two needs half of it in each). A gem whose attribute is too low still works: it plays at the highest level your attributes meet. A support\'s requirement follows the level it dropped at. Mana cost = the skill\'s cost at that gem level.'));
     return h;
   }
   const lc = s => String(s || '').toLowerCase();

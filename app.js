@@ -535,7 +535,7 @@ window.PAGE_LANGS = {
     }
 
     const curses = {};
-    for (const c of J('Gameplay/curses.json').curses) curses[c.Id] = pick(c, ['Id', 'Name', 'Kind', 'Skill', 'TakenPct', 'ElementTakenPct', 'ResistDown', 'BossEffect', 'Dread', 'Tough', 'Text', 'DotTakenPct', 'DealtLessPct']); // DotTakenPct: Sentence of Rot (patch 77); DealtLessPct: Woe of Faltering, Sentence of Chains (shown, not simmed)
+    for (const c of J('Gameplay/curses.json').curses) curses[c.Id] = pick(c, ['Id', 'Name', 'Kind', 'Skill', 'TakenPct', 'ElementTakenPct', 'ResistDown', 'BossEffect', 'Dread', 'Tough', 'Text', 'DotTakenPct', 'DealtLessPct', 'ChaosTakenPct', 'EntropySoonerSec']); // ChaosTakenPct, EntropySoonerSec: Woe of Entropy (patch 88); DotTakenPct: Sentence of Rot (patch 77); DealtLessPct: Woe of Faltering, Sentence of Chains (shown, not simmed)
     const blessings = {};
     for (const b of J('Gameplay/blessings.json').blessings) blessings[b.Id] = pick(b, ['Id', 'Name', 'Kind', 'Skill', 'Mods', 'Text', 'Vowbreak', 'ReserveFlat', 'ReserveFlatPerLevel', 'ReservePct']);
 
@@ -544,7 +544,7 @@ window.PAGE_LANGS = {
     const scaling = {
       Hero: noDocs(sc.Hero), Gem: noDocs(sc.Gem), Ailments: noDocs(sc.Ailments),
 
-      Monster: { ResistPerLevel: sc.MonsterResistPerLevel, ResistMax: sc.MonsterResistMax, ResistRLFrom: sc.MonsterResistRLFrom, ResistPerRL: sc.MonsterResistPerRL, ResistRLMax: sc.MonsterResistRLMax, ArmourPerLevel: sc.MonsterArmourPerLevel,
+      Monster: { ResistPerLevel: sc.MonsterResistPerLevel, ResistMax: sc.MonsterResistMax, ResistRLFrom: sc.MonsterResistRLFrom, ResistPerRL: sc.MonsterResistPerRL, ResistRLMax: sc.MonsterResistRLMax, ChaosResPerRL: sc.MonsterChaosResPerRL, ArmourPerLevel: sc.MonsterArmourPerLevel,
 
 
         Life: sc.MonsterLife && noDocs(sc.MonsterLife), Damage: sc.MonsterDamage && noDocs(sc.MonsterDamage), Rarity: sc.Rarity },
@@ -629,7 +629,7 @@ window.PAGE_LANGS = {
     const P = J('Gameplay/potions.json');
     const potions = Object.assign(pick(P, ['Slots', 'Charges', 'Unlock', 'Vessels', 'Pour', 'Costs', 'Imbue113', 'Drops', 'Early80']), {
       Types: (P.Types || []).map(t => pick(t, ['Id', 'Name', 'Role', 'RecoverPct', 'Seconds', 'Mods', 'Text', 'Ward', 'OnDrinkCharge', 'Weight'])),
-      Mods: (P.Mods || []).map(m => pick(m, ['Id', 'Name', 'Kind', 'Roles', 'Effect', 'Seconds', 'Stat', 'Sign', 'Charge', 'Material', 'Tiers', 'Text', 'Weight', 'Later', 'Recipe'])),
+      Mods: (P.Mods || []).map(m => pick(m, ['Id', 'Name', 'Kind', 'Roles', 'Effect', 'Seconds', 'Stat', 'Sign', 'Charge', 'Material', 'Tiers', 'Text', 'Weight', 'Later', 'Recipe', 'Price72'])), // Price72: the share of an Answer line that counts (see brewery.js)
       Uniques: (P.Uniques || []).map(u => pick(u, ['Id', 'Name', 'Type', 'Source', 'Lines', 'Text', 'Later'])),
       Liquid: Object.fromEntries((P.Types || []).map(t => [t.Id, rgb(t.Liquid)])) });
     const materials = {};
@@ -6102,7 +6102,11 @@ window.BOBrewery = function (ctx) {
       out.seconds = C.Duration * (1 + (linger ? linger.t.Value : 0) / 100) * (1 - (potent ? potent.t.Value2 || 0 : 0) / 100);
       out.charges = { max: C.Max, use: C.PerUse, kill: C.PerKill.map(k => k * (1 + (brim ? brim.t.Value : 0) / 100)) };
       for (const m of t.Mods || []) out.mods.push(Object.assign({}, m, { Value: (m.Value || 0) * scaled(m) * eff }));
-      for (const x of picks) if (x.m.Effect === 'Stat' && x.m.Stat) out.mods.push(Object.assign({}, x.m.Stat, { Value: x.t.Value * (x.m.Sign || 1) }));
+
+
+
+      for (const x of picks) if (x.m.Effect === 'Stat' && x.m.Stat) out.mods.push(Object.assign({}, x.m.Stat, { Value: x.t.Value * (x.m.Sign || 1) * (x.m.Price72 > 0 ? x.m.Price72 : 1) }));
+      if (picks.some(x => x.m.Effect === 'Stat' && x.m.Price72 > 0)) out.notes.push('An Answer line counts at ' + picks.filter(x => x.m.Price72 > 0).map(x => Math.round(x.m.Price72 * 100) + '% of its tier value (' + x.m.Name + ')').join(', ') + ': the game data field Price72, the share our 16 Nov 2026 game sheets showed (0.5 then; patch 88 lowered it).');
       if (u) for (const l of u.Lines || []) if (l.Effect === 'Stat' && l.Stat) out.mods.push(Object.assign({}, l.Stat, { Value: l.Stat.Value * eff }));
       if (eff > 1) out.notes.push('Potent and Quality raise the potion\'s own lines by ' + Math.round((eff - 1) * 100) + '% (not its affix lines; game sheets, 16 Nov 2026).');
       if (flatK !== 1 && (t.Mods || []).some(m => scaled(m) !== 1)) out.notes.push('The potion\'s own flat Evasion or Armour scales with your best map level: x' + fmt(flatK) + ' at level ' + mapLv + '.');
@@ -10690,6 +10694,11 @@ window.BOFaq = function (ctx) {
     grave_reap: ['Kills rise as Risen Thralls (Bone Warrior). The skill panel shows the risen minions only, not the sweep (tooltip: "DPS (all its minions)"); they stand in the same 40-minion army as your summons.', 'Minion damage multiplier 0.12 (skills.json; the sim works the minion hit out from the skill\'s base damage).'],
     marrow_lance: ['Kills rise as Risen Casters (Skeleton Wizard). The skill panel shows the risen minions only, not the lance.', 'Log, 9 Nov 2026 (Marrow Lance gem 11, 11 summons on the bar): 4 risen at gem 11 (3 + 1), shared with the other summons in one army; PetSheet68 "marrow_lance avg 107-108" at gem 11.'],
     summon_bone_golem: ['Always exactly one golem, whatever "+minions" lines say (log: PetSheet68 cap 1).', 'Each +1 to maximum minions the golem cannot use gives it 30% more damage instead, added together (4 of them: ×2.2). Not in the game\'s text: worked out from the game log, 11 Nov 2026.', 'The fire golem blessing (12.5% more minion damage) applies to the golem itself too.', 'Brutality removes all fire, cold and lightning: linked Added Fire is idle and the golem deals no element.'],
+
+    summon_flame_golem: ['Only one golem answers at a time (gem text, patch 88).', 'Its blessing (12.5% more minion damage) applies to the golem itself too, as the flame golem\'s did before patch 88 (game panel, 2 Nov 2026).'],
+    summon_ice_golem: ['Only one golem answers at a time (gem text, patch 88).'],
+    summon_storm_golem: ['Only one golem answers at a time (gem text, patch 88).', 'Its blessing\'s 15% minion speed applies to the golem itself too, as the storm golem\'s did before patch 88.'],
+    summon_venom_golem: ['Only one golem answers at a time (gem text, patch 88).'],
   };
   function minions(GD) {
     const MM = GD.minionMonsters, SK = Object.values(GD.skills || {});
@@ -10719,7 +10728,13 @@ window.BOFaq = function (ctx) {
         m.Affinity ? ['Affinity', '+' + pct(m.AffinityDamage) + '% minion damage per 10 ' + esc(m.Affinity) + (m.AffinityCap ? ', up to ' + m.AffinityCap : '')] : null,
         s.ManaCost ? ['Cast', (s.CastTime !== undefined ? s.CastTime + ' s, ' : '') + s.ManaCost + ' mana' + (s.Cooldown ? ', ' + s.Cooldown + ' s cooldown' : '')] : null,
       ].filter(Boolean);
-      if (m.GolemAuras) {
+      if (m.GolemAuras && +GD.apiBuild >= 88) {
+
+        const STAT = { LifeRegenPct: v => 'you regenerate ' + v + '% of your life a second', GolemRedirect: v => 'the golem takes ' + v + '% of the damage of hits you take', MinionDamage: v => 'minions deal ' + v + '% more damage', ArmourPct: v => 'you have ' + v + '% more armour', MinionSpeed: v => 'minions are ' + v + '% faster', EnemyTaken: v => 'enemies take ' + v + '% more damage', EnemyShock: v => 'hits shock enemies for ' + v + '% more damage taken', EnemyChill: v => 'enemies are chilled ' + v + '%', EnemyDealtLess: v => 'enemies deal ' + v + '% less damage', EnemyDeathBurst: v => 'enemies that die burst for ' + v + '% of their life as Fire', EnemyPoisonChance: v => v + '% poison chance' };
+        const a = m.GolemAuras.Default || {};
+        const parts = [['Stat', 'Value'], ['Stat2', 'Value2'], ['Stat3', 'Value3']].filter(([k]) => a[k]).map(([k, n]) => (STAT[a[k]] || (v => a[k] + ' ' + v))(a[n]));
+        rows.push(['Blessing', esc(parts.join(', ')) + ' (within ' + (a.Radius ? a.Radius / 100 : 9) + ' m) <span class="faq-note">Its own, whatever its supports. Only one golem answers at a time. A blessing grows with your increased minion damage and minion life: half strength with none, full strength from 100% of the two together (gem text). The sim counts the damage parts (more damage, speed, damage taken, shock, chill) as if the golem always stands by the enemy; the rest is shown only.</span>']);
+      } else if (m.GolemAuras) {
         const VAR = { Default: 'Plain golem', Fire: 'Flame golem', Cold: 'Ice golem', Lightning: 'Storm golem', Poison: 'Venom golem' };
         const STAT = { LifeRegenPct: v => v + '% life regeneration', MinionDamage: v => v + '% more minion damage', ArmourPct: v => v + '% more armour', MinionSpeed: v => v + '% minion speed', EnemyTaken: v => 'enemies take ' + v + '% more damage' };
         rows.push(['Variants', '<span class="faq-note">One golem, one monster. A linked element support (Flame, Ice, Storm, Venom) changes its element and so which blessing it gives; Brutality leaves the plain golem. Radius 9 m.' +
@@ -10903,8 +10918,16 @@ window.BOFaq = function (ctx) {
     ].filter(Boolean), 'faq-stack faq-stack3'));
     h += card('Added together into one multiplier', hint('Every line of the form "X% more damage for every amount of a stat". These add to each other first and then multiply your damage once. The game calls this group the damage engine.') +
       list([
-        '<b>For every 1,000 Armour, Evasion, Energy Shield or Life:</b> Bone Armour, Iron Skin, Runic Ward, Bastion\'s Reckoning, the Ironclad Fury support and similar.',
-        '<b>For every 1% chance to Block:</b> Radiant Crusade and similar.',
+
+
+        ...(() => {
+          if (!(+GD.apiBuild >= 88)) return ['<b>For every 1,000 Armour, Evasion, Energy Shield or Life:</b> Bone Armour, Iron Skin, Runic Ward, Bastion\'s Reckoning, the Ironclad Fury support and similar.', '<b>For every 1% chance to Block:</b> Radiant Crusade and similar.'];
+          const PER = { ArmourMore: 'Armour', EvasionMore: 'Evasion', EnergyShieldMore: 'Energy Shield', LifeMore: 'Life', BlockMore: 'Block' };
+          const rows = [];
+          for (const n of Object.values(GD.nodes || {})) for (const m of n.Mods || []) if (PER[m.Stat] && (m.Tags || []).length === 0) rows.push(esc(n.Name) + ' (' + PER[m.Stat] + ', ' + m.Value + '%)');
+          for (const s of Object.values(GD.supports || {})) for (const m of s.Mods || []) if (PER[m.Stat]) rows.push('the ' + esc(s.Name) + ' support (' + PER[m.Stat] + ', ' + m.Value + '%)');
+          return ['<b>For every 1,000 Armour, Evasion, Energy Shield or Life, or 1% chance to Block:</b> ' + (rows.join(', ') || 'none') + '; some red items carry them too. Patch 88 kept one tree node per defence; the other nodes lost these lines.'];
+        })(),
         '<b>For every 10 Strength:</b> Mountainborn (Physical attack damage only). <b>For every 10 Intelligence:</b> Boundless Mind.',
         '<b>For every 100 Mana:</b> Oath of Many Fires. <b>For every 10% increased attack speed:</b> Oath of a Thousand Cuts.',
         '<b>Hammer of Judgement</b> (Slams, for every 1,000 Armour).',
@@ -11462,7 +11485,7 @@ window.BOFaq = function (ctx) {
 
 
 
-  function forge() {
+  function forge(GD) {
     let h = intro('Forge & Crafting', 'Edda\'s Forge: what each material pays for, when a craft can reach the best tier, and what Gloomsilver and Core Embers are for.');
     h += '<div class="card faq-card">' + hint('The Forge file is not in the public API. The materials, recipes, costs, drop sources and Forge levels on this page are from the game files of 12 Nov 2026 and may have changed since. The Gloomsilver source, the Lightless Anneal cost (3) and the Oath Broker line are from the developer\'s patch notes up to patch 85. Two things are current (the API\'s game switches, build 79): Lightless Anneal reaching Tier 1 from Rupture 160, and Oathsteel and Gloomsilver Add crafts rolling one tier under the best.') + '</div>';
     h += card('Materials, by tier', table(['Material', 'Tier', 'Where it comes from', 'What it pays'], [
@@ -11471,7 +11494,7 @@ window.BOFaq = function (ctx) {
       ['<b>Oathsteel</b>', 'III', 'Guardians and Gates, from monster level 30', 'Tier III crafts: Anneal, Oathsteel Temper, Deep Quench, Oathsteel Hone'],
       ['<b>Core Ember</b>', 'IV', 'A Core Rupture\'s Lord', 'The Skyforge (Skyforged Temper, Anneal and Hone), and the Cube\'s Oathsworn recipe'],
       ['<b>Land materials</b>', 'I-II', 'Monsters in Myrh Forest, the Desolated Plains, the Harmoniyan Lands, the Massadian Fire Lands and the Kabarian Swamp', 'The recipes from a Forge Tablet found in that land'],
-      ['<b>Gloomsilver</b>', 'III', 'The Oath Broker in the Forge sells 5 a day for gold. Rare drop from Rupture Guardians from Rupture 150 and from Catacomb Depth Caches (a rare find since patch 84; the rates are not published)', 'Lightless Anneal and the four Gloomsilver crafts below'],
+      ['<b>Gloomsilver</b>', 'III', 'The Oath Broker in the Forge sells 5 a day for gold. Rare drop from Rupture Guardians from Rupture 150 and from Catacomb Depth Caches (a rare find since patch 84; the rates are not published)' + (+GD.apiBuild >= 88 ? '. Your first Catacombs clear always pays Gloomsilver (patch 88)' : ''), 'Lightless Anneal and the four Gloomsilver crafts below'],
       ['<b>Oathcinder</b>', '–', 'Rare drop from Rupture 30', 'Unswear (a rare, a red or a finished Oathword)'],
     ], 'faq-wrap'));
     h += card('Anneal: one mod, one tier better', list([
@@ -11555,7 +11578,8 @@ window.BOFaq = function (ctx) {
       U.BossUniqueChance ? 'A boss kill: ' + curve(U.BossUniqueChance) + '.' : '',
       U.EliteUniqueChance ? 'An elite (rare) monster: ' + one(U.EliteUniqueChance) + '; a named monster: ' + one(U.NamedUniqueChance) + '.' : '',
       U.GateUniqueMult ? 'Gate Guardians x' + U.GateUniqueMult + ', the Pinnacle x' + U.PinnacleUniqueMult + (U.PinnacleUniqueRolls ? ' with ' + U.PinnacleUniqueRolls + ' rolls' : '') + '.' : '',
-      U.UniqueFromML ? 'Uniques drop from monster level ' + U.UniqueFromML + '.' : '',
+
+      +GD.apiBuild >= 88 ? 'Red uniques drop from monster level 35 (patch 88 notes; the game data file still says ' + (U.UniqueFromML || '?') + ').' : U.UniqueFromML ? 'Uniques drop from monster level ' + U.UniqueFromML + '.' : '',
       'Patch 79: "Reds drop half as often now ... Sure drops stay sure", and your weapon class lean is capped at x2. Whether the numbers above already include that is not known.',
     ]));
     h += card('Primal items', list([
@@ -13226,7 +13250,18 @@ window.BOCharacter = function (ctx) {
 
 
 
-    'EntropyShare', 'EntropyMore',
+    'EntropyShare', 'EntropyMore', 'EntropyMulti', 'EntropyMarkedMulti', 'EntropyDelay', 'EntropyCascade', 'EntropySlam', 'EntropySlamMore', 'EntropySlamReach', 'EntropySheathe',
+    'EntropySheatheReach', 'EntropyFade', 'EntropyCrit', 'EntropyCritMore', 'EntropyMarks', 'EntropyMarksFewer', 'EntropyMarksKept', 'EntropyVow', 'EntropyVowRest', 'EntropyVowReach',
+    'EntropyCorpse', 'EntropyCorpseReach', 'EntropyHunger', 'EntropyHallowSooner', 'EntropyGrievance', 'ChaosPen', 'BurstGen', 'NeverCrit',
+
+
+
+
+
+    'ItemOathWard114', 'EsLeechInstantVsBurning113', 'EsLeechMoreInHallowed113', 'EvadeRestoreLife113', 'EvasionAsEnergyShield113', 'EvasionMoreMoving113',
+    'LeechVsSentenced114', 'MistLeech', 'NoSlow', 'RarityPerHardMod', 'VaultResetOnRareKill113', 'SigilDrop', 'CoreStreak', 'CatacombStack',
+    'ChainNoLossVsShocked113', 'ChainToSentenced114', 'ThrowLeap', 'ThrowKeep', 'CrescentFork', 'CloudDrift', 'VoidFeeds', 'VowLock', 'WoeOnSkillHit114',
+    'ShockDurVsSentenced114', 'PersistReservation',
     'ManaBeforeLife', 'ShatterOnKill', 'LeechVsBleeding113', 'MaxBlock113', 'BlockRestorePct113', 'ShockDurVsUnique113', 'PierceBleed113',
     'LifeRegen', 'LifeRegenPct', 'ManaRegen', 'MinionReservation', 'LifeLeech', 'ManaLeech', 'LifeOnKill', 'LifeOnKillPct', 'ManaOnKill', 'ManaOnHit', 'LifeOnBlock',
     'MoveSpeed', 'GoldFind', 'ItemRarity', 'EsRecharge', 'EsRechargeDelay', 'DamageTaken', 'PhysTakenAsElemental', 'ManaCost',
@@ -13420,15 +13455,18 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
   const GUARDIAN_MODEL = { 22: 214416, 24: 302440, 26: 420057, 28: 587200, 32: 1092477, 34: 1315489, 36: 1540130, 38: 1690316, 42: 2888470, 44: 3355432,
     47: 3543929, 49: 3656576, 52: 5311964, 54: 7262434, 56: 9636988, 58: 12480737, 62: 19810684, 64: 24360456, 66: 29166418, 68: 34120516,
     72: 45430412, 74: 51580824, 77: 57152340, 79: 58777900, 83: 37584772, 86: 33444772, 89: 29760722, 93: 25472062, 96: 22666272, 99: 20169564,
     103: 21406124, 106: 20738020, 109: 19478744, 113: 17490756, 116: 16032674, 119: 14683453, 123: 14072768, 126: 13554035, 133: 6174435,
     136: 5994806, 139: 5816228, 140: 5759735, 143: 5397986, 146: 5029081, 149: 4676142, 151: 4357038, 152: 4195082, 153: 4037856, 154: 3885306,
     155: 3737348, 156: 3593818, 157: 3481394, 158: 3371560, 159: 3264219, 161: 3053035, 162: 2949328, 163: 2881513, 164: 2815038, 165: 2644071,
-    166: 2479392, 167: 2320821 };
+    166: 2479392, 167: 2320821, 177: 1616738, 178: 1587041, 179: 1557858 };
   const GUARDIAN_GATE = { 20: 50215, 30: 180780, 40: 1859922, 50: 4765650, 60: 20298676, 70: 50760000, 80: 59345324, 90: 20122266, 100: 14464526,
-    110: 13417916, 120: 10282982, 129: 9644728, 130: 14774400, 150: 6932148, 160: 5099384, 162: 4811808 };
+    110: 13417916, 120: 10282982, 129: 9644728, 130: 14774400, 150: 6932148, 160: 5099384, 162: 4811808, 180: 4247640 };
   const GUARDIAN_LORDS = new Set([80, 130]);
   const DEEP_ZONE = { 80: [1, 1], 83: [2.32, 1.32], 86: [2.68, 1.4], 89: [3.1, 1.48], 90: [3.26, 1.51], 93: [3.77, 1.6], 96: [4.37, 1.69], 99: [5.05, 1.79],
     100: [5.31, 1.82], 103: [6.14, 1.93], 106: [7.11, 2.04], 109: [8.23, 2.16], 110: [8.64, 2.2], 113: [10.01, 2.33], 116: [11.58, 2.46],
@@ -13436,7 +13474,8 @@ window.BOCharacter = function (ctx) {
     136: [72.79, 4.2], 139: [91.69, 4.3], 140: [99.03, 4.34], 143: [124.75, 4.44], 146: [157.15, 4.55], 149: [197.96, 4.66], 150: [213.8, 4.7],
     151: [230.9, 4.73], 152: [249.37, 4.77], 153: [269.32, 4.81], 154: [290.87, 4.85], 155: [314.14, 4.89], 156: [339.27, 4.93], 157: [366.41, 4.97],
     158: [395.72, 5.01], 159: [427.38, 5.05], 160: [461.57, 5.09], 161: [498.5, 5.13], 162: [538.37, 5.17], 163: [581.44, 5.21], 164: [627.96, 5.25],
-    165: [678.2, 5.29], 166: [732.45, 5.33], 167: [791.05, 5.38] };
+    165: [678.2, 5.29], 166: [732.45, 5.33], 167: [791.05, 5.38],
+    177: [1707.82, 5.82], 178: [1844.44, 5.87], 179: [1992.0, 5.92], 180: [2151.36, 5.96] };
 
   const logLine = (pts, x) => {
     let k = 0; while (k < pts.length - 2 && x > pts[k + 1][0]) k++;
@@ -13451,7 +13490,7 @@ window.BOCharacter = function (ctx) {
   const GATE_PTS = tablePts(GUARDIAN_GATE, v => v);
 
 
-  const guardianIsGate = rl => rl % 10 === 0 && rl <= 160 && !GUARDIAN_MODEL[rl] || rl === 129;
+  const guardianIsGate = rl => rl % 10 === 0 && rl <= 160 && !GUARDIAN_MODEL[rl] || rl === 129 || rl === 180; // 180: a Gate in the build 88 log ("model at RL 180 (Gate)")
   const guardianLifeAt = (GD, rl, kind) => {
     rl = Math.max(1, Math.round(+rl || 1));
     const gate = kind === 'gate' || (kind !== 'guardian' && guardianIsGate(rl));
@@ -13533,6 +13572,8 @@ window.BOCharacter = function (ctx) {
   const is085 = GD => apiBuildAtLeast(GD, 85, '2026-11-19T19');
 
   const is086 = GD => apiBuildAtLeast(GD, 86, '2026-11-21T00');
+
+  const is088 = GD => apiBuildAtLeast(GD, 88, '2026-11-23T02');
   const VOW_BUILT_IN = 0.15; // every Vow gem's lines x1.15 since patch 82 (gem texts, API game data build 85; see the Vow block)
   const takenRule = (GD, isBoss) => is084(GD) ? 'kinds' : is082(GD) ? 'add' : !!(isBoss && guardianStrongestTaken(GD));
 
@@ -15074,6 +15115,38 @@ window.BOCharacter = function (ctx) {
         use(speedLine, 'more per 10% attack speed');
         engine.push({ v: speedLine.v * Math.max(0, asInc) / 10, types: [], src: speedLine.src + ' (' + Math.round(asInc) + '% increased Attack Speed)' });
       }
+
+
+
+
+
+
+
+
+      for (const m of pickMods(mods, 'CastSpeedMore', 'Flat')) if (isSpell && applies(ctx, m)) {
+        let csInc = 0; for (const c of pickMods(mods, 'CastSpeed', 'Inc')) if (applies(ctx, c)) csInc += c.v;
+        use(m, 'more per 10% cast speed');
+        engine.push({ v: m.v * Math.max(0, csInc) / 10, types: [], src: m.src + ' (' + Math.round(csInc) + '% increased Cast Speed)' });
+      }
+      const totemish = !!sk.Totem || supportList.some(s => ['totem_support', 'arrow_totem'].includes(lc(s)));
+      for (const m of pickMods(mods, 'TotemCountMore', 'Flat')) if (totemish) {
+        let n = o.totemCount > 0 ? Math.floor(o.totemCount) : (sk.Totem ? (sk.Totem.Max || 1) : 1);
+        if (!(o.totemCount > 0)) for (const t of pickMods(mods, 'TotemCount', 'Flat')) if (applies(ctx, t)) n += t.v;
+        use(m, 'more per totem');
+        engine.push({ v: m.v * Math.max(1, n), types: [], src: m.src + ' (' + Math.max(1, n) + ' totems or ballistas)' });
+      }
+      for (const m of modsOf(mods, 'ItemOath114')) if (m.stat === 'ItemOath114') {
+        use(m, 'item Oath, counted held');
+        engine.push({ v: m.v, types: [], src: m.src + ' (item Oath counted held at its ' + m.v + '%)' });
+      }
+
+
+
+
+      const statAdds = [];
+      for (const m of pickMods(mods, 'ManaAsAddedLightning113', 'Flat')) { const v = m.v / 100 * heroMaxMana(H, ch, mods, attr); use(m, 'added Lightning'); statAdds.push({ stat: 'AddedDamage', mode: 'Flat', tags: ['Lightning', 'Spell'], v, v2: v, local: false, src: m.src + ' (~' + Math.round(v) + ' from max mana)', key: m.key }); }
+      for (const m of pickMods(mods, 'ArmourAsAddedHolyPermille113', 'Flat')) { const v = m.v / 1000 * defenceTotal(GD, ch, mods, attr, 'Armour'); use(m, 'added Physical'); statAdds.push({ stat: 'AddedDamage', mode: 'Flat', tags: ['Physical', 'Holy', 'Spell'], v, v2: v, local: false, src: m.src + ' (~' + Math.round(v) + ' from armour)', key: m.key }); }
+      if (statAdds.length) { mods.push(...statAdds); MOD_IX.delete(mods); }
       const shown = Object.keys(tot).map(s => '~' + Math.round(tot[s]).toLocaleString('en-US') + (s === 'Block' ? '' : ' ') + label[s]);
       if (shown.length) res.notes.push('Defence engine: ' + shown.join(', ') + ' (estimated from your gear, tree and attributes; past 12,000 Armour/Evasion, 6,000 Energy Shield, 5,000 Life each 1,000 counts a quarter, patch 0.56.5).');
     }
@@ -15822,7 +15895,7 @@ window.BOCharacter = function (ctx) {
     }
 
     let hitFactor = 1; const desc = sk.Description || '';
-    let shapeWeight = 1, ownClock = false; // a delivery whose hits are not all the full hit (Winter Orb's burst); ownClock: repeats add no hits
+    let shapeWeight = 1, ownClock = false, ownRate = null; // ownRate: casts a second -> hits a second, for skills that strike on their own clock (Sparks, Winter Orb), so a Conduit's casts feed it; a delivery whose hits are not all the full hit (Winter Orb's burst); ownClock: repeats add no hits
     if (sk.Delivery === 'Aura' || (sk.Ground && sk.Ground.Tick && !sk.Ground.Duration)) {
 
 
@@ -15939,6 +16012,7 @@ window.BOCharacter = function (ctx) {
         const sparks = sparksFor(throwsPerSec);
         usesPerSec = strikeRate(sparks); useTime = 1 / usesPerSec;
         res.brand = { sparks, every: strikeEvery, duration: dur, cap: cap || 1, rate: strikeRate, sparksFor, allAtOnce, castsPerSec: throwsPerSec };
+        ownRate = casts => strikeRate(sparksFor(casts));
         if (allAtOnce && cap > 1) res.notes.push('One cast throws all ' + cap + ' Sparks (patch 0.56.5).' + (sparkRate ? ' Sparks strike ' + Math.round(sparkRate) + '% faster.' : ''));
         res.notes.push('Spark: ' + (sparks % 1 ? sparks.toFixed(1) : sparks) + ' on the target' + (cap ? ' (up to ' + cap + ', each lasting ' + dur.toFixed(1) + ' s, thrown ' + throwsPerSec.toFixed(2) + ' times a second)' : '') + ', each striking every ' + (gather ? strikeEvery.toFixed(2) : ev[1]) + ' s' + (gather ? ', every 3 gathered into one body (x0.85 per spark)' : '') + '. Different Spark skills stack on the same enemy.');
 
@@ -16041,6 +16115,7 @@ window.BOCharacter = function (ctx) {
       const orbSpeed = Math.pow(Math.max(Math.min(speedRate, orbSpeedCap), 1), ruleNum(GD, 'r87.SPARKS.CastSpeedExp', 0.7));
       const up = Math.min(1, usesPerSec * dur), every = ob.Interval / Math.max(0.1, 1 + orbInc / 100) / orbSpeed;
       const icicles = orbs * up / every, bursts = orbs * up / dur, burstScale = ob.ExplodeScale || 0;
+      ownRate = casts => { const u = Math.min(1, casts * dur); return orbs * u / every + (burstScale > 0 ? orbs * u / dur : 0); };
       usesPerSec = icicles + (burstScale > 0 ? bursts : 0); useTime = 1 / usesPerSec; ownClock = true;
       shapeWeight = (icicles + bursts * burstScale) / usesPerSec;
       res.orb = { orbs, every, duration: dur, burstScale };
@@ -16054,9 +16129,17 @@ window.BOCharacter = function (ctx) {
       const interval = conduitInterval(GD, col.mods);
       if (hr.speed && hr.speed.usesPerSec > 0) {
         const tick = 1 / hr.speed.usesPerSec, ticks = Math.max(1, Math.ceil(interval / tick - 1e-9));
-        usesPerSec = 1 / (tick * ticks); if (cooldown > 0) usesPerSec = Math.min(usesPerSec, 1 / cooldown); useTime = 1 / usesPerSec;
-        res.conduit = { host: host.skill, hostName: host.name, linked: host.linked, tick, interval, ticks };
-        res.notes.push('Cast by ' + host.name + '\'s Channel Conduit' + (host.linked ? '' : ' (no saved link: assumed)') + ' with ' + host.name + '\'s supports: one cast every ' + ticks + ' ' + host.name + ' tick' + (ticks > 1 ? 's' : '') + ' (tick ' + Math.round(tick * 1000) + ' ms, Conduit interval ' + Math.round(interval * 1000) + ' ms) = ' + usesPerSec.toFixed(2) + ' casts a second while you channel. Faster ' + host.name + ' (attack speed) means more casts until a tick is shorter than the interval.');
+        let casts = 1 / (tick * ticks); if (cooldown > 0) casts = Math.min(casts, 1 / cooldown);
+
+
+
+
+
+
+        usesPerSec = ownRate ? ownRate(casts) : casts; useTime = 1 / usesPerSec;
+        if (res.brand) { res.brand.castsPerSec = casts; res.brand.sparks = res.brand.sparksFor(casts); }
+        res.conduit = { host: host.skill, hostName: host.name, linked: host.linked, tick, interval, ticks, casts };
+        res.notes.push('Cast by ' + host.name + '\'s Channel Conduit' + (host.linked ? '' : ' (no saved link: assumed)') + ' with ' + host.name + '\'s supports: one cast every ' + ticks + ' ' + host.name + ' tick' + (ticks > 1 ? 's' : '') + ' (tick ' + Math.round(tick * 1000) + ' ms, Conduit interval ' + Math.round(interval * 1000) + ' ms) = ' + casts.toFixed(2) + ' casts a second while you channel' + (ownRate ? ' (each ' + (res.brand ? 'throws the Sparks' : 'forms the orb') + ', which then strike on their own clock)' : '') + '. Faster ' + host.name + ' (attack speed) means more casts until a tick is shorter than the interval.');
       }
     }
 
@@ -16487,6 +16570,8 @@ window.BOCharacter = function (ctx) {
       const row = { id, kind: c.Kind || '', name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, dot: (c.DotTakenPct || 0) * eff };
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
 
+      if (c.ChaosTakenPct) row.elem.Chaos = c.ChaosTakenPct * eff;
+
 
       row.resDown = {}; for (const [d, v] of Object.entries(c.ResistDown || {})) row.resDown[d] = v * eff;
       curseRows.push(row);
@@ -16531,8 +16616,8 @@ window.BOCharacter = function (ctx) {
 
 
     const golemB = golemBlessing(GD, ch, sk, o, mods);
-    const golemTaken = golemB && golemB.stat === 'EnemyTaken' ? 1 + golemB.v / 100 : 1;
-    if (golemTaken !== 1) res.notes.push('Your ' + golemB.name + ' makes enemies near it take ' + +golemB.v.toFixed(2) + '% more damage (counted as if it is always within 9 m of the enemy).');
+    const golemTaken = golemB && golemB.taken > 0 ? 1 + golemB.taken / 100 : 1;
+    if (golemTaken !== 1) res.notes.push('Your ' + golemB.name + ' makes enemies near it take ' + +golemB.taken.toFixed(2) + '% more damage (counted as if it is always within 9 m of the enemy).');
 
 
 
@@ -16643,6 +16728,61 @@ window.BOCharacter = function (ctx) {
     for (const d of Object.keys(hit)) {
       const v = hit[d].avg * critFactor * hitsPerSec * perHitFactor * mitig[d].k * mitig[d].taken * groundTaken;
       byType[d] = v; hitDpsVs += v;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    res.entropy = null;
+    if (is088(GD) && bSwitch(GD, 'r114.CHAOS.bEntropy', true)) {
+      const bySrc = new Map();
+      for (const m of pickMods(mods, 'EntropyShare', 'Flat')) if (applies(ctx, m)) { const k = m.src || m.key || ''; if (!bySrc.has(k) || bySrc.get(k).v < m.v) bySrc.set(k, m); }
+      const share = clamp([...bySrc.values()].reduce((a, m) => (use(m, 'Entropy share'), a + m.v), 0), 0, 100) / 100;
+      if (share > 0) {
+        const raw = Object.keys(hit).reduce((a, d) => a + hit[d].avg, 0) * critFactor * hitsPerSec * perHitFactor * groundTaken;
+        let multi = 0;
+        for (const m of pickMods(mods, 'EntropyMulti', 'Flat')) if (applies(ctx, m)) { multi += m.v; use(m, 'Entropy multiplier'); }
+        if (markPct > 0) for (const m of pickMods(mods, 'EntropyMarkedMulti', 'Flat')) if (applies(ctx, m)) { multi += m.v; use(m, 'Entropy multiplier, Marked enemy'); }
+        let more = 1;
+        for (const m of pickMods(mods, 'EntropyMore')) if (applies(ctx, m)) { more *= 1 + m.v / 100; use(m, 'Entropy more'); }
+        const flag = st => modsOf(mods, st).find(m => m.stat === st);
+        const sumFlat = st => pickMods(mods, st, 'Flat').reduce((a, m) => a + (m.v || 0), 0);
+        const bar = new Set((ch.hotbar || []).filter(Boolean).map(lc));
+        const why = [];
+        let trig = 1;
+        if (flag('EntropySlam') && ctx.tags.has('slam')) { trig = 1.2 * (1 + sumFlat('EntropySlamMore') / 100); why.push('your Slam implodes it at once (Blood Ledger, x' + trig.toFixed(2) + ')'); }
+        else if (flag('EntropySheathe')) {
+          if (bar.has('sheathe')) { trig = 1.3; why.push('Sheathe implodes it at once for 30% more (Quiet Ruin; taken as cast before it fades)'); }
+          else if (bar.has('iaido_thrust')) why.push('Iaido Thrust implodes it as it passes (Quiet Ruin)');
+          else { trig = 0; why.push('Quiet Ruin: your Entropy never implodes on its own and neither Sheathe nor Iaido Thrust is on your bar, so it only fades'); }
+        } else if (flag('EntropyCrit') && isSpell && critChance > 0) {
+          const p = 1 - Math.pow(1 - clamp(critChance, 0, 100) / 100, Math.max(0, hitsPerSec * perHitFactor) * 3);
+          const k = 1.2 * (1 + sumFlat('EntropyCritMore') / 100);
+          trig = 1 + (k - 1) * p; why.push('spell crits implode it at once for x' + k.toFixed(2) + ' (Entropic Overload), ' + Math.round(p * 100) + '% of it');
+        } else if (flag('EntropyMarks') && markPct > 0) { trig = 1.25; why.push('10 Hunter\'s Marks implode it at once for 25% more (Ruin Fletching)'); }
+        const rl = guardianRL(GD, o, lvl);
+        const chaosRes = Math.max(0, (+M.ChaosResPerRL || 0) * Math.max(0, rl || 0) - sumFlat('ChaosPen'));
+        const taken = takenOf('Chaos', false);
+        const dps = raw * share * Math.max(0, 1 + multi / 100) * more * trig * taken * (1 - Math.min(90, chaosRes) / 100);
+        const keep = 1 - share;
+        res.hit = Object.assign({}, hit); // the page shows the full hit; the struck part below is what lands
+        for (const d of Object.keys(hit)) { hit[d] = Object.assign({}, hit[d], { avg: hit[d].avg * keep, min: hit[d].min * keep, max: hit[d].max * keep }); byType[d] *= keep; }
+        hitDpsVs *= keep;
+        res.entropy = { share, multi, more, trig, chaosRes, taken, dps, raw: raw * share };
+        res.notes.push('Entropy (patch 88): ' + Math.round(share * 100) + '% of each hit is laid as Entropy instead of striking (no ailments from it) and implodes as Chaos damage, ignoring Armour and elemental resistance: x' + Math.max(0, 1 + multi / 100).toFixed(2) + ' Entropy multiplier' + (more !== 1 ? ', x' + more.toFixed(2) + ' more' : '') + (taken !== 1 ? ', enemy takes x' + taken.toFixed(2) : '') + ', ' + +chaosRes.toFixed(2) + '% chaos resistance (Rupture ' + rl + ')' + (why.length ? '; ' + why.join('; ') : '') + ' = ' + Math.round(dps).toLocaleString('en-US') + ' DPS. Every implosion counted (a lasting enemy); from the 88 texts and data, not checked in game.');
+      }
     }
 
 
@@ -16827,6 +16967,12 @@ window.BOCharacter = function (ctx) {
         const key = 'barshock:' + lid;
         res.barShock.push({ id, key, name: k.Name || id, size: Math.min(s.cap, s.size + (s.staticBuild || 0)), uptime: 1 - Math.exp(-s.rate * s.duration), coc: !!r.coc, on: !(o.off && o.off.has(key)) });
       }
+
+
+      if (golemB && golemB.shock > 0 && is088(GD)) {
+        const key = 'barshock:' + lc(golemB.id);
+        res.barShock.push({ id: golemB.id, key, name: (GD.skills[lc(golemB.id)] || {}).Name || golemB.name, size: golemB.shock, uptime: 1, golem: true, on: !(o.off && o.off.has(key)) });
+      }
       const helpers = res.barShock.filter(b => b.on && b.size > 0);
       if (helpers.length) {
         const own = ail.shock, ownPct = own ? own.pct : 0;
@@ -16900,6 +17046,21 @@ window.BOCharacter = function (ctx) {
         byType.Cold += crack; hitDpsVs += crack; res.hitDps = hitDpsVs;
         ail.crack = { dps: crack, freezeInc: fd };
         res.notes.push('Crack (patch 79): the ' + (isBoss ? 'Guardian' : 'rare') + ' stores ' + p80(GD, 'r103.AILMENTS.CrackPct103', 25) + '% of the cold it takes (x' + Math.max(0, 1 + dotMulti / 100).toFixed(2) + ' from your damage over time multiplier, x' + Math.max(0, 1 + fd / 100).toFixed(2) + ' from freeze duration, multiplied) and it breaks as a cold hit every 3 s: +' + Math.round(crack).toLocaleString('en-US') + ' DPS. Both raises and how they multiply checked against the game log (21 Nov 2026).');
+      }
+    }
+
+
+
+
+    if (is079(GD) && A.bEnabled && golemB && golemB.chill > 0 && is088(GD) && !(o.off && o.off.has('golemchill'))) {
+      const per = ruleNum(GD, 'r103.AILMENTS.ChillTakenPer103', 0.5);
+      const ownPct = ail.chill && ail.chill.counted ? ail.chill.taken : 0, gPct = per * golemB.chill;
+      if (gPct > ownPct) {
+        const k = (shockF + (gPct - ownPct) / 100) / shockF;
+        for (const d of Object.keys(byType)) byType[d] *= k;
+        hitDpsVs *= k; res.hitDps = hitDpsVs; shockF += (gPct - ownPct) / 100;
+        ail.golemChill = { size: golemB.chill, taken: gPct, own: ownPct };
+        res.notes.push('Your ' + golemB.name + ' chills enemies near it ' + +golemB.chill.toFixed(1) + '%: they take ' + gPct.toFixed(1) + '% more damage from hits (' + per + '% per 1% chill' + (ownPct > 0 ? ', in place of your own chill\'s ' + ownPct.toFixed(1) + '%' : '') + '), added to shock. Counted as if it always stands by the enemy (patch 88 gem text, not checked in game).');
       }
     }
 
@@ -17138,7 +17299,12 @@ window.BOCharacter = function (ctx) {
           const slam = ctx.tags.has('slam'), x = landing * (slam ? 1 : clamp(critChance, 0, 100) / 100);
           if (x > 0) {
             const perSecUp = x / (1 + x * tearCd), gap = 1 / perSecUp;
-            const comingSec = dur / 2 * (0.5 + 0.5 * Math.min(1, gap / dur));
+
+
+
+            const span = dur * (0.5 + 0.5 * Math.min(1, gap / dur));
+            const tearCap = is088(GD) ? ruleNum(GD, 'r114.META.TearSecs114', 4) : Infinity;
+            const comingSec = span <= tearCap ? span / 2 : tearCap - tearCap * tearCap / (2 * span);
             const coming = (dpsKept + wound / uptime) * comingSec;
             tear = uptime * perSecUp * tearPct * TEAR_KEEP * coming;
             res.notes.push('Tear: ' + (slam ? 'every Slam hit' : 'crits (' + Math.round(critChance) + '%)') + ' on the bleeding enemy cash ' + Math.round(tearPct * 100) + '% of the bleed still coming, at most once every ' + tearCd + ' s: ' + (uptime * perSecUp).toFixed(2) + ' tears a second, each about ' + Math.round(coming).toLocaleString('en-US') + ' still coming. The game keeps ' + Math.round(TEAR_KEEP * 100) + '% of the cashed part and takes the rest back from later ticks (game log, 19 Nov 2026): +' + Math.round(tear).toLocaleString('en-US') + '/s.');
@@ -17500,7 +17666,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-    if (pickMods(mods, 'EntropyShare').some(m => applies(ctx, m))) res.notes.push('Chaos support: Entropy is switched off in the game for now (build 87 launch log: "Entropy114: off"), so the support changes nothing but the mana cost.');
+    if (!is088(GD) && pickMods(mods, 'EntropyShare').some(m => applies(ctx, m))) res.notes.push('Chaos support: Entropy is switched off in the game for now (build 87 launch log: "Entropy114: off"), so the support changes nothing but the mana cost.');
     {
       const sentenced = activeCurses.some(r => r.kind === 'Sentence'), faltering = activeCurses.some(r => lc(r.id) === 'woe_of_faltering');
       const sumOf = st => { let s = 0; for (const m of pickMods(mods, st)) if (applies(ctx, m)) { s += m.v; use(m); } return s; };
@@ -17527,6 +17693,47 @@ window.BOCharacter = function (ctx) {
         const k = (1 + (dotMulti + bds) / 100) / (1 + dotMulti / 100);
         bleedDps *= k; if (ail.bleed) ail.bleed.dps = bleedDps;
         res.notes.push('Bleeding: +' + bds + '% Damage over Time Multiplier on the Sentenced enemy, x' + k.toFixed(3) + ' (patch 87 unique line, from its text).');
+      }
+
+
+
+
+
+
+
+
+
+
+      const sumOf88 = st => { let s = 0; for (const m of pickMods(mods, st)) if (applies(ctx, m)) { s += m.v; use(m); } return s; };
+      const has88 = st => modsOf(mods, st).some(m => m.stat === st && (use(m), true));
+      const why88 = []; let k88 = 1;
+      const cvm = sumOf88('CritVsMaimed113');
+      if (cvm && maimPct > 0 && critChance < 95) {
+        const c3 = Math.min(95, critChance + cvm * (1 + critInc / 100) * critMore);
+        k88 *= ((1 - c3 / 100) * nonCritMult + c3 / 100 * effectiveMulti / 100) / (critFactor || 1);
+        why88.push('+' + cvm + '% base crit against the Maimed enemy (' + critChance.toFixed(1) + '% -> ' + c3.toFixed(1) + '%)');
+      }
+      const sparkMore = sumOf88('SparkThirdMore');
+      if (sparkMore && /spark/.test(lc(skillId))) { k88 *= 1 + sparkMore / 100 / 3; why88.push('every third Spark strike ' + sparkMore + '% more'); }
+      const orbitStill = sumOf88('OrbitStillMore');
+      if (orbitStill && ctx.tags.has('orbit')) { k88 *= 1 + orbitStill / 100; why88.push('Orbit skill ' + orbitStill + '% more, counted standing still'); }
+      const fuseEcho = sumOf88('FuseEcho');
+      if (fuseEcho && lc(skillId) === 'fuse_arrow') { k88 *= 1 + fuseEcho / 100; why88.push('Fuse Arrow bursts again for ' + fuseEcho + '%'); }
+      if (k88 !== 1 && isFinite(k88)) {
+        for (const d of Object.keys(byType)) byType[d] *= k88;
+        hitDpsVs *= k88; res.hitDps = hitDpsVs;
+        if (res.entropy) { res.entropy.dps *= k88; }
+        res.notes.push('Patch 88 red lines: ' + why88.join('; ') + ' = x' + k88.toFixed(3) + ' on hits (from the lines\' texts, not checked in game).');
+      }
+      const igs = sumOf88('IgniteVsSentenced114');
+      if (igs && sentenced && igniteDps > 0) { igniteDps *= 1 + igs / 100; if (ail.ignite) ail.ignite.dps = igniteDps; res.notes.push('Ignite: ' + igs + '% more against the Sentenced enemy (patch 88 red line, from its text).'); }
+      const cc = clamp(critChance, 0, 100) / 100;
+      for (const [st, key, name] of [['CritPoisonSure', 'poison', 'Poison'], ['CritIgniteSure', 'ignite', 'Ignite'], ['CritBleedSure', 'bleed', 'Bleeding']]) {
+        if (!has88(st) || !ail[key] || !(ail[key].chance > 0) || !(cc > 0)) continue;
+        const p = clamp(ail[key].chance, 0, 100) / 100, p2 = cc + (1 - cc) * p, k = p2 / p;
+        if (!(k > 1)) continue;
+        if (key === 'poison') { poisonDps *= k; ail.poison.dps = poisonDps; } else if (key === 'ignite') { igniteDps *= k; ail.ignite.dps = igniteDps; } else { bleedDps *= k; ail.bleed.dps = bleedDps; }
+        res.notes.push(name + ': your crits always cause it (patch 88 red line): chance ' + Math.round(p * 100) + '% -> ' + Math.round(p2 * 100) + '%, its damage taken as growing with the chance (x' + k.toFixed(3) + '; from the line\'s text, not checked in game).');
       }
     }
     res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
@@ -17691,12 +17898,14 @@ window.BOCharacter = function (ctx) {
     if (noHero && !res.totem && !res.conduit) {
       use(noHero, 'no damage yourself');
       for (const d of Object.keys(byType)) byType[d] = 0;
-      hitDpsVs = 0; poisonDps = 0; igniteDps = 0; bleedDps = 0;
+      hitDpsVs = 0; poisonDps = 0; igniteDps = 0; bleedDps = 0; if (res.entropy) res.entropy.dps = 0;
       res.hitDps = 0; res.poisonDps = 0; res.igniteDps = 0; res.bleedDps = 0;
       res.noHeroDamage = true;
       res.notes.push(noHero.src.replace(/^Passive · /, '') + ': you deal no damage with skills you use yourself, so this skill does 0 to the enemy (totems, minions and Conduit casts still deal theirs).');
     }
-    res.totalDps = hitDpsVs + poisonDps + igniteDps + bleedDps;
+
+    res.entropyDps = res.entropy ? res.entropy.dps : 0;
+    res.totalDps = hitDpsVs + poisonDps + igniteDps + bleedDps + res.entropyDps;
 
 
 
@@ -18116,6 +18325,11 @@ window.BOCharacter = function (ctx) {
       const n = feeds ? (ab.MaxFused ?? 12) : 0, k = 1 + (ab.DamagePer ?? 0.05) * n;
       if (k > 1) { minionMore *= k; res.notes.push('The Abomination: ' + n + ' Skeleton Warriors and Zombies fused into the golem, x' + k.toFixed(2) + ' damage (counted full while one of them is on your bar).'); }
     }
+
+
+    for (const [st, sid] of [['HolyElementalMore', 'summon_holy_elemental'], ['SkeletalMageMore', 'summon_skeletal_mage']]) {
+      for (const m of pickMods(mods, st, 'Flat')) if (lc(sk.Id) === sid) { minionMore *= 1 + m.v / 100; use(m, 'minion more'); }
+    }
     for (const m of mods) if (m.stat === 'MinionQuarry103' && m.mode === 'Flat' && fromSupport(m)) { minionMore *= 1 + m.v / 100; use(m, 'minion, vs your quarry'); res.notes.push('Quarry Command: your minions deal ' + m.v + '% more to your quarry, counted as this enemy (you must hit it yourself every 6 s; other enemies take 30% less).'); }
 
 
@@ -18140,7 +18354,7 @@ window.BOCharacter = function (ctx) {
 
 
     const golem = oneKind && !mi.GolemAuras ? null : golemBlessing(GD, ch, sk, o, mods);
-    if (golem && golem.stat === 'MinionDamage') minionMore *= 1 + golem.v / 100;
+    if (golem && golem.more > 0) minionMore *= 1 + golem.more / 100;
     if (o.graveCall) minionMore *= 1.3; // Grave Call: 30% more damage (speed is added below)
     const aff = mi.Affinity && mi.AffinityDamage ? 1 + Math.min(mi.AffinityCap || 50, (attr[mi.Affinity] || 0) * mi.AffinityDamage) / 100 : 1;
     const near = o.minionNear === false ? 1 : 1 + MINION_NEAR / 100;
@@ -18266,7 +18480,7 @@ window.BOCharacter = function (ctx) {
 
     const casterMinions = is0563(GD) && ranged;
     for (const m of mods) if ((m.stat === 'MinionSpeed' || (m.stat === 'AttackSpeed' && fromSupport(m)) || (casterMinions && m.stat === 'CastSpeed' && m.key === 'support:faster_casting')) && m.mode === 'More' && fit(m)) { spMore *= 1 + m.v / 100; use(m, 'minion'); }
-    if (golem && golem.stat === 'MinionSpeed') spMore *= 1 + golem.v / 100;
+    if (golem && golem.speed > 0) spMore *= 1 + golem.speed / 100;
 
 
 
@@ -18348,7 +18562,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const gExtra = golem && golem.stat === 'EnemyTaken' ? [golem.v] : [];
+    const gExtra = golem && golem.taken > 0 ? [golem.taken] : [];
     let curseK = 1;
     if ((activeCurses.length || gExtra.length) && avg > 0) {
 
@@ -18357,9 +18571,35 @@ window.BOCharacter = function (ctx) {
       res.notes.push('Curses on minion blows: ' + activeCurses.map(r => r.name).join(' + ') + ' make the enemy take x' + curseK.toFixed(3) + ' on these hits. Counted in the vs-enemy DPS only (not the game\'s panel number, which comes before curses, nor the enemy\'s resistances). Checked only in direction against a Guardian fight on 11 Nov 2026.');
     }
     res.enemy = { level: o.enemyLevel || ch.level, rarity, curses: curseRows, activeCurses: activeCurses.map(r => r.id), curseEffInc: curseInc };
+
+
+
+
+    const gAil = golem && is088(GD) ? (golem.shock || 0) + ruleNum(GD, 'r103.AILMENTS.ChillTakenPer103', 0.5) * (golem.chill || 0) : 0;
+    if (gAil > 0) { curseK *= 1 + gAil / 100; res.notes.push('Your ' + golem.name + ' ' + (golem.shock ? 'shocks' : 'chills') + ' enemies near it: minion hits deal ' + gAil.toFixed(1) + '% more (counted as if it always stands by the enemy; patch 88 gem text, not checked in game).'); }
     res.minionCurseK = curseK;
     res.sheetHitDps = res.panelDps = dps;
     res.hitDps = res.totalDps = dps * curseK;
+
+
+
+
+    res.entropy = null; res.entropyDps = 0;
+    if (is088(GD) && bSwitch(GD, 'r114.CHAOS.bEntropy', true)) {
+      const shareMods = pickMods(mods, 'EntropyShare', 'Flat').filter(m => (m.tags || []).includes('Minion'));
+      const share = clamp(shareMods.reduce((a, m) => (use(m, 'Entropy share, minions'), a + m.v), 0), 0, 100) / 100;
+      if (share > 0 && dps > 0) {
+        let multi = 0; for (const m of pickMods(mods, 'EntropyMulti', 'Flat')) if (!splitTags(m.tags).conds.length) { multi += m.v; use(m, 'Entropy multiplier'); }
+        let more = 1; for (const m of pickMods(mods, 'EntropyMore')) if (!splitTags(m.tags).conds.length) { more *= 1 + m.v / 100; use(m, 'Entropy more'); }
+        const rl = guardianRL(GD, o, o.enemyLevel || ch.level);
+        const chaosRes = Math.max(0, (+((GD.scaling || {}).Monster || {}).ChaosResPerRL || 0) * Math.max(0, rl || 0) - pickMods(mods, 'ChaosPen', 'Flat').reduce((a, m) => a + m.v, 0));
+        const taken = curseTakenK(activeCurses, 'Chaos', false, takenRule(GD, isBoss), gExtra);
+        const eDps = dps * share * Math.max(0, 1 + multi / 100) * more * taken * (1 - Math.min(90, chaosRes) / 100);
+        res.hitDps *= 1 - share; res.totalDps = res.hitDps + eDps; res.entropyDps = eDps;
+        res.entropy = { share, multi, more, chaosRes, taken, dps: eDps };
+        res.notes.push('Entropy (patch 88): ' + Math.round(share * 100) + '% of each minion blow is laid as your Entropy and implodes as Chaos damage: x' + Math.max(0, 1 + multi / 100).toFixed(2) + ' Entropy multiplier' + (more !== 1 ? ', x' + more.toFixed(2) + ' more' : '') + (taken !== 1 ? ', enemy takes x' + taken.toFixed(2) : '') + ', ' + +chaosRes.toFixed(2) + '% chaos resistance = ' + Math.round(eDps).toLocaleString('en-US') + ' DPS (early implosions from fallen minions and burst corpses not counted; from the 88 texts, not checked in game).');
+      }
+    }
 
 
 
@@ -18392,7 +18632,7 @@ window.BOCharacter = function (ctx) {
       res.notes.push(m.src + ': each of the ' + alive + ' ' + sk.Name.replace(/^(Summon|Raise) /, '') + ' minions pulses about every ' + every.toFixed(2) + ' s for ' + t.pct + '% of its own hit' + (el ? ' as ' + el : '') + ' (' + Math.round(size).toLocaleString('en-US') + ' each), +' + Math.round(pDps).toLocaleString('en-US') + ' DPS on one enemy. Counted in the vs-enemy DPS only: the game\'s panel leaves it out. The timing is from the game log (14 Nov 2026), the size from the item\'s text; the damage itself is not measured yet.');
     }
 
-    res.minion = { specAvg: DT.reduce((a, d) => a + (scaled[d][0] + scaled[d][1]) / 2, 0) * (1 + specInc / 100), specInc, soloK, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.stat === 'MinionDamage' ? 1 + golem.v / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth, oneKind };
+    res.minion = { specAvg: DT.reduce((a, d) => a + (scaled[d][0] + scaled[d][1]) / 2, 0) * (1 + specInc / 100), specInc, soloK, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.more > 0 ? 1 + golem.more / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth, oneKind };
     res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + (skelFit ? '; Skeletons: 0.592 s / speed + 0.050 s, fitted to the game log' : '') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
     if (oneKind) res.notes.push('Legion of One: only one kind of minion stands, counted here as ' + sk.Name + ' alone: ' + alive + ' at once (' + aliveBefore + ' doubled, at least +2), dealing 30% less. Your other summons are dismissed when you raise these' + (mi.GolemAuras ? '' : ', the Grave Golem and its blessing with them') + ' (game log, 12 Nov 2026).');
     if (near > 1) res.notes.push('Counted at your side: minions deal ' + MINION_NEAR + '% more within 7 m of you (fading to none at 12 m), as the game\'s panel counts it.');
@@ -18401,7 +18641,8 @@ window.BOCharacter = function (ctx) {
     if (soloK !== 1) res.notes.push('One golem: each +1 to maximum minions it cannot use gives it 30% more damage, x' + soloK.toFixed(1) + ' here (game log, 11 Nov 2026).');
     if (kind !== 1) res.notes.push('Harmony: ' + kinds + ' kind' + (kinds > 1 ? 's' : '') + ' of minion on your bar, ' + Math.round((kind - 1) * 100) + '% more damage.');
     if (shotRepeats) res.notes.push('Multistrike on ' + sk.Name + ': each blow strikes ' + strikes + ' times at Multistrike\'s ' + (is070(GD) ? 56 : 52) + '% less, as the game\'s panel counts it. Since the 5 Nov patch the mage throws a bolt for each repeat.');
-    if (golem && golem.stat !== 'EnemyTaken') res.notes.push('Your ' + golem.name + ' blesses minions near it, itself included: ' + golem.text + ' (counted, as the game\'s panel does).');
+    if (golem && (golem.more > 0 || golem.speed > 0)) res.notes.push('Your ' + golem.name + ' blesses minions near it, itself included (counted, as the game\'s panel does): ' + golem.text + '.');
+    else if (golem && is088(GD)) res.notes.push('Your ' + golem.name + '\'s blessing: ' + golem.text + '.');
     if (army && (army.parts.length > 1 || army.total > AR.full)) {
       const standing = Math.min(AR.total, army.total);
       res.notes.push('Your army: ' + army.parts.map(p => p.n + ' ' + p.name).join(', ') + ' (' + army.total + ' in all' + (army.total > AR.total ? ', at most ' + AR.total + ' stand: past that your oldest go, counted here as each kind losing its share' : '') + ').' + (armyK < 1 ? ' Past ' + AR.full + ' each minion adds ' + (AR.past === 0.5 ? 'half' : AR.past + ' of') + ' a minion of damage, so every blow deals x' + armyK.toFixed(3) + ' (' + armyBodies(GD, standing).toFixed(1) + ' minions of damage from ' + standing + ').' : ''));
@@ -18546,14 +18787,25 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
+
+
+
+
+
   function golemBlessing(GD, ch, sk, o, mods) {
     if (o.golemAura === false) return null;
-    const gid = ch.hotbar.find(id => { const k = GD.skills[lc(id)]; return k && k.Minion && k.Minion.GolemAuras; });
+    const isG = id => { const k = GD.skills[lc(id)]; return k && k.Minion && k.Minion.GolemAuras; };
+    const p88 = is088(GD);
+    const gid = p88 && isG(sk.Id) && ch.hotbar.some(id => lc(id) === lc(sk.Id)) ? sk.Id : ch.hotbar.find(isG);
     if (!gid) return null;
     const g = GD.skills[lc(gid)];
     const sups = lc(gid) === lc(sk.Id) && o.supportsOverride ? o.supportsOverride : ((ch.sockets.find(s => lc(s.skill) === lc(gid)) || {}).supports || []);
     let el = null;
-    for (const id of sups) {
+    if (!p88) for (const id of sups) {
       const sp = GD.supports[lc(id)]; if (!sp || el) continue;
       for (const m of sp.Mods || []) {
         const types = splitTags(m.Tags || []).types;
@@ -18564,11 +18816,12 @@ window.BOCharacter = function (ctx) {
       }
     }
 
-    const brutal = sups.some(id => ((GD.supports[lc(id)] || {}).Mods || []).some(m => isNoElem({ stat: m.Stat, mode: m.Mode, tags: m.Tags })));
+    const brutal = !p88 && sups.some(id => ((GD.supports[lc(id)] || {}).Mods || []).some(m => isNoElem({ stat: m.Stat, mode: m.Mode, tags: m.Tags })));
     if (brutal && ELEMENTS.includes(el)) el = null;
     const a =(g.Minion.GolemAuras || {})[el || 'Default'];
-    if (!a || !['MinionDamage', 'MinionSpeed', 'EnemyTaken'].includes(a.Stat)) return null;
-    const name = el === 'Fire' ? 'flame golem' : el === 'Lightning' ? 'storm golem' : el === 'Poison' ? 'venom golem' : 'golem';
+    const DMG = ['MinionDamage', 'MinionSpeed', 'EnemyTaken'];
+    if (!a || (!p88 && !DMG.includes(a.Stat))) return null;
+    const name = p88 ? lc(g.Name || 'golem') : el === 'Fire' ? 'flame golem' : el === 'Lightning' ? 'storm golem' : el === 'Poison' ? 'venom golem' : 'golem';
 
 
     const gh = modsOf(mods || NO_MODS, 'GolemAuraStack76').filter(m => m.stat === 'GolemAuraStack76').reduce((x, m) => x + (m.v || 0), 0);
@@ -18593,8 +18846,20 @@ window.BOCharacter = function (ctx) {
       for (const m of modsOf(mods || NO_MODS, 'MinionCap')) if (m.stat === 'MinionCap' && (m.tags || []).some(t => lc(t) === 'fire_golem')) golems += m.v || 0;
       golems = Math.max(1, Math.round(golems));
     }
-    const v = a.Value * grow * (1 + gh / 100) * golems;
-    return { element: el, stat: a.Stat, v, grow, golems, name: name + (golems > 1 ? ' x' + golems + ' golems' : '') + (gh ? ' (Golemheart +' + gh + '%)' : '') + (grow < 1 ? ' (blessing at ' + Math.round(grow * 100) + '% strength: under 100% increased minion damage and life)' : ''), text: a.Stat === 'MinionDamage' ? +v.toFixed(2) + '% more damage' : a.Stat === 'EnemyTaken' ? 'enemies take ' + +v.toFixed(2) + '% more damage' : +v.toFixed(2) + '% faster' };
+
+
+    const k1 = grow * (1 + gh / 100);
+    const parts = {};
+    for (const [s, n] of p88 ? [['Stat', 'Value'], ['Stat2', 'Value2'], ['Stat3', 'Value3']] : [['Stat', 'Value']]) {
+      if (!a[s]) continue;
+      parts[a[s]] = (a[n] || 0) * k1 * (['EnemyShock', 'EnemyChill'].includes(a[s]) ? 1 : golems);
+    }
+    const stat = DMG.find(s => parts[s] > 0) || a.Stat;
+    const v = parts[stat] || 0;
+    const f = x => +x.toFixed(2);
+    const SAY = { MinionDamage: x => 'minions near it deal ' + f(x) + '% more damage', MinionSpeed: x => 'minions near it are ' + f(x) + '% faster', EnemyTaken: x => 'enemies near it take ' + f(x) + '% more damage', EnemyShock: x => 'hits shock enemies near it for ' + f(x) + '% more damage taken', EnemyChill: x => 'enemies near it are chilled ' + f(x) + '%', LifeRegenPct: x => 'you regenerate ' + f(x) + '% of your life a second near it (not simmed)', GolemRedirect: x => 'it takes ' + f(x) + '% of the damage of hits you take near it (not simmed)', ArmourPct: x => 'you have ' + f(x) + '% more armour near it (not simmed)', EnemyDealtLess: x => 'enemies near it deal ' + f(x) + '% less damage (not simmed)', EnemyDeathBurst: x => 'enemies dying near it burst for ' + f(x) + '% of their life as Fire (not simmed)', EnemyPoisonChance: x => f(x) + '% poison chance (not simmed)' };
+    const text = Object.entries(parts).map(([s, x]) => (SAY[s] || (y => s + ' ' + f(y)))(x)).join(', ');
+    return { element: el, stat, v, parts, more: parts.MinionDamage || 0, speed: parts.MinionSpeed || 0, taken: parts.EnemyTaken || 0, shock: parts.EnemyShock || 0, chill: parts.EnemyChill || 0, id: gid, grow, golems, name: name + (golems > 1 ? ' x' + golems + ' golems' : '') + (gh ? ' (Golemheart +' + gh + '%)' : '') + (grow < 1 ? ' (blessing at ' + Math.round(grow * 100) + '% strength: under 100% increased minion damage and life)' : ''), text };
   }
 
   function earlyDamage(cls, level) {
@@ -21093,11 +21358,12 @@ window.BOStartApp = function () {
       [
         { label: 'Poison DoT', value: r.poisonDps, color: 'var(--mix-poison)' },
         { label: 'Ignite DoT', value: r.igniteDps, color: 'var(--mix-ignite)' },
-        { label: 'Bleeding DoT', value: r.bleedDps, color: 'var(--mix-bleeding)' }
+        { label: 'Bleeding DoT', value: r.bleedDps, color: 'var(--mix-bleeding)' },
+        { label: 'Entropy (Chaos)', value: r.entropyDps, color: 'var(--mix-entropy)' }
       ].forEach(source => {
         if (source.value > 0) sources.push(source);
       });
-    }
+    } else if (r.entropyDps > 0) sources.push({ label: 'Entropy (Chaos)', value: r.entropyDps, color: 'var(--mix-entropy)' });
     const active = sources.filter(source => source.value > 0 && isFinite(source.value));
     const total = active.reduce((sum, source) => sum + source.value, 0);
     const bar = active.map(source => '<span class="mix-segment" style="--mix-color:' + source.color + ';width:' + (source.value / total * 100).toFixed(2) + '%" title="' + esc(source.label + ': ' + num(source.value) + ' DPS') + '"></span>').join('');
@@ -21456,7 +21722,7 @@ window.BOStartApp = function () {
       kv('Near you', m.near > 1 ? x(m.near) + ' (60% more within 7 m)' : 'not counted') +
       kv('Increased minion damage', '+' + num(m.inc, 1) + '% (passives, gear, +1% per 10 Int)') +
       (m.more !== 1 ? kv('Supports (more)', x(m.more)) : '') + (m.kind !== 1 ? kv('Harmony', x(m.kind) + ' (' + m.kinds + ' kinds on your bar)') : '') +
-      (m.golem ? kv('Golem blessing', (m.golem.stat === 'MinionDamage' ? x(1 + m.golem.v / 100) : m.golem.v + '% faster') + ' (' + esc(m.golem.name) + ')') : '') +
+      (m.golem ? kv('Golem blessing', (m.golem.more > 0 ? x(1 + m.golem.more / 100) : m.golem.speed > 0 ? num(m.golem.speed, 1) + '% faster' : esc(m.golem.text)) + ' (' + esc(m.golem.name) + ')') : '') +
       (m.level && m.level !== 1 ? kv('Zone level', x(m.level)) : '') + (m.ruthless > 1 ? kv('Ruthless (DPS only)', x(m.ruthless)) : '') +
       '</dl></div>';
     h += '<details><summary>Notes for this skill <span class="count">(' + r.notes.length + ')</span></summary><ul class="notes">' + r.notes.map(n => '<li>' + esc(n) + '</li>').join('') + '</ul></details>';

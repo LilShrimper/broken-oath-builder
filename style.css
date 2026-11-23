@@ -4,7 +4,7 @@
   --bg: #0b0f1e; --bg-2: #0e1428; --panel: #131a2e; --panel-2: #1a2240; --line: #273152; --text: #e7e9f4; --muted: #a0a8c4; --faint: #6f789a;
   --accent: #a78bfa; --accent-strong: #7c3aed; --accent-2: #6366f1; --accent-ink: #fff; --good: #34d399; --bad: #f87171;
   --t-physical: #cbb9a2; --t-fire: #f0834f; --t-cold: #73b9ea; --t-lightning: #e9d45c; --t-poison: #82c76c; --life: #e5484d; --mana: #5b8def;
-  --mix-poison: #bb8ae8; --mix-ignite: #f0b663; --mix-bleeding: #cf6473; --dashboard-gold: #d7b66d; --dashboard-green: #42d392;
+  --mix-poison: #bb8ae8; --mix-ignite: #f0b663; --mix-bleeding: #cf6473; --mix-entropy: #7d5cf0; --dashboard-gold: #d7b66d; --dashboard-green: #42d392;
   --radius: 14px; --radius-sm: 9px;
   --shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 8px 28px rgba(2,4,16,.45);
   --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 10px 34px color-mix(in srgb, var(--accent-strong) 30%, transparent);

@@ -683,7 +683,7 @@ window.PAGE_LANGS = {
 
 
 
-    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK|CRAFT|CURSE|TRUST)$/;
+    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK|CRAFT|CURSE|TRUST|TOTEMPOOL)$/; // TOTEMPOOL: fOverflow107, bow engines past the limit (23 Nov 2026)
     try { for (const s of (J('Gameplay/switches.json') || {}).switches || []) if (RULE_SECTIONS.test(s.section)) gameRules[s.section + '.' + s.key] = ruleVal(s.value); } catch (e) { /* not served */ }
     try { for (const [k, v] of Object.entries((J('Gameplay/rules.json') || {}).values || {})) gameRules[k] = ruleVal(v && v.value); } catch (e) { /* older game data */ }
     let trapPrice = {};
@@ -2000,7 +2000,12 @@ window.PAGE_LANGS = {
     const checkReq = !cfg.ignoreAttr;
     const mods0 = (goals[0] && goals[0].r && goals[0].r.mods) || null, attr0 = goals[0] && goals[0].r && goals[0].r.attr;
     const missed0 = new Set(checkReq && mods0 ? (ch.items || []).filter(it => wearShort(GD, ch, mods0, it)) : []);
-    const reqOk = (items, r) => !checkReq || !r || !r.mods || items.every(it => missed0.has(it) || !wearShort(GD, ch, r.mods, it));
+
+
+
+
+    const others0 = cfg.onlySlot || cfg.onlyItem ? new Set(ch.items || []) : null;
+    const reqOk = (items, r) => !checkReq || !r || !r.mods || items.every(it => missed0.has(it) || (others0 && others0.has(it)) || !wearShort(GD, ch, r.mods, it));
 
     const dpsV = items => {
       if (!multi || goals.length === 1) { const d = dpsOf(goals[0], items); return d > 0 && reqOk(items, goals[0].r) ? d : 0; }
@@ -2094,12 +2099,14 @@ window.PAGE_LANGS = {
       L = L || { type: LIMIT, total: lineMax };
       const base = baseOf(it), pool = [], cap = vow ? vowMax : L.total;
 
+      const lines = vow && typeof cfg.vowLines === 'function' ? cfg.vowLines(realSlot(slot), base) : affixesFor(base);
+
       const entry = (af, ti, top) => {
         const t = af.Tiers[ti], a = { id: af.Id, tier: ti, v: rollAt(t.Min, t.Max, lineRoll), v2: t.Max2 != null ? rollAt(t.Min2, t.Max2, lineRoll) : 0 };
         if (top) TOP.add(a);
         return { af, g: af.Group, type: af.Type, top, a };
       };
-      for (const af of affixesFor(base)) {
+      for (const af of lines) {
         const ti = tierFor(af); if (ti < 0) continue;
         if (topMax > 0) pool.push(entry(af, ti, true));
         if (topMax < cap && af.Tiers[ti + 1]) pool.push(entry(af, ti + 1, false));
@@ -2107,7 +2114,7 @@ window.PAGE_LANGS = {
       const cur = { ...it, affixes: it.affixes.slice() };
       let v = V(put(items, slot, cur));
       const used = () => new Set(cur.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
-      const count = t => cur.affixes.filter(a => (GD.affixes[lc(a.id)] || {}).Type === t).length;
+      const count = t => cur.affixes.filter(a => !a.oath && !a.scar && (GD.affixes[lc(a.id)] || {}).Type === t).length; // a rare's Oathsworn / Scarred line sits on top of its 3 + 3
       const tops = list => list.filter(a => TOP.has(a)).length;
       const outsideRiven = put(items, slot, null).reduce((n, i) => n + rivenOn(i.affixes), 0); // Riven lines on every other item
       const rivenOk = (c, list) => !isRiven(c.a.id) || outsideRiven + rivenOn(list) < rivenMax;
@@ -2133,7 +2140,7 @@ window.PAGE_LANGS = {
       }
 
       if (!rush && listed) for (let i = cur.affixes.length - 1; i >= 0; i--) {
-        const a = cur.affixes[i]; if (a.id.startsWith('unique:')) continue;
+        const a = cur.affixes[i]; if (a.id.startsWith('unique:') || a.oath || a.scar) continue;
         const rest = cur.affixes.filter((_, j) => j !== i), u = new Set(rest.map(x => (GD.affixes[lc(x.id)] || {}).Group));
         let bestA = null;
         for (const c of listed) {
@@ -2335,8 +2342,43 @@ window.PAGE_LANGS = {
         return !seen.has(k) && seen.add(k);
       }).slice(0, Math.max(1, +cfg.slotRows || 40));
       const trialOf = it => { let its = put(items, slot, it); if (slot === 'MainHand' && !offOk(baseOf(it), baseOf(at(its, 'OffHand')))) its = put(its, 'OffHand', null); return its; };
-      for (const row of rows) { row.gain = row.v / base0 - 1; row.dps = dpsOf(goals[0], trialOf(row.item)); row.dropsOff = slot === 'MainHand' && !!at(items, 'OffHand') && !at(trialOf(row.item), 'OffHand'); }
+      for (const row of rows) { row.gain = row.v / base0 - 1; row.dps = dpsOf(goals[0], trialOf(row.item)); row.dropsOff = slot === 'MainHand' && !!at(items, 'OffHand') && !at(trialOf(row.item), 'OffHand');
+        const rm = checkReq && goals[0].r && goals[0].r.mods;
+        row.short = rm ? trialOf(row.item).filter(it => others0.has(it) && !missed0.has(it)).map(it => { const s = wearShort(GD, ch, rm, it); return s && Object.assign({ item: it }, s); }).filter(Boolean) : [];
+      }
       return { onlySlot: slot, rows, worn, base: base0, dps0: goals[0].base, empty: V(put(items, slot, null)), calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, gearLevel, reqChecked: checkReq, scored, defWeight: defW, multi: multi && goals.length > 1, skills: goals.map(g => g.id), dropped, topKept: r.kept };
+    }
+
+
+
+
+
+    if (cfg.onlyItem) {
+      const key = cfg.onlyItem.key, it0 = at(items, key);
+      if (!it0) return { error: 'There is no item in that slot.' };
+      curPhase = 'Choosing lines'; curP = 0; yield prog();
+      const isU = it0.rarity === 'Unique', per = isU ? 0 : it0.slot === 'Idol' ? (it0.rarity === 'Rare' ? 3 : it0.rarity === 'Magic' ? 1 : 0) : ({ Magic: 1, Rare: 3 }[it0.rarity] || 0);
+      if (isU ? !useVows : !per) return { error: isU ? 'Set how many Vows to try (1 to ' + VOW_MAX + ').' : 'A normal item has no lines to choose. Set the rarity to Magic or Rare first.' };
+      const keep = (it0.affixes || []).filter(a => isU ? a.id.startsWith('unique:') : a.oath || a.scar);
+      const start = Object.assign({}, it0, { affixes: keep.slice() });
+      const f = yield* fillAffixes(items, key, start, isU, isU ? null : { type: per, total: per * 2 + keep.length });
+
+
+      const affs = f.item.affixes.slice(); let fv = f.v;
+      const kind = a => (GD.affixes[lc(a.id)] || {}).Type, grp = a => (GD.affixes[lc(a.id)] || {}).Group;
+      for (const a of it0.affixes || []) {
+        if (keep.includes(a) || affs.some(b => grp(b) === grp(a))) continue;
+        const n = affs.filter(b => !b.id.startsWith('unique:') && !b.oath && !b.scar && (isU || kind(b) === kind(a))).length;
+        if (n >= (isU ? vowMax : per)) continue;
+        const x = V(put(items, key, Object.assign({}, it0, { affixes: affs.concat([a]) })));
+        if (x >= fv * (1 - MIN_GAIN)) { affs.push(a); fv = Math.max(fv, x); }
+        if (due()) yield prog();
+      }
+      const item = Object.assign({}, it0, { affixes: affs });
+      const withIt = put(items, key, item), v = V(withIt);
+      const rm = checkReq && goals[0].r && goals[0].r.mods;
+      const short = rm ? withIt.filter(i => i !== item && !missed0.has(i)).map(i => { const s = wearShort(GD, ch, rm, i); return s && Object.assign({ item: i }, s); }).filter(Boolean) : [];
+      return { onlyItem: key, item, v, v0: base0, gain: v / base0 - 1, better: v > base0 * (1 + MIN_GAIN), dps0: goals[0].base, dps: dpsOf(goals[0], withIt), short, calcs, ms: Date.now() - t0, timedOut: late(), ilvl, vowMax, scored, defWeight: defW, multi: multi && goals.length > 1 };
     }
     const SLOTS = SINGLE.concat(items.filter(i => i.slot === 'DwarvenRune').length > 1 ? ['DwarvenRune2'] : []);
     const total = 1 + SLOTS.length + (idolN ? 1 : 0);
@@ -12661,7 +12703,11 @@ window.BOCharacter = function (ctx) {
         clearTimeout(wheelHold.timer); wheelHold.timer = setTimeout(wheelFlush, 250);
       }, { passive: false });
       back.addEventListener('mouseout', e => { if (wheelHold && e.target === wheelHold.t) wheelFlush(); });
-      document.addEventListener('keydown', e => { if (M && e.key === 'Escape') { e.preventDefault(); closeItem(); } });
+      document.addEventListener('keydown', e => {
+        if (M && e.key === 'Escape') { e.preventDefault(); closeItem(); }
+
+        else if (M && back && !back.hidden && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'z' || e.key === 'Z') && !(e.target.closest && e.target.closest('input, textarea, select'))) { e.preventDefault(); const c = H().editable(); if (c) itemUndo(c); }
+      });
       document.body.appendChild(back);
     }
     back.hidden = false; document.body.classList.add('io-open');
@@ -12679,14 +12725,45 @@ window.BOCharacter = function (ctx) {
     if (again && again !== w.t) again.focus({ preventScroll: true });
   }
   function closeItem() {
-    wheelFlush();
+    wheelFlush(); optStop();
     M = null; if (back) back.hidden = true; document.body.classList.remove('io-open');
     const host = HOST; HOST = null; if (host && host.close) host.close();
     if (lastFocus && lastFocus.isConnected) lastFocus.focus({ preventScroll: true });
     else { const s = lastFocus && lastFocus.dataset && lastFocus.dataset.slot; const n = s && document.querySelector('#characterPane .ch-slot[data-slot="' + s + '"]'); if (n) n.focus({ preventScroll: true }); }
   }
 
-  function commit(ch) { const m = G.fixHands ? G.fixHands(ch) : ''; if (m) note = { id: ch.id, text: m };
+
+
+
+  const UNDO = new Map(), UNDO_MAX = 30;
+  const undoKey = ch => (HOST ? 'host|' : '') + (ch.id || ch.name || '') + '|' + M.slot + (M.slot === 'Idol' ? '|' + (M.shelf ? 's' : 'f') + M.idx : '');
+  const undoList = ch => UNDO.get(undoKey(ch)) || [];
+  function undoTake(ch) {
+    if (!M || M.undoing || M.seen === undefined) return;
+    const now = itemNow(ch), s = now ? JSON.stringify(bare(now)) : null;
+    if (s === M.seen || (M.seen === null && M.slot === 'Idol')) return; // a new idol: Remove takes it out again
+    const k = undoKey(ch), list = UNDO.get(k) || [];
+    list.push(M.seenFull); if (list.length > UNDO_MAX) list.shift();
+    UNDO.set(k, list);
+  }
+
+  function itemUndo(ch) {
+    const list = undoList(ch); if (!list.length) return;
+    const s = list.pop(), prev = s == null ? null : JSON.parse(s);
+    M.undoing = true; M.msg = '';
+    if (M.slot === 'Idol') {
+      const cur = itemNow(ch); if (!cur || !prev) { M.undoing = false; return renderItem(); }
+      delete prev.gx; delete prev.gy;
+      if (!setIdol(ch, prev, cur)) { list.push(s); M.undoing = false; M.msg = noRoom(prev); return renderItem(); }
+    } else {
+      const i = ch.items.findIndex(x => x.slot === M.slot);
+      if (prev) { if (i >= 0) ch.items[i] = prev; else ch.items.push(prev); } else if (i >= 0) ch.items.splice(i, 1);
+    }
+    M.tab = prev ? 'edit' : 'select'; M.word = '';
+    commit(ch); if (M) M.undoing = false;
+  }
+
+  function commit(ch) { undoTake(ch); const m = G.fixHands ? G.fixHands(ch) : ''; if (m) note = { id: ch.id, text: m };
     if (HOST) { const r = HOST.commit(ch, itemNow(ch)); if (r && M) M.msg = r; } else ctx.commit(ch);
     render(); renderItem(); }
 
@@ -12695,13 +12772,22 @@ window.BOCharacter = function (ctx) {
     const ch = H().current(); if (!ch) return closeItem();
     const it = itemNow(ch);
     if (M.tab === 'edit' && !it) M.tab = 'select';
+    M.seen = it ? JSON.stringify(bare(it)) : null; M.seenFull = it ? JSON.stringify(it) : null; // the state an edit is undone to
+
+    if (M.opt && M.opt.res && M.opt.of !== M.seen) M.opt.res = null;
+    const nU = undoList(ch).length;
     const tab = (id, label, off) => '<button class="io-tab' + (M.tab === id ? ' on' : '') + '" type="button" data-io="tab" data-v="' + id + '"' + (off ? ' disabled' : '') + '>' + label + '</button>';
     let h = '<div class="io-win"><div class="io-head">' + tab('select', 'Select') + tab('edit', 'Edit', !it) +
+      '<button class="io-undo" type="button" data-io="undo"' + (nU ? '' : ' disabled') + ' title="' + (nU ? 'Puts this item back as it was before the last change (Ctrl+Z). ' + nU + ' step' + (nU === 1 ? '' : 's') + ' kept while the page is open.' : 'Nothing to undo for this item yet') + '">↶ Undo' + (nU ? ' <small>' + nU + '</small>' : '') + '</button>' +
       '<span class="io-slotname">' + esc(planner.slotName[M.slot] || M.slot) + '</span><button class="io-x" type="button" data-io="close" aria-label="Close">×</button></div>';
-    h += '<div class="io-body" id="ioBody">' + readBar() + (M.tab === 'select' ? slotPick(it) + selectHtml() : editHtml(ch, it)) + '</div>';
     const old = back.querySelector('#ioBody'), keep = old && old.dataset.tab === M.tab ? old.scrollTop : 0;
-    back.innerHTML = h + '</div>';
-    const body = back.querySelector('#ioBody'); body.dataset.tab = M.tab; if (keep) body.scrollTop = keep; // an edit redraws in place, not back at the top
+    const draw = () => { back.innerHTML = h + '<div class="io-body" id="ioBody">' + readBar() + (M.tab === 'select' ? slotPick(it) + selectHtml() : editHtml(ch, it)) + '</div></div>'; return back.querySelector('#ioBody'); };
+    let body = draw();
+
+
+    const over = () => body.scrollHeight - body.clientHeight;
+    if (M.tab === 'edit' && innerWidth > 980) { const o1 = over(); if (o1 > 1) { M.flip = !M.flip; body = draw(); if (over() > o1) { M.flip = !M.flip; body = draw(); } } }
+    body.dataset.tab = M.tab; if (keep) body.scrollTop = keep; // an edit redraws in place, not back at the top
     back.querySelectorAll('select.io-add').forEach(pickify);
     if (M.tab === 'select') renderList(); else fxFill(back);
   }
@@ -12751,7 +12837,8 @@ window.BOCharacter = function (ctx) {
 
   function readBar() {
     let h = '<div class="io-read" id="ioRead" tabindex="0" role="button" aria-label="Paste, drop or pick a screenshot of the item"><b>' + esc(RD.busy || 'Read a screenshot') + '</b>' +
-      (RD.busy ? '' : ' <span>Press Ctrl+V to paste one, drop it here, or <label class="linkish">pick an image<input type="file" id="ioFile" accept="image/*" hidden></label>. Item text copied in the game (Ctrl+C on the item) works too. The image is read in this browser and never uploaded.</span>') + '</div>';
+      (RD.busy ? '' : M.tab === 'edit' ? ' <span title="Item text copied in the game (Ctrl+C on the item) works too. The image is read in this browser and never uploaded.">Ctrl+V, drop it here, or <label class="linkish">pick an image<input type="file" id="ioFile" accept="image/*" hidden></label>: it replaces this item.</span>' // short on Edit, to keep the item in view
+        : ' <span>Press Ctrl+V to paste one, drop it here, or <label class="linkish">pick an image<input type="file" id="ioFile" accept="image/*" hidden></label>. Item text copied in the game (Ctrl+C on the item) works too. The image is read in this browser and never uploaded.</span>') + '</div>';
     const r = RD.r;
     if (r && r.error) h += '<p class="hint bad">' + esc(r.error) + '</p>';
     else if (r) {
@@ -12759,7 +12846,7 @@ window.BOCharacter = function (ctx) {
       h += '<details class="cmp-readout"' + (r.unread.length || r.notes.length ? ' open' : '') + '><summary>Read ' + n + ' item line' + (n === 1 ? '' : 's') + (r.unread.length ? ', <span class="bad">' + r.unread.length + ' not recognised</span>' : '') + '. Check them against the screenshot.</summary><ul>' +
         r.lines.map(l => '<li class="' + (cls[l.kind] || 'meta') + '">' + esc(l.text) + (l.label ? ' <span class="meta">· ' + esc(l.label) + '</span>' : l.kind === 'unread' ? ' <span class="meta">· not recognised</span>' : '') + '</li>').join('') + '</ul>' +
         r.notes.map(t => '<p class="hint bad">' + esc(t) + '</p>').join('') +
-        (r.unread.length ? '<p class="hint">Add lines that were not recognised with the Add Prefix / Add Suffix lists.</p>' : '') + '</details>';
+        (r.unread.length ? '<p class="hint">Add lines that were not recognised with the Add list on the Edit tab.</p>' : '') + '</details>';
     }
     return h;
   }
@@ -13015,6 +13102,8 @@ window.BOCharacter = function (ctx) {
       '<button class="io-rm" type="button" data-io="rmaffix" data-ai="' + ai + '" title="Remove">×</button></div>';
   }
 
+
+
   function addSelect(it, base, type, label, isIdol, flag, vow) {
     const gd = GD(), used = new Set(it.affixes.map(a => (gd.affixes[lc(a.id)] || {}).Group));
 
@@ -13023,9 +13112,72 @@ window.BOCharacter = function (ctx) {
     const opts = T => all.filter(a => a.Type === T && !used.has(a.Group)).map(a => ({ id: a.Id, t: safe(() => G.modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2)) + (a.Kind ? ' (' + a.Kind + ')' : ''), c: rollChance(a, base) })).sort((x, y) => x.t.localeCompare(y.t))
       .map(o => '<option value="' + esc(o.id) + '"' + (o.c ? ' data-c="' + esc(o.c.pct + '|' + o.c.of) + '"' : '') + '>' + esc(o.t) + '</option>').join('');
     return '<select class="io-add" data-f="addaffix"' + (flag ? ' data-x="' + flag + '"' : '') + ' aria-label="' + esc(label) + '"><option value="">&lt;' + esc(label) + '&gt;</option>' +
-      (type ? opts(type) : '<optgroup label="Prefixes">' + opts('Prefix') + '</optgroup><optgroup label="Suffixes">' + opts('Suffix') + '</optgroup>') + '</select>';
+      (Array.isArray(type) ? type : type ? [type] : ['Prefix', 'Suffix']).map(T => '<optgroup label="' + T + 'es">' + opts(T) + '</optgroup>').join('') + '</select>';
   }
-  const section = (title, body) => '<div class="io-sec"><h4>' + title + '</h4>' + body + '</div>';
+  const section = (title, body, tip) => '<div class="io-sec"><h4' + (tip ? ' title="' + esc(tip) + '"' : '') + '>' + title + '</h4>' + body + '</div>';
+
+
+
+
+  let optVows = 0; // the Vow count last asked for (0: the item's own count, at least 1)
+  const vowsOf = it => it.affixes.filter(a => !a.id.startsWith('unique:')).length;
+  const optKey = (ch, it) => M.slot === 'Idol' ? 'Idol' + ch.items.filter(x => x.slot === 'Idol').indexOf(it) : M.slot;
+  const optOk = it => !!(ctx.itemOpt && !HOST && M && !M.shelf && it) && (it.rarity === 'Unique' ? !!GD().uniques[lc(it.unique)] : (it.rarity === 'Magic' || it.rarity === 'Rare') && !planner.oathwordForItem(it, M.slot));
+  const optN = it => Math.max(1, Math.min(G.VOW_MAX, optVows || vowsOf(it) || 1));
+  function optRun() {
+    const ch = H().current(), it = ch && itemNow(ch); if (!optOk(it)) return;
+    optStop();
+    const isU = it.rarity === 'Unique', me = M.opt = { job: null, pct: 0, res: null, err: '', of: JSON.stringify(bare(it)) };
+    const job = ctx.itemOpt(ch, optKey(ch, it), isU ? optN(it) : 0, it.level || ch.level, p => {
+      if (!M || M.opt !== me) return; me.pct = p; const e = back && back.querySelector('#ioOptProg'); if (e) e.textContent = 'Searching… ' + p + '%';
+    });
+    me.job = job; renderItem();
+    job.done.then(r => {
+      if (!M || M.opt !== me || me.job !== job) return;
+      me.job = null; if (r && r.error) me.err = r.error; else if (r) me.res = r;
+      renderItem();
+    });
+  }
+  function optStop() { if (M && M.opt && M.opt.job) { M.opt.job.cancel(); M.opt.job = null; } }
+  function optUse() {
+    const ch = H().editable(), it = ch && itemNow(ch), r = M.opt && M.opt.res; if (!it || !r) return;
+    it.affixes = JSON.parse(JSON.stringify(r.item.affixes));
+    M.opt.res = null; M.msg = 'The lines found are on the item now. Undo puts the old ones back.';
+    commit(ch);
+  }
+  const sameLine = (a, b) => lc(a.id) === lc(b.id) && a.tier === b.tier && +a.v === +b.v && +(a.v2 || 0) === +(b.v2 || 0);
+  function optHtml(ch, it) {
+    if (!optOk(it)) return '';
+    const O = M.opt || {}, isU = it.rarity === 'Unique', gd = GD();
+    const what = isU ? 'the best ' + optN(it) + ' Vow' + (optN(it) === 1 ? '' : 's') : 'the best ' + (it.rarity === 'Magic' ? 'prefix and suffix' : 'prefixes and suffixes');
+    let h = '<div class="io-opt"><div class="io-opt-bar">' +
+      (isU ? '<label class="field inline io-opt-n" title="How many Vows to put on this item (1 to ' + G.VOW_MAX + '). Its Vows now are chosen again."><span>Vows</span><input class="mini" type="number" min="1" max="' + G.VOW_MAX + '" step="1" data-f="optvows" value="' + optN(it) + '"' + (O.job ? ' disabled' : '') + '></label>' : '') +
+      (O.job ? '<button class="btn small ghost" type="button" data-io="optstop">Stop</button><span class="hint" id="ioOptProg" role="status">Searching… ' + (O.pct || 0) + '%</span>'
+        : '<button class="btn small" type="button" data-io="opt">Optimize this item</button><span class="hint">Finds ' + what + ' for this item only, item level ' + (it.level || 1) + ', top tier and roll. Scored for ' + esc(ctx.itemOptNote ? ctx.itemOptNote() : 'DPS') + ', as in the Item Simulator.</span>') + '</div>';
+    if (O.err) h += '<p class="hint bad">' + esc(O.err) + '</p>';
+    const r = O.res;
+    if (r) {
+      const mine = l => !l.id.startsWith('unique:') && !l.oath && !l.scar;
+      const ord = a => ((gd.affixes[lc(a.id)] || {}).Type === 'Suffix' ? 1 : 0), byKind = list => isU ? list : list.slice().sort((a, b) => ord(a) - ord(b)); // prefixes first
+      const now = byKind(it.affixes.filter(mine)), found = byKind(r.item.affixes.filter(mine));
+      const text = a => { const af = gd.affixes[lc(a.id)]; return af ? (isU ? 'Vow' : af.Type) + ' T' + (a.tier + 1) + ': ' + safe(() => G.modLine(af.Mod, a.v, a.v2)) : a.id; };
+      const same = found.length === now.length && found.every(a => now.some(b => sameLine(a, b)));
+      h += '<div class="io-opt-res">';
+      if (same) h += '<p class="hint">This item already has the lines the search found best.</p>';
+      else {
+
+        h += '<div class="io-opt-head"><span>' + (r.better ? '<b class="good">' + ctx.pct(r.gain) + '</b> ' + (r.scored || r.multi ? 'score' : 'DPS') : '<b class="bad">' + ctx.pct(r.gain) + '</b> <span>your lines now score higher</span>') +
+          ' <span class="meta">· DPS ' + ctx.num(r.dps0) + ' → ' + ctx.num(r.dps) + (r.timedOut ? ' · stopped at the time limit' : '') + '</span></span>' +
+          '<button class="btn small" type="button" data-io="optuse" title="Puts these lines on the item. Undo puts the old ones back.">Use these lines</button><button class="btn small ghost" type="button" data-io="optclear">Dismiss</button></div>' +
+          '<ul class="io-opt-lines" title="New lines are green; struck-through ones come off">' +
+          found.map(a => '<li' + (now.some(b => sameLine(a, b)) ? '' : ' class="new"') + '>' + esc(text(a)) + '</li>').join('') +
+          now.filter(b => !found.some(a => sameLine(a, b))).map(b => '<li class="gone">' + esc(text(b)) + '</li>').join('') + '</ul>' +
+          (r.short || []).map(s => '<p class="hint bad">With these lines your ' + esc(itemName(s.item, s.item.slot).name) + ' needs ' + s.need + ' ' + ({ Str: 'Strength', Dex: 'Dexterity', Int: 'Intelligence' }[s.attr] || s.attr) + ' and you would have ' + s.have + '.</p>').join('');
+      }
+      h += '</div>';
+    }
+    return h + '</div>';
+  }
   function editHtml(ch, it) {
     const gd = GD(), base = gd.bases[lc(it.base)], n = itemName(it, M.slot), isU = it.rarity === 'Unique', u = isU && gd.uniques[lc(it.unique)];
     const word = planner.oathwordForItem(it, M.slot);
@@ -13036,7 +13188,8 @@ window.BOCharacter = function (ctx) {
     if (M.msg) h += '<p class="hint pl-status" role="status">' + esc(M.msg) + '</p>';
 
 
-    let l = '', r = '';
+
+    let l = '', r = '', lh = 3, rh = 0;
     if (!isU) l += '<div class="io-row"><label class="field inline"><span>Rarity</span><select data-f="rarity">' + RAR.map(r => '<option' + (it.rarity === r ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></label>' +
       '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label>' + G.gradeField(it, base) + '</div>';
     else {
@@ -13053,20 +13206,23 @@ window.BOCharacter = function (ctx) {
     if (ws.length) {
       const pick = k => ws.find(x => x.key === k), big = (x, label) => x ? '<div><span>' + label + '</span><b>' + x.v + '</b></div>' : '';
       l += section('Weapon', '<div class="sw-stats io-wstats">' + big(pick('base|dps'), 'Weapon DPS') + big(pick('base|avg'), 'Average hit') + '</div>' +
-        ws.filter(x => x.key !== 'base|dps' && x.key !== 'base|avg').map(x => '<div class="io-imp">' + esc(G.baseLine(x)) + '</div>').join('') +
-        '<p class="hint">This weapon on its own: its damage with its local lines, before your passives, gems and other gear. DPS = average hit x attacks per second.</p>');
+        ws.filter(x => x.key !== 'base|dps' && x.key !== 'base|avg').map(x => '<div class="io-imp">' + esc(G.baseLine(x)) + '</div>').join(''),
+        'This weapon on its own: its damage with its local lines, before your passives, gems and other gear. DPS = average hit x attacks per second.');
+      lh += 6;
     }
     const imp = base ? (ws.length ? (base.Implicits || []).concat(base.FamilyLine ? [base.FamilyLine] : []).map(m => safe(() => G.modLine(m))).filter(Boolean) : baseLines(base, it)) : [];
+    lh += 1 + Math.max(1, imp.length);
     l += section('Implicits', imp.length ? imp.map(l => '<div class="io-imp">' + esc(l) + '</div>').join('') : '<div class="io-imp meta">None</div>');
     const isIdol = M.slot === 'Idol';
     if (isU) {
-      let un = '';
+      let un = '', uh = 1;
       if (u) un = it.affixes.map((a, ai) => {
         if (!a.id.startsWith('unique:')) return '';
         const ui = +a.id.slice(7), um = u.Mods[ui]; if (!um) return '';
 
         const US = window.BOSim, sc = US.uniqueLineScale(it.unique, ui), gm = US.uniqueLineShown(it.unique, ui, um), gv = US.uniqueLineValue(it.unique, ui, a.v), gv2 = US.uniqueLineValue(it.unique, ui, a.v2);
         const scNote = sc !== 1 ? ' <span class="meta" title="The game multiplies this line by ' + sc + '. The box holds the roll as the save stores it; the text is what the game shows and counts.">(game counts x' + sc + ')</span>' : '';
+        uh += (um.Text || '').length > 70 ? 2 : 1;
         const text = esc((um.Text ? um.Text.replace(/\{(0|v)\}/g, gv).replace(/\{1\}/g, gv2) : safe(() => G.modLine(um.Mod, gv, gv2))).replace(/\+-/g, '-')) + scNote;
         const rolls = (lo, hi) => lo != null && hi != null && lo !== hi, r1 = rolls(um.Min, um.Max), r2 = rolls(um.Min2, um.Max2);
         const box = (f, x, lo, hi) => '<input class="mini" type="number" step="any" data-f="' + f + '" value="' + x + '" min="' + Math.min(lo, hi) + '" max="' + Math.max(lo, hi) + '" title="Rolls ' + lo + ' to ' + hi + '">';
@@ -13074,26 +13230,35 @@ window.BOCharacter = function (ctx) {
         const range = (r1 ? gm.Min + ' to ' + gm.Max : '') + (r1 && r2 ? ' / ' : '') + (r2 ? gm.Min2 + ' to ' + gm.Max2 : '');
         return '<div class="io-aff" data-ai="' + ai + '"><span class="io-afftext">' + text + ' <span class="meta">[' + range + ']</span></span>' + fxSpan('rm:' + ai) + (r1 ? box('v', a.v, um.Min, um.Max) : '') + (r2 ? box('v2', a.v2, um.Min2, um.Max2) : '') + '</div>';
       }).join('');
-      r += section('Unique lines', un || '<div class="io-imp meta">None</div>');
       const nV = it.affixes.filter(a => !a.id.startsWith('unique:')).length;
+
+      const unS = section('Unique lines', un || '<div class="io-imp meta">None</div>');
+      const vh = nV * 1.9 + 2;
+      if ((Math.max(lh + uh, vh) <= Math.max(lh, vh + uh)) !== !!M.flip) { l += unS; lh += uh; } else { r += unS; rh += uh; }
+      rh += vh;
       let vi = 0, vows = '';
       const pool = G.vowPool(M.slot, base); // a Vow its base can't roll is marked (planner.js vowMisfit)
 
       const vix = it.affixes.map((a, ai) => a.id.startsWith('unique:') ? -1 : ai).filter(ai => ai >= 0);
       if (vix.length) vows += '<div class="vow-list" data-mv="io">' + vix.map((ai, n) => affixRow(it, it.affixes[ai], ai, 'Vow ' + (++vi), '', G.vowMisfit(pool, it.affixes[ai], M.slot, base),
         vix.length > 1 ? G.vowMove('io', ai, n ? vix[n - 1] : null, n < vix.length - 1 ? vix[n + 1] : null) : '')).join('') + '</div>';
-      if (u && nV < G.VOW_MAX) vows += addSelect(it, base, 'Prefix', 'Add Vow (prefix)', isIdol, '', true) + addSelect(it, base, 'Suffix', 'Add Vow (suffix)', isIdol, '', true);
+      if (u && nV < G.VOW_MAX) vows += addSelect(it, base, '', 'Add a Vow', isIdol, '', true);
       r += section('Vows <small>' + nV + ' / ' + G.VOW_MAX + '</small>', vows || '<div class="io-imp meta">None</div>');
     } else {
       const lim = G.LIMIT[it.rarity] || 0, type = a => (gd.affixes[lc(a.id)] || {}).Type;
+
+      let body = '', room = [], counts = [];
       for (const T of ['Prefix', 'Suffix']) {
         const mine = it.affixes.map((a, ai) => ({ a, ai })).filter(x => type(x.a) === T && !extraTag(x.a));
-        let body = mine.map(x => affixRow(it, x.a, x.ai)).join('');
-        if (mine.length < lim) body += addSelect(it, base, T, 'Add ' + T);
-        else if (!lim) body += '<div class="io-imp meta">Normal items have no affixes. Set the rarity to Magic or Rare.</div>';
+        body += mine.map(x => affixRow(it, x.a, x.ai, T)).join('');
+        if (mine.length < lim) room.push(T);
         if (mine.length > lim) body += '<p class="hint bad">' + it.rarity + ' items hold ' + lim + ' ' + T.toLowerCase() + (lim === 1 ? '' : 'es') + '.</p>';
-        r += section(T + 'es', body);
+        counts.push(mine.length + ' / ' + lim + ' ' + T.toLowerCase() + (lim === 1 ? '' : 'es'));
       }
+      if (!lim) body += '<div class="io-imp meta">Normal items have no affixes. Set the rarity to Magic or Rare.</div>';
+      else if (room.length) body += addSelect(it, base, room, room.length > 1 ? 'Add a prefix or suffix' : 'Add a ' + room[0].toLowerCase());
+      r += section('Prefixes and suffixes' + (lim ? ' <small>' + counts.join(' · ') + '</small>' : ''), body);
+      rh += 2 + it.affixes.length * 1.3;
 
 
 
@@ -13118,7 +13283,8 @@ window.BOCharacter = function (ctx) {
       for (let i = 0; i < rs; i++) rb += '<select data-f="rune" data-ri="' + i + '" aria-label="Rune ' + (i + 1) + '"><option value="">(no rune)</option>' + G.runeList.map(r => '<option value="' + esc(r.Id) + '"' + (lc(it.runes[i]) === lc(r.Id) ? ' selected' : '') + '>' + esc(r.Name) + '</option>').join('') + '</select>';
       l += section('Runes <small>' + rs + ' sockets</small>', rb + '</div>');
     } else if (word) l += section('Oathword', '<div class="io-imp">' + esc(word.Name) + ': ' + esc(it.runes.map(r => (gd.runes[lc(r)] || { Name: r }).Name).join(' · ')) + '</div>');
-    return h + '<div class="io-edit"><div class="io-col">' + l + '</div><div class="io-col">' + r + '</div></div><p class="hint io-foot">' + (HOST && HOST.foot ? esc(HOST.foot) : 'Changes show on the Damage tab straight away. Your save file is never changed.') + '</p>';
+    const opt = optHtml(ch, it), optL = (lh <= rh) !== (!!M.flip && !isU); // the Optimize box: in the shorter column (M.flip: see renderItem)
+    return h + '<div class="io-edit"><div class="io-col">' + l + (optL ? opt : '') + '</div><div class="io-col">' + (optL ? '' : opt) + r + '</div></div><p class="hint io-foot">' + (HOST && HOST.foot ? esc(HOST.foot) : 'Changes show on the Damage tab straight away. Your save file is never changed.') + '</p>';
   }
 
 
@@ -13126,6 +13292,11 @@ window.BOCharacter = function (ctx) {
     const b = e.target.closest && e.target.closest('[data-io]'); if (!b || !M) return;
     const act = b.dataset.io;
     if (act === 'close') return closeItem();
+    if (act === 'undo') { const c = H().editable(); if (c) itemUndo(c); return; }
+    if (act === 'opt') return optRun();
+    if (act === 'optstop') { optStop(); return renderItem(); }
+    if (act === 'optuse') return optUse();
+    if (act === 'optclear') { if (M.opt) M.opt.res = null; return renderItem(); }
     if (act === 'tab') { if (!b.disabled) { M.tab = b.dataset.v; M.msg = ''; renderItem(); } return; }
     if (act === 'change') { M.tab = 'select'; M.word = ''; M.msg = ''; return renderItem(); }
     if (act === 'slot') {
@@ -13178,6 +13349,7 @@ window.BOCharacter = function (ctx) {
     const t = e.target, f = t.dataset.f;
     if (t.id === 'ioFile') { if (t.files[0]) readShot(t.files[0]); t.value = ''; return; }
     if (!M || !f) return;
+    if (f === 'optvows') { optVows = Math.max(1, Math.min(G.VOW_MAX, Math.round(+t.value) || 1)); if (M.opt) { M.opt.res = null; M.opt.err = ''; } return renderItem(); }
     const ch = H().editable(), it = ch && itemNow(ch); if (!it) return;
     const v = t.value, ai = +((t.closest('[data-ai]') || {}).dataset || {}).ai, gd = GD();
     M.msg = '';
@@ -14829,6 +15001,13 @@ window.BOCharacter = function (ctx) {
     const slotHome = !slotSk.HomeClasses || !ch.classId || slotSk.HomeClasses.some(c => lc(c) === lc(ch.classId));
     const slotNeed = is079(GD) ? (slotHome ? [110, 160] : [140, 190]) : null;
     const slotHave = slotNeed ? attrsFrom(GD, ch, col.mods)[slotAttr] || 0 : 0;
+
+
+
+
+    const totemLinked = supportList.some(s => { const id = lc(s.replace('@granted', '')), sd = GD.supports[id]; if (!sd || !['totem_support', 'arrow_totem'].includes(id) || (o.off && o.off.has('support:' + id))) return false;
+      const req = sd.RequiresAnyTag || []; return (!req.length || req.some(t => ctx.tags.has(lc(t)))) && !exTagsFor(sd, sk, GD).some(t => ctx.tags.has(lc(t))) && !noFit(sd, sk); });
+    const hasReq = t => ctx.tags.has(lc(t)) || (totemLinked && lc(t) === 'totem');
     let slotIdx = 0;
     for (const raw of supportList) {
       const granted = raw.endsWith('@granted'); const id = raw.replace('@granted', '');
@@ -14848,11 +15027,11 @@ window.BOCharacter = function (ctx) {
       const ex = exTagsFor(sd, sk, GD).filter(t => !(totemAttack && lc(t) === 'totem' && ['trap_support', 'skyfall'].includes(lc(id))));
 
       const engShare = minionEngine(GD, sd, sk) ? minionEngShare(GD) : 0;
-      const ok = (!req.length || engShare > 0 || req.some(t => ctx.tags.has(lc(t)))) && !ex.some(t => ctx.tags.has(lc(t))) && !noFit(sd, sk);
+      const ok = (!req.length || engShare > 0 || req.some(hasReq)) && !ex.some(t => ctx.tags.has(lc(t))) && !noFit(sd, sk);
 
 
 
-      const fitsSelf = (!req.length || req.some(t => ctx.tags.has(lc(t)))) && !ex.some(t => ctx.tags.has(lc(t)));
+      const fitsSelf = (!req.length || req.some(hasReq)) && !ex.some(t => ctx.tags.has(lc(t)));
       if (granted && !fitsSelf) continue;
       const fitsHost = hostTags && (!req.length || req.some(t => hostTags.has(lc(t)))) && !ex.some(t => hostTags.has(lc(t)));
       if (hostTags && !granted && !fitsHost) { res.supports.push({ id, key, name: sd.Name, ok: false, why: 'cannot be socketed in ' + host.name + ' (needs ' + req.join(' or ') + ')', desc: sd.Description }); continue; }
@@ -15769,7 +15948,7 @@ window.BOCharacter = function (ctx) {
     const animRate = ((GD.animRate || {})[lc(ch.classId)] || {})[skillId] || 1;
     const animOn = animRate !== 1 && !(sk.Channel && sk.Channel.Tick);
     if (animOn) rateMult *= animRate;
-    let usesPerSec, useTime, countFactor = 1;
+    let usesPerSec, useTime, countFactor = 1, totemOver = 0; // totemOver: bow engines past the limit (see the Ballista block)
     if (sk.Channel && sk.Channel.Tick) { usesPerSec = rateMult / sk.Channel.Tick; useTime = sk.Channel.Tick / rateMult; }
     else if (isAttack) { const aps = weapon ? weapon.aps : 1.2; usesPerSec = aps * rateMult; useTime = 1 / usesPerSec; }
     else { const ct = sk.CastTime || 0.5; usesPerSec = rateMult / ct; useTime = ct / rateMult; }
@@ -15919,8 +16098,19 @@ window.BOCharacter = function (ctx) {
       const t = /every ([\d.]+) seconds/i.exec((GD.supports[shape] || {}).Description || ''); const every = t ? +t[1] : 0.8;
 
 
-      let tcount = Math.max(1, Math.floor(o.totemCount || 1));
-      if (is0562(GD)) tcount = Math.min(tcount, ruleNum(GD, 'r80.CAPS.Totems', 10) + siegeLift(GD, mods));
+
+
+
+
+
+
+      let tcount = 1;
+      for (const m of pickMods(mods, 'TotemCount', 'Flat')) if (applies(ctx, m)) { tcount += m.v; use(m); }
+      if (o.totemCount > 0) tcount = Math.max(1, Math.floor(o.totemCount));
+      const bowEngine = shape === 'arrow_totem';
+      const tCap = (bowEngine ? ruleNum(GD, 'r80.CAPS.Ballistas', 7) : ruleNum(GD, 'r80.CAPS.Totems', 10)) + siegeLift(GD, mods);
+      totemOver = bowEngine ? Math.max(0, tcount - tCap) : 0;
+      if (is0562(GD)) tcount = Math.min(tcount, tCap);
 
 
 
@@ -16171,7 +16361,9 @@ window.BOCharacter = function (ctx) {
       for (const m of pickMods(mods, 'TotemCount', 'Flat')) if (applies(ctx, m)) { count += m.v; use(m); }
       if (o.totemCount > 0) count = Math.floor(o.totemCount); // set by hand (owner request, 9 Nov 2026)
 
-      if (is0562(GD)) count = Math.min(count, (tt.Kind === 'Ballista' ? ruleNum(GD, 'r80.CAPS.Ballistas', 6) : ruleNum(GD, 'r80.CAPS.Totems', 10)) + siegeLift(GD, mods));
+      const tCap = (tt.Kind === 'Ballista' ? ruleNum(GD, 'r80.CAPS.Ballistas', 6) : ruleNum(GD, 'r80.CAPS.Totems', 10)) + siegeLift(GD, mods);
+      if (tt.Kind === 'Ballista') totemOver = Math.max(0, count - tCap);
+      if (is0562(GD)) count = Math.min(count, tCap);
       let tsInc = 0; for (const m of pickMods(mods, 'TotemSpeed', 'Inc')) if (applies(ctx, m)) { tsInc += m.v; use(m); }
       const every = tt.Interval / Math.max(0.25, 1 + tsInc / 100); // formulas.md section 3 (public API archive, 12 Nov 2026): "interval = Totem.Interval / max(0.25, 1 + increased totem speed)", which also settles that totem speed fires a Ballista faster
       usesPerSec = count / every; useTime = 1 / usesPerSec;
@@ -16563,6 +16755,15 @@ window.BOCharacter = function (ctx) {
       res.notes.push("Bina's Spotter's Helm: shots in a row at the same enemy deal " + SPOTTER_RAMP_PER + '% more each, counted at the full ' + SPOTTER_RAMP_MAX + '% (after ' + Math.round(SPOTTER_RAMP_MAX / SPOTTER_RAMP_PER) + ' shots) on a Rare or Guardian. Packs do not get it.');
     }
 
+
+
+
+    const overF = ruleNum(GD, 'r107.TOTEMPOOL.fOverflow107', 0);
+    if (totemOver > 0 && overF > 0) {
+      countFactor *= 1 + totemOver * overF;
+      res.notes.push('Bow engine limit: ' + totemOver + ' count' + (totemOver > 1 ? 's' : '') + ' past it, so every bow engine deals ' + Math.round(totemOver * overF * 100) + '% more (Ballista text; not checked in game).');
+    }
+    if (res.totem) Object.assign(res.totem, { share: countFactor, over: totemOver });
     perHitFactor *= countFactor * shapeWeight;
 
 
@@ -16933,9 +17134,13 @@ window.BOCharacter = function (ctx) {
       if (lit('haemorrhage')) {
         const bleeds = id => { const so = (ch.sockets || []).find(x => lc(x.skill) === lc(id)); return !!so && so.supports.some(sid => sv(lc(sid)).some(m => m.Stat === 'BleedChance')); };
         const gearBleed = modsOf(col.mods, 'BleedChance').some(m => m.stat === 'BleedChance' && !String(m.key || '').startsWith('support:'));
-        const other = (ch.hotbar || []).filter(id => id && lc(id) !== lc(skillId) && GD.skills[lc(id)]).some(id => bleeds(id) || (gearBleed && ((GD.skills[lc(id)].Tags || []).includes('Attack'))));
+        const auto = (ch.hotbar || []).filter(id => id && lc(id) !== lc(skillId) && GD.skills[lc(id)]).some(id => bleeds(id) || (gearBleed && ((GD.skills[lc(id)].Tags || []).includes('Attack'))));
+
+
+        const set = typeof o.enemyBleeding === 'boolean', other = set ? o.enemyBleeding : auto;
         const more = other ? ((sv('haemorrhage').find(m => m.Stat === 'BleedTear103') || {}).Value || 40) : 0;
-        k *= 1 + more / 100; why.push('Haemorrhage: ' + (other ? more + '% more, counted as if another skill on your bar keeps the enemy bleeding' : 'no other skill on your bar bleeds, so nothing'));
+        res.haemorrhage = { auto, set, on: other, more };
+        k *= 1 + more / 100; why.push('Haemorrhage: ' + (set ? (other ? more + '% more, the enemy set as bleeding from another skill (Configure Enemy)' : 'nothing, the enemy set as not bleeding from another skill (Configure Enemy)') : other ? more + '% more, counted as if another skill on your bar keeps the enemy bleeding' : 'no other skill on your bar bleeds, so nothing (set the enemy as bleeding in Configure Enemy if another source keeps it bleeding)'));
       }
 
 
@@ -20655,7 +20860,7 @@ window.BOStartApp = function () {
 
   const st = {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0, gatherFury: 2 }, // gatherFury: Fury charges counted while Gather Fury is linked (owner, 19 Nov 2026: default 2)
-    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: null, hallowCG: false, enemyLife: null, graveCall: false, flashfire: false, windburstMoves: null, corpseKind: '', corpsesPerSec: null, leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
+    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: null, hallowCG: false, enemyLife: null, graveCall: false, flashfire: false, otherBleed: '', windburstMoves: null, corpseKind: '', corpsesPerSec: null, leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
     penFloor: false, potionsOn: store.get('potionsOn', true) !== false, opt: null, optJob: null, last: null,
     keepSup: new Set(), blockSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
   };
@@ -20901,7 +21106,7 @@ window.BOStartApp = function () {
     for (const d of DT) if (st.res[d] !== '' && st.res[d] != null && isFinite(+st.res[d])) res[d] = +st.res[d];
     return Object.assign({
       off: st.off, vowbreak: st.vowbreak, tryHeralds: st.tryHeralds, charges: st.charges, supportsOverride: st.supports, gemLevel: st.gemLevel || undefined,
-      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: hallowOn(st.ch), hallowedCG: st.hallowCG, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire, windburstMoves: +st.windburstMoves > 0 ? +st.windburstMoves : undefined, corpseKind: st.corpseKind || undefined, corpsesPerSec: +st.corpsesPerSec > 0 ? +st.corpsesPerSec : undefined, leechUptime: st.leechUptime !== null && st.leechUptime !== '' && !isNaN(+st.leechUptime) ? +st.leechUptime / 100 : undefined, mainSkill: st.skill, execSim: st.execOn || {},
+      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: hallowOn(st.ch), hallowedCG: st.hallowCG, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire, enemyBleeding: st.otherBleed === 'yes' ? true : st.otherBleed === 'no' ? false : undefined, windburstMoves: +st.windburstMoves > 0 ? +st.windburstMoves : undefined, corpseKind: st.corpseKind || undefined, corpsesPerSec: +st.corpsesPerSec > 0 ? +st.corpsesPerSec : undefined, leechUptime: st.leechUptime !== null && st.leechUptime !== '' && !isNaN(+st.leechUptime) ? +st.leechUptime / 100 : undefined, mainSkill: st.skill, execSim: st.execOn || {},
       projOnTarget: +st.projOnTarget || undefined, totemCount: st.totemCount > 0 ? +st.totemCount : undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, castsPerSecOverride: st.cps > 0 ? +st.cps : undefined, penFloor: st.penFloor,
       conduit: st.conduit == null ? undefined : st.conduit,
       coc: st.coc === false ? false : undefined, cocSource: typeof st.coc === 'string' ? st.coc : undefined,
@@ -21108,6 +21313,14 @@ window.BOStartApp = function () {
     $('#rowCorpseKind').hidden = !(r.corpse || r.kindled || st.corpseKind || (r.skill && r.skill.Delivery === 'CorpseBurst') || (r.supports || []).some(x => /kindled_remains/i.test(x.id || x.Id || x)));
     $('#rowCorpses').hidden = !(r.kindled || st.corpsesPerSec || (r.supports || []).some(x => /kindled_remains/i.test(x.id || x.Id || x)));
     $('#rowGraveCall').hidden = !(r.minion || st.graveCall);
+
+
+
+    $('#totemCount').placeholder = r.totem && !(st.totemCount > 0) ? 'auto: ' + r.totem.count : 'auto';
+    $('#totemCount').closest('label').title = 'Blank = the most you can have: 1 + your "+N Totems" lines (Multiple Totems, tree, gear, Dragonling), up to the limit (Ballistas and Arrow Totems ' + ((GD.rules || {})['r80.CAPS.Ballistas'] || 7) + ', spell totems ' + ((GD.rules || {})['r80.CAPS.Totems'] || 11) + '), all standing the whole fight. Set fewer if you keep fewer up.';
+    $('#rowOtherBleed').hidden = !(r.haemorrhage || st.otherBleed);
+    $('#otherBleed').options[0].textContent = 'Auto' + (r.haemorrhage ? (r.haemorrhage.auto ? ' (yes: another skill on your bar bleeds)' : ' (no: nothing else on your bar bleeds)') : ' (from your bar)');
+    $('#otherBleed').value = st.otherBleed || '';
 
     const isBoss = st.rarity === 'boss';
     $('#guardianRow').hidden = !isBoss; $('#guardianElement').value = st.gElem || '';
@@ -21414,6 +21627,7 @@ window.BOStartApp = function () {
   }
   function renderBuildStats() {
     renderSummaryStrip();
+    renderStatsPanel();
     const el = $('#buildStats'); if (!el) return;
     const on = document.body.classList.contains('build-page') || document.body.classList.contains('tree-page');
     let r = null;
@@ -21434,6 +21648,166 @@ window.BOStartApp = function () {
       enemyRow();
     el.hidden = false;
   }
+
+
+
+
+
+
+
+
+  var SP = { timer: 0, open: store.get('statsOpen', true) !== false, shut: new Set(store.get('statsShut', [])) };
+  const spOn = () => !!st.ch && (document.body.classList.contains('character-page') || document.body.classList.contains('tree-page'));
+  function renderStatsPanel() {
+    const el = $('#statsPanel'); if (!el || !SP) return;
+    const on = spOn();
+    document.body.classList.toggle('stats-on', on);
+    document.body.classList.toggle('stats-folded', on && !SP.open);
+    el.hidden = !on;
+    clearTimeout(SP.timer);
+    if (!on) return;
+    if (!SP.open) { el.innerHTML = '<button type="button" class="sp-fold" id="spFold" aria-expanded="false" title="Show the character stats">' + '<span>Stats</span></button>'; return; }
+    SP.timer = setTimeout(drawStatsPanel, 40);
+  }
+  const spLineText = m => m.text ? m.text.replace(/\{(0|v)\}/g, m.v).replace(/\{1\}/g, m.v2) : S.modText(GD, m);
+
+  function spTip(head, sub, rows, lines, foot) {
+    const L = lines || [], cut = 16;
+    return '<b>' + esc(head) + '</b>' + (sub ? '<span class="pl-tip-sub">' + esc(sub) + '</span>' : '') +
+      (rows && rows.length ? '<span class="sp-tip-rows">' + rows.map(x => '<span><i>' + esc(x[0]) + '</i><em>' + esc(x[1]) + '</em></span>').join('') + '</span>' : '') +
+      (L.length ? '<span class="pl-tip-head">From</span><span class="sp-tip-lines">' + L.slice(0, cut).map(m => '<span><i>' + esc(spLineText(m)) + '</i><small>' + esc(m.src || '') + '</small></span>').join('') +
+        (L.length > cut ? '<span><i>... and ' + (L.length - cut) + ' more</i></span>' : '') + '</span>' : '') +
+      (foot ? '<span class="pl-tip-desc sp-tip-foot">' + esc(foot) + '</span>' : '');
+  }
+  const spRow = (label, value, tip, cls) => '<div class="sp-row' + (cls ? ' ' + cls : '') + '"' + (tip ? ' tabindex="0" data-tiphtml="' + esc(tip) + '"' : '') + '><span>' + label + '</span><b>' + value + '</b></div>';
+  const spSec = (id, title, body) => body ? '<details class="sp-sec" data-sec="' + id + '"' + (SP.shut.has(id) ? '' : ' open') + '><summary>' + esc(title) + '</summary>' + body + '</details>' : '';
+  function drawStatsPanel() {
+    const el = $('#statsPanel'); if (!el || !spOn() || !SP.open) return;
+    let r = null, D = null, ds = null;
+    if (st.skill) { try { r = S.calcSkill(GD, st.ch, st.skill, opts()); } catch (e) { r = null; } }
+    const ok = r && !r.error && !r.unsupported;
+    try { D = gsDefence(st.ch, opts()); } catch (e) { D = null; }
+    try { ds = defenceStats(ok ? r : null); } catch (e) { ds = null; }
+    const sections = [];
+    let dmods = [];
+    try { dmods = defenceMods(st.ch, S.collectMods(GD, st.ch, opts()).mods); } catch (e) { dmods = []; }
+    const used = ok ? r.mods.filter(m => r.used.has(m)) : [];
+    const pick = (list, stats, modes) => list.filter(m => stats.includes(m.stat) && (!modes || modes.includes(m.mode)));
+    const p1 = x => num(x, 1), sgn = x => (x >= 0 ? '+' : '') + num(x, 1) + '%', more = x => '×' + num(x, 3);
+    const skillOpts = ($('#skillSelect') || {}).innerHTML || '';
+    let html = '<div class="sp-head"><h3>Stats</h3><button type="button" class="sp-hide" id="spFold" aria-expanded="true" title="Fold the stats panel away">Hide</button></div>' +
+      (skillOpts ? '<label class="field sp-skill"><span>Skill</span><select id="spSkill">' + skillOpts + '</select></label>' : '');
+    if (!ok) html += '<p class="hint">' + (r && (r.error || r.unsupported) ? esc(r.error || r.unsupported) : 'Pick a skill to see its numbers.') + '</p>';
+
+    if (ok && !r.minion) {
+      const types = Object.keys(r.hit || {}), si = r.scaleInfo || {}, tot = types.reduce((a, d) => a + (r.hit[d].avg || 0), 0);
+      const dps = [['Hits', num(r.hitDps)]].concat(r.poisonDps ? [['Poison', num(r.poisonDps)]] : [], r.igniteDps ? [['Ignite', num(r.igniteDps)]] : [], r.bleedDps ? [['Bleeding', num(r.bleedDps)]] : [], r.entropyDps ? [['Entropy', num(r.entropyDps)]] : []);
+      let o = spRow('DPS vs enemy', num(r.totalDps), spTip('DPS vs enemy', 'The Damage tab\'s total, against the enemy set there', dps), 'sp-main') +
+        spRow('Skill panel DPS', num(r.panelDps), spTip('Skill panel DPS', 'What the game\'s skill panel shows')) +
+        spRow('Average hit', num(r.hitAvg), spTip('Average hit', 'Before the enemy\'s resistances', [['No crit', num(r.hitAvg)], ['With crits', num(r.hitAvgCrit)]]));
+      if (tot > 0) o += '<div class="sp-mix" aria-label="Damage by type">' + types.map(d => '<span style="--c:' + typeColor(d) + ';flex:' + (r.hit[d].avg / tot) + '" title="' + d + ' ' + num(r.hit[d].avg / tot * 100, 0) + '% of the hit"></span>').join('') + '</div>' +
+        '<div class="sp-mixkey">' + types.map(d => '<span style="--c:' + typeColor(d) + '">' + d + ' ' + num(r.hit[d].avg / tot * 100, 0) + '%</span>').join('') + '</div>';
+
+      const incL = pick(used, ['Damage'], ['Inc']), moreL = pick(used, ['Damage'], ['More']);
+      const typed = m => { const t = S.splitTags(m.tags || []).types; return t.length ? Object.assign({}, m, { src: (m.src || '') + ' · ' + t.join(', ') + ' only' }) : m; };
+      const main = types.slice().sort((a, b) => r.hit[b].avg - r.hit[a].avg)[0];
+      if (main && si[main]) {
+        const per = k => types.filter(d => si[d]).map(d => [d, k(si[d])]);
+        o += spRow('Increased damage', sgn(si[main].inc), spTip('Increased damage', 'All increased lines of a kind add up' + (types.length > 1 ? '; per damage type' : ''), per(x => sgn(x.inc)), incL.map(typed), 'Spell damage from Intelligence (or Strength for a Strength gem) and similar built-in bonuses count in the total but are not lines.')) +
+          spRow('More damage', more(si[main].more), spTip('More damage', 'Each more line multiplies', per(x => more(x.more)), moreL.map(typed).concat((r.engine || []).map(e => ({ text: '+' + num(e.v, 1) + '% into the damage engine', src: e.src }))),
+            'The damage engine lines add together into one more line (patch 0.56.5). The total also holds the game\'s hero damage factor and a young gem\'s boost, which are not lines.'));
+      }
+      const addL = pick(used, ['AddedDamage', 'DamageAsExtra', 'Convert']);
+      if (addL.length) o += spRow('Added, extra and converted', addL.length + ' line' + (addL.length > 1 ? 's' : ''), spTip('Added, extra and converted damage', 'Lines this skill uses', null, addL));
+      sections.push(spSec('off', 'Offence · ' + (r.skill ? r.skill.Name : st.skill), o));
+
+      const cr = r.crit, sp = r.speed, hs = r.hits;
+      let c = spRow('Crit chance', p1(cr.chance) + '%', spTip('Crit chance', 'Capped at 95%', [['Base', p1(cr.base) + '%'], ['Increased', sgn(cr.inc)]], pick(used, ['CritChance']))) +
+        spRow('Crit multiplier', num(cr.multi, 0) + '%', spTip('Crit multiplier', 'Base 150%', [['Damage from crits', more(cr.factor)]], pick(used, ['CritMulti']))) +
+        spRow(sp.stat === 'CastSpeed' ? 'Cast speed' : 'Attack speed', sgn(sp.inc) + (sp.more && sp.more !== 1 ? ' · ' + more(sp.more) : ''), spTip(sp.stat === 'CastSpeed' ? 'Cast speed' : 'Attack speed', 'Increased lines add, more lines multiply', [['Increased', sgn(sp.inc)], ['More', more(sp.more || 1)]].concat(sp.animRate && sp.animRate !== 1 ? [['Skill\'s own clip speed', more(sp.animRate)]] : []), pick(used, ['CastSpeed', 'AttackSpeed', 'SpeedMore', 'Cooldown']))) +
+        spRow('Uses per second', num(sp.usesPerSec, 2), sp.cooldown ? spTip('Uses per second', 'Cooldown ' + num(sp.cooldown, 2) + ' s') : '') +
+        spRow('Hits per second', num(hs.hitsPerSec, 2), spTip('Hits per second', 'On this target', [].concat(hs.projectiles ? [['Projectiles', hs.projectiles + ' (' + hs.projOnTarget + ' on target)']] : [], hs.strikes > 1 ? [['Strikes per use', String(hs.strikes)]] : [], hs.repeats ? [['Repeats per use', '+' + hs.repeats]] : [])));
+      sections.push(spSec('crit', 'Crit and speed', c));
+
+      const A = r.ailments || {}; let a = '';
+      if (A.poison) a += spRow('Poison chance', num(A.poison.chance, 0) + '%', spTip('Poison', '', [['Stacks on target', num(A.poison.stacks, 1) + ' / ' + A.poison.cap], ['Duration', num(A.poison.duration, 2) + ' s'], ['Increased poison', sgn(A.poison.inc)], ['Poison DPS', num(A.poison.dps)]], pick(used, ['PoisonChance', 'PoisonDamage'])));
+      if (A.ignite) a += spRow('Ignite chance', num(A.ignite.chance, 0) + '%', spTip('Ignite', '', [['Uptime', num(A.ignite.uptime * 100, 0) + '%'], ['Ignite DPS', num(A.ignite.dps)]], pick(used, ['IgniteChance', 'IgniteDamage'])));
+      if (A.bleed) a += spRow('Bleed chance', num(A.bleed.chance, 0) + '%', spTip('Bleeding', '', [['Uptime', num(A.bleed.uptime * 100, 0) + '%'], ['Bleeding DPS', num(A.bleed.dps)]], pick(used, ['BleedChance', 'BleedDamage'])));
+      if (A.shock) a += spRow('Shock chance', num(A.shock.chance, 0) + '%', spTip('Shock', '', [['Each shock', '+' + p1(A.shock.size) + '% damage taken'], ['On the enemy', num(A.shock.avg, 2) + ' of ' + A.shock.stacks]], pick(used, ['ShockChance', 'ShockEffect'])));
+      if (A.dotMulti || A.poison || A.ignite || A.bleed) a += spRow('DoT multiplier', sgn(A.dotMulti || 0), spTip('Damage over time multiplier', 'Raises poison, ignite and bleeding', null, pick(used, ['DotMulti'])));
+      if (A.durationInc) a += spRow('Ailment duration', sgn(A.durationInc), spTip('Ailment duration', '', null, pick(used, ['AilmentDuration'])));
+      sections.push(spSec('ail', 'Ailments', a));
+
+      const E = r.enemy || {}; let en = '';
+      const penL = pick(used, ['Penetration']);
+      const MI = r.mitig || {}, mt = types.filter(d => MI[d]);
+      if (mt.length) en += spRow('Enemy resistance', mt.map(d => '<span style="color:' + typeColor(d) + '">' + num(MI[d].effRes, 0) + '%</span>').join(' / '),
+        spTip('Enemy resistance', 'Level ' + E.level + ' ' + (E.rarity || '') + ', what your hits meet', mt.map(d => [d, (E.resist && d in E.resist ? num(E.resist[d], 1) + '%' : '') + (E.pen && E.pen[d] ? ', ' + num(E.pen[d], 0) + '% penetration' : '') + ' → ' + num(MI[d].effRes, 1) + '%']), penL)) +
+        spRow('Damage taken', more(MI[mt[0]].taken), spTip('Enemy damage taken', 'Curses, shock, marks and the rest together, as the sim multiplies them', mt.map(d => [d, more(MI[d].taken)])));
+      if (r.mitig && r.mitig.armourReduction) en += spRow('Enemy armour', '−' + num(r.mitig.armourReduction * 100, 1) + '%', spTip('Enemy armour', 'Cut off your physical hits'));
+      for (const c of E.curses || []) {
+        const parts = [].concat(c.taken ? [['Damage taken', '+' + p1(c.taken) + '%']] : [], Object.entries(c.elem || {}).map(([k, v]) => [k + ' taken', '+' + p1(v) + '%']), c.more ? [['More (Dread ' + c.dread + ')', '+' + p1(c.more) + '%']] : [], c.dot ? [['DoT taken', '+' + p1(c.dot) + '%']] : [], Object.entries(c.resDown || {}).map(([k, v]) => [k + ' resistance', '−' + p1(v) + '%']));
+        const big = c.taken || Math.max(0, ...Object.values(c.elem || {})) || c.dot || c.more;
+        en += spRow(esc(c.name), big ? '+' + p1(big) + '%' : '–', spTip(c.name, c.kind + ' · effect ' + more(c.eff || 1), parts, null, 'Different curses multiply; one Sentence and up to two Woes at a time.'));
+      }
+      if (A.shock && A.shock.pct) en += spRow('Shock', '+' + p1(A.shock.pct) + '% taken', spTip('Shock', 'This skill\'s own shocks, averaged over the fight'));
+      if (A.barShockPct) en += spRow('Shock from the bar', '+' + p1(A.barShockPct) + '% taken', spTip('Shock from the bar', 'Shocks laid by your other lightning skills', (r.barShock || []).map(b => [b.name || b.id || '', b.pct != null ? '+' + p1(b.pct) + '%' : ''])));
+      if (A.chill && A.chill.taken) en += spRow('Chill', '+' + p1(A.chill.taken) + '% taken', spTip('Chill', '', [['Chill size', p1(A.chill.size) + '%'], ['Uptime', num(A.chill.uptime * 100, 0) + '%']], pick(used, ['ChillEffect'])));
+      if (r.marks && r.marks.pct) en += spRow('Marks', '+' + p1(r.marks.pct) + '% taken', spTip('Marks', 'Hunter\'s Mark and the like'));
+      if (r.hallowed && r.hallowed.taken && r.hallowed.taken !== 1) en += spRow('Hallowed ground', more(r.hallowed.taken), spTip('Hallowed ground', 'Damage taken on the ground'));
+      sections.push(spSec('enemy', 'On the enemy', en));
+    } else if (ok && r.minion) {
+      const M = r.minion, cr = r.crit;
+      let o = spRow('DPS vs enemy', num(r.totalDps), spTip('DPS vs enemy', 'All its minions', [['Hits', num(r.hitDps)]].concat(r.poisonDps ? [['Poison', num(r.poisonDps)]] : [])), 'sp-main') +
+        spRow('Skill panel DPS', num(r.panelDps), spTip('Skill panel DPS', 'What the game\'s skill panel shows')) +
+        spRow('Minions', String(M.alive), spTip('Minions', 'Standing at once', M.army ? [['Minions in your army', String(M.army.total)]] : null, pick(used, ['MinionCount']))) +
+        spRow('Increased minion damage', sgn(M.inc || 0), spTip('Increased minion damage', 'Lines add', null, pick(used, ['MinionDamage', 'Damage'], ['Inc']))) +
+        spRow('More minion damage', more(M.more || 1), spTip('More minion damage', 'Each more line multiplies', [['Near you', more(M.near || 1)], ['Affinity (' + (M.affinityAttr || '') + ')', more(M.affinity || 1)]], pick(used, ['MinionDamage', 'Damage'], ['More']))) +
+        spRow('Crit chance', p1(cr.chance) + '%', spTip('Minion crit chance', '', [['Base', p1(cr.base) + '%'], ['Increased', sgn(cr.inc)]])) +
+        spRow('Crit multiplier', num(cr.multi, 0) + '%') +
+        (M.every ? spRow('Attacks every', num(M.every, 2) + ' s') : '');
+      sections.push(spSec('minion', 'Minions · ' + (r.skill ? r.skill.Name : st.skill), o));
+    }
+
+    if (D) {
+      const capOf = k => (D.caps || {})[k];
+      let d = spRow('Life', num(D.life, 0), spTip('Maximum life', 'From level, Strength and life lines', null, pick(dmods, ['Life', 'DexLife']))) +
+        spRow('Energy shield', num(D.es, 0), spTip('Energy shield', 'Item bases and lines, Intelligence', null, pick(dmods, ['EnergyShield', 'EvasionAsEnergyShield113']))) +
+        (ds ? spRow('Mana', ds.mana, spTip('Maximum mana', 'From level, Intelligence and mana lines', null, pick(dmods, ['Mana']))) : '') +
+        spRow('Armour', num(D.armour, 0), spTip('Armour', 'Against a ' + num((GD.scaling.Hero || {}).ArmourBigHitRef || 1000) + ' hit', [['Physical cut', num(D.armDR * 100, 1) + '%']], pick(dmods, ['Armour', 'ArmourMore']))) +
+        spRow('Evasion', num(D.evasion, 0), spTip('Evasion', 'Against monsters of the enemy level set', [['Chance to evade', num(D.evade * 100, 1) + '%']], pick(dmods, ['Evasion', 'EvasionMore']))) +
+        (D.block ? spRow('Block', num(D.block * 100, 0) + '%', spTip('Block chance', '', null, pick(dmods, ['Block']))) : '');
+      const resK = ['Fire', 'Cold', 'Lightning', 'Poison'];
+      d += resK.map(k => {
+        const v = D.resCapped[k], raw = D.res[k], cap = capOf(k), low = v < cap;
+        return spRow('<span style="color:' + typeColor(k) + '">' + k + ' resistance</span>', num(v, 0) + '%' + (raw - (D.pen || 0) > cap ? '<small> (' + num(raw - (D.pen || 0), 0) + ')</small>' : ''),
+          spTip(k + ' resistance', 'Capped at ' + cap + '%' + (D.pen ? ', with the ' + D.pen + '% penalty' : ''), [['From lines', num(raw, 0) + '%'], ['Counted', num(v, 0) + '%']], pick(dmods, ['Resist', 'MaxResist']).filter(m => { const t = (m.tags || [])[0]; return !t || t === k || (t === 'Elemental' && k !== 'Poison'); })), low ? 'sp-low' : '');
+      }).join('');
+      const less = ehpLessList(D);
+      if (less.length) d += spRow('Less damage taken', less.length + ' part' + (less.length > 1 ? 's' : ''), spTip('Less damage taken', 'Each one multiplies', less.map(x => { const i = x.indexOf(': '); return i > 0 ? [x.slice(0, i), x.slice(i + 2)] : [x, '']; }), pick(dmods, ['DamageTaken'], ['Inc'])));
+      d += spRow('EHP (est.)', num(D.ehp), ehpTipHtml(D), 'sp-main');
+      sections.push(spSec('def', 'Defence', d));
+    }
+
+    {
+      const at = ok ? r.attr : ds && ds.attr;
+      let m = '';
+      if (at) for (const [k, n] of [['Str', 'Strength'], ['Dex', 'Dexterity'], ['Int', 'Intelligence']]) m += spRow(n, String(at[k]), spTip(n, 'Class base and per level, then the lines', null, pick(ok ? used : dmods, [k, 'Attributes'])));
+      const mv = pick(dmods, ['MoveSpeed'], ['Inc', 'Flat']);
+      if (mv.length) m += spRow('Movement speed', sgn(mv.reduce((a, x) => a + x.v, 0)), spTip('Movement speed', 'Its lines added up; the sim does not use movement speed', null, mv));
+      sections.push(spSec('misc', 'Attributes and more', m));
+    }
+    html += sections.join('');
+    html += '<p class="hint sp-note">From the sim, with the Damage tab\'s settings. Hover a row for its lines.</p>';
+    el.innerHTML = html;
+    const sel = $('#spSkill'); if (sel && st.skill) sel.value = st.skill;
+  }
+  { const sp = $('#statsPanel');
+    if (sp) {
+      sp.addEventListener('click', e => { if (!e.target.closest('#spFold')) return; SP.open = !SP.open; store.set('statsOpen', SP.open); renderStatsPanel(); });
+      sp.addEventListener('change', e => { if (e.target.id === 'spSkill' && e.target.value && e.target.value !== st.skill) selectSkill(e.target.value); });
+      sp.addEventListener('toggle', e => { const d = e.target; if (!d.matches || !d.matches('.sp-sec')) return; if (d.open) SP.shut.delete(d.dataset.sec); else SP.shut.add(d.dataset.sec); store.set('statsShut', [...SP.shut]); }, true);
+    } }
 
 
 
@@ -21500,6 +21874,7 @@ window.BOStartApp = function () {
       kv(sp.stat === 'CastSpeed' ? 'Cast speed' : 'Attack speed', '+' + num(sp.inc, 0) + '% inc × ' + num(sp.more, 2) + ' more') +
       (sp.animRate && sp.animRate !== 1 ? kv('Animation speed', '×' + num(sp.animRate, 2) + " (this skill's own clip speed)") : '') +
       kv('Uses per second', num(sp.usesPerSec, 2) + (sp.cooldown ? ' (cooldown ' + num(sp.cooldown, 2) + ' s)' : '')) +
+      (r.totem ? kv(r.skill.Totem && r.skill.Totem.Kind === 'Ballista' ? 'Ballistas standing' : 'Totems standing', r.totem.count + (st.totemCount > 0 ? ' (set by hand)' : ' (the most you can have)') + ', each every ' + num(r.totem.every, 2) + ' s' + (r.totem.count > 1 && r.totem.share ? ', ×' + num(r.totem.share, 3) + ' each for sharing' : '')) : '') +
       (hs.repeats ? kv('Repeats per use', '+' + hs.repeats) : '') +
       (hs.projectiles ? kv('Projectiles', hs.projectiles + ' (' + hs.projOnTarget + ' on this target)') : '') +
       (hs.strikes > 1 ? kv('Strikes per use', hs.strikes) : '') +
@@ -22226,7 +22601,7 @@ window.BOStartApp = function () {
   const supName = id => (GD.supports[String(id).toLowerCase()] || { Name: id }).Name;
   function optSig() {
     const o = opts();
-    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.hallowedCG, o.enemyLife, o.graveCall, o.flashfire, o.windburstMoves, o.corpseKind, o.corpsesPerSec, o.leechUptime, o.execSim, o.mainSkill, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
+    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.hallowedCG, o.enemyLife, o.graveCall, o.flashfire, o.enemyBleeding, o.windburstMoves, o.corpseKind, o.corpsesPerSec, o.leechUptime, o.execSim, o.mainSkill, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
       off: [...st.off].filter(k => !k.startsWith('support:')).sort(), vb: [...st.vowbreak].sort(), th: o.tryHeralds, ch: o.charges, po: o.potions });
   }
   function runSearch() {
@@ -22582,6 +22957,7 @@ window.BOStartApp = function () {
   $('#corpsesPerSec').addEventListener('input', e => { st.corpsesPerSec = e.target.value === '' ? null : e.target.value; render(); });
   $('#flashfire').addEventListener('change', e => { st.flashfire = e.target.checked; render(); });
   $('#graveCall').addEventListener('change', e => { st.graveCall = e.target.checked; render(); });
+  $('#otherBleed').addEventListener('change', e => { st.otherBleed = e.target.value; render(); });
   $('#projOnTarget').addEventListener('input', e => { st.projOnTarget = e.target.value; render(); });
   $('#totemCount').addEventListener('input', e => { st.totemCount = +e.target.value || null; render(); });
   $('#hpsOverride').addEventListener('input', e => { st.hps = +e.target.value || null; render(); });
@@ -24324,7 +24700,7 @@ window.BOStartApp = function () {
 
 
   const lc = s => String(s == null ? '' : s).toLowerCase();
-  const CMP = { key: '', src: null, a: null, b: null, ka: null, kb: null, aEdited: false, read: null, busy: '', msg: '', mode: ['gear', 'slot', 'riven'].includes(store.get('cmpMode', 'item')) ? store.get('cmpMode', 'item') : 'item' }; // mode: Item Compare, Gear Set Sim, Sim by Slot or Best Rivenstone
+  const CMP = { key: '', src: null, a: null, b: null, ka: null, kb: null, aEdited: false, read: null, busy: '', msg: '', mode: 'item' }; // mode: Item Compare, Gear Set Sim, Sim by Slot or Best Rivenstone
   const cmpVisible = () => !$('#comparePane').hidden;
   const itemName = it => { const u = it.rarity === 'Unique' && GD.uniques[lc(it.unique)], b = GD.bases[lc(it.base)]; return u ? u.Name : it.name || (b ? b.Name : it.base); };
 
@@ -24958,7 +25334,7 @@ window.BOStartApp = function () {
     const r = SBS.res, row = r && r.rows[i]; if (!row || !st.ch) return;
     CMP.key = r.onlySlot; CMP.aEdited = false; CMP.a = null; cmpSync();
     CMP.b = holder(Object.assign({}, row.item, { slot: r.onlySlot }), st.ch.level); CMP.kb = planner.gear.newKit(true); CMP.read = null; CMP.msg = '';
-    CMP.mode = 'item'; store.set('cmpMode', 'item'); renderCompare();
+    CMP.mode = 'item'; renderCompare();
   }
   function sbsResultHtml(r) {
     const skillName = (GD.skills[lc(r.skill)] || {}).Name || r.skill, slotName = gsSlotName(r.onlySlot), score = r.scored || r.multi;
@@ -24971,9 +25347,9 @@ window.BOStartApp = function () {
       stat('Slot worth now', r.worn && r.base > 0 ? num((1 - r.empty / r.base) * 100, 1) + '%' : '–', '', '', (score ? 'score' : 'DPS') + ' lost if the slot were left empty') + '</div>';
     h += '<div class="table-wrap"><table class="tbl gs-table sbs-table"><thead><tr><th>#</th><th>Item</th><th>Kind</th><th>DPS</th><th title="' + (score ? 'Score (DPS and defence as the slider weighs them' + (r.multi ? ', over the skills under Also count' : '') + ')' : 'DPS') + ' against the item you wear now">Change</th><th></th></tr></thead><tbody>' +
       r.rows.map((x, i) => '<tr class="' + (x.gain > 0.0005 ? 'gs-changed' : '') + '"><td>' + (i + 1) + '</td><td class="gs-hov" data-sbs-tip="' + i + '">' + gsItemLabel(x.item, true) +
-        '<details class="gs-lines"><summary>Lines</summary><div class="cmp-tip pl-tip">' + planner.gear.tip(x.item, x.item.slot) + '</div></details>' + (x.dropsOff ? '<div class="hint">Two-handed: your off hand comes off.</div>' : '') + '</td><td>' + kind[x.kind] + '</td><td>' + num(x.dps) + '</td><td><span class="' + (x.gain >= 0 ? 'up' : 'down') + '">' + pct(x.gain) + '</span></td>' +
+        '<details class="gs-lines"><summary>Lines</summary><div class="cmp-tip pl-tip">' + planner.gear.tip(x.item, x.item.slot) + '</div></details>' + (x.dropsOff ? '<div class="hint">Two-handed: your off hand comes off.</div>' : '') + (x.short || []).map(s => '<div class="hint bad gs-req">With it on, your ' + esc(itemName(s.item)) + ' needs ' + s.need + ' ' + ATTR_NAME[s.attr] + ' and you would have ' + s.have + '.</div>').join('') + '</td><td>' + kind[x.kind] + '</td><td>' + num(x.dps) + '</td><td><span class="' + (x.gain >= 0 ? 'up' : 'down') + '">' + pct(x.gain) + '</span></td>' +
         '<td class="sbs-acts"><button class="btn small" type="button" data-sbs-equip="' + i + '">Equip</button> <button class="btn small ghost" type="button" data-sbs-cmp="' + i + '">Compare</button></td></tr>').join('') + '</tbody></table></div>';
-    h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the lines that add the most and the best runes; ' + (r.vowMax < 1 ? 'uniques get no Vows' : 'the best few uniques get Vows' + (r.vowMax < 6 ? ' (at most ' + r.vowMax + ')' : '')) + '. The rest of your gear, the tree and the supports stay as they are' + (r.reqChecked ? ', and every item listed fits your Strength, Dexterity and Intelligence with it on' : '; attribute requirements are ignored, as set') + '. Compare opens the item in Item Compare, where you can set its lines to what dropped.' + (r.scored ? ' ' + gsDefNote() : '') + '</p>';
+    h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the lines that add the most and the best runes; ' + (r.vowMax < 1 ? 'uniques get no Vows' : 'the best few uniques get Vows' + (r.vowMax < 6 ? ' (at most ' + r.vowMax + ')' : '')) + '. The rest of your gear, the tree and the supports stay as they are' + (r.reqChecked ? ', and every item listed fits your Strength, Dexterity and Intelligence with it on; a red note under an item names gear you wear that would then miss its own requirement' : '; attribute requirements are ignored, as set') + '. Compare opens the item in Item Compare, where you can set its lines to what dropped.' + (r.scored ? ' ' + gsDefNote() : '') + '</p>';
     return h + '</div>';
   }
   function sbsHtml() {
@@ -25260,7 +25636,7 @@ window.BOStartApp = function () {
     el.addEventListener('input', e => { if (e.target.id === 'gsPrio') { const x = $('#gsPrioText'); if (x) x.textContent = gsPrioText(+e.target.value); } });
     el.addEventListener('click', e => {
       const mb = e.target.closest('[data-cmpmode]');
-      if (mb) { if (mb.dataset.cmpmode !== CMP.mode) { CMP.mode = mb.dataset.cmpmode; store.set('cmpMode', CMP.mode); renderCompare(); } return; }
+      if (mb) { if (mb.dataset.cmpmode !== CMP.mode) { CMP.mode = mb.dataset.cmpmode; renderCompare(); } return; }
       const tb = e.target.closest('[data-gs-tier]');
       if (tb) { if (!GS.running && !SBS.running && !tb.disabled) { setGearTier(tb.dataset.gsTier); store.set('gearSim', GS.set); GS.msg = ''; SBS.msg = ''; renderCompare(); } return; }
       const gb = e.target.closest('[data-gs]');
@@ -25410,7 +25786,6 @@ window.BOStartApp = function () {
   $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && document.body.classList.contains('build-page')) setTimeout(() => syncUrl('build'), 0); });
 
 
-  const lastBuildView = () => { const v = store.get('buildView', 'character'); return ['character', 'tree', 'atlas', 'damage'].includes(v) ? v : 'character'; };
   function showTab(tab) {
     if (tab === 'build' && st.ch) tab = 'character'; // the Skills view is gone (20 Nov 2026): skills are edited on the Character tab
     T.visible = tab === 'tree';
@@ -25460,16 +25835,16 @@ window.BOStartApp = function () {
     if (tab === 'character') character.render();
     if (tab === 'atlas') atlas.render();
     if (tab === 'damage' && (breweryDirty || mainStale) && st.ch) { breweryDirty = false; render(); }
-    store.set('tab', tab);
-    if (['character', 'tree', 'atlas', 'damage'].includes(tab)) store.set('buildView', tab);
     syncUrl(tab);
     if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } syncTreeTab(); renderTreeTabs(); if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
   }
 
   document.querySelectorAll('.tab[data-tab]').forEach(b => b.addEventListener('click', async () => {
-    if (b.dataset.tab !== 'plan' && quietLoad(b.dataset.tab === 'build' ? (st.ch && lastBuildView() !== 'build' ? lastBuildView() : 'build:' + planner.subTab()) : b.dataset.tab)) return;
+    if (b.dataset.tab !== 'plan' && quietLoad(b.dataset.tab === 'build' ? (st.ch ? 'character' : 'build:' + planner.subTab()) : b.dataset.tab)) return;
     if (b.dataset.tab === 'plan') { if (await planner.startNewPlan()) showTab('plan'); }
-    else if (b.dataset.tab === 'build' && st.ch) showTab(lastBuildView()); // back to the Build Planner view used last
+    else if (b.dataset.tab === 'build' && st.ch) showTab('character'); // a section's button always opens its home view, nothing remembered (owner, 23 Nov 2026)
+    else if (b.dataset.tab === 'compare') { CMP.mode = 'item'; showTab('compare'); }
+    else if (b.dataset.tab === 'skillscaling') { skillsView = 'scaling'; showTab('skillscaling'); }
     else showTab(b.dataset.tab);
   }));
 
@@ -25908,6 +26283,32 @@ window.BOStartApp = function () {
 
     dps: ch => { if (!st.skill) return 0; const r = S.calcSkill(GD, ch, st.skill, opts()); return r && !r.error && !r.unsupported ? (r.totalDps || 0) + (r.risen ? r.risen.dps || 0 : 0) : 0; },
 
+
+
+    itemOpt: (ch, key, vows, ilvl, onP) => {
+      let stop = false;
+      const done = new Promise(resolve => {
+        if (!ch || !st.skill || !window.BOGearOpt) return resolve({ error: st.skill ? 'The search is not available in this page.' : 'This plan has no damage skill yet: add one on the Build tab.' });
+        const o = opts({ off: new Set([...st.off].filter(k => !/^item:/.test(k))) });
+        const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
+        const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
+        const gen = BOGearOpt.optimize(GD, S, ch, goal, o, Object.assign({ seconds: 40 }, GS.set, { idolAffixes: '', maxRes: false, defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget(),
+          onlyItem: { key }, maxVows: vows, vows: true, ilvl: ilvl || ch.level || 84, lineRoll: 1, topLines: '', rareLines: '', vowLines: planner.gear.vowAffixes }));
+        const t0 = performance.now();
+        const step = () => {
+          if (stop) return resolve(null);
+          const t = performance.now(); let r;
+          try { do { r = gen.next(); } while (!r.done && performance.now() - t < 30); }
+          catch (err) { return resolve({ error: 'The search failed: ' + err.message }); }
+          if (!r.done) { if (onP) onP(Math.min(95, Math.round((performance.now() - t0) / 100))); return soon(step); }
+          resolve(Object.assign(r.value, { skill: st.skill, prio: GS.set.prio }));
+        };
+        soon(step);
+      });
+      return { cancel: () => { stop = true; }, done };
+    },
+    itemOptNote: () => (GS.set.prio > 0 ? gsPrioText(GS.set.prio) : 'DPS only') + (optExtra().length ? ', with the skills under Also count' : ''),
+
     editable: buildEditable, commit: (ch, what) => { if (ch.plan) planChanged(ch, what || {}); else buildEdited(ch, what || {}); planner.render(); }, // the caller redraws the Character tab
     sheet: () => st.ch && st.skill ? S.calcSkill(GD, st.ch, st.skill, opts()) : null,
     passives: () => [...allocSet()].map(id => GD.nodes[id]),
@@ -25974,7 +26375,6 @@ window.BOStartApp = function () {
     document.body.classList.add('landing-view');
     document.querySelectorAll('.tab[data-tab]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); });
     $('#homeTab').classList.add('active'); $('#homeTab').setAttribute('aria-current', 'page');
-    store.set('tab', 'home');
     document.title = 'Broken Oath Builder';
     if (push && ROUTING && routingReady) { const url = siteRoot() + (window.SITE_LANG && window.PAGE_LANGS && window.PAGE_LANGS[window.SITE_LANG] ? window.SITE_LANG + '/' : ''); if (location.pathname !== url) history.pushState(null, '', url + location.search); }
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -26068,7 +26468,7 @@ window.BOStartApp = function () {
   chatbox.check(); // the question chat's button, for an account it is open to
 
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
-  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (store.get('tab', null) === 'scaling' ? 'skillscaling' : store.get('tab', null)) || (CHARS.length ? 'character' : 'home'); if (['character', 'tree', 'atlas', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'market', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (CHARS.length ? 'character' : 'home'); if (['character', 'tree', 'atlas', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'market', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
   else if (lastTab === 'home') goHome(false); // left on the landing page last time (the address stays as opened)
   routingReady = true; // from here on, switching tabs changes the address
 

@@ -24324,7 +24324,7 @@ window.BOStartApp = function () {
 
 
   const lc = s => String(s == null ? '' : s).toLowerCase();
-  const CMP = { key: '', src: null, a: null, b: null, ka: null, kb: null, aEdited: false, read: null, busy: '', msg: '', mode: ['gear', 'slot'].includes(store.get('cmpMode', 'item')) ? store.get('cmpMode', 'item') : 'item' }; // mode: Item Compare, Gear Set Sim or Sim by Slot
+  const CMP = { key: '', src: null, a: null, b: null, ka: null, kb: null, aEdited: false, read: null, busy: '', msg: '', mode: ['gear', 'slot', 'riven'].includes(store.get('cmpMode', 'item')) ? store.get('cmpMode', 'item') : 'item' }; // mode: Item Compare, Gear Set Sim, Sim by Slot or Best Rivenstone
   const cmpVisible = () => !$('#comparePane').hidden;
   const itemName = it => { const u = it.rarity === 'Unique' && GD.uniques[lc(it.unique)], b = GD.bases[lc(it.base)]; return u ? u.Name : it.name || (b ? b.Name : it.base); };
 
@@ -24758,7 +24758,7 @@ window.BOStartApp = function () {
   }
   const gsPrioText = p => p <= 0 ? 'DPS only' : p >= 100 ? 'Defence only' : (100 - p) + '% DPS · ' + p + '% defence';
   const cmpModesHtml = () => '<div class="cmp-modes" role="tablist" aria-label="Item Simulator tools">' +
-    [['item', 'Item Compare', 'M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4'], ['gear', 'Gear Set Sim', 'M12 3 4 6v6c0 4.5 3.4 7.8 8 9 4.6-1.2 8-4.5 8-9V6z'], ['slot', 'Sim by Slot', 'M4 6h10M4 12h16M4 18h7M17 4v4M14 18h6']].map(([k, n, d]) => '<button type="button" class="cmp-mode' + (CMP.mode === k ? ' on' : '') + '" role="tab" aria-selected="' + (CMP.mode === k) + '" data-cmpmode="' + k + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '"/></svg><span>' + n + '</span></button>').join('') + '</div>';
+    [['item', 'Item Compare', 'M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4'], ['gear', 'Gear Set Sim', 'M12 3 4 6v6c0 4.5 3.4 7.8 8 9 4.6-1.2 8-4.5 8-9V6z'], ['slot', 'Sim by Slot', 'M4 6h10M4 12h16M4 18h7M17 4v4M14 18h6'], ['riven', 'Best Rivenstone', 'M12 3 5 9l7 12 7-12zM5 9h14M9.5 9 12 21l2.5-12']].map(([k, n, d]) => '<button type="button" class="cmp-mode' + (CMP.mode === k ? ' on' : '') + '" role="tab" aria-selected="' + (CMP.mode === k) + '" data-cmpmode="' + k + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '"/></svg><span>' + n + '</span></button>').join('') + '</div>';
 
   function gsKey() {
     if (!st.ch) return '';
@@ -24995,13 +24995,183 @@ window.BOStartApp = function () {
     if (SBS.res) h += sbsResultHtml(SBS.res);
     return h;
   }
+
+
+
+
+
+
+
+
+
+
+  const RV = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ n: 1, roll: 'avg', vows: false }, store.get('rivenSim', {})) };
+  const RV_ROLLS = { lo: 'Lowest roll', avg: 'Average roll', hi: 'Highest roll' };
+  if (!RV_ROLLS[RV.set.roll]) RV.set.roll = 'avg';
+  const rvKey = () => gsKey() + '|' + JSON.stringify(RV.set);
+  const rvTwin = id => { const a = GD.affixes['riven95_' + lc(id)]; return a && a.Kind === 'Riven' && a.Tiers && a.Tiers[0] ? a : null; };
+
+  function rvCands(ch, vows) {
+    const list = [], no = { riven: 0, tier: 0, crafted: 0, oath: 0, vow: 0, none: 0 };
+    (ch.items || []).forEach((it, ii) => {
+      if (it.slot === 'Idol' || !GD.bases[lc(it.base)]) return;
+      (it.affixes || []).forEach((a, ai) => {
+        if (/^unique:/i.test(a.id)) return;
+        const af = GD.affixes[lc(a.id)]; if (!af) return;
+        if (af.Kind === 'Riven') { no.riven++; return; }
+        const tw = rvTwin(a.id);
+        if (!tw) { no.none++; return; }
+        if (a.oath || a.scar) { no.oath++; return; }
+        if (a.crafted) { no.crafted++; return; }
+        if (a.tier !== 0) { no.tier++; return; }
+        if (it.rarity === 'Unique' && !vows) { no.vow++; return; }
+        list.push({ ii, ai, slot: it.slot, tw });
+      });
+    });
+    return { list, no };
+  }
+  function rvLine(c, roll) {
+    const t = c.tw.Tiers[0], mid = (a, b) => { const m = (a + b) / 2; return Number.isInteger(a) && Number.isInteger(b) ? Math.round(m) : Math.round(m * 10) / 10; };
+    const pick = (a, b) => a == null ? 0 : roll === 'lo' ? a : roll === 'hi' ? b : mid(a, b);
+    return { id: c.tw.Id, tier: 0, v: pick(t.Min, t.Max), v2: pick(t.Min2, t.Max2) };
+  }
+
+  function rvWith(ch, cands, roll) {
+    const items = ch.items.slice();
+    for (const c of cands) {
+      const it = items[c.ii] === ch.items[c.ii] ? (items[c.ii] = Object.assign({}, ch.items[c.ii], { affixes: ch.items[c.ii].affixes.slice() })) : items[c.ii];
+      it.affixes[c.ai] = Object.assign({}, it.affixes[c.ai], rvLine(c, roll));
+    }
+    return Object.assign({}, ch, { items });
+  }
+  function* rvSearch(ch0, set) {
+    const o = opts({ off: new Set([...st.off].filter(k => !/^item:/.test(k))) });
+    const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
+    const goals = [{ id: st.skill, w: 1, opt: o }].concat(optExtra().map(g => ({ id: g.id, w: g.w, opt: co })));
+    const w = GS.set.prio / 100, t0 = performance.now();
+    const sheets = ch => goals.map(g => { const r = S.calcSkill(GD, ch, g.id, g.opt); return r && !r.error && !r.unsupported && isFinite(r.totalDps) ? r : null; });
+    const rs0 = sheets(ch0), lost = S.oneKindLost(rs0);
+    if (w < 1 && !(rs0[0] && rs0[0].totalDps > 0)) return { error: 'The selected skill has no DPS to compare' + (rs0[0] ? '' : ' (the sim cannot work it out with this build)') + '. Pick another skill, or move the slider to Defence.' };
+    const sum = rs => rs.reduce((s, r, i) => s + (r && !lost[i] ? r.totalDps : 0), 0);
+    const base = { rs: rs0, ehp: w > 0 ? gsDefence(ch0).ehp : 0, dps: sum(rs0) };
+
+    const ev = (ch, ref) => {
+      const rs = sheets(ch); let ws = 0, wg = 0;
+      goals.forEach((g, i) => { const a = ref.rs[i], b = rs[i]; if (!lost[i] && a && a.totalDps > 0 && b) { ws += g.w; wg += g.w * (b.totalDps / a.totalDps - 1); } });
+      const dr = ws ? 1 + wg / ws : 1, ehp = w > 0 ? gsDefence(ch).ehp : 0, er = w > 0 && ref.ehp > 0 ? ehp / ref.ehp : 1;
+      return { rs, ehp, dps: sum(rs), dr, er, score: w >= 1 ? er : w <= 0 ? dr : Math.pow(Math.max(dr, 0), 1 - w) * Math.pow(Math.max(er, 0), w) };
+    };
+    const { list, no } = rvCands(ch0, set.vows), n = Math.max(1, Math.min(set.n, list.length));
+    let total = list.length * 3, done = 0; for (let k = 1; k < n; k++) total += list.length - k;
+    const tick = phase => ({ phase, p: total ? done / total : 1 });
+
+    const rows = [];
+    for (const c of list) {
+      const e = {}; for (const r of ['lo', 'avg', 'hi']) { e[r] = ev(rvWith(ch0, [c], r), base); done++; yield tick('Trying each line'); }
+      rows.push({ c, e, gain: e[set.roll].score - 1, dps: e[set.roll].dps, lo: e.lo.score - 1, hi: e.hi.score - 1 });
+    }
+    rows.sort((a, b) => b.gain - a.gain);
+
+    const picks = [], left = rows.map(x => x.c); let cur = base, taken = [];
+    for (let k = 0; k < set.n && left.length; k++) {
+      let best = null;
+      for (const c of left) {
+        const e = k === 0 ? rows.find(x => x.c === c).e[set.roll] : ev(rvWith(ch0, taken.concat(c), set.roll), cur);
+        if (k > 0) { done++; yield tick('Stone ' + (k + 1) + ' of ' + set.n); }
+        if (!best || e.score > best.e.score) best = { c, e };
+      }
+      if (!best || best.e.score - 1 < 0.00005) break; // nothing left that helps
+      taken = taken.concat(best.c); left.splice(left.indexOf(best.c), 1);
+      const tot = ev(rvWith(ch0, taken, set.roll), base); cur = { rs: tot.rs, ehp: tot.ehp, dps: tot.dps };
+      picks.push({ c: best.c, step: best.e.score - 1, total: tot.score - 1, dps: tot.dps, dr: tot.dr, er: tot.er });
+    }
+    return { rows, picks, no, base, n: set.n, roll: set.roll, vows: set.vows, w, multi: goals.length > 1, lostAny: lost.some(Boolean), ms: performance.now() - t0, ch: ch0 };
+  }
+  function rvRun() {
+    if (!st.ch || !st.skill || RV.running) return;
+    const job = ++RV.job, key = rvKey();
+    Object.assign(RV, { running: true, res: null, msg: '', phase: 'Starting', p: 0, t0: performance.now(), key });
+    const gen = rvSearch(st.ch, Object.assign({}, RV.set));
+    renderCompare();
+    const step = () => {
+      if (job !== RV.job) return;
+      const t = performance.now(); let r;
+      try { do { r = gen.next(); if (r.value && r.value.phase) { RV.phase = r.value.phase; RV.p = Math.min(0.98, r.value.p); } } while (!r.done && performance.now() - t < 30); }
+      catch (err) { RV.running = false; RV.msg = 'The search failed: ' + err.message; return renderCompare(); }
+      if (!r.done) { gsProgress(RV); soon(step); return; }
+      RV.running = false;
+      if (r.value.error) RV.msg = r.value.error; else RV.res = Object.assign(r.value, { key, skill: st.skill });
+      renderCompare();
+    };
+    soon(step);
+  }
+  function rvCancel() { RV.job++; RV.running = false; RV.msg = 'Search stopped.'; renderCompare(); }
+
+  function rvApply() {
+    const r = RV.res; if (!r || !st.ch || r.key !== rvKey() || !r.picks.length) return;
+    const ch = buildEditable();
+    for (const p of r.picks) { const it = ch.items[p.c.ii]; it.affixes[p.c.ai] = Object.assign({}, it.affixes[p.c.ai], rvLine(p.c, r.roll)); }
+    const n = r.picks.length;
+    RV.res = null; CMP.aEdited = false; CMP.a = null;
+    RV.msg = 'Made ' + n + ' line' + (n > 1 ? 's' : '') + ' Riven on ' + ch.name + ' in this page, at the ' + RV_ROLLS[r.roll].toLowerCase() + '; the Build and Damage tabs use ' + (n > 1 ? 'them' : 'it') + ' too.' + (ch.plan ? '' : ' Your save is never changed: Reset to save on the Build tab undoes it.');
+    if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {});
+  }
+  function rvResultHtml(r) {
+    const skillName = (GD.skills[lc(r.skill)] || {}).Name || r.skill, score = r.w > 0 || r.multi, what = score ? 'the score' : 'the DPS';
+    const sp = x => '<span class="' + (x >= 0.00005 ? 'up' : x <= -0.00005 ? 'down' : 'meta') + '">' + pct(x) + '</span>';
+    const itemCell = c => '<span class="gs-hov" data-rv-tip="' + c.ii + '"><span class="meta">' + esc(gsSlotName(c.slot)) + '</span><br>' + gsItemLabel(r.ch.items[c.ii]) + '</span>';
+    const nowCell = c => { const it = r.ch.items[c.ii], a = it.affixes[c.ai], af = GD.affixes[lc(a.id)]; return esc(modLine(Object.assign({}, af.Mod, { Value: a.v, Value2: a.v2 || 0 }))) + (it.rarity === 'Unique' ? ' <span class="meta">Vow</span>' : ''); };
+    const rng = (a, b) => a === b ? num(a) : num(a) + '–' + num(b);
+    const rivenCell = c => { const t = c.tw.Tiers[0]; return '<b>' + rng(t.Min, t.Max) + (t.Min2 != null && t.Max2 ? ' / ' + rng(t.Min2, t.Max2) : '') + '</b>'; };
+    const no = r.no, why = [[no.tier, 'not at T1'], [no.none, 'with no Riven version'], [no.crafted, 'crafted'], [no.oath, 'Oathsworn or Scarred'], [no.riven, 'Riven already'], [no.vow, 'Vows on uniques (tick the box to try them)']].filter(x => x[0]).map(x => x[0] + ' ' + x[1]).join(', ');
+    if (!r.rows.length) return '<div class="card cmp-result"><h2>No line can take a Rivenstone</h2><p class="hint">A Rivenstone takes a T1 line that dropped on the item and has a Riven version. Crafted, Oathsworn and Scarred lines cannot take it.' + (why ? ' Your lines: ' + why + '.' : '') + '</p></div>';
+    const last = r.picks[r.picks.length - 1], many = r.n > 1, np = r.picks.length;
+    let h = '<div class="card cmp-result"><h2>' + (many ? 'Your ' + r.n + ' Rivenstones' : 'Your Rivenstone') + ' <span class="hint">' + esc(skillName) + ', vs the configured enemy · ' + RV_ROLLS[r.roll].toLowerCase() + '</span></h2>';
+    if (!np) h += '<p class="hint">None of the ' + r.rows.length + ' lines that can take a Rivenstone raises ' + what + ' of this skill.' + (r.w > 0 ? '' : ' Lines like life and resistances only count with the slider moved towards Defence.') + '</p>';
+    else {
+      h += '<div class="headline small">' + stat('Now', num(r.base.dps), '', '', esc(skillName) + (r.multi ? ' and the skills under Also count' : '') + ', total DPS') +
+        stat('With ' + np + ' Rivenstone' + (np > 1 ? 's' : ''), num(last.dps), '<div class="delta ' + (last.total >= 0 ? 'up' : 'down') + '">' + pct(last.total) + (score ? ' score' : '') + '</div>', 'main', r.w > 0 ? 'DPS ' + pct(last.dr - 1) + ', defence ' + pct(last.er - 1) : 'found in ' + (r.ms / 1000).toFixed(1) + ' s') +
+        stat('Lines that can take one', String(r.rows.length), '', '', 'T1, dropped on the item, with a Riven version') + '</div>';
+      h += '<div class="table-wrap"><table class="tbl gs-table rv-table"><thead><tr><th>' + (many ? 'Stone' : '#') + '</th><th>Item</th><th>Line now</th><th>As Riven</th><th title="What this stone adds on top of the ones above it">This stone</th>' + (many ? '<th title="All stones down to this row, against your gear now">Total</th>' : '') + '</tr></thead><tbody>' +
+        r.picks.map((p, i) => '<tr><td>' + (i + 1) + '</td><td>' + itemCell(p.c) + '</td><td>' + nowCell(p.c) + '</td><td>' + rivenCell(p.c) + '</td><td>' + sp(p.step) + '</td>' + (many ? '<td>' + sp(p.total) + '</td>' : '') + '</tr>').join('') + '</tbody></table></div>';
+      if (np < r.n) h += '<p class="hint">' + (np < r.rows.length ? 'Only ' + np + ' of your ' + r.n + ' stones help: no other line that can take one raises ' + what + '.' + (r.w > 0 ? '' : ' Lines like life and resistances only count with the slider moved towards Defence.') : 'Your gear has only ' + r.rows.length + ' line' + (r.rows.length > 1 ? 's' : '') + ' that can take a Rivenstone.') + '</p>';
+      h += '<div class="cmp-actions"><button class="btn" type="button" data-rv="apply">Make ' + (np > 1 ? 'these lines' : 'this line') + ' Riven on the build</button><span class="hint">In this page only, at the ' + RV_ROLLS[r.roll].toLowerCase() + '; the Build and Damage tabs use it too.' + (r.ch.plan ? '' : ' Your save is never changed.') + '</span></div>';
+    }
+    h += '</div><div class="card cmp-result"><h2>Every line that can take a Rivenstone <span class="hint">one stone each, on your gear as it is</span></h2>' +
+      '<div class="table-wrap"><table class="tbl gs-table rv-table"><thead><tr><th>#</th><th>Item</th><th>Line now</th><th>As Riven</th><th title="' + (score ? 'Score (DPS and defence as the slider weighs them' + (r.multi ? ', over the skills under Also count' : '') + ')' : 'DPS') + ' at the ' + RV_ROLLS[r.roll].toLowerCase() + '">Change</th><th title="At the lowest and at the highest roll of the Riven line">Lowest to highest roll</th></tr></thead><tbody>' +
+      r.rows.map((x, i) => '<tr><td>' + (i + 1) + '</td><td>' + itemCell(x.c) + '</td><td>' + nowCell(x.c) + '</td><td>' + rivenCell(x.c) + '</td><td>' + sp(x.gain) + '</td><td>' + sp(x.lo) + ' to ' + sp(x.hi) + '</td></tr>').join('') + '</tbody></table></div>';
+    h += '<p class="hint">A Rivenstone turns one T1 line that dropped on the item into its Riven version, with a new roll in the range shown (the game: "the T1 top ×1.05 to ×1.20"). The game counts most Riven damage lines a little under the number on the item; the sim does the same.' +
+      (many ? ' With several stones each next line is picked on top of the ones before.' : '') + (why ? ' Lines that cannot take one here: ' + why + '.' : '') +
+      (r.vows ? ' Whether a Rivenstone takes a Vow on a unique is not checked in the game.' : '') + (r.lostAny ? ' Legion of One: only the strongest summon counts.' : '') + (r.w > 0 ? ' ' + gsDefNote() : '') + '</p>';
+    return h + '</div>';
+  }
+  function rvHtml() {
+    const key = rvKey();
+    if (RV.running && RV.key !== key) { RV.job++; RV.running = false; RV.msg = 'The character or a setting changed, so the search was stopped.'; }
+    if (RV.res && RV.res.key !== key) RV.res = null;
+    const off = RV.running, dis = off ? ' disabled' : '';
+    let h = '<div class="card gs-card"><div class="cmp-pick-head"><div class="gs-head-text"><h2>Best Rivenstone</h2><p class="hint">A Rivenstone turns one T1 line on an item into its Riven version. This tries every line on the gear you wear that can take one and lists them by what they add. With more than one stone, enter how many: that many lines are picked.</p></div><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + dis + '>' + cmpSkillOptions() + '</select></label>' + (off ? '' : cmpMultiHtml() + enemyBtn()) + '</span></div>' +
+      bareItemsNote() +
+      '<div class="gs-controls rv-controls"><label class="field inline" title="How many Rivenstones you have: that many lines are picked, one after another"><span>Rivenstones you have</span><input type="number" min="1" max="30" id="rvCount" value="' + RV.set.n + '"' + dis + '></label>' +
+      '<div class="gs-tier rv-roll"><span class="meta">Riven roll to sim</span><div class="cmp-modes gs-tiers" role="radiogroup" aria-label="Riven roll to sim">' + Object.keys(RV_ROLLS).map(k => '<button type="button" class="cmp-mode' + (k === RV.set.roll ? ' on' : '') + '" role="radio" aria-checked="' + (k === RV.set.roll) + '" data-rv-roll="' + k + '"' + dis + '><span>' + RV_ROLLS[k] + '</span></button>').join('') + '</div></div>' +
+      '<label class="check-row" title="Vows are lines bound to a unique. Whether a Rivenstone takes one is not checked in the game"><input type="checkbox" id="rvVows"' + (RV.set.vows ? ' checked' : '') + dis + '><span>Try Vows on uniques too (not checked in the game)</span></label></div>' +
+      '<div class="gs-controls gs-goal">' + gsPrioHtml(off) + gsLayersHtml(off) + '</div>' +
+      '<div class="cmp-actions">' + (off ? '<button class="btn ghost" type="button" data-rv="cancel">Stop</button>' :
+        '<button class="btn" type="button" data-rv="run"' + (st.skill ? '' : ' disabled') + '>Find the best ' + (RV.set.n > 1 ? RV.set.n + ' lines' : 'line') + '</button>') +
+      '<span class="hint">' + (st.skill ? 'Takes a few seconds; the page stays usable.' : 'This plan has no damage skill yet: add one on the Build tab.') + '</span></div>' +
+      (off ? '<div class="gs-prog" role="progressbar" aria-label="Search progress"><div class="gs-bar"><div id="gsBar" style="width:' + Math.max(2, Math.round(RV.p * 100)) + '%"></div></div><div class="hint" id="gsPhase">' + esc(RV.phase) + '</div></div>' : '') +
+      (RV.msg ? '<p class="hint pl-status">' + esc(RV.msg) + '</p>' : '') + '</div>';
+    if (RV.res) h += rvResultHtml(RV.res);
+    return h;
+  }
   const cmpItemMode = () => cmpVisible() && CMP.mode === 'item';
   function renderCompare() {
     const el = $('#comparePane'); if (!el || el.hidden) return;
-    let h = cmpModesHtml() + '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Item Simulator</h2><p>' + (CMP.mode === 'gear' ? 'Find the best gear for a skill from every unique, Oathword and rare, for damage, defence or both, and see what it would do.' : CMP.mode === 'slot' ? 'Pick one slot and see every unique, Oathword and rare that fits it, ranked by what it does for your skill with the rest of your gear as it is.' : 'Pick one of your items, then fill in the item you found or paste a screenshot of it, to see what swapping does to your damage and defence, and which one to wear.') + '</p></div>';
+    let h = cmpModesHtml() + '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Item Simulator</h2><p>' + (CMP.mode === 'gear' ? 'Find the best gear for a skill from every unique, Oathword and rare, for damage, defence or both, and see what it would do.' : CMP.mode === 'riven' ? 'See which line on your gear is worth a Rivenstone, or the best lines for all the stones you have.' : CMP.mode === 'slot' ? 'Pick one slot and see every unique, Oathword and rare that fits it, ranked by what it does for your skill with the rest of your gear as it is.' : 'Pick one of your items, then fill in the item you found or paste a screenshot of it, to see what swapping does to your damage and defence, and which one to wear.') + '</p></div>';
     if (!st.ch) { el.innerHTML = h + '<div class="empty">Load a character or start a plan first.</div>'; return; }
     if (CMP.mode === 'gear') { el.innerHTML = h + gsHtml(); return; }
     if (CMP.mode === 'slot') { el.innerHTML = h + sbsHtml(); return; }
+    if (CMP.mode === 'riven') { el.innerHTML = h + rvHtml(); return; }
     cmpSync();
     const g = planner.gear, slot = cmpSlot(), ia = CMP.a.items[0] || null, ib = CMP.b.items[0] || null;
     h += '<div class="card cmp-pick"><div class="cmp-pick-head"><h2>Item slot</h2>' +
@@ -25076,6 +25246,8 @@ window.BOStartApp = function () {
       if (t.id === 'gsPrio') { GS.set.prio = Math.max(0, Math.min(100, Math.round(+t.value / 10) * 10 || 0)); store.set('gearSim', GS.set); syncOptPrio(); if (T.opt) clearOpt(); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsResTarget') { const v = Math.max(1, Math.min(200, Math.round(+t.value) || 0)); GS.set.resTarget = v === gsResCap() ? 0 : v; store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsRareSock') { GS.set.rareSockets = Math.max(0, Math.min(2, Math.round(+t.value) || 0)); gsTierTouch('rareSockets'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'rvCount') { RV.set.n = Math.max(1, Math.min(30, Math.round(+t.value) || 1)); store.set('rivenSim', RV.set); RV.msg = ''; return renderCompare(); }
+      if (t.id === 'rvVows') { RV.set.vows = t.checked; store.set('rivenSim', RV.set); RV.msg = ''; return renderCompare(); }
       if (t.id === 'gsIdol') { GS.set.idolAffixes = t.value === '' ? '' : Math.max(1, Math.min(6, Math.round(+t.value) || 1)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsMaxRiven') { const v = String(t.value).trim(); GS.set.maxRiven = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(99, Math.round(+v))); gsTierTouch('maxRiven'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsMaxVows') { const v = String(t.value).trim(); GS.set.maxVows = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(6, Math.round(+v))); gsTierTouch('maxVows'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
@@ -25093,6 +25265,8 @@ window.BOStartApp = function () {
       if (tb) { if (!GS.running && !SBS.running && !tb.disabled) { setGearTier(tb.dataset.gsTier); store.set('gearSim', GS.set); GS.msg = ''; SBS.msg = ''; renderCompare(); } return; }
       const gb = e.target.closest('[data-gs]');
       if (gb) { const a = gb.dataset.gs; if (a === 'run') gsRun(); else if (a === 'cancel') gsCancel(); else if (a === 'equip') gsEquip(); return; }
+      const rvb = e.target.closest('[data-rv],[data-rv-roll]');
+      if (rvb) { const d = rvb.dataset; if (d.rv === 'run') rvRun(); else if (d.rv === 'cancel') rvCancel(); else if (d.rv === 'apply') rvApply(); else if (d.rvRoll && !RV.running && d.rvRoll !== RV.set.roll) { RV.set.roll = d.rvRoll; store.set('rivenSim', RV.set); RV.msg = ''; renderCompare(); } return; }
       const sbb = e.target.closest('[data-sbs],[data-sbs-equip],[data-sbs-cmp]');
       if (sbb) { const d = sbb.dataset; if (d.sbs === 'run') sbsRun(); else if (d.sbs === 'cancel') sbsCancel(); else if (d.sbsEquip != null) sbsEquip(+d.sbsEquip); else if (d.sbsCmp != null) sbsCompare(+d.sbsCmp); return; }
       if (e.target.closest('.pl-item > summary')) { e.preventDefault(); return; } // the editors stay open here
@@ -25127,6 +25301,9 @@ window.BOStartApp = function () {
       }
       else if ((sb = e.target.closest && e.target.closest('[data-sbs-tip]')) && SBS.res) { // Sim by Slot: a listed item
         key = 'sbs:' + sb.dataset.sbsTip; const row = SBS.res.rows[+sb.dataset.sbsTip]; it = row && row.item;
+      }
+      else if ((sb = e.target.closest && e.target.closest('[data-rv-tip]')) && RV.res) { // Best Rivenstone: the item a line is on
+        key = 'rv:' + sb.dataset.rvTip; it = RV.res.ch.items[+sb.dataset.rvTip];
       }
       if (!it) return hideSlotTip();
       if (!tip) { tip = document.createElement('div'); tip.className = 'pl-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }

@@ -1968,6 +1968,8 @@ body.ch-dragging, body.ch-dragging * { cursor: grabbing !important; user-select:
 .ch-skill { padding: 9px 11px; margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--panel) 85%, var(--bg)); }
 .ch-skill.main { border-color: color-mix(in srgb, var(--dashboard-gold) 55%, var(--line)); }
 .ch-skill-name { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.ch-skill-dps { margin: 2px 0 4px 28px; font-size: 13px; }
+.ch-skill-dps .good { color: var(--good); } .ch-skill-dps .bad { color: var(--bad); }
 .ch-sup { margin: 3px 0 0 14px; padding-left: 8px; border-left: 1px solid var(--line); font-size: 13px; color: var(--muted); }
 .ch-sup-n { display: inline-block; min-width: 1.4em; margin-right: 4px; color: var(--dashboard-gold); font-weight: 600; font-variant-numeric: tabular-nums; }
 .ch-skill-name[data-tip], .ch-sup[data-tip] { cursor: help; }

@@ -3323,6 +3323,8 @@ window.BOPlanner = function (ctx) {
   function countBox(skill) {
     if (!ctx.countable || !ctx.countable(skill)) return '';
     const main = ctx.simSkill && ctx.simSkill() === skill, w = (ctx.optWeights ? ctx.optWeights() : {})[skill], on = main || w > 0;
+
+    if (!on && ctx.autoCounted && ctx.autoCounted(skill)) return '<span class="pl-count on"><label class="check-row" title="Cast on Crit: fires by itself on crits, so it always counts while on the bar"><input type="checkbox" checked disabled><span>Include in simulations (Cast on Crit)</span></label></span>';
     return '<span class="pl-count' + (on ? ' on' : '') + '"><label class="check-row" title="' + (main ? 'The selected skill always counts, at weight 1' : 'The tree optimizer, Plan, node values, Item Compare and Gear Set Sim weigh this skill too (Also count)') + '"><input type="checkbox" data-f="count"' + (on ? ' checked' : '') + (main ? ' disabled' : '') + '><span>Include in simulations</span></label>' +
       (on ? '<label class="field inline pl-count-w" title="Weight: 1 = as much as the main skill, 0.5 = half"><span>Weight</span><input type="number" min="0.05" max="10" step="0.05" data-f="countw" value="' + (main ? 1 : w) + '"' + (main ? ' disabled' : '') + '></label>' : '') + '</span>';
   }
@@ -12248,7 +12250,12 @@ window.BOCharacter = function (ctx) {
     if (!rs.length) h += '<p class="hint">No skills.</p>';
 
     const main = lc(ch.mainSkill || (ctx.simSkill && ctx.simSkill()) || '');
-    const ordered = rs.filter(r => lc(r.skill) === main).concat(rs.filter(r => lc(r.skill) !== main));
+
+
+    const all = rs.filter(r => lc(r.skill) === main).concat(rs.filter(r => lc(r.skill) !== main));
+    const showAll = !!LS.get('ch:allSkills', false), offBar = all.filter(r => lc(r.skill) !== main && !bar.has(r.skill)).length;
+    const ordered = showAll ? all : all.filter(r => lc(r.skill) === main || bar.has(r.skill));
+    if (offBar) h += '<p class="hint ch-offbar">' + (showAll ? 'Showing every skill gem, ' + offBar + ' off the bar. ' : 'Showing the skills on the bar. ') + '<button class="btn small ghost" type="button" data-allskills="' + (showAll ? '0' : '1') + '">' + (showAll ? 'Only the bar' : 'Show ' + offBar + ' off the bar') + '</button></p>';
     for (const r of ordered) {
       const sk = gd.skills[lc(r.skill)], sups = r.sock ? r.sock.supports : [];
       const canSim = sk && !(ctx.sim.dealsNoHits && ctx.sim.dealsNoHits(sk)) && ctx.supportSearch;
@@ -12256,6 +12263,8 @@ window.BOCharacter = function (ctx) {
         '<span class="meta">level ' + (ch.gemLevels[r.skill] || 1) + (bar.has(r.skill) ? '' : ' · off the bar') + (lc(r.skill) === main ? ' · main skill' : '') + '</span>' +
         '<span class="ch-skill-acts">' + (canSim ? '<button class="btn small ghost ch-simsup" type="button" data-simsup="' + esc(r.skill) + '" title="Opens this skill: pin or block supports, then run Sim Supports there">Sim Supports</button>' : '') +
         '<button class="x ch-skill-x" type="button" data-rmskill="' + esc(r.skill) + '" aria-label="Remove ' + esc(sk ? sk.Name : r.skill) + '">×</button></span></div>' +
+
+        (ctx.skillContribs && lc(r.skill) !== main ? '<div class="ch-skill-dps" data-contrib="' + esc(r.skill) + '"><span class="meta">Working out its DPS share…</span></div>' : '') +
 
 
         sups.map((id, i) => '<div class="ch-sup" data-tip="sup" data-id="' + esc(id) + '" tabindex="0"><span class="ch-sup-n" aria-label="Socket ' + (i + 1) + '">' + (i + 1) + '</span>' + ctx.gemDot(id) + esc((gd.supports[lc(id)] || { Name: id }).Name) + '</div>').join('') + skillChecks(r.skill, main) + '</div>';
@@ -12267,8 +12276,14 @@ window.BOCharacter = function (ctx) {
 
   function skillChecks(skill, main) {
     const isMain = lc(skill) === main, can = ctx.countable && ctx.countable(skill);
+
+    const off = !isMain && !(ctx.current().hotbar || []).some(h => lc(h) === lc(skill));
+    if (off) return '<div class="ch-skill-checks"><span class="meta">Off the bar: not counted in the sim. Put it on the bar to count it.</span><label class="check-row" title="The skill the Damage tab sims"><input type="checkbox" data-chf="main"><span>Mark as Main</span></label></div>';
     if (!can && !isMain) return '';
     const w = (ctx.optWeights ? ctx.optWeights() : {})[skill], inc = isMain || w > 0;
+
+    if (!inc && ctx.autoCounted && ctx.autoCounted(skill)) return '<div class="ch-skill-checks"><label class="check-row" title="Cast on Crit: fires by itself on crits, so it always counts while on the bar"><input type="checkbox" checked disabled><span>Include in Sim (Cast on Crit)</span></label>' +
+      '<label class="check-row" title="The skill the Damage tab sims"><input type="checkbox" data-chf="main"><span>Mark as Main</span></label></div>';
     return '<div class="ch-skill-checks">' +
       (can ? '<label class="check-row" title="' + (isMain ? 'The main skill always counts' : 'The tree optimizer, Plan, node values, Item Compare and Gear Set Sim weigh this skill too') + '"><input type="checkbox" data-chf="count"' + (inc ? ' checked' : '') + (isMain ? ' disabled' : '') + '><span>Include in Sim</span></label>' : '') +
       '<label class="check-row" title="The skill the Damage tab sims"><input type="checkbox" data-chf="main"' + (isMain ? ' checked disabled' : '') + '><span>Mark as Main</span></label></div>';
@@ -12480,6 +12495,36 @@ window.BOCharacter = function (ctx) {
     if (!ch) { el.innerHTML = h + '<div class="card"><p class="hint">No character loaded. Load a save, a build code or start a plan first.</p></div>'; return; }
     if (note && note.id === ch.id) h += '<p class="hint pl-status" role="status">' + esc(note.text) + '</p>';
     el.innerHTML = h + planRow(ch) + undoBar(ch) + '<div class="ch-cols"><div class="ch-col">' + gearCard(ch) + (ctx.beltCard ? ctx.beltCard() : '') + notesCard() + '</div><div class="ch-col">' + skillsCard(ch) + passivesCard(ch) + '</div></div>';
+    fillContribs();
+  }
+
+
+
+  let contribTimer = 0;
+  function fillContribs() {
+    clearTimeout(contribTimer);
+    contribTimer = setTimeout(() => {
+      const el = $('#characterPane'); if (!el || el.hidden || !ctx.skillContribs) return;
+      let map = null; try { map = ctx.skillContribs(); } catch (e) { map = null; }
+      for (const box of el.querySelectorAll('.ch-skill-dps[data-contrib]')) {
+        const x = map && map[box.dataset.contrib];
+        box.innerHTML = contribHtml(x); box.hidden = !box.innerHTML;
+      }
+    }, 60);
+  }
+  function contribHtml(x) {
+    if (!x) return '';
+
+    if (!(x.total > 0)) return '';
+    const pct = v => { const p = Math.abs(v / x.total * 100); return (p < 1 ? '<1' : p < 10 ? +p.toFixed(1) : Math.round(p)) + '%'; };
+    const tip = 'Share of the counted DPS (main skill plus the skills ticked Include in Sim, against the enemy set on the Damage tab): ' + ctx.num(x.total) + ' with this skill, ' + ctx.num(x.total - x.delta) + ' without it (off the bar and out of its socket)';
+    const small = Math.abs(x.delta) < Math.max(1, x.total * 0.0005);
+    let h;
+    if (!small) h = '<span title="' + tip + '"><b class="' + (x.delta < 0 ? 'bad' : 'good') + '">' + (x.delta < 0 ? '−' : '+') + pct(x.delta) + ' damage</b></span>';
+    else if (x.own > 0) h = '';
+    else h = '<span class="meta" title="' + tip + '">No damage change in the sim</span>';
+    if (x.own > 0) h += (h ? ' <span class="meta">·</span> ' : '') + '<span class="meta" title="This skill on its own (' + ctx.num(x.own) + ' DPS), with its supports and gem level, as a share of the counted DPS. Tick Include in Sim to add it to the total">Own damage ' + pct(x.own) + ', not counted</span>';
+    return h;
   }
 
 
@@ -12557,6 +12602,8 @@ window.BOCharacter = function (ctx) {
         hide(); remember('skill', nm); const ch = ctx.editable(); if (!ch) return;
         planner.removeSkill(ch, id); ctx.commit(ch); render(); return;
       }
+      const ab = e.target.closest && e.target.closest('[data-allskills]');
+      if (ab) { LS.set('ch:allSkills', ab.dataset.allskills === '1'); render(); return; }
       if (e.target.closest && e.target.closest('[data-undo]')) return doUndo();
       const c = e.target.closest && e.target.closest('[data-clip]'); if (c) return clipAct(c.dataset.clip);
       const sw = e.target.closest && e.target.closest('[data-skwin]'); if (sw) { hide(); return openSkill(sw.dataset.skwin, sw); }
@@ -13576,6 +13623,7 @@ window.BOCharacter = function (ctx) {
 
     'WoeOnHit', 'WoeLinger', 'CurseMore',
     'BloodMagic', 'LifeLeech', 'Dragonling', 'ShockSpreadOnKill', 'IgniteSpreadOnKill', // IgniteSpreadOnKill: Kindling Rod (build 85), a pack effect like the Shock spread
+
 
     'FortifyMax', 'FortifyEffect', 'CryFury', 'CryLinger', 'BannerStartValour', 'BannerKeepValour', 'VowReserveLess',
     'AuraDrainLess', 'PoisonSpreadOnKill', 'HeraldKillRadius',
@@ -15128,6 +15176,22 @@ window.BOCharacter = function (ctx) {
           for (const m of fb.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: (m.Value || 0) * (m.PerStack ? n : 1), v2: m.Value2 || 0, local: false, src: 'Fury x' + n + ' (Gather Fury)', key: 'charge:fury' });
           if (!o._gfHeld) res.notes.push('Gather Fury' + (other ? ' (linked to ' + GD.skills[lc(other.skill)].Name + ')' : '') + ': counted as ' + want + ' Fury charges held (8% increased damage, 4% attack and cast speed each). Change the number under Vows, Heralds & charges; how many you really hold depends on how fast things die and is not checked in game.');
         }
+      }
+    }
+
+
+
+
+
+
+    {
+      const fb = GD.blessings.fury, FURY_MAX = 5;
+      const isCryFury = y => ((GD.supports[lc(String(y).replace('@granted', ''))] || {}).Mods || []).some(m => m.Stat === 'CryFury' && m.Value > 0);
+      const cry = (ch.sockets || []).find(s => { const k = GD.skills[lc(s.skill)]; return k && (k.Delivery === 'Cry' || (k.Tags || []).includes('Cry')) && (ch.hotbar || []).some(h => lc(h) === lc(s.skill)) && (s.supports || []).some(isCryFury); });
+      if (fb && cry && furyHeldN < FURY_MAX && !(o.off && o.off.has('charge:cryfury'))) {
+        const n = FURY_MAX - furyHeldN; furyHeldN = FURY_MAX;
+        for (const m of fb.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: (m.Value || 0) * (m.PerStack ? n : 1), v2: m.Value2 || 0, local: false, src: 'Fury x' + n + ' (Defiant Roar on ' + GD.skills[lc(cry.skill)].Name + ')', key: 'charge:fury' });
+        if (!o._gfHeld) res.notes.push('Defiant Roar on ' + GD.skills[lc(cry.skill)].Name + ': counted as ' + FURY_MAX + ' Fury charges held (one per roar, game log 23 Nov 2026).');
       }
     }
 
@@ -21161,7 +21225,20 @@ window.BOStartApp = function () {
     st.supports = host ? host.supports.slice() : (sock ? sock.supports.slice() : []);
   }
 
+
+
+
+  function syncCurseBar() {
+    if (!st.ch || !st.curses) return;
+    const now = new Set(Object.values(GD.curses).filter(c => c.Skill && (st.ch.hotbar || []).includes(c.Skill)).map(c => c.Id));
+    if (st.curseBar && st.curseBarCh === st.ch.id) for (const c of Object.values(GD.curses)) {
+      const was = st.curseBar.has(c.Id), is = now.has(c.Id);
+      if (was !== is) st.curses[c.Id] = Object.assign({ dread: 0 }, st.curses[c.Id] || {}, { on: is });
+    }
+    st.curseBar = now; st.curseBarCh = st.ch.id;
+  }
   function opts(extra) {
+    syncCurseBar();
     const res = {};
     for (const d of DT) if (st.res[d] !== '' && st.res[d] != null && isFinite(+st.res[d])) res[d] = +st.res[d];
     return Object.assign({
@@ -21184,7 +21261,24 @@ window.BOStartApp = function () {
   }
 
 
-  const optExtra = () => Object.entries(st.optW || {}).filter(([id, w]) => w > 0 && id !== st.skill && (st.pickable || []).some(s => s.id === id)).map(([id, w]) => ({ id, w: +w }));
+
+
+  const onBarNow = id => !!st.ch && (st.ch.hotbar || []).some(h => h && String(h).toLowerCase() === String(id).toLowerCase());
+
+
+
+  const isCocId = y => String(y).replace('@granted', '').toLowerCase() === 'cast_on_crit';
+  const cocAuto = id => {
+    if (!st.ch || !id || id === st.skill || !onBarNow(id)) return false;
+    const s = (st.ch.sockets || []).find(x => String(x.skill).toLowerCase() === String(id).toLowerCase()), sk = GD.skills[String(id).toLowerCase()];
+    return !!(s && sk && !s.conduit && (s.supports || []).some(isCocId) && !(S.dealsNoHits && S.dealsNoHits(sk)) && (st.pickable || []).some(p => p.id === id));
+  };
+  const optExtra = () => {
+    const w = st.optW || {};
+    const out = Object.entries(w).filter(([id, v]) => v > 0 && id !== st.skill && onBarNow(id) && (st.pickable || []).some(s => s.id === id)).map(([id, v]) => ({ id, w: +v }));
+    for (const s of st.pickable || []) if (!out.some(g => g.id === s.id) && cocAuto(s.id)) out.push({ id: s.id, w: 1, auto: true });
+    return out;
+  };
   const sName = id => (GD.skills[String(id).toLowerCase()] || {}).Name || id;
   function optGoals(extra) {
     const more = optExtra();
@@ -21193,12 +21287,13 @@ window.BOStartApp = function () {
   }
   const optLabel = () => { const more = optExtra(); return more.length ? [st.skill, ...more.map(g => g.id)].map(sName).join(' + ') : sName(st.skill); };
 
-  const optMultiList = () => { const w = st.optW || {}; return (st.pickable || []).filter(s => s.id !== st.skill && (s.where !== 'Owned gem' || w[s.id] > 0)); };
+  const optMultiList = () => { const w = st.optW || {}; return (st.pickable || []).filter(s => s.id !== st.skill && onBarNow(s.id)); };
   const optMultiSum = () => { const n = optExtra().length; return n ? 'Also count: ' + n + ' skill' + (n > 1 ? 's' : '') : 'Also count…'; };
   function optMultiRows(boxName) {
     const w = st.optW || {}, list = optMultiList();
     const main = (st.pickable || []).find(s => s.id === st.skill);
     return (main ? '<div class="opt-multi-row main" title="The main skill always counts, at weight 1. Change it in the ' + boxName + ' box."><label class="check-row"><input type="checkbox" checked disabled><span>' + skillDot(main.id) + esc(main.name) + ' <span class="c">main</span></span></label><input type="number" value="1" disabled title="Weight"></div>' : '') + list.map(s => { const on = w[s.id] > 0;
+      if (!on && cocAuto(s.id)) return '<div class="opt-multi-row" title="Cast on Crit: fires by itself on crits, so it always counts while on the bar"><label class="check-row"><input type="checkbox" checked disabled><span>' + skillDot(s.id) + esc(s.name) + ' <span class="c">Cast on Crit</span></span></label><input type="number" value="1" disabled title="Weight"></div>';
       return '<div class="opt-multi-row"><label class="check-row"><input type="checkbox" data-ow="' + esc(s.id) + '"' + (on ? ' checked' : '') + '><span>' + skillDot(s.id) + esc(s.name) + '</span></label>' +
         '<input type="number" min="0.05" max="10" step="0.05" data-oww="' + esc(s.id) + '" value="' + (on ? w[s.id] : 1) + '" title="Weight"' + (on ? '' : ' disabled') + '></div>'; }).join('');
   }
@@ -21239,6 +21334,52 @@ window.BOStartApp = function () {
   const comboIds = () => optExtra().map(g => g.id);
   function comboRuns(extra) {
     return comboIds().map(id => ({ id, r: S.calcSkill(GD, st.ch, id, comboOpts(extra)) })).filter(x => !x.r.error && !x.r.unsupported && isFinite(x.r.totalDps));
+  }
+
+
+
+
+
+
+  const CONTRIB = { key: '', map: null };
+  function contribKey(ch) {
+    const o = opts();
+    return JSON.stringify([ch, o, st.optW || {}], (k, v) => v instanceof Set ? [...v] : v);
+  }
+  function skillContribs(ch) {
+    if (!ch || !st.skill) return null;
+    let key; try { key = contribKey(ch); } catch (e) { key = ''; }
+    if (key && CONTRIB.key === key) return CONTRIB.map;
+    const lc = x => String(x || '').toLowerCase();
+    const dpsOf = r => r && !r.error && !r.unsupported && isFinite(r.totalDps) ? r.totalDps + (r.risen ? r.risen.dps || 0 : 0) : 0;
+    const counted = [st.skill].concat(optExtra().map(g => g.id));
+
+
+    const total = (c, skip) => {
+      let ex;
+      if (skip) { const cs = {}; for (const [k, v] of Object.entries(st.curses || {})) cs[k] = (GD.curses[k] || {}).Skill && lc(GD.curses[k].Skill) === lc(skip) ? Object.assign({}, v, { on: false }) : v; ex = { curses: cs }; }
+      return counted.reduce((a, id) => lc(id) === lc(skip) ? a : a + dpsOf(S.calcSkill(GD, c, id, id === st.skill ? opts(ex) : comboOpts(ex))), 0);
+    };
+    const without = id => {
+      const c = Object.assign({}, ch, { hotbar: (ch.hotbar || []).map(h => lc(h) === lc(id) ? '' : h) });
+      c.sockets = (ch.sockets || []).filter(s => lc(s.skill) !== lc(id)).map(s => lc(s.conduit) === lc(id) ? Object.assign({}, s, { conduit: '' }) : s);
+      return c;
+    };
+    const base = total(ch, null), map = {};
+
+
+    for (const r of planner.rows(ch).filter(r => lc(r.skill) !== lc(st.skill) && (ch.hotbar || []).some(h => lc(h) === lc(r.skill)))) {
+      const id = r.skill; let info;
+      try {
+        const delta = base - total(without(id), id), isCounted = counted.some(x => lc(x) === lc(id));
+        let own = 0;
+        if (!isCounted) { const o = comboOpts(); o.gemLevel = ch.gemLevels[id] || undefined; own = dpsOf(S.calcSkill(GD, ch, id, o)); }
+        info = { delta, total: base, counted: isCounted, own, onBar: (ch.hotbar || []).some(h => lc(h) === lc(id)) };
+      } catch (e) { info = null; }
+      map[id] = info;
+    }
+    CONTRIB.key = key; CONTRIB.map = map;
+    return map;
   }
 
 
@@ -22087,7 +22228,7 @@ window.BOStartApp = function () {
       { label: 'Potions', keys: activeKeys(sources.filter(source => source.group === 'Potions').map(source => source.key)), color: '#e0896f' }
     ].filter(group => group.keys.length);
 
-    const hasCharges = Object.entries(st.charges || {}).some(([key, value]) => key !== 'gatherFury' && value > 0) || (r.mods || []).some(m => m.key === 'charge:fury' && / \(Gather Fury\)$/.test(m.src || ''));
+    const hasCharges = Object.entries(st.charges || {}).some(([key, value]) => key !== 'gatherFury' && value > 0) || (r.mods || []).some(m => m.key === 'charge:fury' && / \((Gather Fury|Defiant Roar on [^)]*)\)$/.test(m.src || ''));
     if (hasCharges) sourceGroups.push({ label: 'Other', keys: [], color: '#48b9b1', charges: true });
 
     const currentDps = r.minion ? r.panelDps : r.totalDps;
@@ -26137,7 +26278,7 @@ window.BOStartApp = function () {
     withTabs: ch => planWithTabs(ch),
     current: () => st.ch, workingCopy: () => st.ch, retree,
 
-    countable: id => (st.pickable || []).some(s => s.id === id), simSkill: () => st.skill,
+    countable: id => onBarNow(id) && (st.pickable || []).some(s => s.id === id), autoCounted: id => cocAuto(id), simSkill: () => st.skill,
     optWeights: () => st.optW || {}, setOptWeight: (id, w) => setOptWeight(id, w), execState: sk => execState(st.ch, sk), setExecOn: (id, on) => setExecOn(id, on),
     extras: id => scaling ? scaling.extras(id) : [], // extra scaling lines (life share), for the hover tooltips
     levels: id => scaling ? scaling.levels(id) : { unit: '', rows: [] }, // skill hit by gem level, for the hover tooltips
@@ -26352,8 +26493,9 @@ window.BOStartApp = function () {
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, num, pct, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
     supportSearch: supportSearchFor, supMarks: marksFor, simSkill: () => st.skill, // the main skill: the plan's own, or the one the Damage tab sims
 
-    countable: id => (st.pickable || []).some(s => s.id === id), optWeights: () => st.optW || {}, setOptWeight: (id, w) => { setOptWeight(id, w); if (planner && !$('#buildPane').hidden) planner.render(); }, execState: sk => execState(st.ch, sk), setExecOn: (id, on) => { setExecOn(id, on); if (planner && !$('#buildPane').hidden) planner.render(); },
+    countable: id => onBarNow(id) && (st.pickable || []).some(s => s.id === id), autoCounted: id => cocAuto(id), optWeights: () => st.optW || {}, setOptWeight: (id, w) => { setOptWeight(id, w); if (planner && !$('#buildPane').hidden) planner.render(); }, execState: sk => execState(st.ch, sk), setExecOn: (id, on) => { setExecOn(id, on); if (planner && !$('#buildPane').hidden) planner.render(); },
 
+    skillContribs: () => skillContribs(st.ch),
     skillSheet: id => { if (!st.ch) return null; const o = comboOpts(); o.gemLevel = st.ch.gemLevels[id] || undefined; return S.calcSkill(GD, st.ch, id, o); },
     patches: () => patches, showTab: t => showTab(t),
 

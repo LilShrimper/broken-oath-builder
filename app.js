@@ -253,7 +253,7 @@ window.PAGE_LANGS = {
 
   const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json', 'Items/quality_stones.json', 'Gameplay/league_rules.json', 'Gameplay/new_gems85.json', 'Items/base_implicits95.json', 'Gameplay/late2_98.json', 'Gameplay/archetypes.json'];
 
-  const SCHEMA = 32; // 32: Guardian signature runes (Grail, Item Search tabs); 31: armour / shield / axe family lines (base_implicits95.json; Damage tab); 30: per-gem base poison chance (new_gems85.json; Damage tab); 29: the game's rule numbers (rules.json, switches.json; Damage tab); 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 33; // 33: Red Tier levels (cube_recipes.json RedTierLevels; Database, Market, tooltips); 32: Guardian signature runes (Grail, Item Search tabs); 31: armour / shield / axe family lines (base_implicits95.json; Damage tab); 30: per-gem base poison chance (new_gems85.json; Damage tab); 29: the game's rule numbers (rules.json, switches.json; Damage tab); 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -645,6 +645,9 @@ window.PAGE_LANGS = {
     let archetypes = null;
     try { const a = J('Gameplay/archetypes.json'); if (a && a.Format) archetypes = pick(a, ['Format', 'FormatKeystone', 'ClassShort', 'KeystonePriority', 'SkillAlias']); } catch (e) { /* older game data: none */ }
     const vowRunes =((J('Items/cube_recipes.json').Rules || {}).Vows83 || {}).Runes || [];
+
+
+    const redTierLevels = ((J('Items/cube_recipes.json').Rules || {}).RedTierLevels || []).slice();
     const idolRecipes = (J('Items/cube_recipes.json').recipes || []).filter(r => /^idol_/.test(r.Id) && !r.bHidden && r.Name && r.Recipe).map(r => pick(r, ['Id', 'Name', 'Recipe', 'Result']));
 
 
@@ -722,7 +725,7 @@ window.PAGE_LANGS = {
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {}, { loot },
       { skills, classes, supports, nodes, masteries, oaths, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, late2, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, sigRuneRule, vowRunes, idolRecipes, archetypes, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, saveIds, trapPrice, gemPoison, rules: gameRules });
+        affixes, late2, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, sigRuneRule, vowRunes, idolRecipes, archetypes, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, redTierLevels, saveIds, trapPrice, gemPoison, rules: gameRules });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, OPTIONAL, SCHEMA };
@@ -3567,8 +3570,8 @@ window.BOPlanner = function (ctx) {
     const base = GD.bases[lc(it.base)], u = it.rarity === 'Unique' && GD.uniques[lc(it.unique)], word = oathwordForItem(it, slot);
     const li = (t, cls) => '<li' + (cls ? ' class="' + cls + '"' : '') + '>' + esc(t) + '</li>';
     let h = '<b>' + esc(u ? u.Name : word ? word.Name : it.rarity + ' ' + ((base && base.Name) || it.base)) + (word ? wordRunes(it) : '') + '</b>';
-    const bTier = u && window.BOItemSearch && window.BOItemSearch.baseTier ? window.BOItemSearch.baseTier(GD, it.base) : 0; // the game's 'Tier N' on a unique's card (itemsearch.js baseTier)
-    h += '<span class="pl-tip-sub">' + esc(SLOT_NAME[slot] + (u || word ? ' · ' + ((base && base.Name) || it.base) : '') + (bTier ? ' · Tier ' + bTier : '') + ' · item level ' + (it.level || 1)) + '</span>';
+    const bTier = u && window.BOItemSearch && window.BOItemSearch.redTier ? window.BOItemSearch.redTier(GD, u) : 0; // Red Tier, as the game's Collection (itemsearch.js redTier)
+    h += '<span class="pl-tip-sub">' + esc(SLOT_NAME[slot] + (u || word ? ' · ' + ((base && base.Name) || it.base) : '') + (bTier ? ' · ' + window.BOItemSearch.redTierName(bTier) : '') + ' · item level ' + (it.level || 1)) + '</span>';
     const bs = baseStats(it, slot);
 
     const grade = it.grade > 0 && base && (base.Armour || base.Evasion || base.EnergyShield || base.DamageMin) && S.gradeMult ? li('Base Grade: ' + it.grade + ', ' + Math.round(S.gradeMult(it.grade) * 100) + '% of the base', 'meta') : '';
@@ -7634,7 +7637,7 @@ window.BOItemSearch = function (ctx) {
       const tier = window.BOItemSearch.tierOf(u);
       const lines = (u.Mods || []).map((m, i) => uniqueLine(GD, S.uniqueLineShown(u.Id, i, m))); // ranges as the game shows them (sim.js UNIQUE_LINE_SCALE)
       ALL.push({ cat: 'unique', id: u.Id, name: u.Name, level: u.Level || (b && b.Level) || 1, slots: b ? [slotName(b.Slot)] : [], types: b ? [baseType(b)] : [],
-        tiers: [tier], tierSort: window.BOItemSearch.TIERS.indexOf(tier), gtier: b ? window.BOItemSearch.baseTier(GD, b.Id) : 0, icon: baseIcon(b), u, b, lines,
+        tiers: [tier], tierSort: window.BOItemSearch.TIERS.indexOf(tier), gtier: window.BOItemSearch.redTier(GD, u), icon: baseIcon(b), u, b, lines,
         text: [u.Name, b && b.Name, b && baseType(b), ...lines].join(' ') });
     }
     for (const w of GD.runewords || []) {
@@ -7719,7 +7722,7 @@ window.BOItemSearch = function (ctx) {
       if (F.type && !e.types.includes(F.type)) return false;
       if (stage === 'tier') return true;
       if (F.tier && !e.tiers.includes(F.tier)) return false;
-      if (F.cat === 'unique' && F.gtier && String(e.gtier) !== F.gtier) return false; // the game's Tier on the card (baseTier)
+      if (F.cat === 'unique' && F.gtier && String(e.gtier) !== F.gtier) return false; // Red Tier (redTier)
       if (F.cat === 'mod' && F.affix && e.affixType !== F.affix) return false;
       if (F.cat === 'oathword' && F.craft) { const inv = owned(); if (inv && inv.loaded) { const s = ctx.owned().wordStatus(e.w, inv); if (!s.held.length && !(s.craftable && (!e.secret || F.secrets))) return false; } }
       const lv = levelOf(e); if (!GEM_CATS[e.cat] && (lv < min || lv > max)) return false; // gems have no level
@@ -7826,8 +7829,7 @@ window.BOItemSearch = function (ctx) {
     } else if (e.cat === 'unique') {
       const u = e.u, b = e.b;
       ico = art('uniq', u.Id, 'unique', ICON_NAMES[e.icon]) || icon(e.icon, 'unique');
-      const bt = b ? window.BOItemSearch.baseTier(GD, b.Id) : 0; // the game's 'Tier N' on its card
-      sub = (b ? b.Name + ' · ' + baseType(b) : u.BaseId) + (bt ? ' · Tier ' + bt : '');
+      sub = (b ? b.Name + ' · ' + baseType(b) : u.BaseId) + ' · ' + window.BOItemSearch.redTierName(window.BOItemSearch.redTier(GD, u)); // as the game's Collection
       body = implicits(GD, b) + '<ul class="is-lines unique">' + e.lines.map(t => li(t)).join('') + '</ul>' + (u.Flavour ? '<p class="is-flavour">' + esc(u.Flavour) + '</p>' : '');
 
 
@@ -8017,7 +8019,7 @@ window.BOItemSearch = function (ctx) {
       field(L[0], '<select id="isSlot">' + opt('', L[1], !F.slot) + slots.map(s => opt(s, s, F.slot === s)).join('') + '</select>') +
       field(L[2], '<select id="isType">' + opt('', L[3], !F.type) + types.map(s => opt(s, s, F.type === s)).join('') + '</select>') +
       field(L[4], '<select id="isTier"' + (tierOk ? '' : ' disabled title="Pick a category first: each one has its own tiers"') + '>' + opt('', tierOk ? L[5] : 'Pick a category', !F.tier) + (tierOk ? tiers.map(s => opt(s, s, F.tier === s)).join('') : '') + '</select>') +
-      (F.cat === 'unique' ? field('Tier', '<select id="isGTier" title="The tier the game shows on the item: its base&#39;s place among bases of its kind, 1 = the best">' + opt('', 'Any tier', !F.gtier) + gtiers.map(t => opt(String(t), 'Tier ' + t, F.gtier === String(t))).join('') + '</select>') : '') +
+      (F.cat === 'unique' ? field('Red Tier', '<select id="isGTier" title="The red&#39;s tier in the game&#39;s Collection, by the level it drops from. The Cube&#39;s red recipes go by it">' + opt('', 'Any tier', !F.gtier) + gtiers.map(t => opt(String(t), window.BOItemSearch.redTierName(t), F.gtier === String(t))).join('') + '</select>') : '') +
       (mods ? field('Prefix / suffix', '<select id="isAffix">' + opt('', 'Both', !F.affix) + opt('Prefix', 'Prefixes only', F.affix === 'Prefix') + opt('Suffix', 'Suffixes only', F.affix === 'Suffix') + '</select>') : '') +
       (GEM_CATS[F.cat] ? '' : field('Level', '<span class="is-range"><input type="number" id="isMin" min="0" max="200" placeholder="min" value="' + esc(F.min) + '"><span>–</span><input type="number" id="isMax" min="0" max="200" placeholder="max" value="' + esc(F.max) + '"></span>')) +
       field('Sort', '<select id="isSort">' + sorts.map(([k, t]) => opt(k, t, F.sort === k)).join('') + '</select>') +
@@ -8101,15 +8103,14 @@ window.BOItemSearch.TIERS = ['Standard', 'Signature', 'Core', 'Primal', 'Chase']
 
 
 
-window.BOItemSearch.baseTier = (GD, baseId) => {
-  const T = window.BOItemSearch;
-  if (T._btGD !== GD) {
-    T._btGD = GD; T._bt = {}; const fam = {};
-    for (const b of Object.values((GD && GD.bases) || {})) { const m = /^(.+)_\d+$/.exec(b.Id); if (m) (fam[m[1]] = fam[m[1]] || []).push(b); }
-    for (const list of Object.values(fam)) if (list.length > 1) list.sort((x, y) => (y.Level || 0) - (x.Level || 0)).forEach((b, i) => { T._bt[String(b.Id).toLowerCase()] = i + 1; });
-  }
-  return T._bt[String(baseId || '').toLowerCase()] || 0;
+window.BOItemSearch.RED_ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI'];
+window.BOItemSearch.redTier = (GD, u) => {
+  if (!u) return 0;
+  const lv = (GD && GD.redTierLevels && GD.redTierLevels.length ? GD.redTierLevels : [1, 20, 40, 60]), L = +u.Level || 1;
+  let t = 0; lv.forEach((m, i) => { if (L >= m) t = i + 1; });
+  return t || 1;
 };
+window.BOItemSearch.redTierName = t => t ? 'Red Tier ' + (window.BOItemSearch.RED_ROMAN[t] || t) : '';
 window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Primal' : u.Core ? 'Core' : u.Signature ? 'Signature' : 'Standard';
 
 ;
@@ -9140,7 +9141,7 @@ window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Prim
       const U = uniq && !isHidden(uniq) ? tbl('uniques', uniq) : null;
       const marks = { sig: !!(U && U.Signature), pin: !!(U && /^pinnacle/.test(String(U.Core || ''))), riven: riven > 0, top: top >= TOP_FROM, true: (it.baseGrade95 || 0) >= 90 };
       const find = [uniq && nameOf('uniques', uniq), baseNameOf(l.base), it.name, SLOT_NAME[l.slot], l.rarity, ...Object.keys(vals), ...(it.runes || []).map(r => isHidden(r) ? '' : nameOf('runes', r)), l.seller].filter(Boolean).join('\n').toLowerCase();
-      return Object.assign({}, l, { _p: p, _find: find, _vals: vals, _at: Date.parse(l.listed_at || '') || 0, _end: Date.parse(l.expires_at || '') || 0, _u: lc(uniq), _b: lc(l.base), _s: lc(l.seller), _top: top, _riven: riven, _m: marks, _tier: U && window.BOItemSearch ? window.BOItemSearch.tierOf(U) : '', _gt: uniq && window.BOItemSearch ? window.BOItemSearch.baseTier(GD(), l.base) : 0 });
+      return Object.assign({}, l, { _p: p, _find: find, _vals: vals, _at: Date.parse(l.listed_at || '') || 0, _end: Date.parse(l.expires_at || '') || 0, _u: lc(uniq), _b: lc(l.base), _s: lc(l.seller), _top: top, _riven: riven, _m: marks, _tier: U && window.BOItemSearch ? window.BOItemSearch.tierOf(U) : '', _gt: U && window.BOItemSearch ? window.BOItemSearch.redTier(GD(), U) : 0 });
     }
     async function loadIndex() {
       S.index = await get('market/index.json');
@@ -9397,7 +9398,7 @@ window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Prim
       if (LISTED.some(x => x[0] === p.get('listed'))) F.listed = p.get('listed');
       if (MARKS.some(x => x[0] === p.get('mark'))) F.mark = p.get('mark');
       if (window.BOItemSearch && window.BOItemSearch.TIERS.includes(p.get('ut'))) F.utier = p.get('ut');
-      if (/^[1-9]\d?$/.test(p.get('gt') || '')) F.gtier = p.get('gt');
+      if (/^[1-6]$/.test(p.get('gt') || '')) F.gtier = p.get('gt');
       F.use = p.get('use') === '1';
       F.up = p.get('up') === '1'; F.upOnly = F.up && p.get('upo') === '1';
       F.online = p.get('on') === '1'; F.one = p.get('one') === '1';
@@ -9541,7 +9542,7 @@ window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Prim
       const tierBox = () => { const T = window.BOItemSearch ? window.BOItemSearch.TIERS : []; if (!T.length) return ''; const c = {}; for (const l of S.list || []) if (l._tier) c[l._tier] = (c[l._tier] || 0) + 1;
         const g = {}; for (const l of S.list || []) if (l._gt) g[l._gt] = (g[l._gt] || 0) + 1;
         const gl = Object.keys(g).map(Number).sort((a, b) => a - b);
-        return '<label class="field"><span>Unique tier</span><select id="mkGTier" title="The tier the game shows on the item: its base&#39;s place among bases of its kind, 1 = the best"><option value="">Any</option>' + gl.map(t => '<option value="' + t + '"' + (String(t) === F.gtier ? ' selected' : '') + '>Tier ' + t + ' (' + n(g[t]) + ')</option>').join('') + '</select></label>' +
+        return '<label class="field"><span>Red Tier</span><select id="mkGTier" title="The red&#39;s tier in the game&#39;s Collection, by the level it drops from. The Cube&#39;s red recipes go by it"><option value="">Any</option>' + gl.map(t => '<option value="' + t + '"' + (String(t) === F.gtier ? ' selected' : '') + '>' + window.BOItemSearch.redTierName(t) + ' (' + n(g[t]) + ')</option>').join('') + '</select></label>' +
           '<label class="field"><span>Unique kind</span><select id="mkTier"><option value="">Any</option>' + T.map(t => '<option value="' + t + '"' + (t === F.utier ? ' selected' : '') + '>' + t + (c[t] ? ' (' + n(c[t]) + ')' : '') + '</option>').join('') + '</select></label>'; };
       const gItem = '<label class="field"><span>Slot</span><select id="mkSlot"><option value="">All slots</option>' + slots.map(s => '<option value="' + esc(s) + '"' + (s === F.slot ? ' selected' : '') + '>' + esc(SLOT_NAME[s] || s) + ' (' + n(fac.slot[s]) + ')</option>').join('') + '</select></label>' +
         rangeBox('ilvl', 'Item level') + rangeBox('req', 'Wearable at level') + rangeBox('sock', 'Sockets') + rangeBox('grade', 'Base Grade') +
@@ -9643,7 +9644,7 @@ window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Prim
       const v = view(l);
       return '<div class="lad-item mk-card r-' + esc(lc(l.rarity || 'normal')) + '">' +
         '<div class="mk-head">' + v.ico + '<div class="mk-title"><b>' + esc(v.title) + '</b>' + (v.title !== v.base ? '<small class="meta">' + esc(v.base) + '</small>' : '') +
-        '<small class="meta">' + esc((SLOT_NAME[l.slot] || l.slot || '') + ' · ' + (l.rarity || '') + (l._gt ? ' · Tier ' + l._gt : '')) + '</small></div></div>' +
+        '<small class="meta">' + esc((SLOT_NAME[l.slot] || l.slot || '') + ' · ' + (l.rarity || '') + (l._gt ? ' · ' + window.BOItemSearch.redTierName(l._gt) : '')) + '</small></div></div>' +
         '<div class="mk-price">' + esc(priceText(l._p)) + (v.tags || gainChip(l) ? '<span class="mk-tags">' + gainChip(l) + v.tags + '</span>' : '') + '</div>' +
         (v.facts ? '<div class="meta lad-facts">' + esc(v.facts) + '</div>' : '') +
         tipInline(l) + (v.marks ? '<div class="meta mk-marks">' + esc(v.marks) + '</div>' : '') +
@@ -9656,7 +9657,7 @@ window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Prim
       const v = view(l);
       const open = S.openRows.has(l.id);
       return '<div class="lad-item mk-row' + (open ? ' open' : '') + ' r-' + esc(lc(l.rarity || 'normal')) + '" data-id="' + esc(l.id) + '">' + v.ico +
-        '<div class="mk-title"><b>' + esc(v.title) + '</b><small class="meta">' + esc((v.title !== v.base ? v.base + ' · ' : '') + (SLOT_NAME[l.slot] || l.slot || '') + ' · ' + (l.rarity || '') + (l._gt ? ' · Tier ' + l._gt : '')) + '</small></div>' +
+        '<div class="mk-title"><b>' + esc(v.title) + '</b><small class="meta">' + esc((v.title !== v.base ? v.base + ' · ' : '') + (SLOT_NAME[l.slot] || l.slot || '') + ' · ' + (l.rarity || '') + (l._gt ? ' · ' + window.BOItemSearch.redTierName(l._gt) : '')) + '</small></div>' +
         '<button type="button" class="mk-row-lines" aria-expanded="' + open + '" aria-label="Show the item: ' + esc(v.title) + '"><small class="meta">' + esc(v.facts) + '</small><span class="mk-row-text">' + esc(v.lines.join(' · ')) + '</span></button>' +
         '<div class="mk-row-price"><b class="mk-price">' + esc(priceText(l._p)) + '</b>' + (v.tags || gainChip(l) ? '<span class="mk-tags">' + gainChip(l) + v.tags + '</span>' : '') + '<small class="meta">' + times(l) + '</small></div>' +
         '<div class="mk-seller">' + sellerBit(l) + '</div>' +
@@ -12820,13 +12821,14 @@ window.BOCharacter = function (ctx) {
   const card = (kind, id, name, cls, sub, lines, a, tag) => '<button type="button" class="io-card ' + cls + withArt(a) + '" data-io="pick" data-kind="' + kind + '" data-id="' + esc(id) + '">' + (a || '') + '<b>' + esc(name) + (tag ? ' <span class="is-badge tier io-tier">' + esc(tag) + '</span>' : '') + '</b><span class="io-sub">' + esc(sub) + '</span>' +
     lines.slice(0, 8).map(l => '<span class="io-line">' + esc(l) + '</span>').join('') + (lines.length > 8 ? '<span class="io-line meta">+' + (lines.length - 8) + ' more</span>' : '') + '</button>';
 
+  const gtOfU = u => (window.BOItemSearch && window.BOItemSearch.redTier ? window.BOItemSearch.redTier(GD(), u) : 0);
   const tierOf = u => (window.BOItemSearch && window.BOItemSearch.tierOf ? window.BOItemSearch.tierOf(u) : '');
   function listFor() {
     const q = M.q.trim().toLowerCase(), has = (...s) => !q || s.join(' ').toLowerCase().includes(q);
     const inCat = b => !M.cat || catOf(b) === M.cat;
     const basic = G.basesFor(M.slot, H().current()).filter(b => inCat(b) && has(b.Name, baseTypeName(b)));
     const uniquesAll = G.uniquesFor(M.slot, H().current()).filter(u => { const b = GD().bases[lc(u.BaseId)]; return inCat(b) && has(u.Name, baseTypeName(b), uniqueLines(u).join(' ')); });
-    const gtOf = u => (window.BOItemSearch && window.BOItemSearch.baseTier ? window.BOItemSearch.baseTier(GD(), u.BaseId) : 0);
+    const gtOf = u => (window.BOItemSearch && window.BOItemSearch.redTier ? window.BOItemSearch.redTier(GD(), u) : 0); // Red Tier (itemsearch.js redTier)
     const uniques = uniquesAll.filter(u => (!M.utier || tierOf(u) === M.utier) && (!M.gtier || gtOf(u) === M.gtier));
     const words = G.oathwordsFor(M.slot, H().current()).filter(w => has(w.Name, (w.Runes || []).join(' ')) && G.oathwordBases(M.slot, w, H().current()).some(inCat)); // only words with a base in the chosen group
     const saved = savedFor(M.slot).filter(s => { const b = GD().bases[lc(s.item.base)]; return (!b || inCat(b)) && has(itemName(s.item, M.slot).name, b ? b.Name : s.item.base, itemLines(s.item).join(' ')); });
@@ -12855,9 +12857,9 @@ window.BOCharacter = function (ctx) {
 
       const gc = {}; for (const u of L.uniquesAll) { const g = L.gtOf(u); if (g) gc[g] = (gc[g] || 0) + 1; }
       const gl = Object.keys(gc).map(Number).sort((a, b) => a - b);
-      if (gl.length > 1 || M.gtier) h += '<div class="cmp-modes io-tiers" role="radiogroup" aria-label="Tier">' + [0].concat(gl).map(t => '<button type="button" class="cmp-mode' + (M.gtier === t ? ' on' : '') + '" role="radio" aria-checked="' + (M.gtier === t) + '" data-io="gtier" data-v="' + t + '"><span>' + (t ? 'Tier ' + t : 'All tiers') + ' <small>' + (t ? gc[t] : L.uniquesAll.length) + '</small></span></button>').join('') + '</div>';
+      if (gl.length > 1 || M.gtier) h += '<div class="cmp-modes io-tiers" role="radiogroup" aria-label="Red Tier">' + [0].concat(gl).map(t => '<button type="button" class="cmp-mode' + (M.gtier === t ? ' on' : '') + '" role="radio" aria-checked="' + (M.gtier === t) + '" data-io="gtier" data-v="' + t + '"><span>' + (t ? window.BOItemSearch.redTierName(t) : 'All tiers') + ' <small>' + (t ? gc[t] : L.uniquesAll.length) + '</small></span></button>').join('') + '</div>';
       if (here.length > 1 || M.utier) h += '<div class="cmp-modes io-tiers" role="radiogroup" aria-label="Kind">' + [''].concat(here).map(t => '<button type="button" class="cmp-mode' + (M.utier === t ? ' on' : '') + '" role="radio" aria-checked="' + (M.utier === t) + '" data-io="utier" data-v="' + t + '"><span>' + (t || 'All kinds') + ' <small>' + (t ? cnt[t] : L.uniquesAll.length) + '</small></span></button>').join('') + '</div>';
-      cards = L.uniques.map(u => { const b = gd.bases[lc(u.BaseId)], t = tierOf(u); const bt = window.BOItemSearch && window.BOItemSearch.baseTier ? window.BOItemSearch.baseTier(gd, u.BaseId) : 0; return card('unique', u.Id, u.Name, 'unique', baseTypeName(b) + (bt ? ' · Tier ' + bt : '') + (b.Level ? ' · level ' + b.Level : ''), uniqueDps(u, b).concat(uniqueLines(u)), uniqArt(u), t !== 'Standard' ? t : ''); }).join('');
+      cards = L.uniques.map(u => { const b = gd.bases[lc(u.BaseId)], t = tierOf(u); const bt = gtOfU(u); return card('unique', u.Id, u.Name, 'unique', baseTypeName(b) + (bt ? ' · ' + window.BOItemSearch.redTierName(bt) : '') + (b.Level ? ' · level ' + b.Level : ''), uniqueDps(u, b).concat(uniqueLines(u)), uniqArt(u), t !== 'Standard' ? t : ''); }).join('');
     }
     else if (M.word) {
       const w = G.oathwordsFor(M.slot, H().current()).find(x => lc(x.Id) === lc(M.word));

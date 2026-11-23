@@ -3606,12 +3606,12 @@ window.BOPlanner = function (ctx) {
     const lines = uniq.concat(vows, pre, suf, extra, other);
     if (lines.length) h += '<ul>' + lines.join('') + '</ul>';
     if (word) {
-      const twoHand = base && (base.bTwoHanded || (base.Tags || []).includes('TwoHand')), pm = S.wordPower2H(word, twoHand, GD);
+      const twoHand = base && (base.bTwoHanded || (base.Tags || []).includes('TwoHand'));
       const lv = word.PowerBandILvl || [], cnt = word.PowerBandCount || [];
       let band = -1; for (let i = 0; i < lv.length; i++) if ((it.level || 0) >= lv[i]) band = i;
       const from = cnt.slice(0, band).reduce((x, y) => x + y, 0);
       const power = band < 0 || !word.PowerBandMods ? word.PowerMods || [] : word.PowerBandMods.slice(from, from + cnt[band]);
-      h += '<ul>' + word.Mods.map(mm => li(mm.Text || modLine(mm.Mod))).join('') + power.map(mm => li(modLine(mm.Mod, (mm.Mod.Value || 0) * pm, (mm.Mod.Value2 || 0) * pm))).join('') + '</ul>';
+      h += '<ul>' + word.Mods.map(mm => li(mm.Text || modLine(mm.Mod))).join('') + power.map(mm => { const k = S.wordPower2H(word, twoHand, GD, mm.Mod); return li(modLine(mm.Mod, (mm.Mod.Value || 0) * k, (mm.Mod.Value2 || 0) * k)); }).join('') + '</ul>';
     }
     const weaponSlot = (slot === 'MainHand' || slot === 'OffHand') && !!base && (base.Tags || []).includes('Weapon'); // shields/tomes: armour side (as in sim.js)
     const runes = it.runes.map(r => GD.runes[lc(r)]).filter(Boolean);
@@ -7871,7 +7871,7 @@ window.BOItemSearch = function (ctx) {
         const rows = [[lv[0] ? 'Below item level ' + lv[0] : 'At any item level', w.PowerMods]]; // the secret words have no item level bands
         let from = 0; lv.forEach((l, i) => { if (w.PowerBandMods && cnt[i]) rows.push(['Item level ' + l + '+', w.PowerBandMods.slice(from, from + cnt[i])]); from += cnt[i] || 0; });
 
-        const band = ([k, mods]) => '<div class="is-band"><b>' + esc(k) + (S.wordPower2H(w, true, GD) > 1 ? ' <small>(×' + S.wordPower2H(w, true, GD) + ' on two-handed)</small>' : '') + '</b><ul class="is-lines oathword">' + mods.map(mm => li(wordLine(GD, mm))).join('') + '</ul></div>';
+        const band = ([k, mods]) => '<div class="is-band"><b>' + esc(k) + (S.wordPower2H(w, true, GD) > 1 ? ' <small>(' + (mods.every(mm => S.wordPower2H(w, true, GD, mm.Mod) > 1) ? '' : 'non-local lines ') + '×' + S.wordPower2H(w, true, GD) + ' on two-handed)</small>' : '') + '</b><ul class="is-lines oathword">' + mods.map(mm => li(wordLine(GD, mm))).join('') + '</ul></div>';
         const top = rows[rows.length - 1], lower = rows.slice(0, -1);
         body += '<div class="is-power is-power-top">' + band(top) + '</div>';
         if (lower.length) body += '<details class="is-power"><summary>Lower item levels</summary>' + lower.reverse().map(band).join('') + '</details>';
@@ -10826,7 +10826,9 @@ window.BOFaq = function (ctx) {
       ]));
     h += grid;
     h += card('Rules for all minions', list([
-      +GD.apiBuild >= 79
+      +GD.apiBuild >= 88
+        ? 'Most of your own damage lines do not reach minions: only the summon gem\'s own supports, the lines for minions, half of the defence "more damage per 1,000" lines, the passive tree\'s and Dragonling\'s "physical as extra" element lines, and item, tree and Dragonling lines that name only one damage type (Physical, Fire, Cold, Lightning or Poison) count. Lines that name Spell or Attack stay yours. Damage your minions convert (for example "Your Minions\' damage is 30% converted to Fire") keeps your lines for the old type and gains the new type\'s too. The game marks the item lines that reach minions with two small teal marks ("Minions: yes" when you hold Alt).'
+        : +GD.apiBuild >= 79
         ? 'Most of your own damage lines do not reach minions: only the summon gem\'s own supports, the lines for minions, half of the defence "more damage per 1,000" lines, the passive tree\'s and Dragonling\'s "physical as extra" element lines, and item and tree lines that name only an element ("increased Poison damage" from patch 78, "more" ones from patch 79) count. Lines that name Spell or Attack stay yours.'
         : +GD.apiBuild >= 78
         ? 'Your own damage lines do not reach minions: only the summon gem\'s own supports, the lines for minions, half of the defence "more damage per 1,000" lines and the passive tree\'s and Dragonling\'s "physical as extra" element lines count (patch 78).'
@@ -13973,8 +13975,22 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
+
+
+
+
+
   const OATHWORD_2H = 1;
-  function wordPower2H(rw, twoHand, GD) { return twoHand && rw && rw.Power2H > 1 ? (GD && is084(GD) ? rw.Power2H : OATHWORD_2H) : 1; }
+  function wordPower2H(rw, twoHand, GD, mod) {
+    if (!(twoHand && rw && rw.Power2H > 1)) return 1;
+    if (!(GD && is084(GD))) return OATHWORD_2H;
+    if (mod && is088(GD) && mod.bLocal) return 1;
+    return rw.Power2H;
+  }
 
   function vowLevelShare(GD) { return is085(GD) ? 1 : is056(GD) ? ruleNum(GD, 'r83.VOWS.VowSkillLevelShare', 0.5) : 1; }
   function vowShare(GD, n) { const s = GD.vowShares || []; return s.length ? s[Math.min(n, s.length - 1)] : 1; }
@@ -14264,9 +14280,8 @@ window.BOCharacter = function (ctx) {
         for (const mm of rw.Mods) add(mm.Mod, mm.Mod.Value, mm.Mod.Value2, label + ' · runeword ' + rw.Name, key);
 
         const twoHand = base.bTwoHanded || (base.Tags || []).includes('TwoHand');
-        const pm = wordPower2H(rw, twoHand, GD);
         const power = runewordPower(rw, it.level);
-        for (const mm of power.mods) add(mm.Mod, (mm.Mod.Value || 0) * pm, (mm.Mod.Value2 || 0) * pm, label + ' · runeword ' + rw.Name + ' (power' + (power.band ? ', item level ' + power.band + '+' : '') + (pm > 1 ? ' x' + pm + ' two-handed' : '') + ')', key);
+        for (const mm of power.mods) for (const pm of [wordPower2H(rw, twoHand, GD, mm.Mod)]) add(mm.Mod, (mm.Mod.Value || 0) * pm, (mm.Mod.Value2 || 0) * pm, label + ' · runeword ' + rw.Name + ' (power' + (power.band ? ', item level ' + power.band + '+' : '') + (pm > 1 ? ' x' + pm + ' two-handed' : '') + ')', key);
       }
     }
 
@@ -16211,6 +16226,8 @@ window.BOCharacter = function (ctx) {
     }
     if (host) {
       const hostSup = supportList.map(s => s.replace('@granted', '')).filter(s => lc(s) !== 'channel_conduit');
+
+
       const hr = calcSkill(GD, ch, host.skill, { _col: col, _gfHeld: gfHeld, _barProbe: !!o._barProbe, off: o.off, supportsOverride: hostSup, conduit: false, barShock: false, _noBrittle: true, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyHallowedGround: o.enemyHallowedGround, flashfire: o.flashfire });
       const interval = conduitInterval(GD, col.mods);
       if (hr.speed && hr.speed.usesPerSec > 0) {
@@ -18302,7 +18319,14 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const elemOnly = m => !m.local && (m.key === 'passives' || m.key === 'oaths' || /^item:/.test(String(m.key || '')) || /^charge:ns103_echo_/.test(String(m.key || ''))) && (() => { const st = splitTags(m.tags); return st.types.length > 0 && !st.conds.length && st.types.every(t => t !== 'Physical') ? st.types : null; })();
+
+
+
+
+
+
+    const minionPhys88 = is088(GD);
+    const elemOnly = m => !m.local && (m.key === 'passives' || m.key === 'oaths' || /^item:/.test(String(m.key || '')) || /^charge:ns103_echo_/.test(String(m.key || ''))) && (() => { const st = splitTags(m.tags); return st.types.length > 0 && !st.conds.length && (minionPhys88 || st.types.every(t => t !== 'Physical')) ? st.types : null; })();
     const elemInc = is078(GD) && bSwitch(GD, 'r102.BUGSB.bMinionElem102', true), elemMore = is079(GD) && bSwitch(GD, 'r103.BUGS-D.bMinionMore103', true);
     const moreFor = d => {
       let k = 1;
@@ -18315,6 +18339,7 @@ window.BOCharacter = function (ctx) {
       return k;
     };
     const scaled = {}; for (const d of DT) { const k = moreFor(d); scaled[d] = [parts[d][0] * k, parts[d][1] * k]; }
+    const convFrom = []; // build 84+: { from, to, amt: [min, max] } converted minion damage, for the source's element lines (hit loop below)
 
 
 
@@ -18354,9 +18379,15 @@ window.BOCharacter = function (ctx) {
         typedK[d] = ty * rest;
         pre[d] = [parts[d][0] * g, parts[d][1] * g]; conv[d] = [0, 0]; convBase[d] = [0, 0]; ext[d] = [0, 0];
       }
-      for (const m of mods) if (String(m.key || '').startsWith('support:') && m.stat === 'Convert' && m.mode === 'Flat') {
+
+
+
+
+
+      const gearMinionConvert = m => !String(m.key || '').startsWith('support:') && (m.tags || []).some(t => lc(t) === 'minion');
+      for (const m of mods) if ((String(m.key || '').startsWith('support:') || gearMinionConvert(m)) && m.stat === 'Convert' && m.mode === 'Flat') {
         const t = splitTags(m.tags).types, to = t[t.length - 1]; if (!to || !pre[to]) continue;
-        for (const d of DT) { if (d === to || d === 'Poison' || !(pre[d][1] > 0)) continue; for (const i of [0, 1]) { const a = pre[d][i] * m.v / 100; pre[d][i] -= a; convBase[to][i] += a; conv[to][i] += a * typedK[d] * typedK[to]; } }
+        for (const d of DT) { if (d === to || d === 'Poison' || !(pre[d][1] > 0)) continue; const cf = { from: d, to, amt: [0, 0] }; for (const i of [0, 1]) { const a = pre[d][i] * m.v / 100; pre[d][i] -= a; convBase[to][i] += a; conv[to][i] += a * typedK[d] * typedK[to]; cf.amt[i] = a * typedK[d] * typedK[to]; } convFrom.push(cf); }
         use(m, 'minion'); res.notes.push(m.src.replace(/^Support · /, '') + ': ' + m.v + '% of the minion damage is converted to ' + to + ' and keeps its Physical lines (skill tooltips in the game, build 84).');
       }
       const heraldExtra = m => /^vow:/.test(String(m.key || '')) && /herald/i.test(String(m.key));
@@ -18493,17 +18524,26 @@ window.BOCharacter = function (ctx) {
     const youngK = sk.EffectivenessEarly != null ? sk.EffectivenessEarly + (1 - sk.EffectivenessEarly) * clamp((minionGem - (sk.EffectivenessEarlyHold || 1)) / Math.max(1, (sk.EffectivenessEarlyFull || (sk.EffectivenessEarlyHold || 1) + 1) - (sk.EffectivenessEarlyHold || 1)), 0, 1) : 1;
     if (youngK !== 1) res.notes.push(sk.Name + ': x' + youngK.toFixed(3) + ' young gem damage at gem level ' + minionGem + ' (x' + sk.EffectivenessEarly + ' up to gem ' + sk.EffectivenessEarlyHold + ', none from gem ' + sk.EffectivenessEarlyFull + '); checked against the game log, 18 Nov 2026.');
     const base = (mi.DamageMult || 1) * aff * near * minionMore * kind * lvlK * (1 + specInc / 100) * heroDamage(GD) * late2K(GD, sk.Id, minionGem) * youngK; // heroDamage: Patch 82/83 x0.8 (at ruleNum)
+
+    const elemSpecFor = d => {
+      let v = 0;
+      if (minionElem84 && elemInc) for (const m of pickMods(mods, 'Damage', 'Inc')) {
+        const t = elemOnly(m) || (m.key === 'dragon' && !m.local ? (() => { const st = splitTags(m.tags); return st.types.length > 0 && !st.conds.length && (minionPhys88 || st.types.every(x => x !== 'Physical')) ? st.types : null; })() : null);
+        if (t && t.includes(d)) { v += m.v; use(m, 'minion (element lines, with the summon skill increased)'); }
+      }
+      return v;
+    };
     const hit = {}; let avg = 0;
     for (const d of DT) {
       if (!(scaled[d][1] > 0)) continue;
-
-      let elemSpec = 0;
-      if (minionElem84 && elemInc) for (const m of pickMods(mods, 'Damage', 'Inc')) {
-        const t = elemOnly(m) || (m.key === 'dragon' && !m.local ? (() => { const st = splitTags(m.tags); return st.types.length > 0 && !st.conds.length && st.types.every(x => x !== 'Physical') ? st.types : null; })() : null);
-        if (t && t.includes(d)) { elemSpec += m.v; use(m, 'minion (element lines, with the summon skill increased)'); }
-      }
+      const elemSpec = elemSpecFor(d);
       const k = base * (1 + incFor(d) / 100) * (1 + specInc / 100 + elemSpec / 100) / (1 + specInc / 100);
-      hit[d] = { min: scaled[d][0] * k, max: scaled[d][1] * k }; hit[d].avg = (hit[d].min + hit[d].max) / 2; avg += hit[d].avg;
+      hit[d] = { min: scaled[d][0] * k, max: scaled[d][1] * k };
+
+
+
+
+      for (const cf of convFrom) if (cf.to === d) { const es = elemSpecFor(cf.from); if (es) { const k2 = base * (1 + incFor(d) / 100) * (es / 100) / (1 + specInc / 100); hit[d].min += cf.amt[0] * k2; hit[d].max += cf.amt[1] * k2; } } hit[d].avg = (hit[d].min + hit[d].max) / 2; avg += hit[d].avg;
     }
 
 
@@ -18531,13 +18571,16 @@ window.BOCharacter = function (ctx) {
 
     const mStaff = (() => {
       const it = ch.items.find(i => i.slot === 'MainHand'), b = it && GD.bases[lc(it.base)];
-      if (!(is084(GD) && b && lc(b.Class) === 'staff' && b.Crit > 0)) return 0;
+
+
+
+      if (!(is084(GD) && b && (lc(b.Class) === 'staff' || lc(b.Class) === 'wand') && b.Crit > 0)) return 0;
       let ci = 0;
       for (const m of mods) if (m.local && m.key === 'item:' + it.slot && m.stat === 'CritChance' && m.mode === 'Inc') ci += m.v;
       return b.Crit * (1 + ci / 100);
     })();
     const chance = Math.min(100, ((mStaff || H.SpellCritBase || 6) + mCritBase) * (1 + mCritInc / 100)), multi = (H.CritMultiBase || 150) + mCritMulti, critFactor = 1 + chance / 100 * (multi / 100 - 1);
-    if (mCritInc || mCritMulti || mCritBase) res.notes.push('Minion crit: ' + chance.toFixed(1) + '% chance, x' + (multi / 100).toFixed(2) + ' (your minion crit lines on the base ' + +(mStaff || H.SpellCritBase || 6).toFixed(2) + '%' + (mStaff ? ' of your staff' : '') + ' and x' + ((H.CritMultiBase || 150) / 100).toFixed(1) + '). Checked against an in-game Summon Skeletons tooltip, 18 Nov 2026.');
+    if (mCritInc || mCritMulti || mCritBase) res.notes.push('Minion crit: ' + chance.toFixed(1) + '% chance, x' + (multi / 100).toFixed(2) + ' (your minion crit lines on the base ' + +(mStaff || H.SpellCritBase || 6).toFixed(2) + '%' + (mStaff ? ' of your staff or wand' : '') + ' and x' + ((H.CritMultiBase || 150) / 100).toFixed(1) + '). Checked against an in-game Summon Skeletons tooltip, 18 Nov 2026.');
 
     let alive = (mi.Cap || mi.Count || 1) + (mi.CountEvery ? Math.floor((L - 1) / mi.CountEvery) : 0) + (mi.PerLevels || []).filter(l => L >= l).length;
 
@@ -21309,7 +21352,13 @@ window.BOStartApp = function () {
 
     const fromSave = st.ch && !st.ch.plan && (st.ch.file || st.ch.from === 'folder' || st.ch.from === 'file');
     $('#bsSpell').textContent = st.ch ? st.ch.classId + ' · level ' + st.ch.level + (fromSave && window.BOGrail ? ' · ' + window.BOGrail.leagueLabel(st.ch.league) : '') + (ok && r.skill ? ' · ' + r.skill.Name : '') : '';
-    $('#bsDps').textContent = ok ? num(r.totalDps) : '–';
+
+
+    { let runs = []; if (ok) { try { runs = comboRuns(); } catch (e) { runs = []; } }
+      const dpsOf = x => x.totalDps + (x.risen ? x.risen.dps : 0);
+      const tot = ok ? runs.reduce((a, x) => a + dpsOf(x.r), dpsOf(r)) : 0;
+      $('#bsDps').textContent = ok ? num(tot) : '–';
+      $('#bsDps').parentNode.title = runs.length ? 'Combined DPS of the selected skill and ' + runs.length + ' included skill' + (runs.length > 1 ? 's' : '') + ' (' + [r.skill ? r.skill.Name : st.skill].concat(runs.map(x => x.r.skill ? x.r.skill.Name : x.id)).join(' + ') + ') against the enemy set on the Damage tab' : 'Total DPS of the selected skill against the enemy set on the Damage tab'; }
     const { life, mana, es, res, resTip, resParts, attr } = defenceStats(ok ? r : null);
     $('#bsLife').textContent = life; $('#bsMana').textContent = mana; $('#bsEs').textContent = es; $('#bsRes').innerHTML = resParts ? resParts.map(x => '<span style="color:' + typeColor(x[0]) + '">' + x[1] + '</span>').join(' / ') : esc(res);
     $('#bsAttr').textContent = attr ? attr.Str + ' / ' + attr.Dex + ' / ' + attr.Int : '–';

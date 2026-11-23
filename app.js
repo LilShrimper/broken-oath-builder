@@ -253,7 +253,7 @@ window.PAGE_LANGS = {
 
   const OPTIONAL = ['Gameplay/trap_price95.json', 'Rifts/deep_wound93.json', 'Items/affixes_riven95.json', 'Items/mythic_lines.json', 'Gameplay/guardian_resist95.json', 'Items/quality_stones.json', 'Gameplay/league_rules.json', 'Gameplay/new_gems85.json', 'Items/base_implicits95.json', 'Gameplay/late2_98.json', 'Gameplay/archetypes.json'];
 
-  const SCHEMA = 33; // 33: Red Tier levels (cube_recipes.json RedTierLevels; Database, Market, tooltips); 32: Guardian signature runes (Grail, Item Search tabs); 31: armour / shield / axe family lines (base_implicits95.json; Damage tab); 30: per-gem base poison chance (new_gems85.json; Damage tab); 29: the game's rule numbers (rules.json, switches.json; Damage tab); 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
+  const SCHEMA = 34; // 34: the game's negative-value line wording (stat_text.json Negative; every line text); 33: Red Tier levels (cube_recipes.json RedTierLevels; Database, Market, tooltips); 32: Guardian signature runes (Grail, Item Search tabs); 31: armour / shield / axe family lines (base_implicits95.json; Damage tab); 30: per-gem base poison chance (new_gems85.json; Damage tab); 29: the game's rule numbers (rules.json, switches.json; Damage tab); 28: quality stones and custom league settings (FAQ tab); 27: Riven mods and Mythic lines (planner, Item Search), Guardian strong / weak element (FAQ tab); 26: Tundra Desert wave arena (FAQ tab); 25: trap / totem strike prices, Winter Orb, Storm Whirl strike, Wheeling Axe return (Damage tab); 24: Oath Masteries (Skill tree tab); 23: minion monster stats (Skills & Minions reference, FAQ tab); 22: Guardian signature and chase drops (Grail tab); 21: rune upgrade path and fuse cost (Item Search tab); 20: item levels, flavour, rarity flags, rune glyphs (Item Search tab); 19: Guardian fight rules, the Deep, XP penalty (FAQ tab); 18: monster affixes + Guardian mod counts (FAQ tab); 17: Dragonling class Aspect (Creator copy); 16: Riven Lord levels (Creator Rupture level); 15: forge recipes, cube recipes and sigil parts (Creator fill); 14: Vow shares (cube_recipes.json); 13: Brewmaw's potions (Brewery tab); 12: rune tier and level (Creator rune search); 11: passive tree version (Creator tab); 10: Rupture map rules (Creator tab); 9: item sizes, node Fp and the XP table (Creator tab); 8: Mirage hops (Thousand Cuts); 7: affix tiers and item tags, rune sockets (build planner); 3: runeword power bands (item level 56/70/84); 4: orbit ring timing, Guardian element variants and Ward; 5: animation speed (Rate) per skill; 6: Rain waves, totem fire interval, Meta59 rules
 
   function buildGameData(J, parts, meta) {
     const pick = (o, keys) => { const r = {}; for (const k of keys) if (o[k] !== undefined) r[k] = o[k]; return r; };
@@ -670,6 +670,10 @@ window.PAGE_LANGS = {
     for (const t of J('Items/stat_text.json').texts) statText[t.Key] = t.Text;
 
 
+    const statTextNeg = {};
+    for (const t of J('Items/stat_text.json').texts) if (t.Negative) statTextNeg[t.Key] = t.Negative;
+
+
 
 
 
@@ -725,7 +729,7 @@ window.PAGE_LANGS = {
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {}, { loot },
       { skills, classes, supports, nodes, masteries, oaths, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, late2, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, guardians, sigRuneRule, vowRunes, idolRecipes, archetypes, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, redTierLevels, saveIds, trapPrice, gemPoison, rules: gameRules });
+        affixes, late2, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, statTextNeg, guardians, sigRuneRule, vowRunes, idolRecipes, archetypes, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, redTierLevels, saveIds, trapPrice, gemPoison, rules: gameRules });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, OPTIONAL, SCHEMA };
@@ -7577,6 +7581,11 @@ window.BOItemSearch = function (ctx) {
     if (a == null) { a = b = m.Value || 0; }
     if (a2 == null) { a2 = b2 = m.Value2 || 0; }
     if (a === b && a2 === b2) return S.modText(GD, Object.assign(base, { v: a, v2: a2 })).replace(/\+-/g, '-');
+
+    if (a < 0 && b <= 0) {
+      const lo = Math.min(-a, -b), hi = Math.max(-a, -b);
+      return S.modText(GD, Object.assign(base, { v: -MARK, v2: MARK2 })).split('-' + MARK).join(rng(a, b)).split(String(MARK)).join(rng(lo, hi)).split(String(MARK2)).join(rng(a2, b2)).replace(/\+-/g, '-');
+    }
     return S.modText(GD, Object.assign(base, { v: MARK, v2: MARK2 })).split(String(MARK)).join(rng(a, b)).split(String(MARK2)).join(rng(a2, b2)).replace(/\+-/g, '-');
   }
   const plain = (GD, m) => rangeText(GD, m);
@@ -7851,7 +7860,7 @@ window.BOItemSearch = function (ctx) {
       if (u.Limited) badges.push(tagBadge(GD, 'Limited', 'muted'));
 
       const sourced = from.length && !/not in the game files/.test(from[0]);
-      if (u.DropWeight === 0) badges.push(badge(sourced ? 'No random drops' : 'Does not drop', 'muted'));
+      if (u.DropWeight === 0) badges.push(badge(sourced ? 'No random drops' : 'Might not be obtainable', 'muted'));
       badges.push(weightBadge(e));
     } else if (e.cat === 'oathword') {
       const w = e.w, hide = e.secret && !F.secrets;
@@ -13983,7 +13992,6 @@ window.BOCharacter = function (ctx) {
 
 
 
-
   const OATHWORD_2H = 1;
   function wordPower2H(rw, twoHand, GD, mod) {
     if (!(twoHand && rw && rw.Power2H > 1)) return 1;
@@ -19137,7 +19145,13 @@ window.BOCharacter = function (ctx) {
 
     const gi = mods.filter(m => !m.local && m.mode === 'Inc' && (m.stat === stat || m.stat === 'Defences') && plain(m)).reduce((x, m) => x + m.v, 0) + attrInc;
     const more = mods.filter(m => !m.local && m.mode === 'More' && m.stat === stat && plain(m)).reduce((x, m) => x * (1 + m.v / 100), 1);
-    return Math.max(0, flat * (1 + gi / 100) * more);
+
+
+
+
+    const evaAsEs = stat === 'EnergyShield' ? mods.filter(m => m.stat === 'EvasionAsEnergyShield113' && m.mode === 'Flat').reduce((x, m) => x + m.v, 0) : 0;
+    const fromEva = evaAsEs ? evaAsEs / 100 * defenceTotal(GD, ch, mods, attr, 'Evasion') : 0;
+    return Math.max(0, flat * (1 + gi / 100) * more + fromEva);
   }
 
 
@@ -19319,6 +19333,9 @@ window.BOCharacter = function (ctx) {
     const typed = types.length && plus && (plus.includes('{tags}') || !conds.length) ? sm + '+' : null;
     const keys = [sm + (m.tags.length ? '+' + m.tags.join('+') : ''), typed, sm + (conds[0] ? '+' + conds[0] : ''), sm + (gemScaled ? '+GemScaled' : ''), sm + '+', sm].filter(Boolean);
     let t = null, tk = ''; for (const k of keys) if (GD.statText[k]) { t = GD.statText[k]; tk = k; break; }
+
+
+    if (t && m.v < 0 && GD.statTextNeg && GD.statTextNeg[tk]) t = GD.statTextNeg[tk];
     const fmt = x => (Math.round(x * 100) / 100).toString();
     if (!t) return fallbackText(m, fmt);
 
@@ -21333,7 +21350,11 @@ window.BOStartApp = function () {
       const bs = GD.bases[String(it.base || '').toLowerCase()] || {}, o = loc['item:' + it.slot] || { es: 0, def: 0 };
       f += ((bs.EnergyShield || 0) + o.es) * (1 + o.def / 100);
     }
-    const es = (f + (H.EsPerInt79 || 0) * int) * (1 + (inc + (H.IntEsPctPer10 || 0) * int / 10) / 100); // Int is not rounded: Int 65 gives +26% (not +24%), the sheet's tooltip 8 Nov
+    let es = (f + (H.EsPerInt79 || 0) * int) * (1 + (inc + (H.IntEsPctPer10 || 0) * int / 10) / 100); // Int is not rounded: Int 65 gives +26% (not +24%), the sheet's tooltip 8 Nov
+
+
+    const evaAsEs = mods.filter(m => m.stat === 'EvasionAsEnergyShield113' && m.mode === 'Flat').reduce((x, m) => x + m.v, 0);
+    if (evaAsEs) es += evaAsEs / 100 * S.defenceTotal(GD, ch, mods, attr, 'Evasion');
     const resParts = [['Fire', rs.Fire], ['Cold', rs.Cold], ['Lightning', rs.Lightning], ['Poison', rs.Poison]];
     return { life, es, resParts };
   }

@@ -13928,11 +13928,11 @@ window.BOCharacter = function (ctx) {
 
   const UNIQUE_LINE_SCALE = {
     wyrmblade_of_the_black_oath: { 0: 1.5, 4: 1.5 }, kingbreaker: { 0: 0.6, 1: 0.6, 3: 1.5 }, gravesong: { 0: 1.5, 1: 1.5, 2: 1.5 },
-    gravecleaver: { 1: 1.5, 2: 2 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff: { 1: 2.5, 3: 2 },
+    gravecleaver: { 1: 1.5, 2: 2 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff: { 0: 1.5, 1: 0.35, 3: 2 },
     cinderwick: { 1: 2, 2: 3, 3: 1.5, 5: 3 }, dawnforge_maul: { 0: 1.25, 1: 1.25, 2: 1.25, 4: 1.25 }, glass_soul: { 0: 0.5, 1: 0.5 },
     the_unyielding_vow: { 0: 0.25 }, the_patient_bastion: { 0: 0.25 }, the_heartwood_girdle: { 0: 0.25 },
     crown_of_the_quiet_ward: { 0: 0.25 }, windwrit_treads: { 0: 0.25 }, the_oathkeepers_stand: { 0: 0.25 },
-    mouth_of_the_mire: { 0: 0.5, 1: 0.5, 2: 0.5 }, drune_grave_rot: { 1: 0.5 }, cinderwick_primal: { 1: 2, 2: 1.8, 3: 1.5, 7: 3 },
+    mouth_of_the_mire: { 0: 0.5, 1: 0.5, 2: 0.5 }, drune_grave_rot: { 1: 0.5 }, cinderwick_primal: { 1: 2, 2: 3, 3: 1.5, 7: 3 },
     starcallers_staff: { 1: 2, 3: 1.5 }, wintercall_orb: { 1: 2 }, orrery_of_the_long_night: { 2: 0.4 },
     dawnwardens_verdict: { 0: 1.5, 1: 2.5, 2: 3 }, halo_of_the_restless_saint: { 2: 2, 3: 0.4 }, lightsworn_reliquary: { 2: 2 },
     hollowhorn: { 2: 1.25, 4: 1.3 }, crown_of_the_bone_king: { 2: 2 }, charnel_bell: { 2: 0.4 },
@@ -13945,7 +13945,8 @@ window.BOCharacter = function (ctx) {
     templars_troth: { 0: 2, 1: 2 }, the_gate_that_answers: { 0: 1.5 }, overclock_coil: { 1: 1.5 },
     hexbinders_censer: { 1: 2 }, the_thousand_sparks: { 0: 0.667, 2: 0.5 }, kingbreaker_primal: { 0: 0.6, 1: 0.6, 3: 1.5 },
     gravesong_primal: { 0: 1.5, 1: 1.5, 2: 1.5 }, gravecleaver_primal: { 1: 1.5, 2: 2 }, stormfang_primal: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 },
-    rimecrown_staff_primal: { 1: 2.5, 3: 2 } };
+    rimecrown_staff_primal: { 0: 1.5, 1: 0.35, 3: 2 }, heart_of_the_white_silence: { 4: 0.25 }, wintercall_orb_primal: { 1: 2 },
+    orrery_of_the_long_night_primal: { 2: 0.4 }, charnel_bell_primal: { 2: 0.4 }, the_thousand_sparks_primal: { 0: 0.667, 2: 0.5 } };
 
 
 

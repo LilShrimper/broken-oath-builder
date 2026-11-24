@@ -1968,7 +1968,7 @@ window.PAGE_LANGS = {
       const x = lo + (hi - lo) * roll;
       return Number.isInteger(lo) && Number.isInteger(hi) ? Math.round(x) : Math.round(x * 100) / 100;
     };
-    const gearLevel = { lineRoll, topLines: topMax, rareLines: lineMax, runeTier: runeTierMax, uniquePool: uPool, uniqueRoll: uRoll, forged, quality: newQuality, grade: newGrade };
+    const gearLevel = { lineRoll, topLines: topMax, rareLines: lineMax, runeTier: runeTierMax, uniquePool: uPool, uniqueRoll: uRoll, forged, quality: newQuality, grade: newGrade, oathsworn: !!cfg.oathsworn };
     const TOP = new WeakSet(); // rare lines / Vows on the best tier for the item level (cfg.topLines counts them)
     const isRiven = id => (GD.affixes[lc(id)] || {}).Kind === 'Riven';
     const rivenOn = list => (list || []).filter(a => !a.id.startsWith('unique:') && isRiven(a.id)).length;
@@ -2175,6 +2175,27 @@ window.PAGE_LANGS = {
     }
 
 
+
+
+
+
+    const useOath = !!cfg.oathsworn;
+    function* fillOath(items, slot, it, v) {
+      const used = new Set(it.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
+      if (it.affixes.some(a => a.oath)) return { item: it, v };
+      let best = null, bv = v;
+      for (const af of affixesFor(baseOf(it))) {
+        if (af.Kind || used.has(af.Group)) continue;
+        const ti = tierFor(af); if (ti < 0) continue;
+        const t = af.Tiers[ti], a = { id: af.Id, tier: ti, v: rollAt(t.Min, t.Max, lineRoll), v2: t.Max2 != null ? rollAt(t.Min2, t.Max2, lineRoll) : 0, oath: true };
+        const x = V(put(items, slot, { ...it, affixes: it.affixes.concat([a]) }));
+        if (x > bv * (1 + MIN_GAIN)) { bv = x; best = a; }
+        if (due()) yield prog();
+      }
+      return best ? { item: { ...it, affixes: it.affixes.concat([best]) }, v: bv } : { item: it, v };
+    }
+
+
     const uniqueIds = items => new Set(items.filter(i => i.rarity === 'Unique').map(i => lc(i.unique)));
 
     function* bestFor(slot, items, filter, K) {
@@ -2236,7 +2257,8 @@ window.PAGE_LANGS = {
           if (late()) break;
           const f = yield* fillAffixes(items, slot, s.it, false);
           let item = f.item, v = f.v;
-          if (useRunes && rareSockets(baseOf(item)) && !late()) { const r = yield* fillRunes(trial(item).filter(i => i.slot !== slot), slot, item, v); item = r.item; }
+          if (useRunes && rareSockets(baseOf(item)) && !late()) { const r = yield* fillRunes(trial(item).filter(i => i.slot !== slot), slot, item, v); item = r.item; v = r.v; }
+          if (useOath && !late()) { const o = yield* fillOath(trial(item).filter(i => i.slot !== slot), slot, item, v); item = o.item; }
           offer(item, V(trial(item)), 'rare');
         }
       }
@@ -25573,12 +25595,12 @@ window.BOStartApp = function () {
 
   const GEAR_TIER_FIELDS = { lineRoll: 1, topLines: '', rareLines: '', runeTier: '', uniquePool: 'all', uniqueRoll: 1, forged: false, quality: 0, grade: 0 };
   const GEAR_TIERS = {
-    mid: { name: 'Midgame', set: { ilvl: 70, limited: false, vows: false, maxVows: 0, runes: true, rareSockets: 2, maxRiven: 0, basicOnly: true, lineRoll: 0.5, topLines: 1, rareLines: 4, runeTier: 3, uniquePool: 'common', uniqueRoll: 0.5, forged: false, quality: 10, grade: 50 },
+    mid: { name: 'Midgame', set: { ilvl: 70, limited: false, vows: false, maxVows: 0, runes: true, rareSockets: 2, maxRiven: 0, basicOnly: true, oathsworn: false, lineRoll: 0.5, topLines: 1, rareLines: 4, runeTier: 3, uniquePool: 'common', uniqueRoll: 0.5, forged: false, quality: 10, grade: 50 },
       text: 'Gear you can expect to find while working through the Rupture. Rares are item level 70 with up to 4 lines, at most one on its best tier and the rest one tier lower, rolled mid-range. Uniques that drop often (no chase uniques), rolled mid-range, no Vows. Runes up to tier 3, 2 sockets, weapon quality 10%, Base Grade 50, no Riven mods, basic bases only (no Core Touched or Ashen).' },
-    end: { name: 'Endgame', set: { ilvl: 84, limited: false, vows: true, maxVows: 3, runes: true, rareSockets: 2, maxRiven: 0, basicOnly: false, lineRoll: 0.75, topLines: 3, rareLines: 6, runeTier: 5, uniquePool: 'regular', uniqueRoll: 0.75, forged: false, quality: 20, grade: 80 },
-      text: 'A well-geared character. Rares are item level 84 with 6 lines, up to 3 on their best tier and the rest one tier lower (so no Great or Flawless Rares), rolled at 75% of their range. Every unique that drops except the chase ones (Primal, Deep-forged, Guardian chase, Core, red Dwarven Runes), rolled at 75%, up to 3 Vows. Runes up to tier 5, 3 sockets, weapon quality 20%, Base Grade 80, no Riven mods.' },
-    bis: { name: 'BiS', set: { ilvl: 84, limited: true, vows: true, maxVows: '', runes: true, rareSockets: 2, maxRiven: '', basicOnly: false, lineRoll: 1, topLines: '', rareLines: 6, runeTier: '', uniquePool: 'all', uniqueRoll: 1, forged: true, quality: 30, grade: 100 },
-      text: 'The most the gear can give. Every rare line on its best tier at its top roll (Flawless Rares), Riven mods with no limit, every unique including the chase ones as a forged copy at its best roll, up to 6 Vows. Every rune, 4 sockets on two-handers, weapon quality 30%, Base Grade 100.' },
+    end: { name: 'Endgame', set: { ilvl: 84, limited: false, vows: true, maxVows: 3, runes: true, rareSockets: 2, maxRiven: 0, basicOnly: false, oathsworn: true, lineRoll: 0.75, topLines: 3, rareLines: 6, runeTier: 5, uniquePool: 'regular', uniqueRoll: 0.75, forged: false, quality: 20, grade: 80 },
+      text: 'A well-geared character. Rares are item level 84 with 6 lines, up to 3 on their best tier and the rest one tier lower (so no Great or Flawless Rares), rolled at 75% of their range, plus an Oathsworn line. Every unique that drops except the chase ones (Primal, Deep-forged, Guardian chase, Core, red Dwarven Runes), rolled at 75%, up to 3 Vows. Runes up to tier 5, 3 sockets, weapon quality 20%, Base Grade 80, no Riven mods.' },
+    bis: { name: 'BiS', set: { ilvl: 84, limited: true, vows: true, maxVows: '', runes: true, rareSockets: 2, maxRiven: '', basicOnly: false, oathsworn: true, lineRoll: 1, topLines: '', rareLines: 6, runeTier: '', uniquePool: 'all', uniqueRoll: 1, forged: true, quality: 30, grade: 100 },
+      text: 'The most the gear can give. Every rare line on its best tier at its top roll (Flawless Rares) plus an Oathsworn line, Riven mods with no limit, every unique including the chase ones as a forged copy at its best roll, up to 6 Vows. Every rune, 4 sockets on two-handers, weapon quality 30%, Base Grade 100.' },
     custom: { name: 'Custom', set: GEAR_TIER_FIELDS, text: 'Set the boxes yourself. Every line and unique rolls at its best, with no weapon quality.' },
   };
   const gsStored = store.get('gearSim', null);
@@ -25593,6 +25615,7 @@ window.BOStartApp = function () {
   }
   if (!GEAR_TIERS[GS.set.tier]) setGearTier(gsStored ? 'custom' : 'end');
   if (GS.set.basicOnly == null) GS.set.basicOnly = !!GEAR_TIERS[GS.set.tier].set.basicOnly; // settings saved before the box existed (17 Nov 2026)
+  if (GS.set.oathsworn == null) GS.set.oathsworn = !!GEAR_TIERS[GS.set.tier].set.oathsworn; // the same for Oathsworn rares (23 Nov 2026)
 
   const gsTierTouch = f => { if (GS.set.tier !== 'custom' && f in GEAR_TIERS[GS.set.tier].set) GS.set.tierEdited = true; };
   const gsTierHtml = off => {
@@ -25618,7 +25641,8 @@ window.BOStartApp = function () {
       chk('vows', 'Vows on uniques', 'A red item takes up to 6 lines from rares at the cube; the best ones are added') +
       chk('basicOnly', 'Basic items only', 'Plain bases only: the search skips Core Touched, Ashen and Gnome-made bases' + (gear ? ', and one you wear now is not kept either' : '')) +
       chk('noCore', 'No Core Touched items', S_.basicOnly ? 'Already covered by Basic items only' : gear ? 'The search skips Core Touched bases, and a Core Touched item you wear now is not kept either' : 'Skip Core Touched bases', S_.basicOnly) +
-      chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') + '</div></div></div>';
+      chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') +
+      chk('oathsworn', 'Oathsworn rares', 'Each rare the search makes also gets its Oathsworn line (the Cube: a rare, a Tier V or better rune and 3 Core Embers): a 7th line from the item\'s own pool at the best tier its item level allows. The line is not graded, so it never makes a rare Great or Flawless. Rares you wear now are kept as they are') + '</div></div></div>';
   };
   GS.set.layers = Object.assign({ life: true, es: true, armour: true, evasion: true, block: true }, GS.set.layers || {});
 
@@ -25887,6 +25911,7 @@ window.BOStartApp = function () {
     let t = T && r.tier !== 'custom' ? '<b>' + T.name + '</b>' + (r.tierEdited ? ' (some boxes changed by hand)' : '') + ': ' : '';
     if (gsFull(r)) t += 'every line is at its top tier for item level ' + r.ilvl + ' and every unique is rolled at its best' + (g.forged ? ' as a forged copy' : '') + ', so this is the most the gear can give, not a drop you will see soon.';
     else t += 'rare lines are item level ' + r.ilvl + ', ' + (g.topLines > 0 ? 'at most ' + g.topLines + ' on their best tier and the rest one tier lower' : 'one tier under their best') + ', rolled at ' + pc(g.lineRoll) + ' of their range' + (g.rareLines < 6 ? ', up to ' + g.rareLines + ' lines' : '') + '; uniques are rolled at ' + pc(g.uniqueRoll) + (g.uniquePool === 'common' ? ', only the ones that drop often' : g.uniquePool === 'regular' ? ', no chase uniques' : '') + '.';
+    if (g.oathsworn) t += ' Rares found here carry an Oathsworn line (a 7th line from the Cube).';
     if (g.runeTier < 6) t += ' Runes up to tier ' + g.runeTier + '.';
     if (g.quality || g.grade) t += ' Items found here have ' + [g.quality ? 'weapon quality ' + g.quality + '%' : '', g.grade ? 'Base Grade ' + g.grade : ''].filter(Boolean).join(' and ') + '.';
     return t;

@@ -10201,8 +10201,9 @@ window.BOPatches = function (ctx) {
     return note('young-gem effect lasts ' + lv + (y > x ? ' longer' : ' less'), 'pt-flat');
   }
   function linesHtml(c, compact) {
-    if (c.kind === 'added') return compact ? '' : '<p class="pt-note">New in this build.</p>';
-    if (c.kind === 'removed') return '<p class="pt-note">Taken out of the game data in this build.</p>';
+    const many = c.n > 1 ? '<p class="pt-note">' + c.n + ' entries of this name in the game data.</p>' : '';
+    if (c.kind === 'added') return compact ? '' : '<p class="pt-note">New in this build.</p>' + many;
+    if (c.kind === 'removed') return '<p class="pt-note">Taken out of the game data in this build.</p>' + many;
     return '<ul class="pt-lines">' + c.lines.map(([o, n]) => {
       if (o && n && (o.length > 60 || n.length > 60)) { const [a, b] = wordDiff(o, n); return '<li class="pt-text"><div class="pt-old">' + kw(a) + '</div><div class="pt-new">' + kw(b) + '</div></li>'; }
       return '<li>' + (o ? '<span class="pt-old">' + kw(esc(o)) + '</span>' : '') + (o && n ? '<span class="pt-arrow" aria-label="becomes">→</span>' : '') + (n ? '<span class="pt-new">' + (o ? '' : '<b>New line:</b> ') + kw(esc(n)) + trend(o, n) + '</span>' : '<span class="pt-new pt-gone">line removed</span>') + '</li>';

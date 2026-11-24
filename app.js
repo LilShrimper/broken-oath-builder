@@ -10484,7 +10484,14 @@ window.BOPatches = function (ctx) {
     const c = LOG && LOG.changes.find(x => x.sec === sec && x.id === id); V.hq = c ? c.name : '';
   }
   const countOf = (sec, id) => LOG ? LOG.changes.filter(c => c.sec === sec && c.id === id).length : 0;
-  return { render, load, historyHtml, openHistory, countOf, ready: () => !!LOG };
+
+  function latestIn(sec) {
+    if (!LOG || !LOG.builds.length) return null;
+    const cur = LOG.builds[LOG.builds.length - 1], n = /(\d+)\s*$/.exec(cur.label || '');
+    const ids = new Map(LOG.changes.filter(c => c.b === cur.b && c.sec === sec && c.kind !== 'removed').map(c => [c.id, c.kind]));
+    return { label: n ? 'Patch ' + n[1] : cur.label, ids };
+  }
+  return { render, load, historyHtml, openHistory, countOf, latestIn, ready: () => !!LOG };
 };
 
 ;
@@ -10503,6 +10510,9 @@ window.BOScaling = function (ctx) {
   const SHOWN = [1, 5, 10, 15, 20];
   const BONUS = [1, 5, 10, 15, 20], BONUS_ALL = 20;
   let filter = 'all', query = '';
+
+
+  let sort = 'name', sortLv = 20;
   const ext = true; // levels 21-40 always shown (they used to sit behind a button)
 
   const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -10538,6 +10548,16 @@ window.BOScaling = function (ctx) {
     if (k === 'spell') { const g = grow * effAt(sk, 1, own); return num(sk.SpellMin * g) + '–' + num(sk.SpellMax * g); }
     return '';
   }
+
+  function sortVal(sk, G, L, what) {
+    const k = kindOf(sk), max = G.MaxLevel || 20, GD = ctx.gd();
+    if (what === 'eff' ? k !== 'attack' : k !== 'spell') return null;
+    let own = L, grow;
+    if (L <= max) grow = k === 'attack' ? 1 + (G.AttackEffectivenessPerLevel || 0) * (L - 1) : Math.pow(G.DamageGrowth || 1.19, L - 1);
+    else { if (!window.BOSim || !window.BOSim.gemLevelGrowth) return null; own = max; grow = window.BOSim.gemLevelGrowth(GD, k, max, L - max); }
+    return k === 'attack' ? effAt(sk, sk.Effectiveness != null ? sk.Effectiveness : 1, own) * grow * 100 : (sk.SpellMin + sk.SpellMax) / 2 * grow * effAt(sk, 1, own);
+  }
+  const SORTS = [['name', 'Name'], ['flat', 'Flat damage'], ['eff', 'Damage effectiveness']];
   const mana = (sk, G, L) => sk.ManaCost ? num(sk.ManaCost * ((G.ManaCostAtGemLevel || [])[L - 1] || 1)) : '';
   const unitOf = k => k === 'attack' ? '% of weapon damage' : k === 'spell' ? 'damage per hit' : '';
 
@@ -10568,17 +10588,18 @@ window.BOScaling = function (ctx) {
     const f = n => +n.toFixed(2);
     return 'Stays on until switched off: ticks ' + f(tps) + ' times a second, each tick deals ' + Math.round(scale * 100) + '% of the hit above (' + f(tps * scale) + '× of it each second). Cast speed does not change the tick rate.';
   }
-  function card(sk, G, max, id) {
+  function card(sk, G, max, id, rank) {
     const k = kindOf(sk), col = COLOR[sk.Attribute];
     const tags = [ATTR[sk.Attribute] ? sk.Attribute : '', sk.Kind === 'Basic' ? 'Basic' : sk.Kind === 'Weapon' ? 'Weapon' : '', ...(sk.Tags || []), sk.DamageType && sk.DamageType !== 'Physical' ? sk.DamageType : ''].filter(Boolean);
     let h = '<article class="sc-card sc-' + col + '" data-name="' + esc((sk.Name + ' ' + (sk.Tags || []).join(' ') + ' ' + (sk.DamageType || '')).toLowerCase()) + '">' +
       '<header data-skill="' + esc(id) + '">' + (ctx.skillIcon ? ctx.skillIcon(id) : '') + '<div><h3>' + esc(sk.Name) + '</h3><span class="sc-tags">' + esc(tags.join(' · ')) + '</span></div></header>';
+    if (rank) h += '<p class="sc-rank"><b class="sc-rank-n">#' + rank.n + '</b><strong>' + esc(rank.val) + '</strong><span>' + esc(rank.text) + '</span></p>';
 
     const conv = ctx.convRule ? ctx.convRule(id) : '';
     if (conv) h += '<p class="sc-meta sc-conv"><b>Conversion:</b> ' + esc(conv) + '</p>';
     {
-      h +='<div class="sc-row">' + SHOWN.filter(L => L <= max).map(L => '<div><span>LV ' + L + '</span><b>' + at(sk, G, L) + '</b></div>').join('') + '</div>';
-      if (ext) h += '<div class="sc-row sc-ext">' + BONUS.map(b => '<div><span>LV ' + (max + b) + '</span><b>' + atBonus(sk, G, b) + '</b></div>').join('') + '</div><p class="sc-unit">' + unitOf(k) + '. Second row: levels past 20 come from gear; past LV 25 is estimated (0.56 curve).</p>';
+      h +='<div class="sc-row">' + SHOWN.filter(L => L <= max).map(L => '<div' + (sort !== 'name' && L === sortLv ? ' class="on"' : '') + '><span>LV ' + L + '</span><b>' + at(sk, G, L) + '</b></div>').join('') + '</div>';
+      if (ext) h += '<div class="sc-row sc-ext">' + BONUS.map(b => '<div' + (sort !== 'name' && max + b === sortLv ? ' class="on"' : '') + '><span>LV ' + (max + b) + '</span><b>' + atBonus(sk, G, b) + '</b></div>').join('') + '</div><p class="sc-unit">' + unitOf(k) + '. Second row: levels past 20 come from gear; past LV 25 is estimated (0.56 curve).</p>';
       else h += '<p class="sc-unit">' + unitOf(k) + ', gem level only (gear levels add more)</p>';
     }
     const tn = tickNote(sk);
@@ -10622,13 +10643,31 @@ window.BOScaling = function (ctx) {
     if (filter !== 'all' && !groups.some(g => GROUP[g.a][0] === filter)) filter = 'all';
     const chips = [['all', 'All']].concat(groups.map(g => [GROUP[g.a][0], GROUP[g.a][0][0].toUpperCase() + GROUP[g.a][0].slice(1)]));
     h += '<div class="sc-bar"><div class="sc-chips" role="group" aria-label="Gem colour">' + chips.map(c => '<button type="button" class="chip sc-chip' + (filter === c[0] ? ' active' : '') + '" data-f="' + c[0] + '" aria-pressed="' + (filter === c[0]) + '">' + c[1] + '</button>').join('') + '</div>' +
+      '<div class="sc-sort"><div class="sc-chips" id="scSort" role="group" aria-label="Sort">' + SORTS.map(o => '<button type="button" class="chip sc-chip' + (sort === o[0] ? ' active' : '') + '" data-s="' + o[0] + '" aria-pressed="' + (sort === o[0]) + '">' + o[1] + '</button>').join('') + '</div>' +
+      '<label class="sc-lv"' + (sort === 'name' ? ' hidden' : '') + '><span>at</span><select id="scLv" aria-label="Level to sort by">' + Array.from({ length: max + BONUS_ALL }, (_, i) => i + 1).map(L => '<option value="' + L + '"' + (L === sortLv ? ' selected' : '') + '>LV ' + L + (L > max ? ' (gem ' + max + ' +' + (L - max) + ')' : '') + '</option>').join('') + '</select></label></div>' +
       '<input type="search" id="scSearch" placeholder="Search skills" aria-label="Search skills" value="' + esc(query) + '"></div>';
-    h += '<div id="scGrid">' + groups.map(g => '<section class="sc-group sc-' + GROUP[g.a][0] + '"><h2 class="sc-sep"><span>' + GROUP[g.a][1] + '</span></h2><div class="sc-grid">' + g.skills.map(s => card(s, G, max, ids.get(s))).join('') + '</div></section>').join('') + '</div><p class="hint sc-empty" id="scEmpty" hidden>No skill matches.</p>';
+    if (sortLv > max + BONUS_ALL) sortLv = max + BONUS_ALL;
+    let grid;
+    if (sort === 'name') grid = groups.map(g => '<section class="sc-group sc-' + GROUP[g.a][0] + '"><h2 class="sc-sep"><span>' + GROUP[g.a][1] + '</span></h2><div class="sc-grid">' + g.skills.map(s => card(s, G, max, ids.get(s))).join('') + '</div></section>').join('');
+    else {
+
+      const v = new Map(list.map(s => [s, sortVal(s, G, sortLv, sort)]));
+      const ranked = list.filter(s => v.get(s) != null).sort((a, b) => v.get(b) - v.get(a) || a.Name.localeCompare(b.Name)), rest = list.filter(s => v.get(s) == null);
+      const what = sort === 'flat' ? 'average hit' : 'of weapon damage', fmt = x => sort === 'flat' ? num(x) : Math.round(x) + '%';
+      grid = '<section class="sc-group"><h2 class="sc-sep"><span>' + (sort === 'flat' ? 'Spells by flat damage' : 'Attacks by damage effectiveness') + ' at LV ' + sortLv + '</span></h2><div class="sc-grid">' +
+        ranked.map((s, i) => card(s, G, max, ids.get(s), { n: i + 1, val: fmt(v.get(s)), text: what + ' at LV ' + sortLv })).join('') + '</div></section>' +
+        (rest.length ? '<section class="sc-group"><h2 class="sc-sep"><span>' + (sort === 'flat' ? 'Attacks (no flat hit: a share of weapon damage)' : 'Spells (a flat hit, no weapon share)') + '</span></h2><div class="sc-grid">' + rest.map(s => card(s, G, max, ids.get(s))).join('') + '</div></section>' : '');
+    }
+    h += '<div id="scGrid">' + grid + '</div><p class="hint sc-empty" id="scEmpty" hidden>No skill matches.</p>';
     hideTip();
     el.innerHTML = h;
     el.onmousemove = showTip; el.onmouseleave = hideTip;
     apply();
-    el.querySelector('.sc-chips').onclick = e => { const b = e.target.closest('[data-f]'); if (!b) return; filter = b.dataset.f; el.querySelectorAll('.sc-chip').forEach(x => { const on = x.dataset.f === filter; x.classList.toggle('active', on); x.setAttribute('aria-pressed', on); }); apply(); };
+    el.querySelector('#scSort').onclick = e => { const b = e.target.closest('[data-s]'); if (!b || b.dataset.s === sort) return; sort = b.dataset.s; render(); };
+    $('#scLv').onchange = e => { sortLv = +e.target.value; render(); };
+    el.querySelector('#scGrid').onclick = e => { const b = e.target.closest('[data-hist]'); if (b && ctx.openHistory) ctx.openHistory(b.dataset.hist); };
+    patchTiles();
+    el.querySelector('.sc-chips').onclick = e => { const b = e.target.closest('[data-f]'); if (!b) return; filter = b.dataset.f; el.querySelectorAll('.sc-chip[data-f]').forEach(x => { const on = x.dataset.f === filter; x.classList.toggle('active', on); x.setAttribute('aria-pressed', on); }); apply(); };
     $('#scSearch').oninput = e => { query = e.target.value.trim().toLowerCase(); apply(); };
   }
 
@@ -10661,6 +10700,19 @@ window.BOScaling = function (ctx) {
     });
     document.querySelectorAll('#scGrid .sc-group').forEach(g => { g.hidden = !g.querySelector('.sc-card:not([hidden])'); });
     const e = $('#scEmpty'); if (e) e.hidden = shown > 0;
+  }
+
+
+
+  let patchWait = false;
+  function patchTiles() {
+    const P = ctx.patches && ctx.patches(); if (!P || !P.latestIn) return;
+    if (!P.ready()) { if (!patchWait) { patchWait = true; P.load().then(() => { patchWait = false; if (P.ready()) patchTiles(); }); } return; }
+    const L = P.latestIn('skills'); if (!L || !L.ids.size) return;
+    document.querySelectorAll('#scGrid .sc-card > header[data-skill]').forEach(hd => {
+      const kind = L.ids.get(hd.dataset.skill); if (!kind || hd.querySelector('.sc-patch')) return;
+      (hd.querySelector('h3').parentElement || hd).insertAdjacentHTML('beforeend', '<button type="button" class="sc-patch' + (kind === 'added' ? ' new' : '') + '" data-hist="' + esc(hd.dataset.skill) + '">' + (kind === 'added' ? 'New' : 'Changed') + ' in ' + esc(L.label) + '</button>');
+    });
   }
 
   function levels(id) {
@@ -27169,7 +27221,8 @@ window.BOStartApp = function () {
     skillName: () => st.skill ? ((GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill) : '', onChange: () => { breweryDirty = true; },
     redraw: () => { if (character) character.render(); if (planner) planner.render(); } }); // the belt cards behind the slot overlay
   const skillIcon = id => (window.GEM_ICONS && window.GEM_ICONS.idx[String(id).toLowerCase()] != null ? skillDot(id) : ''); // the icon only, no colour dot fallback
-  scaling = window.BOScaling({ $, esc, gd: () => GD, skillIcon, tip: id => planner.skillTip(null, id, false, true), convRule: id => planner.convRule(id) }); // hover tooltip on a card's title (the Build tab's skill tooltip, game data only)
+  scaling = window.BOScaling({ $, esc, gd: () => GD, skillIcon, tip: id => planner.skillTip(null, id, false, true), convRule: id => planner.convRule(id),
+    patches: () => patches, openHistory: id => { patches.openHistory('skills', id); showTab('patch'); } }); // hover tooltip on a card's title (the Build tab's skill tooltip, game data only)
 
   grail = window.BOGrail({ $, esc, gd: () => GD, current: () => st.ch, icons: () => itemSearch,
     onChange: () => { if (!$('#itemSearchPane').hidden) itemSearch.render(); } });

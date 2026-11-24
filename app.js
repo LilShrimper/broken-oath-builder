@@ -8048,6 +8048,9 @@ window.BOItemSearch = function (ctx) {
       Primal: ['A stronger copy of a normal unique', ['Same name as the normal one, but every line is at its best roll, and it often has extra lines.',
         'You can get it from any kill' + (P.PrimalFromML ? ' from monster level ' + P.PrimalFromML : '') + ' (very rare), the Core\'s jackpot' + (P.CorePrimalChance ? ' (' + pc(P.CorePrimalChance) + ')' : '') + ', a Riven Lord' + (P.LordPrimalChance ? ' (' + pc(P.LordPrimalChance) + ')' : '') + ', or by unswearing a unique, which can turn it into its Primal copy.']],
       Limited: ['Marked "limited" in the game data', ['We don\'t know what this means yet. Most of these are rare prizes from the Core areas.']],
+
+      'Might not be obtainable': ['No known way to get it', ['Its drop weight in the game data is 0, so it never drops at random, and no Guardian, Core area or other source lists it.',
+        'It may be unused, kept for later, or come from a place the game data doesn\'t show. If you find one, please report where.']],
     }[t];
     if (!text) return '';
     return '<b>' + esc(t) + '</b><span class="pl-tip-sub">' + esc(text[0]) + '</span>' + text[1].map(d).join('') + '<span class="pl-tip-desc pl-tip-flavour">The game doesn\'t explain this tag. This is our reading of its data.</span>';
@@ -8135,7 +8138,7 @@ window.BOItemSearch = function (ctx) {
       if (u.Limited) badges.push(tagBadge(GD, 'Limited', 'muted'));
 
       const sourced = from.length && !/not in the game files/.test(from[0]);
-      if (u.DropWeight === 0) badges.push(badge(sourced ? 'No random drops' : 'Might not be obtainable', 'muted'));
+      if (u.DropWeight === 0) badges.push(sourced ? badge('No random drops', 'muted') : tagBadge(GD, 'Might not be obtainable', 'muted'));
       badges.push(weightBadge(e));
     } else if (e.cat === 'oathword') {
       const w = e.w, hide = e.secret && !F.secrets;

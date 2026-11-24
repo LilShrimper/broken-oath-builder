@@ -3030,7 +3030,23 @@ window.BOPlanner = function (ctx) {
     for (const h of ch.hotbar) if (h && h !== 'move' && !out.some(r => r.skill === h)) out.push({ skill: h, sock: null });
     return out;
   }
-  const onBar = ch => ch.hotbar.filter(h => h && h !== 'move');
+
+
+
+
+  const testOf = ch => { const t = ch && ch.testSkill, hb = (ch && ch.hotbar) || []; return t && hb.indexOf(t, BAR) >= BAR && !hb.slice(0, BAR).includes(t) ? t : ''; };
+  const stripTest = ch => { const t = testOf(ch); return t ? ch.hotbar.filter((h, i) => i < BAR || h !== t) : (ch.hotbar || []).slice(); };
+  function setTest(ch, id) {
+    const old = testOf(ch);
+    if (old) { ch.hotbar = stripTest(ch); if (ch.testNew && old !== id) removeSkill(ch, old); }
+    delete ch.testSkill; delete ch.testNew;
+    if (!id || ch.hotbar.slice(0, BAR).includes(id)) return;
+    if (!rows(ch).some(r => r.skill === id)) { ensureSocket(ch, id); if (!ch.gemLevels[id]) ch.gemLevels[id] = Math.max(1, ...Object.values(ch.gemLevels).filter(x => x > 0), 1); ch.testNew = true; }
+    while (ch.hotbar.length < BAR) ch.hotbar.push('');
+    ch.hotbar = ch.hotbar.filter((h, i) => i < BAR || h !== id).concat([id]);
+    ch.testSkill = id;
+  }
+  const onBar = ch => { const t = testOf(ch); return ch.hotbar.filter(h => h && h !== 'move' && h !== t); };
   function ensureSocket(ch, skill) {
     let s = ch.sockets.find(x => x.skill === skill);
     if (!s) { s = { skill, supports: [], conduit: '' }; ch.sockets.push(s); }
@@ -3049,6 +3065,10 @@ window.BOPlanner = function (ctx) {
   const isPlanCode = s => /^BO[PS]1\./.test(String(s || '').trim());
   async function toCode(ch) {
     const p = Object.assign({}, ch); delete p.id; delete p.from; delete p.savedAt;
+
+    const t = testOf(p);
+    if (t && p.testNew) { p.sockets = (p.sockets || []).filter(x => x.skill !== t); p.gems = (p.gems || []).filter(g => g !== t); p.gemLevels = Object.assign({}, p.gemLevels); delete p.gemLevels[t]; if (p.mainSkill === t) p.mainSkill = ''; }
+    if (p.hotbar) p.hotbar = stripTest(p); delete p.testSkill; delete p.testNew;
     const z = new Uint8Array(await new Response(new Blob([JSON.stringify(p)]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
     let bin = ''; for (const b of z) bin += String.fromCharCode(b);
     return 'BOP1.' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -4339,7 +4359,7 @@ window.BOPlanner = function (ctx) {
     return status;
   }
   const classIds = () => Object.values(GD.classes).map(c => c.Id);
-  return { setPlanField, classIds, MAX_BONUS, bonusWarn, skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, openPicker, skillOpts, itemTip, skillTip, convRule, supTip, oathwordForItem, wordRunes, slotName: SLOT_NAME, rows, render, fromCode, toCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
+  return { setPlanField, classIds, MAX_BONUS, bonusWarn, skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, testOf, setTest, stripTest, openPicker, skillOpts, itemTip, skillTip, convRule, supTip, oathwordForItem, wordRunes, slotName: SLOT_NAME, rows, render, fromCode, toCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
 };
 
 ;
@@ -4632,14 +4652,16 @@ window.BOCreator = function (ctx) {
       done.push(fresh.length + ' equipped items (the bag is kept)');
     }
     if (parts.skills) {
-      const gl = Object.assign({}, ch.gemLevels || {});
 
-      for (const g of ch.gems || []) { const k = GD.skills[lc(g)]; if (!gl[g] && k && (k.Kind || 'Gem') === 'Gem') gl[g] = 1; }
+      const testOnly = ch.testNew && planner.testOf(ch);
+      const gl = Object.assign({}, ch.gemLevels || {}); if (testOnly) delete gl[testOnly];
+
+      for (const g of (ch.gems || []).filter(g => g !== testOnly)) { const k = GD.skills[lc(g)]; if (!gl[g] && k && (k.Kind || 'Gem') === 'Gem') gl[g] = 1; }
       setArr(rec, 'Gems', Object.keys(gl));
       setMap(rec, 'GemLevels', gl);
       setMap(rec, 'GemXp', Object.fromEntries(Object.entries(gl).map(([k, l]) => [k, xpFor(l)])));
-      need(rec, 'Sockets').v = { items: (ch.sockets || []).map(s => { const x = struct(SOCKET); iset(x, 'SkillId', s.skill); x.props[1].v = { items: (s.supports || []).slice() }; x.props[2].v = s.conduit || ''; return x; }) };
-      const hb = (ch.hotbar || []).slice(), len = arr(rec, 'Hotbar').length || hb.length; while (hb.length < len) hb.push('');
+      need(rec, 'Sockets').v = { items: (ch.sockets || []).filter(s => !testOnly || s.skill !== testOnly).map(s => { const x = struct(SOCKET); iset(x, 'SkillId', s.skill); x.props[1].v = { items: (s.supports || []).slice() }; x.props[2].v = s.conduit || ''; return x; }) };
+      const hb = planner.stripTest(ch), len = arr(rec, 'Hotbar').length || hb.length; while (hb.length < len) hb.push('');
       setArr(rec, 'Hotbar', hb);
       const onBar = new Set(hb), br = getP(rec, 'BarRemoved'); if (br) br.v.items = br.v.items.filter(x => !onBar.has(x));
       const ng = getP(rec, 'NewGems'); if (ng) ng.v.items = [];
@@ -10871,6 +10893,185 @@ window.BOAtlas = function (ctx) {
 
 
 
+
+
+
+
+
+
+window.BOVows = function (ctx) {
+  'use strict';
+  const { $, esc, num } = ctx;
+  const lc = x => String(x || '').toLowerCase();
+  const LS = { get: (k, d) => { try { const v = localStorage.getItem('bods:' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set: (k, v) => { try { localStorage.setItem('bods:' + k, JSON.stringify(v)); } catch (e) { /* private mode */ } } };
+  const AMULET = 'the_oath_unbroken', ECON = 'economical_vow', DEEP = 'deepened_woe';
+  const BAR_SLOTS = ['Left click', 'Middle mouse', 'Right click', 'Key 1', 'Key 2', 'Key 3', 'Key 4', 'Key 5', 'Ctrl 1', 'Ctrl 2', 'Ctrl 3', 'Ctrl 4', 'Ctrl 5'];
+  const opt = { amulet: !!LS.get('vows:amulet', false), sup: !!LS.get('vows:sup', false) };
+  let job = 0;
+
+
+
+  function entries() {
+    const GD = ctx.gd(), out = [], seen = new Set();
+    for (const b of Object.values(GD.blessings)) {
+      if (b.Kind !== 'Vow' || !b.Skill || /^woebringer/i.test(b.Id) || !GD.skills[lc(b.Skill)] || seen.has(lc(b.Skill))) continue;
+      seen.add(lc(b.Skill));
+      out.push({ kind: /herald/i.test(b.Id) ? 'Herald' : 'Vow', group: 'vow', skill: b.Skill, vow: b.Id, sup: ECON });
+    }
+    for (const c of Object.values(GD.curses)) {
+      if ((c.Kind !== 'Woe' && c.Kind !== 'Sentence') || !c.Skill || !GD.skills[lc(c.Skill)] || seen.has(lc(c.Skill))) continue;
+      seen.add(lc(c.Skill));
+      out.push({ kind: c.Kind, group: c.Kind === 'Woe' ? 'woe' : 'sentence', skill: c.Skill, curse: c.Id, sup: c.Kind === 'Woe' ? DEEP : '' });
+    }
+    return out;
+  }
+  const onBar = (ch, id) => (ch.hotbar || []).some(h => lc(h) === lc(id));
+  const wearsAmulet = ch => (ch.items || []).some(it => it.slot === 'Amulet' && lc(it.unique) === AMULET);
+
+
+  function baseChar(ch) {
+    const c = JSON.parse(JSON.stringify(ch));
+    if (opt.amulet && !wearsAmulet(c)) {
+      const u = ctx.gd().uniques[AMULET];
+      const it = { slot: 'Amulet', base: (u && u.BaseId) || 'sunstone_amulet', rarity: 'Unique', unique: AMULET, name: u ? u.Name : 'The Oath Unbroken', level: (u && u.Level) || 72, quality: 0, grade: 0, affixes: [], runes: [] };
+      ctx.planner.gear.rollUnique(it, 1);
+      c.items = c.items.filter(x => x.slot !== 'Amulet').concat([it]);
+    }
+    return c;
+  }
+
+  function withSkill(c0, e) {
+    const c = JSON.parse(JSON.stringify(c0)), sups = opt.sup && e.sup ? [e.sup] : [];
+    let s = c.sockets.find(x => x.skill === e.skill);
+    if (!s) { s = { skill: e.skill, supports: [], conduit: '' }; c.sockets.push(s); }
+    s.supports = sups;
+    if (!c.gems.includes(e.skill)) c.gems.push(e.skill);
+    if (!c.gemLevels[e.skill]) c.gemLevels[e.skill] = Math.max(1, ...Object.values(c.gemLevels).filter(x => x > 0), 1);
+    if (!onBar(c, e.skill)) c.hotbar = c.hotbar.concat([e.skill]);
+    return c;
+  }
+  function without(c0, e) {
+    const c = Object.assign({}, c0, { hotbar: (c0.hotbar || []).map(h => lc(h) === lc(e.skill) ? '' : h) });
+    c.sockets = (c0.sockets || []).filter(s => lc(s.skill) !== lc(e.skill)).map(s => lc(s.conduit) === lc(e.skill) ? Object.assign({}, s, { conduit: '' }) : s);
+    return c;
+  }
+
+
+  const sentenceIds = () => Object.values(ctx.gd().curses).filter(c => c.Kind === 'Sentence').map(c => c.Id);
+  const run = (c, e, on) => ctx.sim(c, e ? { curse: e.curse, vow: e.vow, on, alsoOff: e.group === 'sentence' ? sentenceIds().filter(id => id !== e.curse) : null } : null);
+
+  function manaOf(e, w, wo) {
+    if (e.group === 'vow') {
+      if (!w.mana || !wo.mana) return null;
+      let r = Math.max(0, w.mana.reserved - wo.mana.reserved);
+      if (opt.amulet) r = 0; else if (opt.sup && e.sup === ECON) r = Math.round(r * 0.9);
+      return { reserve: r };
+    }
+    const sk = ctx.gd().skills[lc(e.skill)] || {}, sp = opt.sup && e.sup ? (ctx.gd().supports[e.sup] || {}).ManaMultiplier || 1 : 1;
+    return sk.ManaCost ? { cost: sk.ManaCost * sp } : null;
+  }
+
+  function shownReserved(c, m) {
+    if (!m) return null;
+    if (opt.amulet || wearsAmulet(c)) return 0;
+    return m.reserved;
+  }
+
+  function barHtml(ch, list) {
+    const GD = ctx.gd(), kinds = new Map(list.map(e => [lc(e.skill), e.kind]));
+    const hb = (ch.hotbar || []).slice(0, BAR_SLOTS.length); while (hb.length < BAR_SLOTS.length) hb.push('');
+    const slot = i => {
+      const id = hb[i] || '', sk = id && id !== 'move' ? GD.skills[lc(id)] : null, k = kinds.get(lc(id));
+      return '<div class="cr-bar-slot ch-bar-slot' + (id ? ' full' : '') + (k ? ' vw-hit' : '') + '" style="grid-area: s' + i + '"><div class="cr-bar-put"' + (sk ? ' data-tip="skill" data-id="' + esc(id) + '"' : '') + '><small>' + BAR_SLOTS[i] + (k ? ' · ' + k : '') + '</small><span>' + (id ? (sk ? ctx.skillDot(id) : '') + esc(id === 'move' ? 'Move only' : sk ? sk.Name : id) : '<i>empty</i>') + '</span></div></div>';
+    };
+    return '<div class="ch-bar-card vw-bar"><h3>Skill bar</h3><div class="cr-bar">' + hb.slice(0, 8).map((x, i) => slot(i)).join('') + '<span class="cr-bar-label">Ctrl bar</span>' + hb.slice(8).map((x, i) => slot(8 + i)).join('') + '</div>' +
+      '<p class="hint">Change the bar on the Character tab. Vows, Heralds and curses count in the sim only while on the bar.</p></div>';
+  }
+
+  function render() {
+    const el = $('#vowsPane'); if (!el) return;
+    const ch = ctx.current();
+    if (!ch) { el.innerHTML = '<p class="hint">Load a character first.</p>'; return; }
+    const list = entries(), worn = wearsAmulet(ch);
+    const amu = ctx.gd().uniques[AMULET];
+    let h = '<div class="cmp-intro"><div class="eyebrow">BUILD PLANNER</div><h2>Vows, Curses, Sentences</h2><p>Each Vow, Herald, Woe and Sentence with your build DPS (the main skill plus the skills ticked Include in Sim, against the enemy on the Damage tab): what it adds on your bar, or would add if you put it there. Change the bar on the Character tab.</p></div>';
+    h += barHtml(ch, list);
+    h += '<div class="vw-opts">' +
+      '<label class="check-row"><input type="checkbox" data-vw="amulet"' + (opt.amulet || worn ? ' checked' : '') + (worn ? ' disabled' : '') + '><span>' + esc(amu ? amu.Name : 'The Oath Unbroken') + ' (amulet): Vows reserve no mana' + (worn ? ' <span class="meta">· you wear it</span>' : ' <span class="meta">· takes the place of your amulet in every number here</span>') + '</span></label>' +
+      '<label class="check-row"><input type="checkbox" data-vw="sup"' + (opt.sup ? ' checked' : '') + '><span>Vow / Curse supports <span class="meta">· Economical Vow on each Vow and Herald (10% less reserved), Deepened Woe on each Woe (21% stronger). Off: no supports on the card\'s skill</span></span></label></div>';
+    h += '<div class="vw-mana" id="vwMana"><span class="meta">Working out your mana…</span></div>';
+    for (const [g, title] of [['vow', 'Vows and Heralds'], ['woe', 'Woes'], ['sentence', 'Sentences']]) {
+      const es = list.filter(e => e.group === g); if (!es.length) continue;
+      h += '<h3 class="vw-h">' + title + '</h3><div class="vw-grid" data-vwgroup="' + g + '">' + es.map(e => card(ch, e)).join('') + '</div>';
+    }
+    h += '<p class="hint">Each Sentence card is that Sentence alone, as only one enemy holds a Sentence at a time. Sentences take no support here: Economical Vow asks for a Vow and Deepened Woe for a Woe. An enemy holds two Woes at a time; the sim applies its own limits. Every number is a sim estimate.</p>';
+    el.innerHTML = h;
+    fill(ch, list);
+  }
+  function card(ch, e) {
+    const sk = ctx.gd().skills[lc(e.skill)] || {}, on = onBar(ch, e.skill), lvl = ch.gemLevels[e.skill] || 0;
+    const desc = String(sk.Description || '').split(/(?<=\.)\s/)[0];
+    const sup = opt.sup && e.sup ? ctx.gd().supports[e.sup] : null;
+    return '<div class="vw-card' + (on ? ' on' : '') + '" data-vwcard="' + esc(e.skill) + '"><div class="vw-top"><span class="vw-name" data-tip="skill" data-id="' + esc(e.skill) + '">' + ctx.skillDot(e.skill) + '<b>' + esc(sk.Name || e.skill) + '</b></span><span class="vw-kind">' + e.kind + '</span></div>' +
+      '<div class="meta">' + (on ? 'On your bar' : 'Not on your bar') + (lvl ? ' · level ' + lvl : ' · not owned') + (sup ? ' · with ' + esc(sup.Name) : ' · no supports') + (e.group === 'sentence' ? ' · alone' : '') + '</div>' +
+      '<p class="vw-desc">' + esc(desc) + '</p><div class="vw-num" data-vwnum><span class="meta">Working out…</span></div></div>';
+  }
+
+  function fill(ch, list) {
+    const my = ++job, base = baseChar(ch);
+    let b0;
+    const step = () => {
+      if (my !== job || $('#vowsPane').hidden) return;
+      if (!b0) {
+        try { b0 = run(base, null); } catch (err) { b0 = { dps: 0, mana: null }; }
+        const m = b0.mana, res = shownReserved(base, m), box = $('#vwMana');
+        if (box) box.innerHTML = m ? '<b>Mana</b> ' + num(m.max, 0) + ' <span class="meta">·</span> reserved ' + num(res, 0) + ' <span class="meta">·</span> free ' + num(Math.max(0, m.max - res), 0) +
+          (m.toggleHeld && res ? ' <span class="meta">(' + num(m.toggleHeld, 0) + ' of it held by toggles)</span>' : '') + ' <span class="meta">·</span> build DPS <b>' + num(b0.dps) + '</b>' + (opt.amulet && !wearsAmulet(ch) ? ' <span class="meta">with ' + esc((ctx.gd().uniques[AMULET] || {}).Name || 'the amulet') + '</span>' : '') :
+          '<span class="meta">No mana sheet for this build (no skill here costs mana).</span> Build DPS <b>' + num(b0.dps) + '</b>';
+        return setTimeout(step, 0);
+      }
+      const e = list.find(x => !x.done); if (!e) { for (const x of list) delete x.done; return sortCards(); }
+      e.done = true;
+      const box = document.querySelector('#vowsPane [data-vwcard="' + CSS.escape(e.skill) + '"] [data-vwnum]');
+      try {
+        const w = run(withSkill(base, e), e, true), wo = run(without(base, e), e, false);
+        const d = w.dps - wo.dps, m = manaOf(e, w, wo), on = onBar(ch, e.skill);
+        const pct = wo.dps > 0 ? d / wo.dps * 100 : 0, small = Math.abs(pct) < 0.05;
+        const mana = !m ? '' : m.reserve != null ? 'Reserves ' + num(m.reserve, 0) + ' mana' + (b0.mana ? ' (' + num(m.reserve / b0.mana.max * 100, 0) + '%)' : '') : 'Costs ' + num(m.cost, 1) + ' mana a cast (before cost cuts)';
+        const free = m && m.reserve != null && b0.mana && !on ? b0.mana.max - shownReserved(base, b0.mana) - m.reserve : null;
+        if (box) box.closest('[data-vwcard]').dataset.score = d;
+        if (box) box.innerHTML = '<div class="vw-dps"><span class="meta">Build DPS</span> <b>' + num(w.dps) + '</b></div>' +
+          '<div class="' + (small ? 'meta' : d > 0 ? 'good' : 'bad') + '" title="' + esc('With it: ' + num(w.dps) + ' · without it: ' + num(wo.dps)) + '">' + (small ? 'No damage change in the sim' : (d > 0 ? '+' : '−') + (Math.abs(pct) < 10 ? Math.abs(pct).toFixed(1) : Math.round(Math.abs(pct))) + '% ' + (on ? 'from it' : 'if added')) + '</div>' +
+          (mana ? '<div class="meta">' + mana + '</div>' : '') + (free != null && free < 0 ? '<div class="bad">Not enough free mana: ' + num(-free, 0) + ' short</div>' : '');
+      } catch (err) { if (box) box.innerHTML = '<span class="meta">Could not sim this one.</span>'; }
+      setTimeout(step, 0);
+    };
+    setTimeout(step, 30);
+  }
+
+  function sortCards() {
+    for (const g of document.querySelectorAll('#vowsPane [data-vwgroup]')) {
+      const cs = [...g.children].sort((x, y) => (+y.dataset.score || 0) - (+x.dataset.score || 0));
+      for (const c of cs) g.appendChild(c);
+    }
+  }
+
+  document.addEventListener('change', e => {
+    const t = e.target, k = t && t.dataset && t.dataset.vw; if (!k || !t.closest('#vowsPane')) return;
+    opt[k] = t.checked; LS.set('vows:' + k, t.checked); render();
+  });
+  return { render };
+};
+
+;
+
+
+
+
+
+
+
+
 window.BOFaq = function (ctx) {
   'use strict';
   const { $, esc } = ctx;
@@ -12137,7 +12338,7 @@ window.BOCharacter = function (ctx) {
   let note = null; // { id, text }: what the last Copy / Paste did, shown on that character's page
 
 
-  const UNDO_KEYS = { gear: ['items', 'idolShelf'], skill: ['sockets', 'hotbar', 'gems', 'gemLevels', 'mainSkill'], bar: ['hotbar'] };
+  const UNDO_KEYS = { gear: ['items', 'idolShelf'], skill: ['sockets', 'hotbar', 'gems', 'gemLevels', 'mainSkill'], bar: ['hotbar'], test: ['sockets', 'hotbar', 'gems', 'gemLevels', 'mainSkill', 'testSkill', 'testNew'] };
   let undo = null; // { id, kind, label, snap }
   function remember(kind, label) {
     const ch = ctx.current(); if (!ch) return;
@@ -12410,19 +12611,24 @@ window.BOCharacter = function (ctx) {
   }
 
   function skillsCard(ch) {
-    const gd = ctx.gd(), rs = planner.rows(ch), bar = new Set(ch.hotbar.filter(x => x && x !== 'move'));
+    const gd = ctx.gd(), rs = planner.rows(ch), bar = new Set(ch.hotbar.filter(x => x && x !== 'move')), test = planner.testOf(ch);
+    const full = new Set(ch.hotbar.filter(x => x && x !== 'move' && x !== test)).size >= planner.BAR;
     const clip = LS.get('clip:skills', null), has = clip && Array.isArray(clip.sockets);
     let h = '<div class="card ch-skills"><div class="ch-skills-head"><h2>Skills</h2><span class="ch-acts">' +
       '<button class="btn small ghost" type="button" data-clip="copyskills" title="Copies the skills with their supports, gem levels and bar, to paste on another character or plan"' + (rs.length ? '' : ' disabled') + '>Copy skills</button>' +
       '<button class="btn small ghost" type="button" data-clip="pasteskills" title="' + esc(has ? 'Replaces the skills here with the ones copied from ' + clip.from : 'Use Copy skills on another character or plan first') + '"' + (has ? '' : ' disabled') + '>Paste skills</button>' +
+
+
+      (full || test ? '<button class="btn small" type="button" data-testslot="1" title="Sims one more skill as if it were on the bar (its Vow, curse, shock), with its DPS as the main skill, to compare it with the main skill. Not a game slot: saves and share links leave it out">Compare a new skill</button>' : '') +
       '<button class="btn small" type="button" id="chAddSkillBtn">Add skill</button></span>' +
-      '<select id="chAddSkill" class="ch-addskill-sel" aria-hidden="true" tabindex="-1">' + planner.skillOpts('') + '</select></div>';
+      '<select id="chAddSkill" class="ch-addskill-sel" aria-hidden="true" tabindex="-1">' + planner.skillOpts('') + '</select>' +
+      (full || test ? '<select class="ch-addskill-sel" data-testsel="1" aria-hidden="true" tabindex="-1">' + planner.skillOpts(test || '') + '</select>' : '') + '</div>';
     if (!rs.length) h += '<p class="hint">No skills.</p>';
 
     const main = lc(ch.mainSkill || (ctx.simSkill && ctx.simSkill()) || '');
 
 
-    const all = rs.filter(r => lc(r.skill) === main).concat(rs.filter(r => lc(r.skill) !== main));
+    const all = rs.filter(r => lc(r.skill) === main).concat(rs.filter(r => r.skill === test && lc(r.skill) !== main), rs.filter(r => lc(r.skill) !== main && r.skill !== test));
     const showAll = !!LS.get('ch:allSkills', false), offBar = all.filter(r => lc(r.skill) !== main && !bar.has(r.skill)).length;
     const ordered = showAll ? all : all.filter(r => lc(r.skill) === main || bar.has(r.skill));
     if (offBar) h += '<p class="hint ch-offbar">' + (showAll ? 'Showing every skill gem, ' + offBar + ' off the bar. ' : 'Showing the skills on the bar. ') + '<button class="btn small ghost" type="button" data-allskills="' + (showAll ? '0' : '1') + '">' + (showAll ? 'Only the bar' : 'Show ' + offBar + ' off the bar') + '</button></p>';
@@ -12430,9 +12636,9 @@ window.BOCharacter = function (ctx) {
       const sk = gd.skills[lc(r.skill)], sups = r.sock ? r.sock.supports : [];
       const canSim = sk && !(ctx.sim.dealsNoHits && ctx.sim.dealsNoHits(sk)) && ctx.supportSearch;
       h += '<div class="ch-skill' + (lc(r.skill) === main ? ' main' : '') + '" data-skwin="' + esc(r.skill) + '" tabindex="0" role="button" aria-label="Edit ' + esc(sk ? sk.Name : r.skill) + '" title="Click to edit this skill: gem level, supports, skill bar"><div class="ch-skill-name" data-tip="skill" data-id="' + esc(r.skill) + '">' + ctx.skillDot(r.skill) + '<b>' + esc(sk ? sk.Name : r.skill) + '</b>' +
-        '<span class="meta">level ' + (ch.gemLevels[r.skill] || 1) + (bar.has(r.skill) ? '' : ' · off the bar') + (lc(r.skill) === main ? ' · main skill' : '') + '</span>' +
+        '<span class="meta">level ' + (ch.gemLevels[r.skill] || 1) + (r.skill === test ? ' · comparing, not on the game bar' : bar.has(r.skill) ? '' : ' · off the bar') + (lc(r.skill) === main ? ' · main skill' : '') + '</span>' +
         '<span class="ch-skill-acts">' + (canSim ? '<button class="btn small ghost ch-simsup" type="button" data-simsup="' + esc(r.skill) + '" title="Opens this skill: pin or block supports, then run Sim Supports there">Sim Supports</button>' : '') +
-        '<button class="x ch-skill-x" type="button" data-rmskill="' + esc(r.skill) + '" aria-label="Remove ' + esc(sk ? sk.Name : r.skill) + '">×</button></span></div>' +
+        (r.skill === test ? '<button class="x ch-skill-x" type="button" data-testclear="1" aria-label="Stop comparing ' + esc(sk ? sk.Name : r.skill) + '">×</button>' : '<button class="x ch-skill-x" type="button" data-rmskill="' + esc(r.skill) + '" aria-label="Remove ' + esc(sk ? sk.Name : r.skill) + '">×</button>') + '</span></div>' +
 
         (ctx.skillContribs && lc(r.skill) !== main ? '<div class="ch-skill-dps" data-contrib="' + esc(r.skill) + '"><span class="meta">Working out its DPS share…</span></div>' : '') +
 
@@ -12469,7 +12675,7 @@ window.BOCharacter = function (ctx) {
   const BAR_MAIN = 8;
   const barName = id => id === 'move' ? 'Move only' : (ctx.gd().skills[lc(id)] || {}).Name || id;
   function barCard(ch) {
-    const hb = ch.hotbar || [], rs = planner.rows(ch), extra = hb.slice(BAR_SLOTS.length).filter(x => x && !hb.slice(0, BAR_SLOTS.length).includes(x));
+    const hb = ch.hotbar || [], rs = planner.rows(ch), test = planner.testOf(ch), extra = hb.slice(BAR_SLOTS.length).filter(x => x && x !== test && !hb.slice(0, BAR_SLOTS.length).includes(x));
     const opts = '<option value="-">Empty</option>' + rs.map(r => '<option value="' + esc(r.skill) + '">' + esc(barName(r.skill)) + '</option>').join('') + '<option value="move">Move only</option>';
     const slot = i => {
       const id = hb[i] || '', sk = id && id !== 'move' ? ctx.gd().skills[lc(id)] : null;
@@ -12478,11 +12684,11 @@ window.BOCharacter = function (ctx) {
         '<select class="ch-bar-sel" data-barsel="' + i + '" aria-hidden="true" tabindex="-1">' + opts + '</select>' +
         (id ? '<button type="button" class="x" data-barclear="' + i + '" aria-label="Clear ' + BAR_SLOTS[i] + '">×</button>' : '') + '</div>';
     };
-    const n = new Set(hb.filter(x => x && x !== 'move')).size;
+    const n = new Set(hb.filter(x => x && x !== 'move' && x !== test)).size;
     return '<div class="ch-bar-card"><h3>Action bar <small>' + n + ' skill' + (n === 1 ? '' : 's') + ' on it</small></h3>' +
       '<div class="cr-bar">' + hb.slice(0, BAR_MAIN).concat(Array(Math.max(0, BAR_MAIN - hb.length)).fill('')).slice(0, BAR_MAIN).map((x, i) => slot(i)).join('') + '<span class="cr-bar-label">Ctrl bar</span>' + BAR_SLOTS.slice(BAR_MAIN).map((x, i) => slot(BAR_MAIN + i)).join('') + '</div>' +
       (extra.length ? '<p class="hint">Also on the bar, no slot yet: ' + extra.map(id => esc(barName(id))).join(', ') + '. Click a slot to place ' + (extra.length > 1 ? 'them' : 'it') + '.</p>' : '') +
-      '<p class="hint">Click a slot to pick its skill, or drag a skill to another slot. Vows, Heralds and curses only count in the sim while on the bar.</p></div>';
+      '<p class="hint">Click a slot to pick its skill, or drag a skill to another slot. Vows, Heralds and curses only count in the sim while on the bar.</p>' + '</div>';
   }
 
 
@@ -12522,6 +12728,11 @@ window.BOCharacter = function (ctx) {
     [hb[d.i], hb[j]] = [hb[j], hb[d.i]];
     ch.hotbar = hb; ctx.commit(ch, { skills: true }); render(); if (SW) renderSkill();
   }
+  function setTestSlot(v) {
+    const ch = ctx.editable(); if (!ch) return;
+    planner.setTest(ch, v && v !== '-' ? v : '');
+    ctx.commit(ch, { skills: true }); render(); if (SW) renderSkill();
+  }
   const closeBarPicker = () => { const p = document.querySelector('.pl-pick'); if (p) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); };
   function setBar(i, v) {
     const ch = ctx.editable(); if (!ch) return;
@@ -12531,6 +12742,7 @@ window.BOCharacter = function (ctx) {
     hb[i] = id;
 
     ch.hotbar = hb.slice(0, BAR_SLOTS.length).concat(hb.slice(BAR_SLOTS.length).filter(x => x && x !== id));
+    if (id && id === ch.testSkill) { delete ch.testSkill; delete ch.testNew; } // the tested skill is on the bar for real now
     if (id && id !== 'move' && !ch.gems.includes(id)) ch.gems.push(id);
     ctx.commit(ch, { skills: true }); render(); if (SW) renderSkill();
   }
@@ -12675,15 +12887,25 @@ window.BOCharacter = function (ctx) {
     clearTimeout(contribTimer);
     contribTimer = setTimeout(() => {
       const el = $('#characterPane'); if (!el || el.hidden || !ctx.skillContribs) return;
-      let map = null; try { map = ctx.skillContribs(); } catch (e) { map = null; }
+      let map = null; try { map = ctx.skillContribs(!!LS.get('ch:allSkills', false)); } catch (e) { map = null; }
       for (const box of el.querySelectorAll('.ch-skill-dps[data-contrib]')) {
         const x = map && map[box.dataset.contrib];
         box.innerHTML = contribHtml(x); box.hidden = !box.innerHTML;
       }
     }, 60);
   }
+
+  function asMainHtml(x) {
+    if (!(x.asMain > 0)) return x.offBar ? '<span class="meta">No DPS of its own. Use Compare a new skill to see what it adds</span>' : '';
+
+    const d = x.main > 0 ? (x.asMain / x.main - 1) * 100 : null, sh = d == null ? 0 : x.asMain / x.main * 100, f = v => v < 1 ? '<1' : v < 10 ? (+v.toFixed(1)) : Math.round(v);
+    const p = d == null ? '' : Math.abs(d) < 0.5 ? 'same as ' : d > 0 ? '+' + f(d) + '% vs ' : f(sh) + '% of ';
+    const tip = 'This skill as the Damage tab skill, with its own gem level and supports' + (x.offBar ? ', counted as on the bar' : '') + ': ' + ctx.num(x.asMain) + ' DPS. ' + x.mainName + ' (the main skill): ' + ctx.num(x.main) + ' DPS. Mark as Main to see the full sheet';
+    return '<span title="' + esc(tip) + '">As main <b>' + ctx.num(x.asMain) + ' DPS</b>' + (d == null ? '' : ' <span class="' + (d > 0.5 ? 'good' : d < -0.5 ? 'bad' : 'meta') + '">' + p + esc(x.mainName) + '</span>') + '</span>';
+  }
   function contribHtml(x) {
     if (!x) return '';
+    if (x.offBar) return asMainHtml(x);
 
     if (!(x.total > 0)) return '';
     const pct = v => { const p = Math.abs(v / x.total * 100); return (p < 1 ? '<1' : p < 10 ? +p.toFixed(1) : Math.round(p)) + '%'; };
@@ -12693,7 +12915,8 @@ window.BOCharacter = function (ctx) {
     if (!small) h = '<span title="' + tip + '"><b class="' + (x.delta < 0 ? 'bad' : 'good') + '">' + (x.delta < 0 ? '−' : '+') + pct(x.delta) + ' damage</b></span>';
     else if (x.own > 0) h = '';
     else h = '<span class="meta" title="' + tip + '">No damage change in the sim</span>';
-    if (x.own > 0) h += (h ? ' <span class="meta">·</span> ' : '') + '<span class="meta" title="This skill on its own (' + ctx.num(x.own) + ' DPS), with its supports and gem level, as a share of the counted DPS. Tick Include in Sim to add it to the total">Own damage ' + pct(x.own) + ', not counted</span>';
+    if (x.own > 0 && !x.test) h += (h ? ' <span class="meta">·</span> ' : '') + '<span class="meta" title="This skill on its own (' + ctx.num(x.own) + ' DPS), with its supports and gem level, as a share of the counted DPS. Tick Include in Sim to add it to the total">Own damage ' + pct(x.own) + ', not counted</span>';
+    if (x.test) { const m = asMainHtml(x); if (m) h += (h ? ' <span class="meta">·</span> ' : '') + m; }
     return h;
   }
 
@@ -12748,6 +12971,8 @@ window.BOCharacter = function (ctx) {
       const ss = e.target.closest && e.target.closest('[data-simsup]'); if (ss) { hide(); openSkill(ss.dataset.simsup, ss); const b = SW && swBack.querySelector('[data-sw="sim"]'); if (b) b.focus({ preventScroll: true }); return; }
       if (e.target.closest && e.target.closest('.ch-skill-checks')) return; // the boxes, not the skill window
       const bc = e.target.closest && e.target.closest('[data-barclear]'); if (bc) { hide(); const i = +bc.dataset.barclear; remember('bar', barName((ctx.current().hotbar || [])[i]) + ' from ' + BAR_SLOTS[i]); return setBar(i, '-'); }
+      if (e.target.closest && e.target.closest('[data-testclear]')) { hide(); remember('test', barName(planner.testOf(ctx.current())) + ' from the comparison'); return setTestSlot(''); }
+      if (e.target.closest && e.target.closest('[data-testslot]')) { hide(); const sel = el.querySelector('[data-testsel]'); if (sel && ctx.current()) { sel.value = planner.testOf(ctx.current()) || ''; planner.openPicker(sel); } return; }
       const bs = e.target.closest && e.target.closest('[data-barslot]');
       if (bs && barJust) return;
       if (bs) { hide(); const sel = el.querySelector('[data-barsel="' + bs.dataset.barslot + '"]'); if (sel && ctx.current()) { sel.value = (ctx.current().hotbar || [])[+bs.dataset.barslot] || '-'; planner.openPicker(sel); } return; }
@@ -12781,6 +13006,7 @@ window.BOCharacter = function (ctx) {
     });
     el.addEventListener('change', e => {
       if (e.target && e.target.dataset && e.target.dataset.barsel != null) return setBar(+e.target.dataset.barsel, e.target.value);
+      if (e.target && e.target.dataset && e.target.dataset.testsel != null) return setTestSlot(e.target.value);
       const pf = e.target && e.target.dataset && e.target.dataset.plf;
       if (pf) { const s = planner.setPlanField(pf, e.target.value); if (s) note = { id: (ctx.current() || {}).id, text: s }; return render(); }
       const cf = e.target && e.target.dataset && e.target.dataset.chf;
@@ -12825,7 +13051,7 @@ window.BOCharacter = function (ctx) {
       return render();
     }
     if (act === 'copyskills') {
-      const c = { from: cur.name, sockets: cur.sockets, hotbar: cur.hotbar, gems: cur.gems, gemLevels: cur.gemLevels, mainSkill: cur.mainSkill || '', supportGems: cur.supportGems || [] };
+      const c = { from: cur.name, sockets: cur.testNew && planner.testOf(cur) ? cur.sockets.filter(x => x.skill !== cur.testSkill) : cur.sockets, hotbar: planner.stripTest(cur), gems: cur.gems, gemLevels: cur.gemLevels, mainSkill: cur.mainSkill || '', supportGems: cur.supportGems || [] };
       say(LS.set('clip:skills', copyOf(c)) ? 'Copied ' + plural(planner.rows(cur).length, 'skill') + ' from ' + cur.name + ' with their supports and gem levels. Open another character or plan and use Paste skills.' : 'Could not copy: this browser does not let the page store anything.');
       return render();
     }
@@ -12843,7 +13069,7 @@ window.BOCharacter = function (ctx) {
       if (had && !window.confirm('Replace the ' + plural(had, 'skill') + ' on ' + cur.name + ' with the ones copied from ' + c.from + '? Supports, gem levels and the skill bar are replaced too.')) return;
       const ch = ctx.editable(); if (!ch) return;
       const n = copyOf(c), gd = ctx.gd();
-      Object.assign(ch, { sockets: n.sockets, hotbar: n.hotbar || [], gems: n.gems || [], gemLevels: n.gemLevels || {}, mainSkill: n.mainSkill || '', supportGems: n.supportGems || [] });
+      Object.assign(ch, { sockets: n.sockets, hotbar: n.hotbar || [], gems: n.gems || [], gemLevels: n.gemLevels || {}, mainSkill: n.mainSkill || '', supportGems: n.supportGems || [] }); delete ch.testSkill; delete ch.testNew;
 
       const dropped = [];
       for (const s of ch.sockets) {
@@ -13387,6 +13613,11 @@ window.BOCharacter = function (ctx) {
 
 
   let optVows = 0; // the Vow count last asked for (0: the item's own count, at least 1)
+
+
+
+  let optRiven = null;
+  const optRivenOn = () => optRiven != null ? optRiven : !!(ctx.itemOptRiven && ctx.itemOptRiven());
   const vowsOf = it => it.affixes.filter(a => !a.id.startsWith('unique:')).length;
   const optKey = (ch, it) => M.slot === 'Idol' ? 'Idol' + ch.items.filter(x => x.slot === 'Idol').indexOf(it) : M.slot;
   const optOk = it => !!(ctx.itemOpt && !HOST && M && !M.shelf && it) && (it.rarity === 'Unique' ? !!GD().uniques[lc(it.unique)] : (it.rarity === 'Magic' || it.rarity === 'Rare') && !planner.oathwordForItem(it, M.slot));
@@ -13397,7 +13628,7 @@ window.BOCharacter = function (ctx) {
     const isU = it.rarity === 'Unique', me = M.opt = { job: null, pct: 0, res: null, err: '', of: JSON.stringify(bare(it)) };
     const job = ctx.itemOpt(ch, optKey(ch, it), isU ? optN(it) : 0, it.level || ch.level, p => {
       if (!M || M.opt !== me) return; me.pct = p; const e = back && back.querySelector('#ioOptProg'); if (e) e.textContent = 'Searching… ' + p + '%';
-    });
+    }, { riven: optRivenOn() });
     me.job = job; renderItem();
     job.done.then(r => {
       if (!M || M.opt !== me || me.job !== job) return;
@@ -13417,17 +13648,19 @@ window.BOCharacter = function (ctx) {
     if (!optOk(it)) return '';
     const O = M.opt || {}, isU = it.rarity === 'Unique', gd = GD();
     const what = isU ? 'the best ' + optN(it) + ' Vow' + (optN(it) === 1 ? '' : 's') : 'the best ' + (it.rarity === 'Magic' ? 'prefix and suffix' : 'prefixes and suffixes');
+    const rv = optRivenOn(), vowLv = isU && ctx.itemOptVowLevel ? ctx.itemOptVowLevel() : 0;
     let h = '<div class="io-opt"><div class="io-opt-bar">' +
       (isU ? '<label class="field inline io-opt-n" title="How many Vows to put on this item (1 to ' + G.VOW_MAX + '). Its Vows now are chosen again."><span>Vows</span><input class="mini" type="number" min="1" max="' + G.VOW_MAX + '" step="1" data-f="optvows" value="' + optN(it) + '"' + (O.job ? ' disabled' : '') + '></label>' : '') +
+      '<label class="check-row" title="Let the search use Riven lines (one tier above the best normal tier; item level 84 and up)' + (isU ? ', taken as Vows from a rare that has them' : '') + '"><input type="checkbox" data-f="optriven"' + (rv ? ' checked' : '') + (O.job ? ' disabled' : '') + '><span>Riven lines</span></label>' +
       (O.job ? '<button class="btn small ghost" type="button" data-io="optstop">Stop</button><span class="hint" id="ioOptProg" role="status">Searching… ' + (O.pct || 0) + '%</span>'
-        : '<button class="btn small" type="button" data-io="opt">Optimize this item</button><span class="hint">Finds ' + what + ' for this item only, item level ' + (it.level || 1) + ', top tier and roll. Scored for ' + esc(ctx.itemOptNote ? ctx.itemOptNote() : 'DPS') + ', as in the Item Simulator.</span>') + '</div>';
+        : '<button class="btn small" type="button" data-io="opt">Optimize this item</button><span class="hint">Finds ' + what + ' for this item only, ' + (isU ? 'from rares of item level ' + (vowLv || 84) : 'item level ' + (it.level || 1)) + ', top tier and roll' + (rv ? ', Riven lines included' : '') + '. Scored for ' + esc(ctx.itemOptNote ? ctx.itemOptNote() : 'DPS') + ', as in the Item Simulator.</span>') + '</div>';
     if (O.err) h += '<p class="hint bad">' + esc(O.err) + '</p>';
     const r = O.res;
     if (r) {
       const mine = l => !l.id.startsWith('unique:') && !l.oath && !l.scar;
       const ord = a => ((gd.affixes[lc(a.id)] || {}).Type === 'Suffix' ? 1 : 0), byKind = list => isU ? list : list.slice().sort((a, b) => ord(a) - ord(b)); // prefixes first
       const now = byKind(it.affixes.filter(mine)), found = byKind(r.item.affixes.filter(mine));
-      const text = a => { const af = gd.affixes[lc(a.id)]; return af ? (isU ? 'Vow' : af.Type) + ' T' + (a.tier + 1) + ': ' + safe(() => G.modLine(af.Mod, a.v, a.v2)) : a.id; };
+      const text = a => { const af = gd.affixes[lc(a.id)]; return af ? (isU ? 'Vow' : af.Type) + (af.Kind === 'Riven' ? ' Riven' : ' T' + (a.tier + 1)) + ': ' + safe(() => G.modLine(af.Mod, a.v, a.v2)) : a.id; };
       const same = found.length === now.length && found.every(a => now.some(b => sameLine(a, b)));
       h += '<div class="io-opt-res">';
       if (same) h += '<p class="hint">This item already has the lines the search found best.</p>';
@@ -13616,6 +13849,7 @@ window.BOCharacter = function (ctx) {
     const t = e.target, f = t.dataset.f;
     if (t.id === 'ioFile') { if (t.files[0]) readShot(t.files[0]); t.value = ''; return; }
     if (!M || !f) return;
+    if (f === 'optriven') { optRiven = !!t.checked; if (M.opt) { M.opt.res = null; M.opt.err = ''; } return renderItem(); }
     if (f === 'optvows') { optVows = Math.max(1, Math.min(G.VOW_MAX, Math.round(+t.value) || 1)); if (M.opt) { M.opt.res = null; M.opt.err = ''; } return renderItem(); }
     const ch = H().editable(), it = ch && itemNow(ch); if (!it) return;
     const v = t.value, ai = +((t.closest('[data-ai]') || {}).dataset || {}).ai, gd = GD();
@@ -21168,6 +21402,7 @@ window.BOStartApp = function () {
   let scaling = null; // the Skills tab (scaling.js)
   let faq = null; // the FAQ / Game Mechanics tab (faq.js)
   let atlas = null; // the Riven Atlas tab (atlas.js), a Build Planner view
+  let vowsTab = null; // the Vows, Curses, Sentences tab (vows.js), a Build Planner view
   let character = null; // the Character tab (character.js)
   let itemSearch = null; // the Item Search tab (itemsearch.js)
   let patches = null; // the Recent Patch tab (patches.js): what each game build changed, and each skill's or item's history
@@ -21332,6 +21567,7 @@ window.BOStartApp = function () {
     if (!ch) return;
     store.set('char', ch.id);
     if (character && !$('#characterPane').hidden) character.render();
+    if (vowsTab && !$('#vowsPane').hidden) setTimeout(() => vowsTab.render(), 0); // after the skill and curse ticks are set
     if (brewery && !$('#breweryPane').hidden) brewery.render(); // the Brewery shows this character's potions
     if (lootFilter && !$('#lootFilterPane').hidden) setTimeout(() => lootFilter.render(), 0); // its preset fits the character (after the skill is picked)
     st.curses = {};
@@ -21521,13 +21757,16 @@ window.BOStartApp = function () {
 
 
   const CONTRIB = { key: '', map: null };
-  function contribKey(ch) {
+  function contribKey(ch, withOff) {
     const o = opts();
-    return JSON.stringify([ch, o, st.optW || {}], (k, v) => v instanceof Set ? [...v] : v);
+    return JSON.stringify([ch, o, st.optW || {}, !!withOff], (k, v) => v instanceof Set ? [...v] : v);
   }
-  function skillContribs(ch) {
+
+
+
+  function skillContribs(ch, withOff) {
     if (!ch || !st.skill) return null;
-    let key; try { key = contribKey(ch); } catch (e) { key = ''; }
+    let key; try { key = contribKey(ch, withOff); } catch (e) { key = ''; }
     if (key && CONTRIB.key === key) return CONTRIB.map;
     const lc = x => String(x || '').toLowerCase();
     const dpsOf = r => r && !r.error && !r.unsupported && isFinite(r.totalDps) ? r.totalDps + (r.risen ? r.risen.dps || 0 : 0) : 0;
@@ -21544,7 +21783,13 @@ window.BOStartApp = function () {
       c.sockets = (ch.sockets || []).filter(s => lc(s.skill) !== lc(id)).map(s => lc(s.conduit) === lc(id) ? Object.assign({}, s, { conduit: '' }) : s);
       return c;
     };
-    const base = total(ch, null), map = {};
+    const base = total(ch, null), map = {}, test = planner.testOf(ch);
+    let mainDps = null;
+    const asMain = (c, id) => {
+      if (mainDps == null) mainDps = dpsOf(S.calcSkill(GD, ch, st.skill, opts()));
+      const o = comboOpts(); o.gemLevel = ch.gemLevels[id] || undefined;
+      return { asMain: dpsOf(S.calcSkill(GD, c, id, o)), main: mainDps, mainName: (GD.skills[lc(st.skill)] || {}).Name || st.skill };
+    };
 
 
     for (const r of planner.rows(ch).filter(r => lc(r.skill) !== lc(st.skill) && (ch.hotbar || []).some(h => lc(h) === lc(r.skill)))) {
@@ -21554,11 +21799,42 @@ window.BOStartApp = function () {
         let own = 0;
         if (!isCounted) { const o = comboOpts(); o.gemLevel = ch.gemLevels[id] || undefined; own = dpsOf(S.calcSkill(GD, ch, id, o)); }
         info = { delta, total: base, counted: isCounted, own, onBar: (ch.hotbar || []).some(h => lc(h) === lc(id)) };
+        if (id === test) Object.assign(info, asMain(ch, id), { test: true });
       } catch (e) { info = null; }
       map[id] = info;
     }
+    if (withOff) for (const r of planner.rows(ch).filter(r => lc(r.skill) !== lc(st.skill) && !(ch.hotbar || []).some(h => lc(h) === lc(r.skill)))) {
+      let info = null;
+      try { info = asMain(Object.assign({}, ch, { hotbar: (ch.hotbar || []).concat([r.skill]) }), r.skill); info.offBar = true; } catch (e) { info = null; }
+      map[r.skill] = info;
+    }
     CONTRIB.key = key; CONTRIB.map = map;
     return map;
+  }
+
+
+
+  function vowSim(c, e) {
+    const lc = x => String(x || '').toLowerCase();
+    const dpsOf = r => r && !r.error && !r.unsupported && isFinite(r.totalDps) ? r.totalDps + (r.risen ? r.risen.dps || 0 : 0) : 0;
+    let ex;
+    if (e) {
+      ex = {};
+      if (e.curse) { ex.curses = Object.assign({}, st.curses || {}); ex.curses[e.curse] = Object.assign({ dread: 0 }, ex.curses[e.curse] || {}, { on: !!e.on }); for (const id of e.alsoOff || []) ex.curses[id] = Object.assign({ dread: 0 }, ex.curses[id] || {}, { on: false }); }
+      if (e.vow) ex.off = new Set([...(st.off || [])].filter(k => k !== 'vow:' + e.vow));
+    }
+    let main = null, dps = 0;
+    for (const id of [st.skill].concat(optExtra().map(g => g.id))) {
+      const r = S.calcSkill(GD, c, id, id === st.skill ? opts(ex) : comboOpts(ex));
+      if (id === st.skill) main = r;
+      dps += dpsOf(r);
+    }
+    let mana = main && main.mana && main.mana.max ? main.mana : null;
+    if (!mana) for (const id of (c.hotbar || []).filter(h => h && h !== 'move' && lc(h) !== lc(st.skill))) {
+      let r = null; try { const o = comboOpts(ex); o.gemLevel = c.gemLevels[id] || undefined; r = S.calcSkill(GD, c, id, o); } catch (err) { r = null; }
+      if (r && r.mana && r.mana.max) { mana = r.mana; break; }
+    }
+    return { dps, mana: mana ? { max: mana.max, reserved: mana.reserved || 0, toggleHeld: mana.toggleHeld || 0 } : null };
   }
 
 
@@ -26103,10 +26379,10 @@ window.BOStartApp = function () {
 
 
 
-  const ROUTES = { character: 'build/character', tree: 'build/tree', atlas: 'build/atlas', 'build:skills': 'build/skills', damage: 'build/damage',
+  const ROUTES = { character: 'build/character', tree: 'build/tree', atlas: 'build/atlas', 'build:skills': 'build/skills', damage: 'build/damage', vows: 'build/vows',
     compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', market: 'market', patch: 'patch', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', lootfilter: 'lootfilter', faq: 'faq',
     skillscaling: 'skills', minions: 'skills/minions', gemlevels: 'skills/levels', creator: 'creator', plan: 'plan', code: 'code', builds: 'savedbuilds' };
-  const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', atlas: 'Riven Atlas', 'build:skills': 'Skills', damage: 'Damage Analysis',
+  const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', atlas: 'Riven Atlas', 'build:skills': 'Skills', damage: 'Damage Analysis', vows: 'Vows, Curses, Sentences',
     compare: 'Item Simulator', items: 'Database', grail: 'Grail', ladder: 'Ladder', market: 'Market', patch: 'Recent Patch', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery", lootfilter: 'Loot Filter',
     faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', gemlevels: 'Gem Levels', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code', builds: 'Saved Builds' };
 
@@ -26194,8 +26470,9 @@ window.BOStartApp = function () {
     document.body.classList.toggle('plan-page', tab === 'plan'); // the plan setup page: no Damage-tab controls beside it
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'builds' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'lootfilter' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'market' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character' || tab === 'atlas');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'builds' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'lootfilter' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'market' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character' || tab === 'atlas' || tab === 'vows');
     document.body.classList.toggle('atlas-page', tab === 'atlas');
+    document.body.classList.toggle('vows-page', tab === 'vows');
     document.body.classList.toggle('character-page', tab === 'character');
     document.body.classList.toggle('ladder-page', tab === 'ladder' || tab === 'market'); // the Market tab too: no character strip
     document.body.classList.toggle('lootfilter-page', tab === 'lootfilter'); // nor on the Loot Filter tab // no character strip on the Ladder tab
@@ -26208,9 +26485,9 @@ window.BOStartApp = function () {
     }
     syncSettingsToViewport();
 
-    document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'atlas', 'damage'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
-    if (tab === 'tree' || tab === 'damage' || tab === 'character' || tab === 'atlas') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#savedBuildsPane').hidden = tab !== 'builds'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#lootFilterPane').hidden = tab !== 'lootfilter'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#marketPane').hidden = tab !== 'market'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character'; $('#atlasPane').hidden = tab !== 'atlas';
+    document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'atlas', 'damage', 'vows'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    if (tab === 'tree' || tab === 'damage' || tab === 'character' || tab === 'atlas' || tab === 'vows') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#savedBuildsPane').hidden = tab !== 'builds'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#lootFilterPane').hidden = tab !== 'lootfilter'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#marketPane').hidden = tab !== 'market'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character'; $('#atlasPane').hidden = tab !== 'atlas'; $('#vowsPane').hidden = tab !== 'vows';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     renderBuildStats();
@@ -26230,6 +26507,7 @@ window.BOStartApp = function () {
     if (tab === 'skillscaling') renderSkillsTab();
     if (tab === 'character') character.render();
     if (tab === 'atlas') atlas.render();
+    if (tab === 'vows') vowsTab.render();
     if (tab === 'damage' && (breweryDirty || mainStale) && st.ch) { breweryDirty = false; render(); }
     syncUrl(tab);
     if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } syncTreeTab(); renderTreeTabs(); if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
@@ -26245,7 +26523,7 @@ window.BOStartApp = function () {
   }));
 
 
-  $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && (document.body.classList.contains('tree-page') || document.body.classList.contains('dashboard-view') || document.body.classList.contains('character-page') || document.body.classList.contains('atlas-page'))) showTab('build'); });
+  $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && (document.body.classList.contains('tree-page') || document.body.classList.contains('dashboard-view') || document.body.classList.contains('character-page') || document.body.classList.contains('atlas-page') || document.body.classList.contains('vows-page'))) showTab('build'); });
 
 
   const view = $('#treeView'), tip = $('#treeTip');
@@ -26666,6 +26944,7 @@ window.BOStartApp = function () {
     modLabel: id => { const a = GD.affixes[id] || GD.affixes[String(id).toLowerCase()]; return a && a.Mod ? modLine(Object.assign({}, a.Mod, { Value: 1, Value2: 2 })).replace(/[+-]?\d+(\.\d+)?/g, '#').replace(/^#(?=[%\s])/, '+#') : ''; },
     art: (cat, id, cls) => itemSearch && itemSearch.art ? itemSearch.art(cat, id, cls) : '' });
   atlas = window.BOAtlas({ $, esc, current: () => st.ch });
+  vowsTab = window.BOVows({ $, esc, num, planner, gd: () => GD, current: () => st.ch, skillDot, sim: vowSim });
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, atlas, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '',
     skillTip: id => planner.skillTip(null, id, false, true), supTip: id => planner.supTip(id) }); // Gem Levels tiles: the Build tab's tooltips
   character = window.BOCharacter({
@@ -26675,7 +26954,7 @@ window.BOStartApp = function () {
 
     countable: id => onBarNow(id) && (st.pickable || []).some(s => s.id === id), autoCounted: id => cocAuto(id), optWeights: () => st.optW || {}, setOptWeight: (id, w) => { setOptWeight(id, w); if (planner && !$('#buildPane').hidden) planner.render(); }, execState: sk => execState(st.ch, sk), setExecOn: (id, on) => { setExecOn(id, on); if (planner && !$('#buildPane').hidden) planner.render(); },
 
-    skillContribs: () => skillContribs(st.ch),
+    skillContribs: withOff => skillContribs(st.ch, withOff),
     skillSheet: id => { if (!st.ch) return null; const o = comboOpts(); o.gemLevel = st.ch.gemLevels[id] || undefined; return S.calcSkill(GD, st.ch, id, o); },
     patches: () => patches, showTab: t => showTab(t),
 
@@ -26683,7 +26962,13 @@ window.BOStartApp = function () {
 
 
 
-    itemOpt: (ch, key, vows, ilvl, onP) => {
+
+
+
+
+    itemOptRiven: () => GS.set.maxRiven === '' || GS.set.maxRiven == null || +GS.set.maxRiven > 0,
+    itemOptVowLevel: () => +GS.set.ilvl || 84,
+    itemOpt: (ch, key, vows, ilvl, onP, more0) => {
       let stop = false;
       const done = new Promise(resolve => {
         if (!ch || !st.skill || !window.BOGearOpt) return resolve({ error: st.skill ? 'The search is not available in this page.' : 'This plan has no damage skill yet: add one on the Build tab.' });
@@ -26691,7 +26976,7 @@ window.BOStartApp = function () {
         const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
         const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
         const gen = BOGearOpt.optimize(GD, S, ch, goal, o, Object.assign({ seconds: 40 }, GS.set, { idolAffixes: '', maxRes: false, defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget(),
-          onlyItem: { key }, maxVows: vows, vows: true, ilvl: ilvl || ch.level || 84, lineRoll: 1, topLines: '', rareLines: '', vowLines: planner.gear.vowAffixes }));
+          onlyItem: { key }, maxVows: vows, vows: true, ilvl: vows ? +GS.set.ilvl || 84 : ilvl || ch.level || 84, maxRiven: more0 && more0.riven ? '' : 0, lineRoll: 1, topLines: '', rareLines: '', vowLines: planner.gear.vowAffixes }));
         const t0 = performance.now();
         const step = () => {
           if (stop) return resolve(null);
@@ -26866,7 +27151,7 @@ window.BOStartApp = function () {
   chatbox.check(); // the question chat's button, for an account it is open to
 
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
-  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (CHARS.length ? 'character' : 'home'); if (['character', 'tree', 'atlas', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'market', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (CHARS.length ? 'character' : 'home'); if (['character', 'tree', 'atlas', 'vows', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'market', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
   else if (lastTab === 'home') goHome(false); // left on the landing page last time (the address stays as opened)
   routingReady = true; // from here on, switching tabs changes the address
 

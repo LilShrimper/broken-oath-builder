@@ -264,7 +264,7 @@ window.PAGE_LANGS = {
     const SKILL_KEYS = ['Id', 'Name', 'Kind', 'Attribute', 'Description', 'Tags', 'Delivery', 'DamageType', 'Family', 'Effectiveness',
       'EffectivenessLate', 'EffectivenessLateFrom', 'EffectivenessLateAt', 'EffectivenessEarly', 'EffectivenessEarlyHold', 'EffectivenessEarlyFull',
       'SpellMin', 'SpellMax', 'SpellGrowth', 'CastTime', 'ActionSpeed', 'ManaCost', 'Cooldown', 'CooldownLate', 'CooldownLateAt', 'MinCooldown',
-      'WeaponKinds', 'Projectiles', 'ProjectilesAtLevels', 'Chains', 'Pierce', 'Strikes', 'WaveCount', 'ConvertShare', 'LifeAsBase', 'bBothHands', 'bReturnFlight', 'Requires'];
+      'WeaponKinds', 'Projectiles', 'ProjectilesAtLevels', 'Chains', 'Pierce', 'Strikes', 'WaveCount', 'ConvertShare', 'LifeAsBase', 'bBothHands', 'bReturnFlight', 'Requires', 'AcceptsSupports'];
     const skills = {};
     for (const s of skillsArr) {
       const o = pick(s, SKILL_KEYS);
@@ -10503,6 +10503,8 @@ window.BOPatches = function (ctx) {
 
 
 
+
+
 window.BOScaling = function (ctx) {
   'use strict';
   const { $, esc } = ctx;
@@ -10519,6 +10521,7 @@ window.BOScaling = function (ctx) {
   const isSummon = s => s.Delivery === 'Summon' || (!!s.Minion && !(s.Tags || []).includes('Attack'));
   const kindOf = s => isSummon(s) ? 'summon' : (s.Tags || []).includes('Attack') ? 'attack' : s.SpellMin > 0 ? 'spell' : 'other';
   function effAt(sk, base, L) {
+    if (window.BOSim && window.BOSim.rampEff) return window.BOSim.rampEff(ctx.gd(), sk, base, L);
     let e = base;
     if (sk.EffectivenessLate != null && sk.EffectivenessLateAt) {
       const f = sk.EffectivenessLateFrom || 1, a = sk.EffectivenessLateAt;
@@ -10544,8 +10547,8 @@ window.BOScaling = function (ctx) {
     const k = kindOf(sk), own = G.MaxLevel || 20, GD = ctx.gd();
     if (!window.BOSim || !window.BOSim.gemLevelGrowth) return '';
     const grow = window.BOSim.gemLevelGrowth(GD, k, own, b);
-    if (k === 'attack') return Math.round(effAt(sk, sk.Effectiveness != null ? sk.Effectiveness : 1, own) * grow * 100) + '%';
-    if (k === 'spell') { const g = grow * effAt(sk, 1, own); return num(sk.SpellMin * g) + '–' + num(sk.SpellMax * g); }
+    if (k === 'attack') return Math.round(effAt(sk, sk.Effectiveness != null ? sk.Effectiveness : 1, own + b) * grow * 100) + '%';
+    if (k === 'spell') { const g = grow * effAt(sk, 1, own + b); return num(sk.SpellMin * g) + '–' + num(sk.SpellMax * g); }
     return '';
   }
 
@@ -10555,7 +10558,7 @@ window.BOScaling = function (ctx) {
     let own = L, grow;
     if (L <= max) grow = k === 'attack' ? 1 + (G.AttackEffectivenessPerLevel || 0) * (L - 1) : Math.pow(G.DamageGrowth || 1.19, L - 1);
     else { if (!window.BOSim || !window.BOSim.gemLevelGrowth) return null; own = max; grow = window.BOSim.gemLevelGrowth(GD, k, max, L - max); }
-    return k === 'attack' ? effAt(sk, sk.Effectiveness != null ? sk.Effectiveness : 1, own) * grow * 100 : (sk.SpellMin + sk.SpellMax) / 2 * grow * effAt(sk, 1, own);
+    return k === 'attack' ? effAt(sk, sk.Effectiveness != null ? sk.Effectiveness : 1, L) * grow * 100 : (sk.SpellMin + sk.SpellMax) / 2 * grow * effAt(sk, 1, L);
   }
   const SORTS = [['name', 'Name'], ['flat', 'Flat damage'], ['eff', 'Damage effectiveness']];
   const mana = (sk, G, L) => sk.ManaCost ? num(sk.ManaCost * ((G.ManaCostAtGemLevel || [])[L - 1] || 1)) : '';
@@ -10566,6 +10569,9 @@ window.BOScaling = function (ctx) {
 
   function extras(sk) {
     const out = [];
+
+    const l2 = (ctx.gd().late2 || {})[String(sk.Id).toLowerCase()];
+    if (l2 && l2.Mult > 0 && l2.Mult !== 1) out.push('late gem levels: x1 up to LV ' + l2.From + ', then a straight line to x' + l2.Mult + ' at LV ' + l2.At + ' and after (gear levels count; already in the numbers above)');
     if (sk.LifeAsBase) {
       const per = sk.Ground && sk.Ground.Tick ? sk.LifeAsBase / sk.Ground.Tick : 0;
       out.push(sk.LifeAsBase + '% of your maximum life is added to the ' + (kindOf(sk) === 'attack' ? 'weapon\'s base damage' : 'skill\'s base damage') + ' each hit' + (per ? ' (' + +per.toFixed(2) + '% per second at one hit every ' + sk.Ground.Tick + ' s)' : ''));
@@ -14349,7 +14355,7 @@ window.BOCharacter = function (ctx) {
     'EsRechargeKeep', 'MarkJump', 'CorpseKeepMinion',
     'DexLife']); // Wind Dancer: "+{v} to maximum Life for every 10 Dexterity" (statText)
 
-  const HANDLED = new Set(['MinionOneKind', 'RepeatOwnDamage', 'StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'UnravelOnHit', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
+  const HANDLED = new Set(['MinionOneKind', 'GolemLifeMore', 'RepeatOwnDamage', 'StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'UnravelOnHit', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
     'Cooldown', 'Repeats', 'Projectiles', 'Penetration', 'SkillLevel', 'PoisonChance', 'PoisonDamage', 'IgniteChance', 'IgniteDamage', 'BleedChance', 'BleedDamage',
     'DotMulti', 'AilmentDuration', 'CurseEffect', 'Str', 'Dex', 'Int', 'Attributes', 'GrantSupport', 'SkyfallRepeat', 'OrbitCount',
     'ShockChance', 'ShockEffect', 'ShockStacks', 'ArmourMore', 'LowLifeMore', 'CullingStrike', 'Keystone', 'BrandCount', 'IntSpellMore',
@@ -14717,6 +14723,22 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+  function rampEff(GD, sk, baseEff, lvl) {
+    let e = baseEff;
+    if (sk.EffectivenessLate != null && sk.EffectivenessLateAt) {
+      const f = sk.EffectivenessLateFrom || 1, a = sk.EffectivenessLateAt;
+      const late = sk.EffectivenessLate * atkAddLift(GD, sk); // Patch 79 attack lifts the API data lacks (ATK_ADD_LIFT_79)
+      e = baseEff + (late - baseEff) * clamp((lvl - f) / Math.max(1, a - f), 0, 1);
+    }
+    e *= late2K(GD, sk.Id, lvl);
+    if (sk.EffectivenessEarly != null) {
+      const h = sk.EffectivenessEarlyHold || 1, fu = sk.EffectivenessEarlyFull || h + 1;
+      e *= sk.EffectivenessEarly + (1 - sk.EffectivenessEarly) * clamp((lvl - h) / Math.max(1, fu - h), 0, 1);
+    }
+    return e;
+  }
   const late2K = (GD, id, lvl) => {
     const x = (GD.late2 || {})[lc(id)];
     if (!x || !bSwitch(GD, 'r98.META.bLate2_98', false)) return 1;
@@ -15008,22 +15030,23 @@ window.BOCharacter = function (ctx) {
     gravecleaver: { 1: 1.5, 2: 2 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff: { 0: 1.5, 1: 0.35, 3: 2 },
     cinderwick: { 1: 2, 2: 3, 3: 1.5, 5: 3 }, dawnforge_maul: { 0: 1.25, 1: 1.25, 2: 1.25, 4: 1.25 }, glass_soul: { 0: 0.5, 1: 0.5 },
     the_unyielding_vow: { 0: 0.25 }, the_patient_bastion: { 0: 0.25 }, the_heartwood_girdle: { 0: 0.25 },
-    crown_of_the_quiet_ward: { 0: 0.25 }, windwrit_treads: { 0: 0.25 }, the_oathkeepers_stand: { 0: 0.25 },
+    crown_of_the_quiet_ward: { 0: 0.1875 }, windwrit_treads: { 0: 0.125 }, the_oathkeepers_stand: { 0: 0.25 },
     mouth_of_the_mire: { 0: 0.5, 1: 0.5, 2: 0.5 }, drune_grave_rot: { 1: 0.5 }, cinderwick_primal: { 1: 2, 2: 3, 3: 1.5, 7: 3 },
     starcallers_staff: { 1: 2, 3: 1.5 }, wintercall_orb: { 1: 2 }, orrery_of_the_long_night: { 2: 0.4 },
     dawnwardens_verdict: { 0: 1.5, 1: 2.5, 2: 3 }, halo_of_the_restless_saint: { 2: 2, 3: 0.4 }, lightsworn_reliquary: { 2: 2 },
     hollowhorn: { 2: 1.25, 4: 1.3 }, crown_of_the_bone_king: { 2: 2 }, charnel_bell: { 2: 0.4 },
     wand_of_the_ash_march: { 0: 2, 3: 1.5 }, skyrend: { 2: 2, 3: 3 }, weeping_talons: { 3: 2 },
-    twinscar: { 3: 2 }, thornwake: { 3: 2 }, ravenmaw: { 2: 2 },
+    twinscar: { 0: 0.7, 3: 2, 6: 0.7, 7: 0.3334 }, thornwake: { 2: 0.5, 3: 2 }, ravenmaw: { 2: 2 },
     jarlsbane: { 2: 2, 3: 3 }, hoarfall: { 2: 2 }, cinderknuckle: { 2: 2 },
     the_fissure_edge: { 2: 2, 3: 2 }, the_bellwarden: { 3: 1.5 }, the_oathsplit_fang: { 2: 2, 3: 2 },
     the_last_harvest: { 3: 2, 4: 3 }, gravetithe: { 2: 2, 3: 2.5 }, nightglass: { 2: 2 },
-    the_last_petal: { 1: 2 }, rimewrit: { 0: 4, 2: 2 }, the_slow_verdict: { 0: 1.25 },
-    templars_troth: { 0: 2, 1: 2 }, the_gate_that_answers: { 0: 1.5 }, overclock_coil: { 1: 1.5 },
-    hexbinders_censer: { 1: 2 }, the_thousand_sparks: { 0: 0.667, 2: 0.5 }, kingbreaker_primal: { 0: 0.6, 1: 0.6, 3: 1.5 },
-    gravesong_primal: { 0: 1.5, 1: 1.5, 2: 1.5 }, gravecleaver_primal: { 1: 1.5, 2: 2 }, stormfang_primal: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 },
-    rimecrown_staff_primal: { 0: 1.5, 1: 0.35, 3: 2 }, heart_of_the_white_silence: { 4: 0.25 }, wintercall_orb_primal: { 1: 2 },
-    orrery_of_the_long_night_primal: { 2: 0.4 }, charnel_bell_primal: { 2: 0.4 }, the_thousand_sparks_primal: { 0: 0.667, 2: 0.5 } };
+    the_last_petal: { 1: 2 }, rimewrit: { 0: 4, 2: 2 }, templars_troth: { 0: 2, 1: 2 },
+    the_gate_that_answers: { 0: 1.5 }, overclock_coil: { 1: 1.5 }, hexbinders_censer: { 1: 2 },
+    the_thousand_sparks: { 0: 0.667, 2: 0.5 }, kingbreaker_primal: { 0: 0.6, 1: 0.6, 3: 1.5 }, gravesong_primal: { 0: 1.5, 1: 1.5, 2: 1.5 },
+    gravecleaver_primal: { 1: 1.5, 2: 2 }, stormfang_primal: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff_primal: { 0: 1.5, 1: 0.35, 3: 2 },
+    heart_of_the_white_silence: { 4: 0.25 }, wintercall_orb_primal: { 1: 2 }, orrery_of_the_long_night_primal: { 2: 0.4 },
+    charnel_bell_primal: { 2: 0.4 }, the_thousand_sparks_primal: { 0: 0.667, 2: 0.5 }, community_sleepy_cats_coil: { 0: 0.8 },
+    stormstring: { 0: 0.45, 4: 0.75, 6: 0.75 }, veinwrit_grips: { 0: 0.8 } };
 
 
 
@@ -15842,14 +15865,15 @@ window.BOCharacter = function (ctx) {
 
 
 
-      const ex = exTagsFor(sd, sk, GD).filter(t => !(totemAttack && lc(t) === 'totem' && ['trap_support', 'skyfall'].includes(lc(id))));
+      const acc = acceptsSup(sd, sk); // the skill's own AcceptsSupports (build 89): fits whatever the tags say
+      const ex = acc ? [] : exTagsFor(sd, sk, GD).filter(t => !(totemAttack && lc(t) === 'totem' && ['trap_support', 'skyfall'].includes(lc(id))));
 
       const engShare = minionEngine(GD, sd, sk) ? minionEngShare(GD) : 0;
-      const ok = (!req.length || engShare > 0 || req.some(hasReq)) && !ex.some(t => ctx.tags.has(lc(t))) && !noFit(sd, sk);
+      const ok = (acc || !req.length || engShare > 0 || req.some(hasReq)) && !ex.some(t => ctx.tags.has(lc(t))) && !noFit(sd, sk);
 
 
 
-      const fitsSelf = (!req.length || req.some(hasReq)) && !ex.some(t => ctx.tags.has(lc(t)));
+      const fitsSelf = (acc || !req.length || req.some(hasReq)) && !ex.some(t => ctx.tags.has(lc(t)));
       if (granted && !fitsSelf) continue;
       const fitsHost = hostTags && (!req.length || req.some(t => hostTags.has(lc(t)))) && !ex.some(t => hostTags.has(lc(t)));
       if (hostTags && !granted && !fitsHost) { res.supports.push({ id, key, name: sd.Name, ok: false, why: 'cannot be socketed in ' + host.name + ' (needs ' + req.join(' or ') + ')', desc: sd.Description }); continue; }
@@ -16375,12 +16399,26 @@ window.BOCharacter = function (ctx) {
 
 
       const dShare = minionDefShare(GD), dEng = engine.filter(e => e.def).map(e => Object.assign({}, e, { v: e.v * dShare }));
+
+
+
+
+
+
+      {
+        const gl = pickMods(mods, 'GolemLifeMore', 'Flat'), per = gl.reduce((t, m) => t + m.v, 0);
+        if (per) {
+          const golem = /^summon_.*golem$/.test(lc(sk.Id)), life = heroMaxLife(GD, ch, mods, attr), share = golem ? 1 : 0.35;
+          gl.forEach(m => use(m, 'minion more damage per 100 life'));
+          dEng.push({ v: per * life / 100 * share, types: [], src: gl[0].src + ' (' + Math.round(life).toLocaleString('en-US') + ' life' + (golem ? '' : ', 35% for minions other than the golem') + ')' });
+        }
+      }
       if (dEng.length) {
         const U = sum(dEng.filter(e => !e.types.length).map(e => e.v)), byType = {};
         for (const e of dEng) for (const t of e.types) byType[t] = (byType[t] || 0) + e.v;
         if (U) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: U, v2: 0, local: false, src: 'Damage engine (defences, added together, patch 0.56.5)', key: 'engine' });
         for (const [t, S] of Object.entries(byType)) mods.push({ stat: 'Damage', mode: 'More', tags: [t], v: ((1 + (U + S) / 100) / (1 + U / 100) - 1) * 100, v2: 0, local: false, src: 'Damage engine, ' + t + ' only', key: 'engine' });
-        res.notes.push('Damage engine on minions: ' + dEng.map(e => e.src.replace(/^[^·]*·\s*/, '') + ' +' + e.v.toFixed(1) + '%').join(', ') + ' (game panel and log, 11 Nov 2026)' + (dShare < 1 ? '; half for minions from patch 78 (patch notes)' : '') + '.');
+        res.notes.push('Damage engine on minions: ' + dEng.map(e => e.src.replace(/^[^·]*·\s*/, '') + ' +' + e.v.toFixed(1) + '%').join(', ') + (dEng.some(e => e.def) ? ' (defence lines: game panel and log, 11 Nov 2026' + (dShare < 1 ? '; half for minions from patch 78, patch notes' : '') + ')' : '') + (dEng.some(e => !e.def) ? ' (Pyre Spark: from its text and the developer stacking table, not checked in game)' : '') + '.');
       }
       return minionSheet(GD, ch, sk, res, mods, use, attr, L, o);
     }
@@ -16389,20 +16427,9 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const effAt = (baseEff) => {
-      let e = baseEff;
-      if (sk.EffectivenessLate != null && sk.EffectivenessLateAt) {
-        const f = sk.EffectivenessLateFrom || 1, a = sk.EffectivenessLateAt;
-        const late = sk.EffectivenessLate * atkAddLift(GD, sk); // Patch 79 attack lifts the API data lacks (ATK_ADD_LIFT_79)
-        e = baseEff + (late - baseEff) * clamp(((o._lateOwn ? own : L) - f) / Math.max(1, a - f), 0, 1);
-      }
-      e *= late2K(GD, sk.Id, o._lateOwn ? own : L);
-      if (sk.EffectivenessEarly != null) {
-        const h = sk.EffectivenessEarlyHold || 1, fu = sk.EffectivenessEarlyFull || h + 1;
-        e *= sk.EffectivenessEarly + (1 - sk.EffectivenessEarly) * clamp(((o._lateOwn ? own : L) - h) / Math.max(1, fu - h), 0, 1);
-      }
-      return e;
-    };
+
+
+    const effAt = (baseEff) => rampEff(GD, sk, baseEff, o._lateOwn ? own : L);
 
     { const k2 = late2K(GD, sk.Id, o._lateOwn ? own : L); if (k2 !== 1) res.notes.push(sk.Name + ': x' + k2.toFixed(3) + ' late gem-level damage (patch 83, at gem level ' + (o._lateOwn ? own : L) + ').'); }
 
@@ -16543,10 +16570,10 @@ window.BOCharacter = function (ctx) {
         const tot = shares.reduce((a, b) => a + b, 0);
         const scale = tot > 1 ? 1 / tot : 1;
         const kept = 1 - Math.min(1, tot);
-        if (kept > 0) out.push({ type: p.type, scales: p.scales, min: p.min * kept, max: p.max * kept, own: p.own });
+        if (kept > 0) out.push({ type: p.type, scales: p.scales, min: p.min * kept, max: p.max * kept, own: p.own, orig: p.orig || p.type });
         const byTo = {};
 
-        convRules.forEach((r, i) => { if (!(shares[i] > 0)) return; if (r.own) out.push({ type: r.to, scales: new Set([...p.scales, r.to]), min: p.min * shares[i] * scale, max: p.max * shares[i] * scale, own: true }); else byTo[r.to] = (byTo[r.to] || 0) + shares[i] * scale; });
+        convRules.forEach((r, i) => { if (!(shares[i] > 0)) return; if (r.own) out.push({ type: r.to, scales: new Set([...p.scales, r.to]), min: p.min * shares[i] * scale, max: p.max * shares[i] * scale, own: true, orig: p.orig || p.type }); else byTo[r.to] = (byTo[r.to] || 0) + shares[i] * scale; });
 
 
 
@@ -16556,7 +16583,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-        for (const [to, s] of Object.entries(byTo)) out.push(Object.assign({ type: to, scales: new Set([...p.scales, to]), min: p.min * s, max: p.max * s, conv: true }, p.type === 'Physical' && !p.moreScales ? {} : { moreScales: new Set(p.moreScales || p.scales) }));
+        for (const [to, s] of Object.entries(byTo)) out.push(Object.assign({ type: to, scales: new Set([...p.scales, to]), min: p.min * s, max: p.max * s, conv: true, orig: p.orig || p.type }, p.type === 'Physical' && !p.moreScales ? {} : { moreScales: new Set(p.moreScales || p.scales) }));
       }
       pieces = out;
     }
@@ -16590,6 +16617,7 @@ window.BOCharacter = function (ctx) {
 
 
     const gotExtra = new Map();
+    const preConv = bSwitch(GD, 'r113.META.bAsExtraPre113', false);
     const addExtras = (rules, sources) => {
       for (const { m, to, from } of rules) {
 
@@ -16597,12 +16625,17 @@ window.BOCharacter = function (ctx) {
 
 
 
-        for (const p of sources) if (!from || p.type === from || (p.scales.has(from) && from !== to && !p.own)) {
+
+
+
+
+
+        for (const p of sources) if (!from || (preConv && p.orig ? p.orig === from : (p.type === from || (p.scales.has(from) && from !== to && !p.own)))) {
           const seen = gotExtra.get(p) || new Set(), k = (m.src || '') + '>' + to;
           if (m.src && seen.has(k)) continue;
           seen.add(k); gotExtra.set(p, seen);
           extras.push({ type: to, scales: new Set([to]), min: p.min * m.v / 100, max: p.max * m.v / 100, from: p.type });
-          convTrace.push({ from: p.type, to, pct: m.v, src: m.src, extra: true });
+          convTrace.push({ from: preConv && p.orig ? p.orig : p.type, to, pct: m.v, src: m.src, extra: true });
         }
       }
     };
@@ -16659,6 +16692,13 @@ window.BOCharacter = function (ctx) {
       for (let i = mods.length - 1; i >= 0; i--) {
         const m = mods[i];
         if (m.key === 'charge:bloodlust' && m.stat === 'Damage' && m.mode === 'More') { engine.push({ v: m.v, types: splitTags(m.tags).types, src: m.src }); mods.splice(i, 1); MOD_IX.delete(mods); }
+
+
+
+        else if (m.key === 'fortify' && m.stat === 'Damage' && m.mode === 'More') {
+          if (applies(ctx, m)) { engine.push({ v: m.v, types: splitTags(m.tags).types, src: m.src }); use(m); }
+          mods.splice(i, 1); MOD_IX.delete(mods);
+        }
       }
       if (engine.length) {
         const U = sum(engine.filter(e => !e.types.length).map(e => e.v));
@@ -16931,6 +16971,9 @@ window.BOCharacter = function (ctx) {
     if (shape === 'trap_support') { const tot = activeSup.find(id => TRAP_HOSTS.includes(id)); if (tot) shape = tot; }
     res.shape = shape;
 
+    if (shape === 'trap_support' && sk.Delivery === 'Brand') res.notes.push(sk.Name + ' thrown as a trap (game data, patch 89): it latches onto the first enemy that sets it off and strikes on its own Spark clock, so Trap adds its damage lines and the Trap tag only. Not checked in game.');
+    if (shape === 'skyfall' && acceptsSup(GD.supports.skyfall, sk)) res.notes.push(sk.Name + ' with Skyfall (game data, patch 89): a meteor lands at the fissure\'s end; each enemy is struck once per use, so one Guardian takes one hit of the shown size, with Skyfall lines counted. Not checked in game.');
+
 
     const totemShape = shape === 'totem_support' || (shape === 'arrow_totem' && isAttack);
     if (totemShape) {
@@ -16967,7 +17010,8 @@ window.BOCharacter = function (ctx) {
         countFactor = countShare(tcount, tNext, tPast);
         res.notes.push('Totems share their damage (patch 0.56.5): each past the first adds ' + Math.round(tNext * 100) + '% of one' + (tPast !== tNext ? ', past the sixth 20%' : '') + ' (x' + countFactor.toFixed(3) + ' on average over ' + tcount + ').');
       }
-    } else if (shape === 'trap_support' && !totemAttack) { // a ballista keeps its totem rate (below): tooltip 5 Nov "8 totems, each firing every 0.31 s" with Trap Support
+    } else if (shape === 'trap_support' && !totemAttack && sk.Delivery !== 'Brand') { // a Spark thrown as a trap (AcceptsSupports, build 89) latches on and strikes on its own Spark clock below: Trap adds its numbers and Trap tag only (the traps' re-arm, count share and Chain Detonation are about trap strikes, which a latched Spark does not make; our reading of the Sparks' text, not checked in game)
+
       const d = GD.supports.trap_support.Description; const n = /up to (\d+)/i.exec(d), re = /re-arms ([\d.]+) seconds/i.exec(d);
 
       let rearm = re ? +re[1] : /re-arms about a second/i.test(d) ? 1 : 2.5; let traps = n ? +n[1] : 3;
@@ -18404,7 +18448,11 @@ window.BOCharacter = function (ctx) {
         const dps1 = hit.Physical.avg / ruthK * critFactor * coef; // a bleed from the average hit (Ruthless taken out: it does not raise the bleed, its text, build 85)
 
 
-        const rollsPerSec = hitsPerSec * perHitFactor / arrowShare * hitFactor * bleedChance / 100;
+
+
+
+        const bleedShare = bSwitch(GD, 'r113.META.bTrapAil113', false) && countFactor > 0 && countFactor < 1 && (shape === 'trap_support' || res.totem) ? countFactor : 1;
+        const rollsPerSec = hitsPerSec * perHitFactor / bleedShare / arrowShare * hitFactor * bleedChance / 100;
         const uptime = 1 - Math.exp(-rollsPerSec * dur);
 
 
@@ -18467,7 +18515,7 @@ window.BOCharacter = function (ctx) {
         let tear = 0;
         if (is079(GD) && uptime > 0) {
           const tearPct = p80(GD, 'r103.AILMENTS.TearPct103', 50) / 100, tearCd = p80(GD, 'r103.AILMENTS.TearCd103', 1), TEAR_KEEP = 0.4;
-          const landing = hitsPerSec * perHitFactor / arrowShare * hitFactor; // hits a second that can roll a bleed
+          const landing = hitsPerSec * perHitFactor / bleedShare / arrowShare * hitFactor; // hits a second that can roll a bleed
           const slam = ctx.tags.has('slam'), x = landing * (slam ? 1 : clamp(critChance, 0, 100) / 100);
           if (x > 0) {
             const perSecUp = x / (1 + x * tearCd), gap = 1 / perSecUp;
@@ -19614,7 +19662,22 @@ window.BOCharacter = function (ctx) {
 
     const youngK = sk.EffectivenessEarly != null ? sk.EffectivenessEarly + (1 - sk.EffectivenessEarly) * clamp((minionGem - (sk.EffectivenessEarlyHold || 1)) / Math.max(1, (sk.EffectivenessEarlyFull || (sk.EffectivenessEarlyHold || 1) + 1) - (sk.EffectivenessEarlyHold || 1)), 0, 1) : 1;
     if (youngK !== 1) res.notes.push(sk.Name + ': x' + youngK.toFixed(3) + ' young gem damage at gem level ' + minionGem + ' (x' + sk.EffectivenessEarly + ' up to gem ' + sk.EffectivenessEarlyHold + ', none from gem ' + sk.EffectivenessEarlyFull + '); checked against the game log, 18 Nov 2026.');
-    const base = (mi.DamageMult || 1) * aff * near * minionMore * kind * lvlK * (1 + specInc / 100) * heroDamage(GD) * late2K(GD, sk.Id, minionGem) * youngK; // heroDamage: Patch 82/83 x0.8 (at ruleNum)
+
+
+
+
+
+
+
+    let minionLateK = 1;
+    {
+      const from = ruleNum(GD, 'r98.META.MinionLateFrom98', 0), per = ruleNum(GD, 'r98.META.MinionLatePer98', 0), rl = guardianRL(GD, o, o.enemyLevel || ch.level);
+      if (bSwitch(GD, 'r98.META.bMinionLate98', false) && per > 0 && rl > from && lc(ch.classId) === 'necromancer') {
+        minionLateK = 1 + per * (rl - from);
+        res.notes.push(sk.Name + ': Necromancer minions deal ' + Math.round((minionLateK - 1) * 100) + '% more at Rupture ' + rl + ' (' + (per * 100) + '% a level past ' + from + '; game log, our reading, not checked in game).');
+      }
+    }
+    const base = (mi.DamageMult || 1) * aff * near * minionMore * kind * lvlK * (1 + specInc / 100) * heroDamage(GD) * late2K(GD, sk.Id, minionGem) * youngK * minionLateK; // heroDamage: Patch 82/83 x0.8 (at ruleNum)
 
     const elemSpecFor = d => {
       let v = 0;
@@ -20524,7 +20587,13 @@ window.BOCharacter = function (ctx) {
   const meleeOnlyMiss = (sp, sk) => !!sp && lc(sp.Id) === 'melee_physical' && !!sk && isSummon(sk) && (sk.Tags || []).includes('Projectile');
 
 
-  const brandTrapMiss = (sp, sk) => !!sp && lc(sp.Id) === 'trap_support' && !!sk && sk.Delivery === 'Brand';
+
+
+
+
+
+  const acceptsSup = (sp, sk) => !!sp && !!sk && Array.isArray(sk.AcceptsSupports) && sk.AcceptsSupports.some(x => lc(x) === lc(sp.Id));
+  const brandTrapMiss = (sp, sk) => !!sp && lc(sp.Id) === 'trap_support' && !!sk && sk.Delivery === 'Brand' && !acceptsSup(sp, sk);
 
 
 
@@ -20579,6 +20648,7 @@ window.BOCharacter = function (ctx) {
   }
 
   function noFitWhy(sp, sk) {
+    if (acceptsSup(sp, sk)) return '';
     if (meleeOnlyMiss(sp, sk)) return 'shooting minions cannot use it';
     if (brandTrapMiss(sp, sk)) return 'a Spark cannot be thrown as a trap';
     if (noHitMiss(sp, sk)) return sk.Name + ' deals no hits';
@@ -20669,7 +20739,7 @@ window.BOCharacter = function (ctx) {
     const host = conduitHost(GD, ch, skillId, mods0, (o || {}).conduit);
     const base = host ? GD.skills[lc(host.skill)] || sk : sk;
     const tags = socketTags(base);
-    const fits = sp => (!(sp.RequiresAnyTag || []).length || minionEngine(GD, sp, base) || sp.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(sp, base, GD).some(t => tags.has(lc(t))) && !noFit(sp, base);
+    const fits = sp => acceptsSup(sp, base) || ((!(sp.RequiresAnyTag || []).length || minionEngine(GD, sp, base) || sp.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(sp, base, GD).some(t => tags.has(lc(t))) && !noFit(sp, base));
     const list = Object.values(GD.supports).filter(fits).map(sp => ({ id: lc(sp.Id), name: sp.Name, desc: sp.Description || '', packOnly: isSummon(sk) ? !(minionCounts(sp, sk) || furyForMinions(sp, sk, mods0)) : NO_SINGLE_TARGET.has(lc(sp.Id)) && !['cast_on_crit', 'channel_conduit'].includes(lc(sp.Id)), shape: SHAPES.includes(lc(sp.Id)) }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -20838,7 +20908,7 @@ window.BOCharacter = function (ctx) {
     for (const id of ch.dragonNodes || []) { const k = T[id] ? id : moved[id]; if (k && T[k] && !out.includes(k)) out.push(k); }
     return out;
   }
-  const api = { dragonIds, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, affixLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
+  const api = { dragonIds, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, rampEff, late2K: (GD, id, lvl) => late2K(GD, id, lvl), vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, affixLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
 
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;

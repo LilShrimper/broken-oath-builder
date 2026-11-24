@@ -2153,6 +2153,9 @@ body.io-open { overflow: hidden; }
 .io-sec { margin-top: 14px; }
 .io-sec h4 { margin: 0 0 4px; padding-bottom: 4px; border-bottom: 1px solid var(--line); color: var(--dashboard-gold); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; }
 .io-sec h4 small { color: var(--faint); font-weight: 400; letter-spacing: 0; text-transform: none; margin-left: 6px; }
+.io-sec h4 .io-fxkill { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; color: var(--text); font-size: 12.5px; font-weight: 400; letter-spacing: 0; text-transform: none; cursor: pointer; vertical-align: middle; }
+.io-sec h4 .io-fxkill[hidden] { display: none; }
+.io-sec h4 .io-fxkill input { margin: 0; }
 .io-imp { padding: 5px 4px; color: var(--text); }
 .io-aff { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 5px 4px; border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
 .io-afftext { flex: 1 1 220px; min-width: 0; }
@@ -2161,6 +2164,7 @@ body.io-open { overflow: hidden; }
 .io-fx { flex: none; min-width: 60px; text-align: right; white-space: nowrap; font-size: 12.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .io-fx:empty { min-width: 0; }
 .io-fx.good { color: var(--good); } .io-fx.bad { color: var(--bad); } .io-fx.zero { color: var(--faint); font-weight: 400; }
+.io-fx.fight:not(:empty)::after { content: ' kill'; font-size: 10.5px; font-weight: 500; color: var(--faint); letter-spacing: .02em; } /* Guardian kill speed in place of the skill's DPS (character.js FX.fight) */
 .io-pick-opt { display: flex; align-items: baseline; gap: 8px; }
 .io-edit .io-afftext { flex: 1 1 170px; }
 .io-edit .io-aff select { max-width: 180px; }

@@ -13840,8 +13840,16 @@ window.BOCharacter = function (ctx) {
 
 
 
-  let FX = { key: '', ch: null, it: null, base: null, memo: new Map() }, fxQueue = [], fxTimer = 0;
-  const fxDps = ch => { try { return (ctx.dps && ctx.dps(ch)) || 0; } catch (e) { return 0; } };
+
+
+
+
+
+  let FX = { key: '', ch: null, it: null, base: null, fight: null, can: false, memo: new Map() }, fxQueue = [], fxTimer = 0, fxKill = !!LS.get('fxKill', false);
+  const fxKillBox = () => '<label class="io-fxkill check-row" hidden title="Compare each line on how fast the Guardian dies (this skill plus the skills filling its freeze bar) instead of this skill\'s own DPS"><input type="checkbox" data-f="fxkill"' + (fxKill ? ' checked' : '') + '><span>View change as kill speed</span></label>';
+  const fxKillShow = root => { for (const el of (root || back).querySelectorAll('.io-fxkill')) el.hidden = !FX.can; };
+  const fxInfo = ch => { try { return ctx.dpsInfo ? ctx.dpsInfo(ch) : { total: (ctx.dps && ctx.dps(ch)) || 0 }; } catch (e) { return { total: 0 }; } };
+  const fxDps = ch => { const i = fxInfo(ch); return FX.fight ? (i.fight ? i.fight.dps : 0) : i.total || 0; };
   const fxSpan = k => '<span class="io-fx" data-fx="' + esc(k) + '"></span>';
   function fxPaint(k, root) {
     const v = FX.memo.get(k); if (v === undefined) return;
@@ -13849,7 +13857,8 @@ window.BOCharacter = function (ctx) {
     for (const el of (root || back).querySelectorAll('.io-fx[data-fx="' + k + '"]')) {
       el.className = 'io-fx ' + (pct == null ? '' : pct > 0 ? 'good' : pct < 0 ? 'bad' : 'zero');
       el.textContent = pct == null || (add && !pct) ? '' : !pct ? '0%' : (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
-      if (pct != null) el.title = add ? 'Total DPS of the Damage tab skill with this line added, against now' : 'Total DPS of the Damage tab skill with this line, against without it';
+      if (pct != null) el.title = FX.fight ? 'Guardian kill speed ' + (add ? 'with this line added, against now' : 'with this line, against without it') + ': ' + FX.fight.join(' + ') + ' (the skills filling its freeze bar), the Guardian\'s life / the kill time' : add ? 'Total DPS of the Damage tab skill with this line added, against now' : 'Total DPS of the Damage tab skill with this line, against without it';
+      if (FX.fight) el.classList.add('fight');
     }
   }
   function fxPump() {
@@ -13869,10 +13878,11 @@ window.BOCharacter = function (ctx) {
   function fxFill(root, addsOnly) {
     if (!M || !back || !ctx.dps || HOST) return;
     const ch = H().current(), it = ch && itemNow(ch); if (!it || M.shelf) return; // a spare idol counts for nothing
-    const key = ch.id + '|' + M.slot + '|' + JSON.stringify(it);
-    if (FX.key !== key) { FX = { key, ch, it, base: null, memo: new Map() }; fxQueue = []; }
+    const key = ch.id + '|' + M.slot + '|' + fxKill + '|' + JSON.stringify(it);
+    if (FX.key !== key) { const i0 = fxInfo(ch); FX = { key, ch, it, base: null, can: !!i0.fight, fight: fxKill && i0.fight ? i0.fight.skills : null, memo: new Map() }; FX.base = FX.fight ? i0.fight.dps : i0.total || 0; fxQueue = []; }
+    fxKillShow(back);
     const F = FX, gd = GD();
-    const base = () => F.base == null ? (F.base = fxDps(ch)) : F.base;
+    const base = () => F.base;
     const swap = it2 => Object.assign({}, ch, { items: ch.items.map(x => x === it ? it2 : x) });
     if (addsOnly) fxQueue = fxQueue.filter(q => !q.add); // the list was drawn again: only what it shows now
     for (const el of root.querySelectorAll('.io-fx[data-fx]')) {
@@ -14082,7 +14092,7 @@ window.BOCharacter = function (ctx) {
       if (vix.length) vows += '<div class="vow-list" data-mv="io">' + vix.map((ai, n) => affixRow(it, it.affixes[ai], ai, 'Vow ' + (++vi), '', G.vowMisfit(pool, it.affixes[ai], M.slot, base),
         vix.length > 1 ? G.vowMove('io', ai, n ? vix[n - 1] : null, n < vix.length - 1 ? vix[n + 1] : null) : '')).join('') + '</div>';
       if (u && nV < G.VOW_MAX) vows += addSelect(it, base, '', 'Add a Vow', isIdol, '', true);
-      r += section('Vows <small>' + nV + ' / ' + G.VOW_MAX + '</small>', vows || '<div class="io-imp meta">None</div>');
+      r += section('Vows <small>' + nV + ' / ' + G.VOW_MAX + '</small>' + fxKillBox(), vows || '<div class="io-imp meta">None</div>');
     } else {
       const lim = G.LIMIT[it.rarity] || 0, type = a => (gd.affixes[lc(a.id)] || {}).Type;
 
@@ -14098,7 +14108,7 @@ window.BOCharacter = function (ctx) {
       }
       if (!lim) body += '<div class="io-imp meta">Normal items have no affixes. Set the rarity to Magic or Rare.</div>';
       else if (room.length) body += addSelect(it, base, room, room.length > 1 ? 'Add a prefix or suffix' : 'Add a ' + room[0].toLowerCase());
-      r += section('Prefixes and suffixes' + (lim ? ' <small>' + counts.join(' · ') + '</small>' : ''), body);
+      r += section('Prefixes and suffixes' + (lim ? ' <small>' + counts.join(' · ') + '</small>' : '') + fxKillBox(), body);
       rh += 2 + it.affixes.length * 1.3;
 
 
@@ -14190,6 +14200,7 @@ window.BOCharacter = function (ctx) {
     const t = e.target, f = t.dataset.f;
     if (t.id === 'ioFile') { if (t.files[0]) readShot(t.files[0]); t.value = ''; return; }
     if (!M || !f) return;
+    if (f === 'fxkill') { fxKill = !!t.checked; LS.set('fxKill', fxKill); FX.key = ''; for (const el of back.querySelectorAll('.io-fx')) { el.textContent = ''; el.className = 'io-fx'; el.removeAttribute('title'); } return fxFill(back); }
     if (f === 'optriven') { optRiven = !!t.checked; if (M.opt) { M.opt.res = null; M.opt.err = ''; } return renderItem(); }
     if (f === 'optvows') { optVows = Math.max(1, Math.min(G.VOW_MAX, Math.round(+t.value) || 1)); if (M.opt) { M.opt.res = null; M.opt.err = ''; } return renderItem(); }
     const ch = H().editable(), it = ch && itemNow(ch); if (!it) return;
@@ -19166,6 +19177,30 @@ window.BOCharacter = function (ctx) {
         shockF += bAdd;
         const k = 1 + more / 100 * uptime;
         Object.assign(res.freeze, { frostbreak: hasFrostbreak, helpers, bars, uptime, fightSec, life, share, firstFillSec: cold > 0 ? barPct / 100 * life / cold : 0, more: (k - 1) * 100, brittleTaken: bAdd * 100 });
+
+
+
+
+
+
+
+        const helpersOn = helpers.filter(h => h.on && h.dps > 0);
+        if (helpersOn.length && life > 0 && dmg > 0) {
+          const extra = hitDpsVs * ((1 + more / 100) * (1 + brittlePct / 100 / (shockF - bAdd)) - 1);
+          const wins = [];
+          if (bars > 0 && cold > 0) for (let t = 0, size = barPct / 100 * life, i = 0; i < 60; i++, size *= grow) { t += size / cold; if (t >= fightSec) break; wins.push([t, t + win]); }
+          let t = 0, left = life;
+          for (const [a0, b0] of wins) {
+            const a = Math.max(a0, t); if (b0 <= a) continue;
+            if (dmg * (a - t) >= left) break;
+            left -= dmg * (a - t); t = a;
+            const r = dmg + extra;
+            if (r * (b0 - t) >= left) { t += left / r; left = 0; break; }
+            left -= r * (b0 - t); t = b0;
+          }
+          if (left > 0) t += left / dmg;
+          res.fight = { dps: life / t, killSec: t, plainSec: fightSec, life, skills: [sk.Name].concat(helpersOn.map(h => h.name)), helperDps: helpersOn.reduce((s, h) => s + h.dps, 0) };
+        }
         const kAll = k * kB;
         if (kAll !== 1) { for (const d of Object.keys(byType)) byType[d] *= kAll; hitDpsVs *= kAll; res.hitDps = hitDpsVs; }
         if (bAdd > 0) res.notes.push('Brittle: the Guardian is Brittle ' + Math.round(uptime * 100) + '% of the fight (' + bars + ' freeze bar' + (bars === 1 ? '' : 's') + ' in about ' + Math.round(fightSec) + ' s, ' + win + ' s from each fill), ' + (res.freeze.buildUp > 1 ? 'your increased freeze duration fills the bar x' + res.freeze.buildUp.toFixed(2) + ' faster, game log 20 Nov 2026; ' : '') + 'taking ' + brittlePct + '% more then, added to shock and chill (hits only: poison, ignite and bleed ticks do not take it) = +' + (bAdd * 100).toFixed(1) + '% on average. Developer stacking table + game tooltip 20 Nov 2026; not seen in a game sheet yet.');
@@ -27516,6 +27551,9 @@ window.BOStartApp = function () {
     patches: () => patches, showTab: t => showTab(t),
 
     dps: ch => { if (!st.skill) return 0; const r = S.calcSkill(GD, ch, st.skill, opts()); return r && !r.error && !r.unsupported ? (r.totalDps || 0) + (r.risen ? r.risen.dps || 0 : 0) : 0; },
+
+
+    dpsInfo: ch => { if (!st.skill) return { total: 0 }; const r = S.calcSkill(GD, ch, st.skill, opts()); if (!r || r.error || r.unsupported) return { total: 0 }; return { total: (r.totalDps || 0) + (r.risen ? r.risen.dps || 0 : 0), fight: r.fight || null }; },
 
 
 

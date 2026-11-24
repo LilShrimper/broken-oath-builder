@@ -318,7 +318,9 @@ window.PAGE_LANGS = {
 
 
 
-    const NOT_IN_GAME = ['entropic_focus', 'hastened_ruin', 'gathering_dark', 'cascading_ruin', 'pact_of_ruin'];
+
+
+    const NOT_IN_GAME = [];
     for (const id of NOT_IN_GAME) if (supports[id]) supports[id].NotInGame = true;
 
 

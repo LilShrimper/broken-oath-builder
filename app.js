@@ -365,8 +365,8 @@ window.PAGE_LANGS = {
 
     const EXTRA_OATHS = {
       'Mastery of Fury': [
-        { Id: 'oath_long_fight', Name: 'Oath of the Long Fight', Text: '3% increased maximum Life and 6% increased Melee damage', Vow: '', Mods: [{ Stat: 'Life', Mode: 'Inc', Tags: [], Value: 3 }, { Stat: 'Damage', Mode: 'Inc', Tags: ['Melee'], Value: 6 }] },
-        { Id: 'oath_crushing_blow', Name: 'Oath of the Crushing Blow', Text: '15% increased critical strike chance with Melee skills', Vow: '', Mods: [{ Stat: 'CritChance', Mode: 'Inc', Tags: ['Melee'], Value: 15 }] },
+        { Id: 'oath_long_fight', Name: 'Oath of the Long Fight', Text: '6% increased maximum Life and 12% increased Melee damage', Vow: '', Mods: [{ Stat: 'Life', Mode: 'Inc', Tags: [], Value: 6 }, { Stat: 'Damage', Mode: 'Inc', Tags: ['Melee'], Value: 12 }] },
+        { Id: 'oath_crushing_blow', Name: 'Oath of the Crushing Blow', Text: '30% increased critical strike chance with Melee skills', Vow: '', Mods: [{ Stat: 'CritChance', Mode: 'Inc', Tags: ['Melee'], Value: 30 }] },
       ],
 
       'Mastery of the Legion': [
@@ -376,15 +376,15 @@ window.PAGE_LANGS = {
 
 
       'Mastery of Dawn': [
-        { Id: 'oath_high_sun', Name: 'Oath of the High Sun', Text: '15% increased critical strike chance with Holy skills', Vow: '', Mods: [{ Stat: 'CritChance', Mode: 'Inc', Tags: ['Holy'], Value: 15 }] },
-        { Id: 'oath_dawn_guard', Name: 'Oath of the Dawn Guard', Text: '6% increased Holy damage and 3% increased maximum Life', Vow: '', Mods: [{ Stat: 'Damage', Mode: 'Inc', Tags: ['Holy'], Value: 6 }, { Stat: 'Life', Mode: 'Inc', Tags: [], Value: 3 }] },
+        { Id: 'oath_high_sun', Name: 'Oath of the High Sun', Text: '30% increased critical strike chance with Holy skills', Vow: '', Mods: [{ Stat: 'CritChance', Mode: 'Inc', Tags: ['Holy'], Value: 30 }] },
+        { Id: 'oath_dawn_guard', Name: 'Oath of the Dawn Guard', Text: '12% increased Holy damage and 6% increased maximum Life', Vow: '', Mods: [{ Stat: 'Damage', Mode: 'Inc', Tags: ['Holy'], Value: 12 }, { Stat: 'Life', Mode: 'Inc', Tags: [], Value: 6 }] },
       ],
 
       'Mastery of the Snare': [
         { Id: 'oath_hidden_wire', Name: 'Oath of the Hidden Wire', Text: '15% increased critical strike chance with Trap and Totem skills', Vow: '', Mods: [{ Stat: 'CritChance', Mode: 'Inc', Tags: ['Trap'], Value: 15 }, { Stat: 'CritChance', Mode: 'Inc', Tags: ['Totem'], Value: 15 }] },
       ],
       'Mastery of Stillness': [
-        { Id: 'oath_settled_blade', Name: 'Oath of the Settled Blade', Text: '+10% to critical strike multiplier with Dash skills', Vow: '', Mods: [{ Stat: 'CritMulti', Mode: 'Flat', Tags: ['Dash'], Value: 10 }] },
+        { Id: 'oath_settled_blade', Name: 'Oath of the Settled Blade', Text: '+19% to critical strike multiplier with Dash skills', Vow: '', Mods: [{ Stat: 'CritMulti', Mode: 'Flat', Tags: ['Dash'], Value: 19 }] },
       ],
     };
     for (const [name, list] of Object.entries(EXTRA_OATHS)) for (const o of list) {
@@ -8669,6 +8669,8 @@ window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Prim
     const items = (b.items || []).map(it => ({
       slot: it.slot, base: it.base, rarity: it.rarity || 'Normal', unique: it.unique && !isHidden(it.unique) ? it.unique : 'None', name: '',
       level: it.item_level || l, quality: it.quality || 0, forged: it.forged || 0,
+      ...(Number.isFinite(it.grade) ? { grade: it.grade } : {}),
+      ...(Number.isFinite(it.sockets) ? { sockets: it.sockets } : {}),
       affixes: (it.affixes || []).filter(a => !isHidden(a.id)).map(a => ({ id: a.id, tier: a.tier || 0, v: +a.value || 0, v2: +a.value2 || 0, crafted: !!a.crafted, oath: !!a.oath })),
       runes: it.runes_hidden ? [] : (it.runes || []).filter(r => r && !isHidden(r)),
     }));
@@ -8877,13 +8879,14 @@ window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Prim
           const sd = h.build.skill_damage || {};
           const order = Object.keys(sd).filter(k => !isHidden(k) && sd[k] > 0).sort((a, b) => sd[b] - sd[a]);
           if (row && row.main_skill && !isHidden(row.main_skill) && !order.includes(row.main_skill)) order.push(row.main_skill);
-          let sim = null, simSkill = '';
+          let sim = null, simSkill = '', manaBlocked = false;
           for (const id of order) {
             ch.mainSkill = id;
-            try { sim = ctx.simDps ? ctx.simDps(ch, h.rupture_level || 0) : null; } catch (e) { sim = null; }
-            if (sim > 0) { simSkill = id; break; }
+            let estimate = null;
+            try { estimate = ctx.simDps ? ctx.simDps(ch, h.rupture_level || 0) : null; } catch (e) {}
+            if (estimate && estimate.dps > 0) { sim = estimate.dps; manaBlocked = estimate.manaBlocked; simSkill = id; break; }
           }
-          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap(), (GD().scaling || {}).Hero, monsterLevelAt(GD(), h.rupture_level || 0) || ch.level), sim, simSkill, items, gems, find: items.join('\n').toLowerCase(), kept: !!h.kept_build };
+          roster(league)[h.hero] = { life: d.life, es: d.es, ehp: ehpOf(d, cap(), (GD().scaling || {}).Hero, monsterLevelAt(GD(), h.rupture_level || 0) || ch.level), sim, simSkill, manaBlocked, items, gems, find: items.join('\n').toLowerCase(), kept: !!h.kept_build };
         } catch (e) { roster(league)[h.hero] = { life: null, es: null, ehp: null, sim: null, items, gems, find: items.join('\n').toLowerCase() }; }
         if (++n % 15 === 0) { S.rosterBusy = 'Running the sim on the builds… ' + n; paint(); await new Promise(r => setTimeout(r, 0)); }
       }
@@ -8908,7 +8911,8 @@ window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Prim
       if (x.empty) return '<span class="meta" title="The game published this build without gear, skills or passives">–</span>';
       if (!(x.sim > 0)) return '<span class="meta" title="The sim does not cover this skill or build yet">–</span>';
       return '<span title="' + esc(skillName(x.simSkill)) + ' (the skill this hero has dealt the most damage with), sim estimate' + (x.kept ? '. On the hero\'s last full build: the game publishes it empty at the moment' : '') + '">' + short(x.sim) + '</span>' +
-        (x.simSkill && x.simSkill !== r.main_skill ? '<br><small class="meta">' + esc(skillName(x.simSkill)) + '</small>' : '');
+        (x.simSkill && x.simSkill !== r.main_skill ? '<br><small class="meta">' + esc(skillName(x.simSkill)) + '</small>' : '') +
+        (x.manaBlocked ? '<br><small class="meta" title="The published build cannot pay the first use after mana reservation">Mana blocked</small>' : '');
     };
 
 
@@ -15445,6 +15449,63 @@ window.BOCharacter = function (ctx) {
   }
 
 
+  function enemyMitigation(GD, o, lvl, isBoss, notes) {
+    const M = GD.scaling.Monster;
+    const resist = {};
+    for (const d of DT) resist[d] = o.enemyRes && o.enemyRes[d] != null ? o.enemyRes[d] : (d === 'Physical' ? 0 : Math.min(M.ResistMax, lvl * M.ResistPerLevel));
+
+
+
+
+
+
+    {
+      const from = +M.ResistRLFrom, per = +M.ResistPerRL, mx = +M.ResistRLMax, rl = guardianRL(GD, o, lvl);
+      const add = per > 0 && rl > from ? Math.min(mx > 0 ? mx : Infinity, (rl - from) * per) : 0;
+      if (add > 0) {
+        for (const d of ['Fire', 'Cold', 'Lightning']) if (!(o.enemyRes && o.enemyRes[d] != null)) resist[d] += add;
+        notes.push('Rupture ' + rl + ': enemies resist Fire, Cold and Lightning ' + +add.toFixed(2) + '% more (' + per + '% per Rupture Level past ' + from + ', at most ' + mx + '%; game log, 22 Nov 2026).');
+      }
+    }
+
+
+
+
+
+
+
+
+
+
+    const GUARDIAN_RES_CAP = 75;
+    let guardian = null;
+
+
+
+
+    const idPct = (() => { for (const g of Object.values(GD.guardians || {})) for (const v of Object.values(g.identity || {})) if (v > 0) return v; return 20; })();
+    const identity = {};
+    if (isBoss) for (const [E, sign] of [[o.guardianStrong, 1], [o.guardianWeak, -1]]) {
+      if (!E || !DT.includes(E) || (o.enemyRes && o.enemyRes[E] != null) || identity[E] != null) continue;
+      identity[E] = sign * idPct; resist[E] += identity[E];
+    }
+    if (Object.keys(identity).length) {
+      guardian = { identity };
+      notes.push('Guardian strong / weak element: ' + Object.entries(identity).map(([E, v]) => E + ' ' + (v > 0 ? '+' : '') + v + '%').join(', ') + ' resistance, added to its level resistance and colour (checked in the game, 12 Nov 2026).');
+    }
+    if (isBoss && o.guardianElement && DT.includes(o.guardianElement) && !(o.enemyRes && o.enemyRes[o.guardianElement] != null)) {
+      const E = o.guardianElement;
+      const variant = o.guardianVariantResist != null ? +o.guardianVariantResist : 40;
+      const ward = o.guardianWard != null ? +o.guardianWard : wardAt(GD, lvl);
+      resist[E] = Math.min(GUARDIAN_RES_CAP, resist[E] + variant + ward);
+      guardian = Object.assign(guardian || {}, { element: E, variant, ward, resist: resist[E] });
+      notes.push('Guardian element ' + E + ': its colour variant resists ' + E + ' ' + variant + '% more' + (ward ? ' and its Ward ' + ward + '% more' : '') + ' (' + resist[E] + '% in all, before penetration; a Guardian resists at most ' + GUARDIAN_RES_CAP + '%).');
+    }
+    for (const E of Object.keys(identity)) resist[E] = Math.min(GUARDIAN_RES_CAP, resist[E]);
+    const armour = o.enemyArmour != null ? o.enemyArmour : lvl * M.ArmourPerLevel;
+    return { resist, guardian, armour };
+  }
+
   function calcSkill(GD, ch, skillId, o) {
     o = o || {};
     const H = GD.scaling.Hero, G = GD.scaling.Gem, A = GD.scaling.Ailments, M = GD.scaling.Monster;
@@ -17338,57 +17399,7 @@ window.BOCharacter = function (ctx) {
     const lvl = o.enemyLevel || ch.level;
     const rarity = o.enemyRarity || 'rare';
     const isBoss = rarity === 'boss';
-    const resist = {};
-    for (const d of DT) resist[d] = o.enemyRes && o.enemyRes[d] != null ? o.enemyRes[d] : (d === 'Physical' ? 0 : Math.min(M.ResistMax, lvl * M.ResistPerLevel));
-
-
-
-
-
-
-    {
-      const from = +M.ResistRLFrom, per = +M.ResistPerRL, mx = +M.ResistRLMax, rl = guardianRL(GD, o, lvl);
-      const add = per > 0 && rl > from ? Math.min(mx > 0 ? mx : Infinity, (rl - from) * per) : 0;
-      if (add > 0) {
-        for (const d of ['Fire', 'Cold', 'Lightning']) if (!(o.enemyRes && o.enemyRes[d] != null)) resist[d] += add;
-        res.notes.push('Rupture ' + rl + ': enemies resist Fire, Cold and Lightning ' + +add.toFixed(2) + '% more (' + per + '% per Rupture Level past ' + from + ', at most ' + mx + '%; game log, 22 Nov 2026).');
-      }
-    }
-
-
-
-
-
-
-
-
-
-
-    const GUARDIAN_RES_CAP = 75;
-    let guardian = null;
-
-
-
-
-    const idPct = (() => { for (const g of Object.values(GD.guardians || {})) for (const v of Object.values(g.identity || {})) if (v > 0) return v; return 20; })();
-    const identity = {};
-    if (isBoss) for (const [E, sign] of [[o.guardianStrong, 1], [o.guardianWeak, -1]]) {
-      if (!E || !DT.includes(E) || (o.enemyRes && o.enemyRes[E] != null) || identity[E] != null) continue;
-      identity[E] = sign * idPct; resist[E] += identity[E];
-    }
-    if (Object.keys(identity).length) {
-      guardian = { identity };
-      res.notes.push('Guardian strong / weak element: ' + Object.entries(identity).map(([E, v]) => E + ' ' + (v > 0 ? '+' : '') + v + '%').join(', ') + ' resistance, added to its level resistance and colour (checked in the game, 12 Nov 2026).');
-    }
-    if (isBoss && o.guardianElement && DT.includes(o.guardianElement) && !(o.enemyRes && o.enemyRes[o.guardianElement] != null)) {
-      const E = o.guardianElement;
-      const variant = o.guardianVariantResist != null ? +o.guardianVariantResist : 40;
-      const ward = o.guardianWard != null ? +o.guardianWard : wardAt(GD, lvl);
-      resist[E] = Math.min(GUARDIAN_RES_CAP, resist[E] + variant + ward);
-      guardian = Object.assign(guardian || {}, { element: E, variant, ward, resist: resist[E] });
-      res.notes.push('Guardian element ' + E + ': its colour variant resists ' + E + ' ' + variant + '% more' + (ward ? ' and its Ward ' + ward + '% more' : '') + ' (' + resist[E] + '% in all, before penetration; a Guardian resists at most ' + GUARDIAN_RES_CAP + '%).');
-    }
-    for (const E of Object.keys(identity)) resist[E] = Math.min(GUARDIAN_RES_CAP, resist[E]);
+    const { resist, guardian, armour } = enemyMitigation(GD, o, lvl, isBoss, res.notes);
     const pen = {}; DT.forEach(d => pen[d] = 0);
     for (const m of pickMods(mods, 'Penetration', 'Flat')) {
       const { types, conds } = splitTags(m.tags);
@@ -17396,7 +17407,6 @@ window.BOCharacter = function (ctx) {
       let hit1 = false; for (const d of (types.length ? types : DT)) { pen[d] += m.v; if (ctx.dealt.has(d)) hit1 = true; }
       if (hit1) use(m);
     }
-    const armour = o.enemyArmour != null ? o.enemyArmour : lvl * M.ArmourPerLevel;
 
 
 
@@ -18817,7 +18827,9 @@ window.BOCharacter = function (ctx) {
       const max = heroMaxMana(H, ch, mods, attr);
       const regen = max * (H.ManaRegenPct || 1.8) / 100 * Math.max(0, 1 + inc('ManaRegen') / 100) + flat('ManaRegen');
       const pips = (H.AttrPipAt || [100, 200, 300]).filter(t => (attr.Int || 0) >= t).length;
-      const refund = pips ? ((H.ClarityRefundPct || [])[pips - 1] || 0) : 0;
+      // Clarity refunds mana after a kill. A lone boss supplies no kills during the fight.
+      const kills = Math.max(0, Math.min(H.ClarityKillsPerCast ?? 3, +o.manaKillsPerCast || 0));
+      const refund = Math.min(100, kills * ((H.ClarityRefundPct || [])[pips - 1] || 0));
       let mult = 1;
 
 
@@ -18836,7 +18848,8 @@ window.BOCharacter = function (ctx) {
 
       const econ = is073(GD) && (GD.rules || {})['r98.META.bEcon74'] !== false && String(((GD.rules || {})['r98.META.bEcon74'] || {}).value || '').toLowerCase() !== 'false';
       const offClassCost = econ && sk.HomeClasses && ch.classId && !sk.HomeClasses.some(c => lc(c) === lc(ch.classId)) ? ruleNum(GD, 'r98.META.fOffClassMana74', 1.5) : 1;
-      const cost = sk.ManaCost * cut * mult * offClassCost * Math.max(0, 1 + costInc / 100) * (res.coc ? 0.5 : 1) * (1 - refund / 100);
+      const listed = sk.ManaCost * cut * mult * offClassCost * Math.max(0, 1 + costInc / 100) * (res.coc ? 0.5 : 1);
+      const cost = listed * (1 - refund / 100);
 
 
 
@@ -18876,8 +18889,9 @@ window.BOCharacter = function (ctx) {
       }
       reserved += toggleHeld;
       const pool = Math.max(0, max - reserved), deficit = spend - gain;
-      const lasts = deficit > 0 ? pool / deficit : Infinity;
-      res.mana = { max, reserved, toggleHeld, offClassCost, leechCap, pool, regen, cost, listed: refund < 100 ? cost / (1 - refund / 100) : cost, mult, costInc, cut, refund, spend, onHit: onHit * hitsPerSec, leech: leechGain, gain, sustained: deficit <= 0, lasts, ok: lasts >= 60 };
+      const canStart = pool >= listed;
+      const lasts = canStart ? (deficit > 0 ? (pool - listed) / deficit : Infinity) : 0;
+      res.mana = { max, reserved, toggleHeld, offClassCost, leechCap, pool, regen, cost, listed, mult, costInc, cut, refund, spend, onHit: onHit * hitsPerSec, leech: leechGain, gain, canStart, sustained: canStart && deficit <= 0, lasts, ok: lasts >= 60 };
     } else res.mana = { skip: skipMana };
 
 
@@ -19445,6 +19459,14 @@ window.BOCharacter = function (ctx) {
 
 
     const rarity = o.enemyRarity || 'rare', isBoss = rarity === 'boss';
+    const enemyLevel = o.enemyLevel || ch.level;
+    const { resist, guardian, armour } = enemyMitigation(GD, o, enemyLevel, isBoss, res.notes);
+    const resistK = d => 1 - Math.min(H.ResistHardCap || 90, resist[d] || 0) / 100;
+    const hitMit = (d, average) => {
+      const dr = d === 'Physical' && armour > 0 && average > 0
+        ? Math.min(H.ArmourMaxReduction, 100 * armour / (armour + H.ArmourFactor * average)) : 0;
+      return resistK(d) * (1 - dr / 100);
+    };
     let curseInc = 0; for (const m of pickMods(mods, 'CurseEffect', 'Inc')) { curseInc += m.v; use(m, 'minion, curses'); }
     const curseRows = [];
     for (const [id, cfg] of Object.entries(o.curses || {})) {
@@ -19484,13 +19506,13 @@ window.BOCharacter = function (ctx) {
     const aMark = armyMarkPct(GD, ch);
     if (aMark > 0) { gExtra.push({ k: 'mark', v: aMark }); res.notes.push('Hunter\'s Marks from your minions: the enemy takes ' + +aMark.toFixed(1) + '% more damage at 10 Marks (the Marks kind; Guardian debuff in the game, 23 Nov 2026).'); }
     let curseK = 1;
+    const one = takenRule(GD, isBoss);
     if ((activeCurses.length || gExtra.length) && avg > 0) {
 
-      const one = takenRule(GD, isBoss);
       curseK = Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTot * curseTakenK(activeCurses, d, false, one, gExtra), 0);
-      res.notes.push('Curses on minion blows: ' + activeCurses.map(r => r.name).join(' + ') + ' make the enemy take x' + curseK.toFixed(3) + ' on these hits. Counted in the vs-enemy DPS only (not the game\'s panel number, which comes before curses, nor the enemy\'s resistances). Checked only in direction against a Guardian fight on 11 Nov 2026.');
+      res.notes.push('Enemy damage-taken effects multiply minion hits by about x' + curseK.toFixed(3) + ' before mitigation.');
     }
-    res.enemy = { level: o.enemyLevel || ch.level, rarity, curses: curseRows, activeCurses: activeCurses.map(r => r.id), curseEffInc: curseInc };
+    res.enemy = { level: enemyLevel, rarity, resist, armour, guardian, curses: curseRows, activeCurses: activeCurses.map(r => r.id), curseEffInc: curseInc };
 
 
 
@@ -19499,7 +19521,9 @@ window.BOCharacter = function (ctx) {
     if (gAil > 0) { curseK *= 1 + gAil / 100; res.notes.push('Your ' + golem.name + ' ' + (golem.shock ? 'shocks' : 'chills') + ' enemies near it: minion hits deal ' + gAil.toFixed(1) + '% more (counted as if it always stands by the enemy; patch 88 gem text, not checked in game).'); }
     res.minionCurseK = curseK;
     res.sheetHitDps = res.panelDps = dps;
-    res.hitDps = res.totalDps = dps * curseK;
+    const hitWeight = Object.entries(hit).reduce((acc, [d, row]) =>
+      acc + row.avg / hitTot * hitMit(d, row.avg * critFactor) * curseTakenK(activeCurses, d, false, one, gExtra), 0);
+    res.hitDps = res.totalDps = dps * hitWeight * (1 + gAil / 100);
 
 
 
@@ -19543,9 +19567,8 @@ window.BOCharacter = function (ctx) {
       const every = Math.ceil((t.cooldown || 1) / MINION_PULSE_STEP - 1e-9) * MINION_PULSE_STEP;
       const size = avg * critFactor * t.pct / 100 * armyK;
       const el = t.element && DT.includes(t.element) ? t.element : null;
-      const one = takenRule(GD, isBoss);
       const cK = el ? curseTakenK(activeCurses, el, false, one, gExtra) : curseK;
-      const pDps = alive * size / every * cK;
+      const pDps = alive * size / every * cK * (el ? hitMit(el, size) : curseK > 0 ? hitWeight / curseK : 0);
       res.pulses.push({ src: m.src, pct: t.pct, element: el, every, size, dps: pDps });
       res.hitDps += pDps; res.totalDps += pDps;
       use(m, 'minion pulse');
@@ -19618,8 +19641,7 @@ window.BOCharacter = function (ctx) {
         }
         const stacks = cap - left;
         const remain = R * dur > cap ? dur - cap / R / 2 : dur / 2;
-        const one = takenRule(GD, isBoss);
-        const taken = A.bPoisonTakesDamageTaken ? curseTakenK(activeCurses, 'Poison', false, one, gExtra) : 1;
+        const taken = resistK('Poison') * (A.bPoisonTakesDamageTaken ? curseTakenK(activeCurses, 'Poison', false, one, gExtra) : 1);
         const poisonDps = mine * taken;
         let burstPct = 0; for (const m of pickMods(mods, 'PoisonBurst76', 'Flat')) { burstPct += m.v; use(m, 'minion poison burst'); }
         const every = Math.max(1, ruleNum(GD, 'r76.UNIQUES.Every', 12));
@@ -19645,6 +19667,8 @@ window.BOCharacter = function (ctx) {
   function armyCount(GD, ch, sk, alive, o) {
     const parts = [{ name: sk.Name, n: alive }];
     const seen = new Set([sk]);
+    const { supportsOverride, gemLevel, ...armyOptions } = o;
+    const probes = o._minionProbeCache;
     for (const id of ch.hotbar || []) {
       const k = GD.skills[lc(id)];
       if (!k || seen.has(k) || !k.Minion || !k.Minion.MonsterId) continue;
@@ -19659,7 +19683,11 @@ window.BOCharacter = function (ctx) {
         continue;
       }
       seen.add(k);
-      const r = calcSkill(GD, ch, id, Object.assign({}, o, { armyProbe: true, barShock: false }));
+      let r = probes?.get(id);
+      if (!r) {
+        r = calcSkill(GD, ch, id, { ...armyOptions, armyProbe: true, barShock: false });
+        probes?.set(id, r);
+      }
       const n = r.minion ? r.minion.alive : (k.Minion.GolemAuras ? 1 : (k.Minion.Cap || k.Minion.Count || 1));
       parts.push({ name: k.Name, n, poison: r.minion ? r.minion.poisonRow : null }); // its poisons, for the army's shared stacks
     }
@@ -20370,6 +20398,7 @@ window.BOCharacter = function (ctx) {
     const base = Object.assign({}, o); delete base.supportsOverride;
     base.off = new Set([...(o.off || [])].filter(x => !String(x).startsWith('support:')));
     base._col = collectMods(GD, ch, base);
+    base._minionProbeCache = new Map();
     const score = sup => { const r = calcSkill(GD, ch, skillId, Object.assign({}, base, { supportsOverride: sup })); return { r, v: opt.target === 'panel' ? r.panelDps : r.totalDps }; };
     const combos = (() => { let t = 1; for (let i = 0; i < k; i++) t = t * (pool.length - i) / (i + 1); return Math.round(t); })();
     const keep = opt.keep || 15; const results = [];
@@ -22054,11 +22083,11 @@ window.BOStartApp = function () {
     if (!m) return '';
     if (m.skip) return '<h3>Mana</h3><p class="hint">Not counted: ' + esc(m.skip) + '.</p>';
     const back = [num(m.regen, 1) + ' regen'].concat(m.onHit ? [num(m.onHit, 1) + ' on hit'] : [], m.leech ? [num(m.leech, 1) + ' leech'] : []).join(' + ');
-    const lasts = m.sustained ? 'sustained' : m.lasts >= 600 ? 'lasts 10+ min of nonstop use' : 'lasts ' + num(m.lasts, 0) + ' s of nonstop use';
-    return '<h3>Mana</h3><dl class="kv">' + kv('Cost a use', num(m.cost, 1) + (m.mult > 1.001 ? ' (supports ×' + num(m.mult, 2) + ')' : '') + (m.offClassCost > 1 ? ' (another class ×' + num(m.offClassCost, 1) + ')' : '') + (m.refund ? ', ' + m.refund + '% refunded (Int)' : '')) +
+    const lasts = m.canStart === false ? 'cannot pay for the first use' : m.sustained ? 'sustained' : m.lasts >= 600 ? 'lasts 10+ min of nonstop use' : 'lasts ' + num(m.lasts, 0) + ' s of nonstop use';
+    return '<h3>Mana</h3><dl class="kv">' + kv('Cost a use', num(m.listed, 1) + (m.mult > 1.001 ? ' (supports ×' + num(m.mult, 2) + ')' : '') + (m.offClassCost > 1 ? ' (another class ×' + num(m.offClassCost, 1) + ')' : '') + (m.refund ? ', ' + m.refund + '% estimated refund on kills' : '')) +
       kv('Spent / gained a second', '<span class="' + (m.sustained ? 'good' : m.ok ? '' : 'bad') + '">' + num(m.spend, 1) + ' / ' + num(m.gain, 1) + ' · ' + lasts + '</span>', true) +
       kv('Gained from', back) + kv('Mana to spend', num(m.pool, 0) + ' of ' + num(m.max, 0) + (m.reserved ? ' (' + num(m.reserved, 0) + ' reserved by Vows and Heralds' + (m.toggleHeld ? ', ' + num(m.toggleHeld, 0) + ' of it held by toggles' : '') + ')' : '')) + '</dl>' +
-      (m.ok ? '' : '<p class="hint bad">This skill alone runs you dry in about ' + num(m.lasts, 0) + ' s of nonstop use. Other skills on the bar spend more.</p>');
+      (m.ok || m.canStart === false ? '' : '<p class="hint bad">This skill alone runs you dry in about ' + num(m.lasts, 0) + ' s of nonstop use. Other skills on the bar spend more.</p>');
   }
 
 
@@ -26910,7 +26939,7 @@ window.BOStartApp = function () {
       const lvl = rl > 0 ? (rl <= max || !ml.length ? rl : ml[Math.min(rl - max, ml.length) - 1]) : undefined;
       const curses = {}; for (const id of ch.hotbar || []) if (GD.curses[id]) curses[id] = { on: true, dread: 0 };
       const r = S.calcSkill(GD, ch, ch.mainSkill, { enemyRarity: 'boss', enemyLevel: lvl, ruptureLevel: rl > 0 ? rl : undefined, curses });
-      return r && !r.error && !r.unsupported && r.totalDps > 0 ? r.totalDps : null;
+      return r && !r.error && !r.unsupported && r.totalDps > 0 ? { dps: r.totalDps, manaBlocked: r.mana?.canStart === false } : null;
     },
     openBuild: async ch => { if (!await leaveOk(ch.id)) return; addChars([ch], 'code', ch.id); showTab('character'); saveTip('Loaded a ladder build as a plan. Damage Analysis sims it; your own characters are unchanged.'); },
   });

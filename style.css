@@ -1739,6 +1739,19 @@ body.lootfilter-page #buildSummary { display: none !important; } /* the characte
 .bw-swatch { width: 12px; height: 18px; border-radius: 3px 3px 6px 6px; background: var(--liq); border: 1px solid color-mix(in srgb, var(--text) 25%, transparent); flex: none; }
 .bw-mod { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 6px; margin: 6px 0; }
 .bw-mod select:only-child { grid-column: 1 / -1; }
+/* Line rows: the item window's search list (io-pick), filled like a field once a line is picked. */
+.bw-mod { position: relative; }
+.bw-pick { min-width: 0; }
+.bw-pick:only-child { grid-column: 1 / -1; }
+.bw-pick input.io-add { margin: 0; height: 100%; min-height: 34px; color: var(--text); border-style: solid; text-overflow: ellipsis; }
+.bw-pick input.io-add.empty { color: var(--faint); border-style: dashed; }
+.bw-pick .io-pick-list { position: absolute; left: 0; right: 0; top: 38px; z-index: 30; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+.bw-pick .io-pick-opt.used { opacity: .45; cursor: default; }
+.bw-pick .io-pick-opt.cur { box-shadow: inset 3px 0 0 var(--dashboard-gold); }
+.bw-mod-info { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px; margin-top: -2px; padding-left: 2px; font-size: 12.5px; }
+.bw-mod-info .io-fx { min-width: 0; text-align: left; }
+.bw-mod-info .io-weight { margin-left: 0; }
+.bw-mod-info:not(:has(.io-weight)):has(.io-fx:empty) { display: none; }
 @media (max-width: 520px) { .bw-mod { grid-template-columns: minmax(0, 1fr); } }
 .bw-potion { margin-top: 12px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--dashboard-gold) 35%, var(--line)); border-radius: 8px; background: var(--panel-2); }
 .bw-name { display: block; color: var(--dashboard-gold); font-size: 15px; margin-bottom: 4px; }

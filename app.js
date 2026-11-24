@@ -6221,13 +6221,80 @@ window.BOBrewery = function (ctx) {
   }
   const field = (label, inner, cls) => '<label class="field' + (cls ? ' ' + cls : '') + '"><span>' + label + '</span>' + inner + '</label>';
 
+
+
+
+
+
+
+  function rollChance(m, list) {
+    if (!(m.Weight > 0) || m.Recipe || (m.Kind !== 'Prefix' && m.Kind !== 'Suffix')) return null;
+    const tot = list.reduce((t, x) => t + (x.Weight > 0 && !x.Recipe ? x.Weight : 0), 0); if (!tot) return null;
+    const p = m.Weight / tot * 100;
+    return [(p >= 10 ? p.toFixed(0) : p.toFixed(1)) + '%', '(' + m.Weight + '/' + tot + ')'];
+  }
+  const weightHtml = c => c ? ' <span class="io-weight" title="Roll chance: the line\'s weight over the weights of every line of its kind this potion can roll at this Rupture Level (not checked in game)"><span class="io-weight-k">Weight</span><b>' + esc(c[0]) + '</b> <span class="meta">' + esc(c[1]) + '</span></span>' : '';
+  const fxSpan = k => '<span class="io-fx" data-bwfx="' + esc(k) + '"></span>';
+
+
   function modRow(i, f, k, kind, pick, role, used) {
     const list = modsFor(role, kind);
     const m = pick && modById(pick.id);
-    let h = '<div class="bw-mod"><select data-slot="' + i + '" data-f="' + f + '" data-k="' + k + '" aria-label="' + kind + ' ' + (k + 1) + '">' + opt('', 'No ' + kind.toLowerCase() + ' line', !pick) +
-      list.map(x => opt(x.Id, x.Name + (x.Recipe ? ' (recipe)' : '') + ' · ' + fill(x.Text, (x.Tiers[0] || {}).Value, (x.Tiers[0] || {}).Value2).replace(/\d+(\.\d+)?/g, '#'), pick && pick.id === x.Id, used.has(x.Id) && !(pick && pick.id === x.Id), x.Name + ': ' + rangeText(x))).join('') + '</select>';
+    const label = x => x.Name + (x.Recipe ? ' (recipe)' : '') + ' · ' + fill(x.Text, (x.Tiers[0] || {}).Value, (x.Tiers[0] || {}).Value2).replace(/\d+(\.\d+)?/g, '#');
+    const optC = (x, sel, dis) => '<option value="' + esc(x.Id) + '"' + (sel ? ' selected' : '') + (dis ? ' disabled' : '') + (rollChance(x, list) ? ' data-c="' + esc(rollChance(x, list).join('|')) + '"' : '') + '>' + esc(label(x)) + '</option>';
+    const name = kind + ' ' + (k + 1), none = 'No ' + kind.toLowerCase() + ' line';
+    let h = '<div class="bw-mod"><div class="io-pick bw-pick"><select hidden data-slot="' + i + '" data-f="' + f + '" data-k="' + k + '" aria-label="' + esc(name) + '">' + opt('', none, !pick) +
+      list.map(x => optC(x, pick && pick.id === x.Id, used.has(x.Id) && !(pick && pick.id === x.Id))).join('') + '</select>' +
+      '<input type="search" class="io-add bw-add' + (m ? '' : ' empty') + '" autocomplete="off" spellcheck="false" aria-label="' + esc(name) + '" placeholder="' + esc(none) + '  (type to search)" value="' + esc(m ? label(m) : '') + '" data-shown="' + esc(m ? label(m) : '') + '">' +
+      '<div class="io-pick-list" role="listbox" hidden></div></div>';
     if (m) h += '<select class="bw-tier" data-slot="' + i + '" data-f="' + f + 't" data-k="' + k + '" aria-label="Tier">' + tiersOk(m).map(t => opt(t.Tier, 'Tier ' + t.Tier + ' · ' + fmt(t.Value) + (t.Value2 != null ? ' / ' + fmt(t.Value2) : ''), t.Tier === pick.tier)).join('') + '</select>';
+
+    if (m) h += '<div class="bw-mod-info">' + fxSpan(m.Id + '|' + i + '|' + f + '|' + k) + weightHtml(rollChance(m, list)) + '</div>';
     return h + '</div>';
+  }
+
+  function pickDraw(box) {
+    const wrap = box.closest('.bw-pick'), sel = wrap.querySelector('select'), list = wrap.querySelector('.io-pick-list');
+    const words = box.value.toLowerCase().split(/\s+/).filter(Boolean), key = o => o.value + '|' + sel.dataset.slot + '|' + sel.dataset.f + '|' + (sel.dataset.k || 0);
+    const at = +(box.dataset.at || 0); let h = '', n = 0;
+    for (const o of sel.options) {
+      if (!words.every(w => o.textContent.toLowerCase().includes(w))) continue;
+      const c = o.dataset.c ? o.dataset.c.split('|') : null;
+      h += '<div class="io-pick-opt' + (n === at ? ' on' : '') + (o.disabled ? ' used' : '') + (o.selected ? ' cur' : '') + '" role="option" data-v="' + esc(o.value) + '"' + (o.disabled ? ' aria-disabled="true" title="Already on this potion"' : '') + '>' +
+        (o.value ? fxSpan(key(o)) : '') + esc(o.textContent) + weightHtml(c) + '</div>';
+      n++;
+    }
+    list.innerHTML = h || '<div class="io-pick-none">No line matches</div>';
+    list.hidden = false; box.dataset.n = n;
+    fxPaint(list);
+    const on = list.querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+  }
+  function pickClose(box) { const list = box.closest('.bw-pick').querySelector('.io-pick-list'); list.hidden = true; box.value = box.dataset.shown || ''; }
+  function pickSet(box, v) {
+    const sel = box.closest('.bw-pick').querySelector('select'), o = [...sel.options].find(x => x.value === v);
+    if (!o || o.disabled) return;
+    pickClose(box); if (sel.value === v) return;
+    sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function pickBind(root) {
+    if (root.dataset.bwPick) return; root.dataset.bwPick = '1';
+    const box = e => e.target.closest && e.target.closest('input.bw-add');
+    root.addEventListener('focusin', e => { const b = box(e); if (!b) return; hideTip(); b.value = ''; b.dataset.at = 0; pickDraw(b); });
+    root.addEventListener('input', e => { const b = box(e); if (!b) return; b.dataset.at = 0; pickDraw(b); });
+    root.addEventListener('focusout', e => { const b = box(e); if (b) setTimeout(() => { if (b.isConnected && document.activeElement !== b) pickClose(b); }, 150); });
+    root.addEventListener('keydown', e => {
+      const b = box(e); if (!b) return;
+      const n = +b.dataset.n || 0, at = +b.dataset.at || 0;
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && n) { e.preventDefault(); b.dataset.at = (at + (e.key === 'ArrowDown' ? 1 : n - 1)) % n; pickDraw(b); }
+      else if (e.key === 'Enter') { e.preventDefault(); const o = b.closest('.bw-pick').querySelectorAll('.io-pick-opt')[at]; if (o) pickSet(b, o.dataset.v); }
+      else if (e.key === 'Escape' && !b.closest('.bw-pick').querySelector('.io-pick-list').hidden) { e.preventDefault(); e.stopPropagation(); pickClose(b); b.blur(); }
+    });
+    root.addEventListener('mousedown', e => {
+      const o = e.target.closest && e.target.closest('.bw-pick .io-pick-opt'); if (!o) return;
+      e.preventDefault(); if (o.classList.contains('used')) return;
+      pickSet(o.closest('.bw-pick').querySelector('input.bw-add'), o.dataset.v);
+    });
   }
 
   function slotCard(i) {
@@ -6299,34 +6366,39 @@ window.BOBrewery = function (ctx) {
 
 
 
-  let fxJob = 0;
+
+
+  let fxJob = 0, fxMemo = new Map(), fxRoots = [];
+  function fxPaint(root) {
+    for (const el of root.querySelectorAll('.io-fx[data-bwfx]')) {
+      const k = el.dataset.bwfx, row = k.slice(k.indexOf('|')), a = fxMemo.get(k), z = fxMemo.get('none' + row);
+      if (a == null || !(z > 0)) { el.textContent = ''; el.className = 'io-fx'; continue; }
+      const v = Math.round((a / z - 1) * 10000) / 100;
+      el.className = 'io-fx ' + (v > 0 ? 'good' : v < 0 ? 'bad' : 'zero');
+      el.textContent = !v ? '0%' : (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+      el.title = 'Total DPS of the Damage tab skill with this line in this row, against the row left empty';
+    }
+  }
   function fxFill(root) {
-    const job = ++fxJob;
+    const job = ++fxJob; fxMemo = new Map(); fxRoots = [root];
     if (!ctx.score || !(ctx.current && ctx.current()) || !B) return;
     const sels = [...root.querySelectorAll('.bw-mod select[data-f]')].filter(x => /^(pre|suf|oath|core)$/.test(x.dataset.f));
     if (!sels.length) return;
-    const base = clone(B), memo = new Map(), q = [];
+    const base = clone(B), q = [];
     const beltWith = (i, f, k, pick) => { const b = clone(base), sl = b.slots[i]; if (f === 'pre' || f === 'suf') sl[f][k] = pick; else sl[f] = pick; return b; };
     for (const sel of sels) {
-      const i = +sel.dataset.slot, f = sel.dataset.f, k = +sel.dataset.k || 0;
+      const i = +sel.dataset.slot, f = sel.dataset.f, k = +sel.dataset.k || 0, row = '|' + i + '|' + f + '|' + k;
       const cur = f === 'pre' || f === 'suf' ? base.slots[i][f][k] : base.slots[i][f];
-      const none = 'none|' + i + '|' + f + '|' + k;
-      q.push({ key: none, run: () => scoreOf(beltWith(i, f, k, null), true, true) });
-      for (const o of sel.options) {
-        if (!o.value || o.disabled) continue;
-        if (o.dataset.txt == null) o.dataset.txt = o.textContent;
-        const key = o.value + '|' + i + '|' + f + '|' + k;
-        q.push({ key, run: () => scoreOf(beltWith(i, f, k, { id: o.value, tier: cur && cur.id === o.value ? cur.tier : 99 }), true, true), paint: () => {
-          const a = memo.get(key), z = memo.get(none); if (!(z > 0) || a == null) return;
-          const v = Math.round((a / z - 1) * 10000) / 100;
-          o.textContent = o.dataset.txt + (Math.abs(v) >= 0.01 ? ' · ' + (v > 0 ? '+' : '') + v.toFixed(2) + '% DPS' : '');
-        } });
-      }
+      q.push({ key: 'none' + row, run: () => scoreOf(beltWith(i, f, k, null), true, true) });
+
+      const opts = [...sel.options].filter(o => o.value && (!o.disabled || o.selected)).sort((a, b) => (b.selected ? 1 : 0) - (a.selected ? 1 : 0));
+      for (const o of opts) q.push({ key: o.value + row, run: () => scoreOf(beltWith(i, f, k, { id: o.value, tier: cur && cur.id === o.value ? cur.tier : 99 }), true, true) });
     }
     const tick = () => {
       if (job !== fxJob) return;
       const t0 = performance.now();
-      while (q.length && performance.now() - t0 < 14) { const x = q.shift(); if (!memo.has(x.key)) { try { memo.set(x.key, x.run()); } catch (e) { memo.set(x.key, null); } } if (x.paint) x.paint(); }
+      while (q.length && performance.now() - t0 < 14) { const x = q.shift(); if (!fxMemo.has(x.key)) { try { fxMemo.set(x.key, x.run()); } catch (e) { fxMemo.set(x.key, null); } } }
+      fxRoots.forEach(r => r.isConnected && fxPaint(r));
       if (q.length) (ctx.soon || setTimeout)(tick);
     };
     (ctx.soon || setTimeout)(tick);
@@ -6465,6 +6537,7 @@ window.BOBrewery = function (ctx) {
   function bind() {
     const el = $('#breweryPane'); if (!el || el.dataset.bound) return; el.dataset.bound = '1';
     el.addEventListener('change', onChange);
+    pickBind(el);
     el.addEventListener('click', e => {
       if (e.target.closest('[data-bw-best]')) return runBest();
       const u = e.target.closest('[data-bw-use]'); if (u) return applyBest(+u.dataset.bwUse);
@@ -6514,6 +6587,7 @@ window.BOBrewery = function (ctx) {
       ov.addEventListener('mousedown', e => { if (e.target === ov) closeOv(); });
       ov.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-bw-close]')) closeOv(); });
       ov.addEventListener('change', onChange);
+      pickBind(ov);
       document.addEventListener('keydown', e => { if (e.key === 'Escape' && ov && !ov.hidden) { e.preventDefault(); closeOv(); } });
       document.body.appendChild(ov);
     }
@@ -6552,13 +6626,16 @@ window.BOBrewery = function (ctx) {
   let tipEl = null;
   const hideTip = () => { if (tipEl) tipEl.hidden = true; };
   function showTip(e) {
-    const sel = e.target.closest && e.target.closest('.bw-slot select, .bw-top select');
+
+    const box = e.target.closest && e.target.closest('.bw-pick');
+    if (box && (e.target.closest('.io-pick-list') || box.querySelector('input:focus'))) return hideTip();
+    const sel = box ? box.querySelector('select') : e.target.closest && e.target.closest('.bw-slot select, .bw-top select');
     if (!sel || sel.matches(':focus')) return hideTip();
     let html = ''; try { use(); html = selTip(sel); } catch (err) { html = ''; }
     if (!html) return hideTip();
     if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'pl-tip'; tipEl.setAttribute('role', 'tooltip'); document.body.appendChild(tipEl); }
     tipEl.innerHTML = html; tipEl.hidden = false;
-    const r = sel.getBoundingClientRect(), w = tipEl.offsetWidth, hg = tipEl.offsetHeight;
+    const r = (box || sel).getBoundingClientRect(), w = tipEl.offsetWidth, hg = tipEl.offsetHeight;
     let y = r.bottom + 6; if (y + hg > innerHeight - 8) y = Math.max(8, r.top - hg - 6);
     tipEl.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px'; tipEl.style.top = y + 'px';
   }

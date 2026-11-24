@@ -804,7 +804,7 @@ tr.cmp-counted td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 /* Dragonling button: the framed dragon tile for the chosen Aspect (6 tiles in one strip) */
 .dragon-btn.tiled { padding: 0; background: transparent; border: 0; box-shadow: var(--shadow); width: 60px; height: 60px; }
 .dragon-btn.tiled:hover, .dragon-btn.tiled[aria-expanded="true"] { filter: brightness(1.18); }
-.dragon-art { display: block; width: 100%; height: 100%; border-radius: 6px; background-repeat: no-repeat; background-size: 600% 100%; }
+.dragon-art { display: block; width: 100%; height: 100%; border-radius: 6px; background-repeat: no-repeat; background-size: 700% 100%; }
 /* Welcome banner (shown until a character or plan is loaded) */
 .hero { display: none; max-width: min(1460px, calc(100% - 40px)); margin: 16px auto 0; grid-template-columns: minmax(0, 1fr); gap: 18px; }
 /* The landing page (19 Nov 2026): the art panel on top, then the game data numbers, every tool as a card (filled from

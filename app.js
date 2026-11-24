@@ -2311,6 +2311,11 @@ window.PAGE_LANGS = {
     const idolBases = idolN ? Object.values(GD.bases || {}).filter(b => b.Slot === 'Idol' && lvOk(b.Level)).map(b => ({ b, w: b.Width || 1, h: b.Height || 1 })) : [];
     const IDOL_L = { type: idolN > 2 ? 3 : 1, total: idolN };
     const idolOf = b => ({ slot: 'Idol', base: b.Id, rarity: idolN > 2 ? 'Rare' : 'Magic', unique: 'None', name: '', level: ilvl, quality: 0, affixes: [], runes: [] });
+
+
+
+    const idolUniques = idolN ? Object.values(GD.uniques).map(u => ({ u, b: GD.bases[lc(u.BaseId)] })).filter(x => x.b && x.b.Slot === 'Idol' && lvOk(x.u.Level || x.b.Level) && uniqueOk(x.u) && !ctBan(x.b))
+      .map(x => ({ b: x.b, u: x.u, w: x.b.Width || 1, h: x.b.Height || 1 })) : [];
     const sizeOfIdol = it => { const b = baseOf(it); return [(b && b.Width) || 1, (b && b.Height) || 1]; };
     const idolCount = list => list.filter(i => i.slot === 'Idol').length;
 
@@ -2318,19 +2323,24 @@ window.PAGE_LANGS = {
 
     function* bestIdols(items) {
       let fixed = items.filter(i => i.slot === 'Idol' && i.rarity === 'Unique');
+      const worn = new Set(fixed.map(i => lc(i.unique))), usedU = list => new Set(list.filter(m => m.u).map(m => m.u.Id));
       if (!firstLayout(fixed.map(sizeOfIdol))) fixed = []; // the red idols worn now do not fit the grid (an odd save): leave them out
       const rest = items.filter(i => i.slot !== 'Idol');
       const build = list => rest.concat(fixed, list.map(m => m.it));
       const sizesOf = list => fixed.map(sizeOfIdol).concat(list.map(m => [m.w, m.h]));
       const mine = [];
       const fill = function* (list, c) { // the best lines for a new idol of shape c, with `list` already placed
-        const cur = build(list);
-        return yield* fillAffixes(cur, 'Idol' + idolCount(cur), idolOf(c.b), false, IDOL_L);
+        const cur = build(list), key = 'Idol' + idolCount(cur);
+        if (!c.u) return yield* fillAffixes(cur, key, idolOf(c.b), false, IDOL_L);
+        const it = Object.assign(idolOf(c.b), { rarity: 'Unique', unique: c.u.Id, name: c.u.Name });
+        rollUnique(it, uRoll);
+        return useVows ? yield* fillAffixes(cur, key, it, true) : { item: it, v: V(put(cur, key, it)) };
       };
-      const cand = idolBases.map(c => ({ ...c, eff: Infinity, stamp: -1, it: null, gain: 0 }));
+      const cand = idolBases.concat(idolUniques.filter(c => !worn.has(lc(c.u.Id)))).map(c => ({ ...c, eff: Infinity, stamp: -1, it: null, gain: 0 }));
+      const candKey = c => c.u ? 'u:' + c.u.Id : c.b.Id;
       let v = V(build(mine));
       for (let iter = 0; iter < GRID_CELLS.length && !late(); iter++) {
-        const fit = cand.filter(c => firstLayout(sizesOf(mine).concat([[c.w, c.h]])));
+        const taken = usedU(mine), fit = cand.filter(c => !(c.u && taken.has(c.u.Id)) && firstLayout(sizesOf(mine).concat([[c.w, c.h]])));
         let pick = null;
         while (fit.length && !late()) {
           fit.sort((a, b) => b.eff - a.eff);
@@ -2340,31 +2350,33 @@ window.PAGE_LANGS = {
           top.it = f.item; top.gain = f.v / v - 1; top.eff = top.gain / (top.w * top.h); top.stamp = iter;
         }
         if (!pick || !(pick.gain > MIN_GAIN)) break;
-        mine.push({ b: pick.b, w: pick.w, h: pick.h, it: pick.it }); v = V(build(mine));
+        mine.push({ b: pick.b, u: pick.u, w: pick.w, h: pick.h, it: pick.it }); v = V(build(mine));
       }
 
       if (!rush && !late()) {
         let tries = 0;
-        for (const kind of [...new Set(mine.map(m => m.b.Id))]) {
+        for (const kind of [...new Set(mine.map(candKey))]) {
           for (const c of cand) {
-            if (late() || tries >= 40 || c.b.Id === kind) continue;
-            const i = mine.map(m => m.b.Id).lastIndexOf(kind), others = mine.filter((_, j) => j !== i);
+            if (late() || tries >= 40 || candKey(c) === kind) continue;
+            const i = mine.map(candKey).lastIndexOf(kind), others = mine.filter((_, j) => j !== i);
+            if (c.u && usedU(others).has(c.u.Id)) continue;
             if (!firstLayout(sizesOf(others).concat([[c.w, c.h]]))) continue;
             tries++;
             const f = yield* fill(others, c);
-            if (f.v > v * (1 + MIN_GAIN)) { mine.splice(i, 1); mine.push({ b: c.b, w: c.w, h: c.h, it: f.item }); v = V(build(mine)); }
+            if (f.v > v * (1 + MIN_GAIN)) { mine.splice(i, 1); mine.push({ b: c.b, u: c.u, w: c.w, h: c.h, it: f.item }); v = V(build(mine)); }
           }
         }
 
         for (let again = 0; again < GRID_CELLS.length && !late(); again++) {
           let best = null;
+          const tk = usedU(mine);
           for (const c of cand) {
-            if (!firstLayout(sizesOf(mine).concat([[c.w, c.h]]))) continue;
+            if ((c.u && tk.has(c.u.Id)) || !firstLayout(sizesOf(mine).concat([[c.w, c.h]]))) continue;
             const f = yield* fill(mine, c);
             if (f.v > (best ? best.f.v : v) * (1 + MIN_GAIN)) best = { c, f };
           }
           if (!best) break;
-          mine.push({ b: best.c.b, w: best.c.w, h: best.c.h, it: best.f.item }); v = V(build(mine));
+          mine.push({ b: best.c.b, u: best.c.u, w: best.c.w, h: best.c.h, it: best.f.item }); v = V(build(mine));
         }
       }
       return { items: build(mine), v: V(build(mine)), layout: firstLayout(sizesOf(mine)), cells: sizesOf(mine).reduce((n, s) => n + s[0] * s[1], 0) };
@@ -3000,20 +3012,15 @@ window.BOPlanner = function (ctx) {
   }
 
 
-  const idolAffixes = () => Object.values(GD.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length);
 
 
 
 
-  const vowAffixes = (slot, base) => {
-    if (slot === 'Idol') return idolAffixes();
-    if (!base) return [];
-    const seen = new Set();
-    return Object.values(GD.bases).filter(b => b.Slot === base.Slot).flatMap(b => affixesFor(b)).filter(a => !seen.has(a.Id) && seen.add(a.Id));
-  };
+
+  const vowAffixes = (slot, base) => base ? affixesFor(base) : [];
   const vowPool = (slot, base) => new Set(vowAffixes(slot, base).map(a => lc(a.Id)));
 
-  const vowMisfit = (pool, a, slot, base) => pool.has(lc(a.id)) || !GD.affixes[lc(a.id)] ? '' : ' <span class="bad">(' + esc(slot === 'Idol' ? 'not an idol line' : 'no rare ' + (SLOT_NAME[slot] || slot).toLowerCase() + ' rolls this') + ')</span>';
+  const vowMisfit = (pool, a, slot, base) => pool.has(lc(a.id)) || !GD.affixes[lc(a.id)] ? '' : ' <span class="bad">(' + esc('this base can not roll it') + ')</span>';
   function runeSlots(base) {
     if (!base) return 0;
     const R = GD.runeSockets || {}, tags = base.Tags || [];
@@ -13817,7 +13824,7 @@ window.BOCharacter = function (ctx) {
   function addSelect(it, base, type, label, isIdol, flag, vow) {
     const gd = GD(), used = new Set(it.affixes.map(a => (gd.affixes[lc(a.id)] || {}).Group));
 
-    const all = vow ? G.vowAffixes(M.slot, base) : isIdol ? Object.values(gd.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length) : G.affixesFor(base);
+    const all = vow ? G.vowAffixes(M.slot, base) : base ? G.affixesFor(base) : isIdol ? Object.values(gd.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length) : G.affixesFor(base);
 
     const opts = T => all.filter(a => a.Type === T && !used.has(a.Group)).map(a => ({ id: a.Id, t: safe(() => G.modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2)) + (a.Kind ? ' (' + a.Kind + ')' : ''), c: rollChance(a, base) })).sort((x, y) => x.t.localeCompare(y.t))
       .map(o => '<option value="' + esc(o.id) + '"' + (o.c ? ' data-c="' + esc(o.c.pct + '|' + o.c.of) + '"' : '') + '>' + esc(o.t) + '</option>').join('');
@@ -13895,6 +13902,24 @@ window.BOCharacter = function (ctx) {
     }
     return h + '</div>';
   }
+
+
+
+  function baseChoices(ch, it, word) {
+    let l = word ? G.oathwordBases(M.slot, word, ch) : G.basesFor(M.slot, ch);
+    if (M.slot === 'Idol') { const [w, h] = idolDims(it); l = l.filter(b => ((b.Width || 1) === w) && ((b.Height || 1) === h)); }
+    return l;
+  }
+  function baseField(ch, it, word, base) {
+    let l = baseChoices(ch, it, word); if (l.length < 2 && l.some(b => lc(b.Id) === lc(it.base))) return '';
+    const opt = b => '<option value="' + esc(b.Id) + '"' + (lc(b.Id) === lc(it.base) ? ' selected' : '') + '>' + esc(b.Name + (b.Level ? ' (level ' + b.Level + ')' : '')) + '</option>';
+    const ord = b => { const i = DEF_ORDER.indexOf(catOf(b)); return i < 0 ? 99 : i; };
+    l = l.slice().sort((a, b) => ord(a) - ord(b)); // armour groups in the Select sidebar's order; the rest keep theirs (stable sort)
+    const groups = new Map(); for (const b of l) { const k = catOf(b) || 'Other'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(b); }
+    const own = l.some(b => lc(b.Id) === lc(it.base)) ? '' : '<option value="' + esc(it.base) + '" selected>' + esc(base ? base.Name : it.base) + '</option>';
+    return '<label class="field inline" title="Puts this item\'s lines on another base. Lines the new base can not roll are kept and marked.' + (word ? ' An Oathword keeps to its word\'s bases.' : '') + '"><span>Base</span><select data-f="base">' + own +
+      (groups.size > 1 ? [...groups].map(([k, bs]) => '<optgroup label="' + esc(k) + '">' + bs.map(opt).join('') + '</optgroup>').join('') : l.map(opt).join('')) + '</select></label>';
+  }
   function editHtml(ch, it) {
     const gd = GD(), base = gd.bases[lc(it.base)], n = itemName(it, M.slot), isU = it.rarity === 'Unique', u = isU && gd.uniques[lc(it.unique)];
     const word = planner.oathwordForItem(it, M.slot);
@@ -13908,7 +13933,7 @@ window.BOCharacter = function (ctx) {
 
     let l = '', r = '', lh = 3, rh = 0;
     if (!isU) l += '<div class="io-row"><label class="field inline"><span>Rarity</span><select data-f="rarity">' + RAR.map(r => '<option' + (it.rarity === r ? ' selected' : '') + '>' + r + '</option>').join('') + '</select></label>' +
-      '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label>' + G.gradeField(it, base) + '</div>';
+      '<label class="field inline"><span>Item level</span><input type="number" min="1" max="100" data-f="ilvl" value="' + (it.level || 1) + '"></label>' + G.gradeField(it, base) + baseField(ch, it, word, base) + '</div>';
     else {
 
       const mb = u ? G.markBases(u, M.slot, ch) : [], opt = (id, t, on) => '<option value="' + esc(id) + '"' + (on ? ' selected' : '') + '>' + esc(t) + '</option>';
@@ -13964,10 +13989,12 @@ window.BOCharacter = function (ctx) {
     } else {
       const lim = G.LIMIT[it.rarity] || 0, type = a => (gd.affixes[lc(a.id)] || {}).Type;
 
+      const pool = G.vowPool(M.slot, base), misfit = a => base ? G.vowMisfit(pool, a, M.slot, base) : '';
+
       let body = '', room = [], counts = [];
       for (const T of ['Prefix', 'Suffix']) {
         const mine = it.affixes.map((a, ai) => ({ a, ai })).filter(x => type(x.a) === T && !extraTag(x.a));
-        body += mine.map(x => affixRow(it, x.a, x.ai, T)).join('');
+        body += mine.map(x => affixRow(it, x.a, x.ai, T, '', misfit(x.a))).join('');
         if (mine.length < lim) room.push(T);
         if (mine.length > lim) body += '<p class="hint bad">' + it.rarity + ' items hold ' + lim + ' ' + T.toLowerCase() + (lim === 1 ? '' : 'es') + '.</p>';
         counts.push(mine.length + ' / ' + lim + ' ' + T.toLowerCase() + (lim === 1 ? '' : 'es'));
@@ -13986,7 +14013,7 @@ window.BOCharacter = function (ctx) {
 
       const extra = it.affixes.map((a, ai) => ({ a, ai })).filter(x => extraTag(x.a));
       if ((it.rarity === 'Rare' && !isIdol) || extra.length) {
-        let body = extra.map(x => affixRow(it, x.a, x.ai, '', extraTag(x.a))).join('');
+        let body = extra.map(x => affixRow(it, x.a, x.ai, '', extraTag(x.a), misfit(x.a))).join('');
         if (it.rarity === 'Rare' && !isIdol) {
           if (!extra.some(x => x.a.oath)) body += addSelect(it, base, '', 'Add the Oathsworn line (Cube recipe: a 7th line)', false, 'oath');
           if (!extra.some(x => x.a.scar)) body += addSelect(it, base, '', 'Add a Scarred line (from Unswearing at the Forge)', false, 'scar');
@@ -14075,6 +14102,15 @@ window.BOCharacter = function (ctx) {
       case 'rarity': it.rarity = v; if (v === 'Normal') it.affixes = []; if (it.runes) it.runes = it.runes.slice(0, G.runeSockets(gd.bases[lc(it.base)], it)); break; // a white's 3rd-4th rune goes when it turns magic or rare
       case 'ilvl': it.level = Math.max(1, Math.min(100, +v || 1)); break;
       case 'grade': case 'gradepct': case 'truesworn': case 'quality': G.gradeChange(it, f, t); break;
+      case 'base': {
+        const word = planner.oathwordForItem(it, M.slot), b = it.rarity !== 'Unique' && baseChoices(ch, it, word).find(x => lc(x.Id) === lc(v));
+        if (!b) return renderItem();
+        it.base = b.Id;
+        if (!word) it.runes = (it.runes || []).slice(0, G.runeSockets(b, it)); // fewer sockets on the new base: the last runes come out
+        const pool = G.vowPool(M.slot, b), off = it.affixes.filter(a => gd.affixes[lc(a.id)] && !pool.has(lc(a.id))).length;
+        M.msg = 'Now on ' + b.Name + ', every line kept.' + (off ? ' ' + off + (off === 1 ? ' line is' : ' lines are') + ' marked: ' + b.Name + ' can not roll ' + (off === 1 ? 'it' : 'them') + '.' : '');
+        break;
+      }
       case 'ubase': { const u = gd.uniques[lc(it.unique)], b = u && G.markBases(u, M.slot, ch).find(x => lc(x.Id) === lc(v)); if (!b) return renderItem(); it.base = b.Id; break; }
       case 'addaffix': { const af = gd.affixes[lc(v)]; if (!af) return renderItem(); const ti = G.topTier(af, it.level || ch.level), tt = af.Tiers[ti]; it.affixes.push(Object.assign({ id: af.Id, tier: ti, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }, t.dataset.x === 'oath' ? { oath: true } : t.dataset.x === 'scar' ? { scar: true } : {})); break; }
       case 'tier': { const a = it.affixes[ai], af = a && gd.affixes[lc(a.id)], tt = af && af.Tiers[+v]; if (!tt) return; Object.assign(a, { tier: +v, v: tt.Max, v2: tt.Max2 != null ? tt.Max2 : 0 }); break; }

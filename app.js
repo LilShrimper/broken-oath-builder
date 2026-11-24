@@ -697,6 +697,7 @@ window.PAGE_LANGS = {
 
 
 
+
     const late2 = {};
     try { for (const [id, x] of Object.entries((J('Gameplay/late2_98.json') || {}).skills || {})) if (x && x.Mult > 0) late2[id.toLowerCase()] = { From: +x.From, At: +x.At, Mult: +x.Mult }; } catch (e) { /* older data: none */ }
     try { for (const x of (J('Gameplay/new_gems85.json') || {}).gems || []) if (x && x.Id && x.PoisonChance > 0) gemPoison[x.Id.toLowerCase()] = +x.PoisonChance; } catch (e) { /* older game data: none */ }
@@ -14582,6 +14583,12 @@ window.BOCharacter = function (ctx) {
   const is086 = GD => apiBuildAtLeast(GD, 86, '2026-11-21T00');
 
   const is088 = GD => apiBuildAtLeast(GD, 88, '2026-11-23T02');
+
+  const is089 = GD => apiBuildAtLeast(GD, 89, '2026-11-24T00');
+
+
+
+  const curseEffK = (GD, inc, dreadPct) => is089(GD) && bSwitch(GD, 'r113.META.bDreadAdd116', true) ? 1 + (inc + dreadPct) / 100 : (1 + inc / 100) * (1 + dreadPct / 100);
   const VOW_BUILT_IN = 0.15; // every Vow gem's lines x1.15 since patch 82 (gem texts, API game data build 85; see the Vow block)
   const takenRule = (GD, isBoss) => is084(GD) ? 'kinds' : is082(GD) ? 'add' : !!(isBoss && guardianStrongestTaken(GD));
 
@@ -17658,7 +17665,7 @@ window.BOCharacter = function (ctx) {
       const woeSups = c.Skill && lc(c.Skill) === lc(skillId) && o.supportsOverride ? o.supportsOverride : ((ch.sockets || []).find(s => c.Skill && lc(s.skill) === lc(c.Skill)) || {}).supports || [];
       let curseMore = 0;
       for (const sid of woeSups) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'CurseMore' && m.Mode === 'Flat') curseMore += m.Value;
-      const eff = (1 + (curseEffInc + bannerEffectInc(c, mods)) / 100) * (1 + dreadPct / 100) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
+      const eff = curseEffK(GD, curseEffInc + bannerEffectInc(c, mods), dreadPct) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
 
 
       const row = { id, kind: c.Kind || '', name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, dot: (c.DotTakenPct || 0) * eff };
@@ -19747,7 +19754,7 @@ window.BOCharacter = function (ctx) {
       const woeSups = c.Skill && lc(c.Skill) === lc(sk.Id) && o.supportsOverride ? o.supportsOverride : ((ch.sockets || []).find(s => c.Skill && lc(s.skill) === lc(c.Skill)) || {}).supports || [];
       let curseMore = 0;
       for (const sid of woeSups) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'CurseMore' && m.Mode === 'Flat') curseMore += m.Value;
-      const eff = (1 + (curseInc + bannerEffectInc(c, mods)) / 100) * (1 + dreadPct / 100) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
+      const eff = curseEffK(GD, curseInc + bannerEffectInc(c, mods), dreadPct) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
       const row = { id, kind: c.Kind || '', name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, resDown: {} };
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
       curseRows.push(row);
@@ -20211,8 +20218,13 @@ window.BOCharacter = function (ctx) {
     const key = 'item:' + item.slot;
     let physInc = 0, asInc = 0, critInc = 0;
     const added = {}; DT.forEach(d => added[d] = [0, 0]);
+
+
+
+    const meleeBase = (base.Tags || []).includes('Melee');
     for (const m of mods) {
       if (!m.local || m.key !== key) continue;
+      if (!meleeBase && (m.tags || []).includes('Melee113')) continue;
       const { types } = splitTags(m.tags);
       if (m.stat === 'Damage' && m.mode === 'Inc' && (!types.length || types.includes('Physical'))) { physInc += m.v; use(m, 'local'); }
       else if (m.stat === 'AddedDamage' && types.length) { added[types[0]][0] += m.v; added[types[0]][1] += m.v2; use(m, 'local'); }

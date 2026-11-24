@@ -1945,6 +1945,11 @@ window.PAGE_LANGS = {
 
     const ctBan = b => !!b && ((noCore && (b.Tags || []).includes('CoreTouched')) || (basicOnly && (b.Tags || []).some(t => t === 'Ashen' || t === 'GnomeMade')));
     const coreBan = it => !!it && ctBan(GD.bases[lc(it.base)]);
+    const isAshen = b => !!b && (b.Tags || []).includes('Ashen');
+
+    const kindOf = b => b.TypeName || b.Class || b.Slot;
+    const markTwins = own => !own ? [] : Object.values(GD.bases).filter(b => b !== own && (b.Tags || []).includes('CoreTouched') && b.Slot === own.Slot && kindOf(b) === kindOf(own) && !ctBan(b));
+    const markOk = !noCore && !(+cfg.runeTier > 0 && +cfg.runeTier < 5);
 
     const lim = (v, max) => v == null || v === '' || !isFinite(+v) ? max : Math.max(0, Math.min(max, Math.round(+v)));
     const vowMax = cfg.maxVows == null || cfg.maxVows === '' || !isFinite(+cfg.maxVows) ? VOW_EMPTY : lim(cfg.maxVows, VOW_MAX);
@@ -2257,11 +2262,18 @@ window.PAGE_LANGS = {
       const scored = [];
       for (const u of uniq) {
         if (late()) break;
-        const it = mk(GD.bases[lc(u.BaseId)], { rarity: 'Unique', unique: u.Id, name: u.Name });
-        rollUnique(it, uRoll);
-        const v = V(trial(it)); scored.push({ it, v });
-        offer(it, v, 'unique');
-        if (due()) yield prog();
+
+
+
+
+
+        for (const b of [GD.bases[lc(u.BaseId)]].concat(markOk ? markTwins(GD.bases[lc(u.BaseId)]).filter(b => fitsSlot(b, slot) && okBase(b) && lvOk(b.Level)) : [])) {
+          const it = mk(b, { rarity: 'Unique', unique: u.Id, name: u.Name });
+          rollUnique(it, uRoll);
+          const v = V(trial(it)); scored.push({ it, v });
+          offer(it, v, 'unique');
+          if (due()) yield prog();
+        }
       }
       if (useVows) {
         scored.sort((a, b) => b.v - a.v);
@@ -2282,10 +2294,13 @@ window.PAGE_LANGS = {
         }
       }
 
+
+
+
       if (realSlot(slot) !== 'DwarvenRune') {
         curPhase = phaseName(slot) + ': rares';
         const rs = [];
-        for (const b of distinct(bases)) { const it = mk(b); rs.push({ it, v: V(trial(it)) }); if (due()) yield prog(); }
+        for (const b of distinct(bases.filter(b => !isAshen(b)))) { const it = mk(b); rs.push({ it, v: V(trial(it)) }); if (due()) yield prog(); }
         rs.sort((a, b) => b.v - a.v);
         for (const s of rs.slice(0, K)) {
           if (late()) break;
@@ -3040,6 +3055,13 @@ window.BOPlanner = function (ctx) {
 
   const TRUESWORN = 90, QUALITY_MAX = 30;
 
+
+
+
+  const ASHEN_QUALITY_MAX = 10;
+  const qualityMaxOf = base => !base || !(base.Armour || base.Evasion || base.EnergyShield || base.DamageMin) ? 0 : (base.Tags || []).includes('Ashen') ? ASHEN_QUALITY_MAX : QUALITY_MAX;
+  const newUnique = it => { rollUnique(it, 1); const q = qualityMaxOf(GD.bases[lc(it.base)]); if (q) it.quality = q; else delete it.quality; return it; };
+
   const gradeField = (it, base, dis, qualityOnly) => {
     if (!it || !base || !(base.Armour || base.Evasion || base.EnergyShield || base.DamageMin)) return '';
     const g = it.grade || 0, ts = g >= TRUESWORN;
@@ -3047,7 +3069,7 @@ window.BOPlanner = function (ctx) {
 
 
       '<label class="field inline" title="Type the % the game shows on the item: Base Grade: 98 Truesworn, 124% of the base. 85% to 125%; 119% or more is Truesworn"><span>% of base</span><input type="number" min="85" max="125" data-f="gradepct" value="' + (g > 0 && S.gradeMult ? Math.round(S.gradeMult(g) * 100) : '') + '" placeholder="100"' + (dis || '') + '></label>') +
-      '<label class="field inline" title="Quality: up to 20% from stones and the Forge, up to 30% with Cogs. A weapon\'s counts as increased physical damage of that weapon, armour\'s as increased defences of that piece"><span>Quality</span><input type="number" min="0" max="' + QUALITY_MAX + '" data-f="quality" value="' + (it.quality || 0) + '"' + (dis || '') + '></label>' +
+      '<label class="field inline" title="Quality: up to 20% from stones and the Forge, up to 30% with Cogs. A weapon\'s counts as increased physical damage of that weapon, armour\'s as increased defences of that piece"><span>Quality</span><input type="number" min="0" max="' + (qualityMaxOf(base) || QUALITY_MAX) + '" data-f="quality" value="' + (it.quality || 0) + '"' + (dis || '') + '></label>' +
       (qualityOnly ? '' : '<label class="check-row pl-truesworn" title="Truesworn: Base Grade 90 or more"><input type="checkbox" data-f="truesworn"' + (ts ? ' checked' : '') + (dis || '') + '><span>Truesworn</span></label>');
   };
 
@@ -3063,7 +3085,7 @@ window.BOPlanner = function (ctx) {
       it.grade = Math.max(1, Math.min(100, Math.round(100 * Math.pow(r, 2 / 3))));
       return true;
     }
-    if (f === 'quality') { it.quality = Math.max(0, Math.min(QUALITY_MAX, Math.round(+v) || 0)); return true; }
+    if (f === 'quality') { it.quality = Math.max(0, Math.min(qualityMaxOf(GD.bases[lc(it.base)]) || QUALITY_MAX, Math.round(+v) || 0)); return true; }
     return false;
   }
   const modLine = (m, v, v2) => S.modText(GD, { stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: v != null ? v : m.Value || 0, v2: v2 != null ? v2 : m.Value2 || 0 });
@@ -4143,9 +4165,10 @@ window.BOPlanner = function (ctx) {
       if (!item) { item = { slot, base: u.BaseId, rarity: 'Unique', unique: u.Id, name: u.Name, level: ch.level, affixes: [], runes: [] }; ch.items.push(item); k.openItems.add(slot); }
 
 
-      if (lc(item.unique) !== lc(u.Id)) { const pool = vowPool(slot, GD.bases[lc(u.BaseId)]); item.affixes = (item.affixes || []).filter(a => !a.id.startsWith('unique:') && pool.has(lc(a.id))); }
+      const fresh = lc(item.unique) !== lc(u.Id);
+      if (fresh) { const pool = vowPool(slot, GD.bases[lc(u.BaseId)]); item.affixes = (item.affixes || []).filter(a => !a.id.startsWith('unique:') && pool.has(lc(a.id))); }
       Object.assign(item,{ rarity: 'Unique', unique: u.Id, base: u.BaseId, name: u.Name, runes: [] });
-      rollUnique(item, item.roll == null ? 0.5 : item.roll);
+      if (fresh) newUnique(item); else rollUnique(item, item.roll == null ? 1 : item.roll);
       return done();
     }
     if (!it) return;
@@ -4396,7 +4419,7 @@ window.BOPlanner = function (ctx) {
 
   const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, baseLine, gradeField, gradeChange, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, markBases, affixesFor, vowAffixes, vowPool, vowMisfit, vowMove, moveAffix, fixHands, handOk,
 
-    oathwordsFor, oathwordBases, rollUnique, topTier, runeSlots, runeSockets, runeList, modLine, LIMIT, VOW_MAX };
+    oathwordsFor, oathwordBases, rollUnique, newUnique, topTier, runeSlots, runeSockets, runeList, modLine, LIMIT, VOW_MAX };
 
   function removeSkill(ch, skill) {
     ch.sockets = ch.sockets.filter(s => s.skill !== skill); ch.hotbar = ch.hotbar.filter(h => h !== skill);
@@ -13772,7 +13795,7 @@ window.BOCharacter = function (ctx) {
     if (kind === 'basic') { const b = gd.bases[lc(id)]; if (b) equip(blank(b.Id)); }
     else if (kind === 'unique') {
       const u = gd.uniques[lc(id)]; if (!u) return;
-      const item = blank(u.BaseId, { rarity: 'Unique', unique: u.Id, name: u.Name }); G.rollUnique(item, 0.5); equip(item);
+      const item = blank(u.BaseId, { rarity: 'Unique', unique: u.Id, name: u.Name }); G.newUnique(item); equip(item); // top roll + most quality (planner.js newUnique)
     } else if (kind === 'word') { M.word = id; renderList(); }
     else if (kind === 'wbase') {
       const w = G.oathwordsFor(M.slot, H().current()).find(x => lc(x.Id) === lc(M.word)), b = gd.bases[lc(id)];
@@ -18576,6 +18599,10 @@ window.BOCharacter = function (ctx) {
         if (m.stat !== 'Trigger' || !(m.key === 'passives' || String(m.key || '').startsWith('item:') || supTrig)) continue;
         const t = trigParse(m);
         if (!['Hit', 'Crit', 'SkillUse'].includes(t.when) || !t.pct) continue;
+
+
+
+
 
 
 

@@ -270,7 +270,7 @@ window.PAGE_LANGS = {
       const o = pick(s, SKILL_KEYS);
       if (s.Channel) o.Channel = pick(s.Channel, ['CostPerSec', 'Tick', 'MoveMult', 'bStrike', 'StrikeScale']);
       if (s.Orb && typeof s.Orb === 'object') o.Orb = pick(s.Orb, ['Duration', 'Interval', 'Max', 'ExplodeScale']); // Winter Orb: icicle clock and the closing burst
-      if (s.Minion) o.Minion = pick(s.Minion, ['MonsterId', 'Count', 'Cap', 'CountEvery', 'PerLevels', 'DamageMult', 'AttackEvery', 'Affinity', 'AffinityDamage', 'AffinityCap', 'LevelDamage', 'GolemAuras', 'ShareBeyond', 'SharePerBody', 'ReserveHomeClass', 'ReserveHomeMult', 'SlamEvery', 'SlamShare', 'GrowPerLevel', 'GrowMax']); // ShareBeyond..GrowMax: build 79 fields (Shared Light read by the sim; reservation and the zombie slam/grow kept for display, not simmed)
+      if (s.Minion) o.Minion = pick(s.Minion, ['MonsterId', 'Count', 'Cap', 'CountEvery', 'PerLevels', 'DamageMult', 'AttackEvery', 'Affinity', 'AffinityDamage', 'AffinityCap', 'LevelDamage', 'GolemAuras', 'ShareBeyond', 'SharePerBody', 'ReservePct', 'ReserveHomeClass', 'ReserveHomeMult', 'SlamEvery', 'SlamShare', 'GrowPerLevel', 'GrowMax']); // ShareBeyond..GrowMax: build 79 fields (Shared Light read by the sim; ReservePct / ReserveHome* read by its mana sheet since 23 Nov 2026; the zombie slam/grow kept for display, not simmed)
       if (s.Ground) o.Ground = pick(s.Ground, ['Duration', 'Tick', 'TickScale', 'Radius', 'HallowedTakenPct', 'HallowedCrit']); // Hallowed*: the ground's damage taken and crit (Consecrated Ground, Hallowed Slam)
       if (s.Totem) o.Totem = typeof s.Totem === 'object' ? Object.assign({ on: true }, pick(s.Totem, ['Kind', 'Interval', 'Duration', 'Max', 'PerLevels', 'Effectiveness'])) : true;
       if (s.Rain) o.Rain = pick(s.Rain, ['Delay', 'Waves', 'Interval', 'Arrows']);
@@ -10959,6 +10959,9 @@ window.BOAtlas = function (ctx) {
 
 
 
+
+
+
 window.BOVows = function (ctx) {
   'use strict';
   const { $, esc, num } = ctx;
@@ -10985,6 +10988,8 @@ window.BOVows = function (ctx) {
     }
     return out;
   }
+  const WB = 'woebringer';
+  const hasWb = (ch, e) => e.group === 'woe' && (ch.sockets || []).some(s => lc(s.skill) === lc(e.skill) && (s.supports || []).some(x => lc(x) === WB));
   const onBar = (ch, id) => (ch.hotbar || []).some(h => lc(h) === lc(id));
   const wearsAmulet = ch => (ch.items || []).some(it => it.slot === 'Amulet' && lc(it.unique) === AMULET);
 
@@ -11017,7 +11022,7 @@ window.BOVows = function (ctx) {
   const cardLevel = (ch, e) => (ch.gemLevels || {})[e.skill] || Math.max(1, ...Object.values(ch.gemLevels || {}).filter(x => x > 0), 1);
 
   function withSkill(c0, e) {
-    const c = JSON.parse(JSON.stringify(c0)), sups = opt.sup && e.sup ? [e.sup] : [];
+    const c = JSON.parse(JSON.stringify(c0)), sups = (opt.sup && e.sup ? [e.sup] : []).concat(e.wb ? [WB] : []);
     let s = c.sockets.find(x => x.skill === e.skill);
     if (!s) { s = { skill: e.skill, supports: [], conduit: '' }; c.sockets.push(s); }
     s.supports = sups;
@@ -11050,10 +11055,13 @@ window.BOVows = function (ctx) {
   function manaOf(e, w, wo) {
     if (e.group === 'vow') {
       if (!w.mana || !wo.mana) return null;
-      let r = Math.max(0, w.mana.reserved - wo.mana.reserved);
+
+      let r = Math.max(0, (w.mana.reserved - (w.mana.minionHeld || 0)) - (wo.mana.reserved - (wo.mana.minionHeld || 0)));
       if (opt.amulet) r = 0; else if (opt.sup && e.sup === ECON) r = Math.round(r * 0.9);
       return { reserve: r };
     }
+
+    if (e.wb && w.mana && wo.mana) return { reserve: opt.amulet ? 0 : Math.max(0, (w.mana.woeHeld || 0) - (wo.mana.woeHeld || 0)), wb: true };
     const sk = ctx.gd().skills[lc(e.skill)] || {}, sp = opt.sup && e.sup ? (ctx.gd().supports[e.sup] || {}).ManaMultiplier || 1 : 1;
     return sk.ManaCost ? { cost: sk.ManaCost * sp } : null;
   }
@@ -11099,12 +11107,13 @@ window.BOVows = function (ctx) {
     if (!ch) { el.innerHTML = '<p class="hint">Load a character first.</p>'; return; }
     workFor(ch);
     const list = entries(), worn = wearsAmulet(ch);
+    for (const e of list) e.wb = hasWb(ch, e);
     const amu = ctx.gd().uniques[AMULET];
     let h = '<div class="cmp-intro"><div class="eyebrow">BUILD PLANNER</div><h2>Vows, Curses, Sentences</h2><p>Each Vow, Herald, Woe and Sentence with your build DPS (the main skill plus the skills ticked Include in Sim, against the enemy on the Damage tab): what it adds while ticked, or would add if you ticked it. Tick and untick cards to try a set; the bar, mana and DPS follow.</p></div>';
     h += barHtml(ch, list);
     h += '<div class="vw-opts">' +
       '<label class="check-row"><input type="checkbox" data-vw="amulet"' + (opt.amulet || worn ? ' checked' : '') + (worn ? ' disabled' : '') + '><span>' + esc(amu ? amu.Name : 'The Oath Unbroken') + ' (amulet): Vows reserve no mana' + (worn ? ' <span class="meta">· you wear it</span>' : ' <span class="meta">· takes the place of your amulet in every number here</span>') + '</span></label>' +
-      '<label class="check-row"><input type="checkbox" data-vw="sup"' + (opt.sup ? ' checked' : '') + '><span>Vow / Curse supports <span class="meta">· Economical Vow on each Vow and Herald (10% less reserved), Deepened Woe on each Woe (21% stronger). Off: no supports on the card\'s skill</span></span></label></div>';
+      '<label class="check-row"><input type="checkbox" data-vw="sup"' + (opt.sup ? ' checked' : '') + '><span>Vow / Curse supports <span class="meta">· Economical Vow on each Vow and Herald (10% less reserved), Deepened Woe on each Woe (21% stronger). Off: no supports on the card\'s skill. A Woe you link to Woebringer keeps it either way</span></span></label></div>';
     h += '<div class="vw-mana" id="vwMana" aria-live="polite"><span class="meta">Working out your mana…</span></div>';
     for (const [g, title] of [['vow', 'Vows and Heralds'], ['woe', 'Woes'], ['sentence', 'Sentences']]) {
 
@@ -11125,7 +11134,7 @@ window.BOVows = function (ctx) {
     const need = gemNeed(ch, sk, L);
     const req = '<div class="vw-req">' + (need.length ? 'Needs ' + need.map(x => '<b data-attr="' + esc(x.attr) + '" data-need="' + x.need + '">' + num(x.need, 0) + ' ' + esc(x.attr) + '</b>').join(', ') + ' for level ' + L + (need[0].off ? ' <span class="meta">(off-class gem)</span>' : '') : 'No attribute need at level ' + L) + '</div>';
     return '<div class="vw-card' + (on ? ' on' : '') + '" data-vwcard="' + esc(e.skill) + '"><div class="vw-top"><span class="vw-name"><input type="checkbox" data-vwon="' + esc(e.skill) + '"' + (on ? ' checked' : '') + ' aria-label="Count ' + esc(sk.Name || e.skill) + ' in the build DPS"><span class="vw-tipname" data-tip="skill" data-id="' + esc(e.skill) + '" tabindex="0">' + ctx.skillDot(e.skill) + '<b>' + esc(sk.Name || e.skill) + '</b></span></span><span class="vw-kind">' + e.kind + '</span></div>' +
-      '<div class="meta">' + (on ? 'Counted' : onBar(ch, e.skill) ? 'On your bar, not counted' : 'Not counted') + (lvl ? ' · level ' + lvl : ' · not owned') + (sup ? ' · with ' + esc(sup.Name) : ' · no supports') + (e.group === 'sentence' ? ' · alone' : '') + '</div>' +
+      '<div class="meta">' + (on ? 'Counted' : onBar(ch, e.skill) ? 'On your bar, not counted' : 'Not counted') + (lvl ? ' · level ' + lvl : ' · not owned') + ([sup && sup.Name, e.wb && ((ctx.gd().supports[WB] || {}).Name || 'Woebringer')].filter(Boolean).length ? ' · with ' + esc([sup && sup.Name, e.wb && ((ctx.gd().supports[WB] || {}).Name || 'Woebringer')].filter(Boolean).join(' + ')) : ' · no supports') + (e.group === 'sentence' ? ' · alone' : '') + '</div>' +
       req + (note && lc(noteSkill) === lc(e.skill) ? '<div class="vw-warn" role="alert">' + esc(note) + '</div>' : '') + '<p class="vw-desc">' + esc(desc) + '</p><div class="vw-num" data-vwnum><span class="meta">Working out…</span></div></div>';
   }
 
@@ -11142,7 +11151,7 @@ window.BOVows = function (ctx) {
     const head = () => {
       const m = b0.mana, res = shownReserved(base, m), box = $('#vwMana');
       if (box) box.innerHTML = (m ? '<b>Mana</b> ' + num(m.max, 0) + ' <span class="meta">·</span> reserved ' + num(res, 0) + ' <span class="meta">·</span> free ' + num(Math.max(0, m.max - res), 0) +
-        (m.toggleHeld && res ? ' <span class="meta">(' + num(m.toggleHeld, 0) + ' of it held by toggles)</span>' : '') + ' <span class="meta">·</span> ' : '<span class="meta">No mana sheet for this build (no skill here costs mana).</span> ') +
+        (res && (m.minionHeld || m.woeHeld || m.toggleHeld) ? ' <span class="meta">(' + [[m.minionHeld, 'held by minions'], [m.woeHeld, 'by Woebringer'], [m.toggleHeld, 'by toggles']].filter(x => x[0]).map(x => num(x[0], 0) + ' ' + x[1]).join(', ') + ')</span>' : '') + ' <span class="meta">·</span> ' : '<span class="meta">No mana sheet for this build (no skill here costs mana).</span> ') +
         'Build DPS <span class="vw-gold">' + num(b0.dps) + '</span>' + (opt.amulet && !wearsAmulet(ch) ? ' <span class="meta">with ' + esc((ctx.gd().uniques[AMULET] || {}).Name || 'the amulet') + '</span>' : '');
 
       if (b0.attr) for (const b of document.querySelectorAll('#vowsPane .vw-req b[data-attr]')) {
@@ -11178,7 +11187,7 @@ window.BOVows = function (ctx) {
         const { w, wo, on } = r;
         const d = w.dps - wo.dps, m = manaOf(e, w, wo);
         const pct = wo.dps > 0 ? d / wo.dps * 100 : 0, small = Math.abs(pct) < 0.05;
-        const mana = !m ? '' : m.reserve != null ? 'Reserves ' + num(m.reserve, 0) + ' mana' + (b0.mana ? ' (' + num(m.reserve / b0.mana.max * 100, 0) + '%)' : '') : 'Costs ' + num(m.cost, 1) + ' mana a cast (before cost cuts)';
+        const mana = !m ? '' : m.reserve != null ? 'Reserves ' + num(m.reserve, 0) + ' mana' + (m.wb ? ' as a Woebringer aura' : '') + (b0.mana ? ' (' + num(m.reserve / b0.mana.max * 100, 0) + '%)' : '') : 'Costs ' + num(m.cost, 1) + ' mana a cast (before cost cuts)';
         const free = m && m.reserve != null && b0.mana && !on ? b0.mana.max - shownReserved(base, b0.mana) - m.reserve : null;
         if (box) box.innerHTML = '<div class="vw-dps"><span class="meta">Build DPS ' + (on ? 'with it' : 'if ticked') + '</span> <span class="vw-gold">' + num(w.dps) + '</span></div>' +
           '<div class="' + (small ? 'meta' : 'delta ' + (d > 0 ? 'up' : 'down')) + '" title="' + esc('With it: ' + num(w.dps) + ' · without it: ' + num(wo.dps)) + '">' + (small ? 'No damage change in the sim' : (d > 0 ? '+' : '−') + (Math.abs(pct) < 10 ? Math.abs(pct).toFixed(1) : Math.round(Math.abs(pct))) + '% ' + (on ? 'from it' : 'if ticked')) + '</div>' +
@@ -19062,9 +19071,45 @@ window.BOCharacter = function (ctx) {
         toggleHeld += Math.round(max * ruleNum(GD, 'r98.META.fPersistPct74', 30) / 100 * (home ? ruleNum(GD, 'r98.META.fPersistHomeMult74', 0.35) : 1));
       }
       reserved += toggleHeld;
+
+
+
+
+
+      let woeHeld = 0;
+      const wbTxt = /reserves (\d+(?:\.\d+)?)% of your mana/i.exec((GD.supports.woebringer || {}).Description || '');
+      if (wbTxt) for (const s of ch.sockets || []) {
+        if (!(s.supports || []).some(x => lc(x) === 'woebringer') || !ch.hotbar.some(h => lc(h) === lc(s.skill))) continue;
+        const cs = Object.values(GD.curses).find(c => lc(c.Skill) === lc(s.skill));
+        if (!cs || cs.Kind !== 'Woe' || (o.off && o.off.has('vow:woebringer_aura'))) continue;
+        woeHeld += Math.round(+wbTxt[1] / 100 * max * Math.max(0, 1 + resInc / 100));
+      }
+      reserved += woeHeld;
+
+
+
+
+
+
+
+
+
+      let minionHeld = 0;
+      if (ruleNum(GD, 'r95.META.bMinionReserve95', 1)) {
+        const seen = new Set();
+        for (const h of ch.hotbar) {
+          const ms = GD.skills[lc(h)], mi = ms && ms.Minion;
+          if (!mi || !mi.ReservePct || seen.has(lc(h)) || !isSummon(ms) || (o.off && o.off.has('minion:' + lc(h)))) continue;
+          seen.add(lc(h));
+          const home = mi.ReserveHomeClass && lc(mi.ReserveHomeClass) === lc(ch.classId || '');
+          minionHeld += Math.round(max * mi.ReservePct / 100 * (home ? (mi.ReserveHomeMult || 1) : 1) * 0.8);
+        }
+        minionHeld = Math.round(Math.min(minionHeld, Math.max(0, max - reserved - max * 0.1)));
+      }
+      reserved += minionHeld;
       const pool = Math.max(0, max - reserved), deficit = spend - gain;
       const lasts = deficit > 0 ? pool / deficit : Infinity;
-      res.mana = { max, reserved, toggleHeld, offClassCost, leechCap, pool, regen, cost, listed: refund < 100 ? cost / (1 - refund / 100) : cost, mult, costInc, cut, refund, spend, onHit: onHit * hitsPerSec, leech: leechGain, gain, sustained: deficit <= 0, lasts, ok: lasts >= 60 };
+      res.mana = { max, reserved, toggleHeld, woeHeld, minionHeld, offClassCost, leechCap, pool, regen, cost, listed: refund < 100 ? cost / (1 - refund / 100) : cost, mult, costInc, cut, refund, spend, onHit: onHit * hitsPerSec, leech: leechGain, gain, sustained: deficit <= 0, lasts, ok: lasts >= 60 };
     } else res.mana = { skip: skipMana };
 
 
@@ -22064,7 +22109,7 @@ window.BOStartApp = function () {
       let r = null; try { const o = comboOpts(ex); o.gemLevel = c.gemLevels[id] || undefined; r = S.calcSkill(GD, c, id, o); } catch (err) { r = null; }
       if (r && r.mana && r.mana.max) { mana = r.mana; break; }
     }
-    return { dps, attr: main && main.attr || null, mana: mana ? { max: mana.max, reserved: mana.reserved || 0, toggleHeld: mana.toggleHeld || 0 } : null };
+    return { dps, attr: main && main.attr || null, mana: mana ? { max: mana.max, reserved: mana.reserved || 0, toggleHeld: mana.toggleHeld || 0, woeHeld: mana.woeHeld || 0, minionHeld: mana.minionHeld || 0 } : null };
   }
 
 
@@ -22267,7 +22312,7 @@ window.BOStartApp = function () {
     const lasts = m.sustained ? 'sustained' : m.lasts >= 600 ? 'lasts 10+ min of nonstop use' : 'lasts ' + num(m.lasts, 0) + ' s of nonstop use';
     return '<h3>Mana</h3><dl class="kv">' + kv('Cost a use', num(m.cost, 1) + (m.mult > 1.001 ? ' (supports ×' + num(m.mult, 2) + ')' : '') + (m.offClassCost > 1 ? ' (another class ×' + num(m.offClassCost, 1) + ')' : '') + (m.refund ? ', ' + m.refund + '% refunded (Int)' : '')) +
       kv('Spent / gained a second', '<span class="' + (m.sustained ? 'good' : m.ok ? '' : 'bad') + '">' + num(m.spend, 1) + ' / ' + num(m.gain, 1) + ' · ' + lasts + '</span>', true) +
-      kv('Gained from', back) + kv('Mana to spend', num(m.pool, 0) + ' of ' + num(m.max, 0) + (m.reserved ? ' (' + num(m.reserved, 0) + ' reserved by Vows and Heralds' + (m.toggleHeld ? ', ' + num(m.toggleHeld, 0) + ' of it held by toggles' : '') + ')' : '')) + '</dl>' +
+      kv('Gained from', back) + kv('Mana to spend', num(m.pool, 0) + ' of ' + num(m.max, 0) + (m.reserved ? ' (' + num(m.reserved, 0) + ' reserved' + [[m.minionHeld, 'by minions'], [m.woeHeld, 'by Woebringer'], [m.toggleHeld, 'by toggles']].filter(x => x[0]).map(x => ', ' + num(x[0], 0) + ' ' + x[1]).join('') + ')' : '')) + '</dl>' +
       (m.ok ? '' : '<p class="hint bad">This skill alone runs you dry in about ' + num(m.lasts, 0) + ' s of nonstop use. Other skills on the bar spend more.</p>');
   }
 

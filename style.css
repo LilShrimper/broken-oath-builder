@@ -1236,6 +1236,15 @@ b.bs-rename { cursor: text; border-bottom: 1px dashed transparent; }
 b.bs-rename:hover, b.bs-rename:focus-visible { border-bottom-color: var(--dashboard-gold); outline: none; }
 .sb-main .bs-name-input { font: 600 15px/1.3 Inter, "Segoe UI", sans-serif; color: inherit; width: auto; flex: 1 1 260px; max-width: 480px; }
 .bs-name-input { font: 600 18px/1.2 Georgia, "Times New Roman", serif; color: var(--dashboard-gold); background: var(--bg, transparent); border: 1px solid var(--dashboard-gold); border-radius: 4px; padding: 0 4px; min-width: 0; width: 100%; }
+/* The open plan's name box also takes its class and level (app.js nameEditor) */
+.bs-name-edit { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.sb-main .bs-name-edit { flex: 1 1 260px; max-width: 480px; }
+.sb-main .bs-name-edit .bs-name-input { max-width: none; flex: none; }
+.bs-name-more { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--muted); font: 600 11px/1.2 Inter, "Segoe UI", sans-serif; }
+.bs-name-more label { display: inline-flex; align-items: center; gap: 4px; }
+.bs-name-more select, .bs-name-more input { font: 500 12px/1.2 Inter, "Segoe UI", sans-serif; color: var(--text); background: var(--bg, transparent); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }
+.bs-name-more input { width: 56px; }
+.bs-name-edit ~ small { display: none; }
 .bs-cell small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bs-share { align-items: stretch; gap: 6px; padding: 8px 12px; }
 @media (max-width: 900px) { .bs-share { flex-direction: row; } .bs-share .btn { flex: 1 1 0; } }
@@ -2725,12 +2734,14 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 .io-rm { width: 26px; height: 26px; font-size: 16px; }
 
 /* The game's item art on the Character tab: gear slots, the Fossil's idols, the item window (character.js artImg) */
-/* Gear slots: the picture sits under the slot's label; right of the text once the doll is wide enough for both */
-.ch-slot.has-art:not(.ch-idol) > .is-ico { width: 44px; height: 44px; margin: 2px 0; }
+/* Gear slots (Character tab and Save Creator): the picture is centred under the slot's label with the name centred under it,
+   as on the weapon, off hand and body armour (owner, 23 Nov 2026); a little larger once the doll is wide */
+.ch-slot.has-art:not(.ch-idol) { text-align: center; }
+.ch-slot.has-art:not(.ch-idol) > .ch-slot-label { align-self: stretch; text-align: left; }
+.ch-slot.has-art:not(.ch-idol) > .is-ico { align-self: center; width: 44px; height: 44px; margin: 2px 0; }
 .ch-doll { container-type: inline-size; }
 @container (min-width: 540px) {
-  .ch-slot.has-art { padding-right: 68px; }
-  .ch-slot.has-art > .is-ico.art { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 52px; height: 52px; margin: 0; }
+  .ch-slot.has-art:not(.ch-idol) > .is-ico.art { width: 52px; height: 52px; }
 }
 .ch-slot.ch-idol.has-art { padding: 0; }
 .ch-idol.has-art > .is-ico { position: absolute; inset: 3px; width: auto; height: auto; pointer-events: none; }
@@ -3216,7 +3227,12 @@ body.stats-folded .stats-panel { padding: 0; border: 0; background: none; overfl
 
 /* Vows, Curses, Sentences tab (vows.js, owner 23 Nov 2026) */
 .vows-pane .vw-bar { margin: 4px 0 14px; }
-.vows-pane .vw-bar .cr-bar-put { cursor: default; }
+.vows-pane .vw-bar div.cr-bar-put { cursor: default; }
+.vows-pane .vw-bar div.cr-bar-put:hover { border-color: var(--line); }
+.vows-pane .vw-bar .cr-bar-slot.full div.cr-bar-put:hover { border-color: color-mix(in srgb, var(--dashboard-gold) 45%, var(--line)); }
+.vw-bar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.vw-bar-head h3 { margin: 0; }
+@media (max-width: 640px) { .vows-pane .ch-bar-card .cr-bar { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: 's0 s1 s2' 's3 s4 s5' 's6 s7 .' 'lab lab lab' 's8 s9 s10' 's11 s12 .'; } }
 .vows-pane .vw-bar .vw-hit .cr-bar-put { border-color: var(--dashboard-gold); box-shadow: 0 0 0 1px color-mix(in srgb, var(--dashboard-gold) 50%, transparent); }
 .vw-opts { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
 .vw-mana { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--panel) 85%, var(--bg)); margin-bottom: 6px; }
@@ -3230,4 +3246,14 @@ body.stats-folded .stats-panel { padding: 0; border: 0; background: none; overfl
 .vw-kind { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
 .vw-desc { margin: 2px 0; font-size: 12.5px; color: var(--muted); }
 .vw-num { margin-top: auto; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
-.vw-dps b { font-size: 16px; color: var(--text); }
+.vw-gold { font: 600 17px/1.2 Georgia, "Times New Roman", serif; color: var(--dashboard-gold); font-variant-numeric: tabular-nums; }
+.vw-mana .vw-gold { font-size: 19px; }
+:root[data-theme="light"] .vw-gold, :root[data-theme="light"] .vw-mana b { color: #795714; }
+.vw-card { cursor: pointer; }
+.vw-card:hover { border-color: color-mix(in srgb, var(--dashboard-gold) 35%, var(--line)); }
+.vw-card.on:hover { border-color: color-mix(in srgb, var(--dashboard-gold) 75%, var(--line)); }
+.vw-name input { margin: 0; flex: none; width: 16px; height: 16px; accent-color: var(--dashboard-gold); cursor: pointer; }
+.vw-tipname { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.vw-req { font-size: 12px; color: var(--muted); }
+.vw-req b { font-weight: 650; color: var(--text); }
+.vw-req b.delta { font-size: inherit; }

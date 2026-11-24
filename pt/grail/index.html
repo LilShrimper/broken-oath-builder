@@ -50,7 +50,7 @@
   var b = new URL("../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/pt.json'), langCode: 'pt' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../../style.css?v=480">
+<link rel="stylesheet" href="../../style.css?v=481">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -552,7 +552,7 @@
       </div>
       <div class="enemy-toggles">
         <label class="check" id="rowFlashfire" title="Flashfire: Fire hits in the 2 s after a Flame Dash deal 40% more. Counts it as always up." hidden><input type="checkbox" id="flashfire"><span>Flame Dash just used</span></label>
-        <label class="check" id="rowGraveCall" title="Minions: 30% more damage and 20% faster for 4 s after each cast. The game's panel leaves it out." hidden><input type="checkbox" id="graveCall"><span>Grave Call active</span></label>
+        <label class="check" id="rowGraveCall" title="Minions: 30% more damage and 20% faster for 4 s after each cast. Ticked by itself while Grave Call is on your bar (counted as kept up). Counted against the enemy only: the game's panel leaves it out." hidden><input type="checkbox" id="graveCall"><span>Grave Call active</span></label>
       </div>
       <!-- How the selected skill is cast (owner, 19 Nov 2026: everything that configures DPS is in this pop-up); shown only for skills they apply to -->
       <div class="enemy-casts">
@@ -672,7 +672,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":480,"at":"2026-11-24T02:46:20.643Z"};
+window.SITE_VERSION = {"v":481,"at":"2026-11-24T03:55:19.947Z"};
 window.SITE_LANG = 'pt';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -685,6 +685,6 @@ window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["War
 /*__ATLAS__*/
 /*__VOWS__*/
 </script>
-<script src="../../app.js?v=480"></script>
+<script src="../../app.js?v=481"></script>
 </body>
 </html>

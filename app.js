@@ -1924,7 +1924,8 @@ window.PAGE_LANGS = {
   const sourceKey = it => 'item:' + it.slot;
   function wearShort(GD, ch, mods, it) { return itemNeeds(GD, it) ? attrShort(GD, it, attrsWithout(GD, ch, mods, sourceKey(it))) : null; }
   const LIMIT = 3;      // prefixes and suffixes on a rare
-  const VOW_MAX = 6;    // Vows on one red item (planner.js VOW_MAX)
+  const VOW_MAX = 11;   // Vows on one red item (planner.js VOW_MAX: 11 from 23 Nov 2026, was 6)
+  const VOW_EMPTY = 3;  // Vows tried when no limit is set (owner, 23 Nov 2026: "empty box be 3")
   const MIN_GAIN = 1e-6;
   const PASSES = 4;
   const LISTED = 20;    // affixes that go on to the later steps of the greedy fill
@@ -1945,7 +1946,7 @@ window.PAGE_LANGS = {
     const coreBan = it => !!it && ctBan(GD.bases[lc(it.base)]);
 
     const lim = (v, max) => v == null || v === '' || !isFinite(+v) ? max : Math.max(0, Math.min(max, Math.round(+v)));
-    const vowMax = lim(cfg.maxVows, VOW_MAX);
+    const vowMax = cfg.maxVows == null || cfg.maxVows === '' || !isFinite(+cfg.maxVows) ? VOW_EMPTY : lim(cfg.maxVows, VOW_MAX);
     const useVows = cfg.vows !== false && vowMax > 0;
 
 
@@ -2139,6 +2140,7 @@ window.PAGE_LANGS = {
         if (!listed) listed = [...gains.keys()].sort((p, q) => gains.get(q) - gains.get(p)).slice(0, LISTED);
         if (!best) break;
         cur.affixes.push(best.a); v = bv;
+        if (vow) v = yield* vowOrder(items, slot, cur, v, true);
       }
 
       if (!rush && listed) for (let i = cur.affixes.length - 1; i >= 0; i--) {
@@ -2154,7 +2156,38 @@ window.PAGE_LANGS = {
         }
         if (bestA) cur.affixes[i] = bestA.a;
       }
+      if (vow && !rush) v = yield* vowOrder(items, slot, cur, v, false);
       return { item: cur, v };
+    }
+
+
+
+
+
+
+    function* vowOrder(items, slot, cur, v, last) {
+      const isV = a => !a.id.startsWith('unique:') && !a.oath && !a.scar && !a.crafted;
+      const fixed = cur.affixes.filter(a => !isV(a));
+      let vows = cur.affixes.filter(isV);
+      if (vows.length < 2) return v;
+      for (let pass = 0; pass < (last ? 1 : 3) && !late(); pass++) {
+        let moved = false;
+        for (const a of last ? [vows[vows.length - 1]] : vows.slice()) {
+          const from = vows.indexOf(a);
+          let bestL = null;
+          for (let to = 0; to < vows.length; to++) {
+            if (to === from) continue;
+            const list = vows.slice(); list.splice(from, 1); list.splice(to, 0, a);
+            const x = V(put(items, slot, { ...cur, affixes: fixed.concat(list) }));
+            if (x > v * (1 + MIN_GAIN)) { v = x; bestL = list; }
+            if (due()) yield prog();
+          }
+          if (bestL) { vows = bestL; moved = true; }
+        }
+        if (!moved) break;
+      }
+      cur.affixes.splice(0, cur.affixes.length, ...fixed.concat(vows));
+      return v;
     }
 
     const runeList = Object.values(GD.runes).filter(r => r.Kind === 'rune' && lvOk(r.Level) && (r.Tier || 1) <= runeTierMax);
@@ -2889,7 +2922,10 @@ window.BOPlanner = function (ctx) {
   const SLOT_NAME = { MainHand: 'Weapon', OffHand: 'Off hand', Helm: 'Helm', Chest: 'Body armour', Gloves: 'Gloves', Boots: 'Boots', Amulet: 'Amulet', Ring1: 'Ring 1', Ring2: 'Ring 2', Belt: 'Belt', DwarvenRune: 'Dwarven rune', Idol: 'Idol' };
   const RARITIES = ['Normal', 'Magic', 'Rare', 'Unique'];
   const LIMIT = { Normal: 0, Magic: 1, Rare: 3 }; // prefixes and suffixes each
-  const VOW_MAX = 6; // Vows on one red item (Items/cube_recipes.json Rules.Vows83: 6 shares, 6 rune costs)
+
+
+
+  const VOW_MAX = 11;
   const BAR = 13; // skill bar slots: 8 main (3 mouse buttons + keys 1-5) + 5 Ctrl-bar; every real save has a 13-entry Hotbar (owner screenshot, 9 Nov 2026)
   const baseSlot = slot => /^Ring\d$/.test(slot) ? 'Ring' : slot;
   const byName = (a, b) => a.Name.localeCompare(b.Name);
@@ -10921,6 +10957,8 @@ window.BOAtlas = function (ctx) {
 
 
 
+
+
 window.BOVows = function (ctx) {
   'use strict';
   const { $, esc, num } = ctx;
@@ -10951,6 +10989,20 @@ window.BOVows = function (ctx) {
   const wearsAmulet = ch => (ch.items || []).some(it => it.slot === 'Amulet' && lc(it.unique) === AMULET);
 
 
+
+  let work = null, note = '';
+  function workFor(ch) {
+    const key = (ch.id || ch.name || '') + '|' + JSON.stringify(ch.hotbar || []);
+    if (!work || work.key !== key) {
+      const hb = (ch.hotbar || []).slice(0, BAR_SLOTS.length); while (hb.length < BAR_SLOTS.length) hb.push('');
+      work = { key, bar: hb, orig: hb.slice(), extra: (ch.hotbar || []).slice(BAR_SLOTS.length) };
+    }
+    return work;
+  }
+  const isOn = e => work.bar.some(h => lc(h) === lc(e.skill));
+  const changed = () => work.bar.some((h, i) => lc(h) !== lc(work.orig[i]));
+
+
   function baseChar(ch) {
     const c = JSON.parse(JSON.stringify(ch));
     if (opt.amulet && !wearsAmulet(c)) {
@@ -10962,13 +11014,15 @@ window.BOVows = function (ctx) {
     return c;
   }
 
+  const cardLevel = (ch, e) => (ch.gemLevels || {})[e.skill] || Math.max(1, ...Object.values(ch.gemLevels || {}).filter(x => x > 0), 1);
+
   function withSkill(c0, e) {
     const c = JSON.parse(JSON.stringify(c0)), sups = opt.sup && e.sup ? [e.sup] : [];
     let s = c.sockets.find(x => x.skill === e.skill);
     if (!s) { s = { skill: e.skill, supports: [], conduit: '' }; c.sockets.push(s); }
     s.supports = sups;
     if (!c.gems.includes(e.skill)) c.gems.push(e.skill);
-    if (!c.gemLevels[e.skill]) c.gemLevels[e.skill] = Math.max(1, ...Object.values(c.gemLevels).filter(x => x > 0), 1);
+    if (!c.gemLevels[e.skill]) c.gemLevels[e.skill] = cardLevel(c0, e);
     if (!onBar(c, e.skill)) c.hotbar = c.hotbar.concat([e.skill]);
     return c;
   }
@@ -10979,8 +11033,19 @@ window.BOVows = function (ctx) {
   }
 
 
-  const sentenceIds = () => Object.values(ctx.gd().curses).filter(c => c.Kind === 'Sentence').map(c => c.Id);
-  const run = (c, e, on) => ctx.sim(c, e ? { curse: e.curse, vow: e.vow, on, alsoOff: e.group === 'sentence' ? sentenceIds().filter(id => id !== e.curse) : null } : null);
+  function workChar(base, list) {
+    let c = Object.assign({}, base, { hotbar: work.bar.concat(work.extra) });
+    for (const e of list) c = isOn(e) ? withSkill(c, e) : without(c, e);
+    return c;
+  }
+  function ticks(list, flip) {
+    const cursesOn = {}, vowsOn = [];
+    for (const e of list) {
+      const on = flip && flip.e === e ? flip.on : flip && flip.off && flip.off.includes(e) ? false : isOn(e);
+      if (e.curse) cursesOn[e.curse] = on; else if (e.vow && on) vowsOn.push(e.vow);
+    }
+    return { cursesOn, vowsOn };
+  }
 
   function manaOf(e, w, wo) {
     if (e.group === 'vow') {
@@ -10999,76 +11064,126 @@ window.BOVows = function (ctx) {
     return m.reserved;
   }
 
+
+  function gemNeed(ch, sk, L) {
+    const G = (ctx.gd().scaling || {}).Gem || {}, CL = G.CharLevelForGemLevel || [];
+    if (!sk || !CL.length || !(L > 1)) return [];
+    const homes = sk.HomeClasses || [], off = homes.length > 0 && !homes.some(c => lc(c) === lc(ch.classId));
+    const floor = off ? ((sk.Tags || []).includes('Movement') ? G.OffClassMoveReqFloor || 0 : G.OffClassReqFloor || 0) : 0;
+    const weights = sk.Requires && Object.keys(sk.Requires).length ? sk.Requires : { [sk.Attribute || 'Int']: 100 };
+    return Object.entries(weights).map(([a, w]) => {
+      const v = ((G.ReqBase || 0) + (G.ReqPerCharLevel || 0) * ((CL[Math.min(L, CL.length) - 1] || 1) - (G.ReqLevelOffset || 0)) + floor) * w / 100;
+      return { attr: a, need: v < (G.ReqMinimum || 0) ? 0 : Math.round(v), off };
+    }).filter(x => x.need > 0);
+  }
+
   function barHtml(ch, list) {
-    const GD = ctx.gd(), kinds = new Map(list.map(e => [lc(e.skill), e.kind]));
-    const hb = (ch.hotbar || []).slice(0, BAR_SLOTS.length); while (hb.length < BAR_SLOTS.length) hb.push('');
+    const GD = ctx.gd(), kinds = new Map(list.map(e => [lc(e.skill), e.kind])), hb = work.bar;
     const slot = i => {
-      const id = hb[i] || '', sk = id && id !== 'move' ? GD.skills[lc(id)] : null, k = kinds.get(lc(id));
-      return '<div class="cr-bar-slot ch-bar-slot' + (id ? ' full' : '') + (k ? ' vw-hit' : '') + '" style="grid-area: s' + i + '"><div class="cr-bar-put"' + (sk ? ' data-tip="skill" data-id="' + esc(id) + '"' : '') + '><small>' + BAR_SLOTS[i] + (k ? ' · ' + k : '') + '</small><span>' + (id ? (sk ? ctx.skillDot(id) : '') + esc(id === 'move' ? 'Move only' : sk ? sk.Name : id) : '<i>empty</i>') + '</span></div></div>';
+      const id = hb[i] || '', sk = id && id !== 'move' ? GD.skills[lc(id)] : null, k = kinds.get(lc(id)), freed = !id && work.orig[i];
+      const name = id === 'move' ? 'Move only' : sk ? sk.Name : id;
+      const inner = '<small>' + BAR_SLOTS[i] + (k ? ' · ' + k : '') + '</small><span>' + (id ? (sk ? ctx.skillDot(id) : '') + esc(name) : '<i>' + (freed ? 'free' : 'empty') + '</i>') + '</span>';
+      const tip = sk ? ' data-tip="skill" data-id="' + esc(id) + '"' : '';
+      return '<div class="cr-bar-slot ch-bar-slot' + (id ? ' full' : '') + (k ? ' vw-hit' : '') + '" style="grid-area: s' + i + '">' +
+        (k ? '<button type="button" class="cr-bar-put" data-vwoff="' + i + '"' + tip + ' aria-label="Take ' + esc(name) + ' off ' + BAR_SLOTS[i] + '">' + inner + '</button><button type="button" class="x" data-vwoff="' + i + '" aria-label="Take ' + esc(name) + ' off">×</button>'
+          : '<div class="cr-bar-put"' + tip + '>' + inner + '</div>') + '</div>';
     };
-    return '<div class="ch-bar-card vw-bar"><h3>Skill bar</h3><div class="cr-bar">' + hb.slice(0, 8).map((x, i) => slot(i)).join('') + '<span class="cr-bar-label">Ctrl bar</span>' + hb.slice(8).map((x, i) => slot(8 + i)).join('') + '</div>' +
-      '<p class="hint">Change the bar on the Character tab. Vows, Heralds and curses count in the sim only while on the bar.</p></div>';
+    return '<div class="ch-bar-card vw-bar"><div class="vw-bar-head"><h3>Skill bar</h3>' + (changed() ? '<button type="button" class="btn small ghost" data-vwreset="1">Back to my bar</button>' : '') + '</div><div class="cr-bar">' + hb.slice(0, 8).map((x, i) => slot(i)).join('') + '<span class="cr-bar-label">Ctrl bar</span>' + hb.slice(8).map((x, i) => slot(8 + i)).join('') + '</div>' +
+      (note ? '<p class="hint delta down" role="status">' + esc(note) + '</p>' : '') +
+      '<p class="hint">Click a Vow, Herald or curse here to take it off and free its slot; tick a card below to put it on a free slot. The numbers follow this bar; your saved bar stays as it is (change that on the Character tab).</p></div>';
   }
 
   function render() {
     const el = $('#vowsPane'); if (!el) return;
     const ch = ctx.current();
     if (!ch) { el.innerHTML = '<p class="hint">Load a character first.</p>'; return; }
+    workFor(ch);
     const list = entries(), worn = wearsAmulet(ch);
     const amu = ctx.gd().uniques[AMULET];
-    let h = '<div class="cmp-intro"><div class="eyebrow">BUILD PLANNER</div><h2>Vows, Curses, Sentences</h2><p>Each Vow, Herald, Woe and Sentence with your build DPS (the main skill plus the skills ticked Include in Sim, against the enemy on the Damage tab): what it adds on your bar, or would add if you put it there. Change the bar on the Character tab.</p></div>';
+    let h = '<div class="cmp-intro"><div class="eyebrow">BUILD PLANNER</div><h2>Vows, Curses, Sentences</h2><p>Each Vow, Herald, Woe and Sentence with your build DPS (the main skill plus the skills ticked Include in Sim, against the enemy on the Damage tab): what it adds while ticked, or would add if you ticked it. Tick and untick cards to try a set; the bar, mana and DPS follow.</p></div>';
     h += barHtml(ch, list);
     h += '<div class="vw-opts">' +
       '<label class="check-row"><input type="checkbox" data-vw="amulet"' + (opt.amulet || worn ? ' checked' : '') + (worn ? ' disabled' : '') + '><span>' + esc(amu ? amu.Name : 'The Oath Unbroken') + ' (amulet): Vows reserve no mana' + (worn ? ' <span class="meta">· you wear it</span>' : ' <span class="meta">· takes the place of your amulet in every number here</span>') + '</span></label>' +
       '<label class="check-row"><input type="checkbox" data-vw="sup"' + (opt.sup ? ' checked' : '') + '><span>Vow / Curse supports <span class="meta">· Economical Vow on each Vow and Herald (10% less reserved), Deepened Woe on each Woe (21% stronger). Off: no supports on the card\'s skill</span></span></label></div>';
-    h += '<div class="vw-mana" id="vwMana"><span class="meta">Working out your mana…</span></div>';
+    h += '<div class="vw-mana" id="vwMana" aria-live="polite"><span class="meta">Working out your mana…</span></div>';
     for (const [g, title] of [['vow', 'Vows and Heralds'], ['woe', 'Woes'], ['sentence', 'Sentences']]) {
       const es = list.filter(e => e.group === g); if (!es.length) continue;
       h += '<h3 class="vw-h">' + title + '</h3><div class="vw-grid" data-vwgroup="' + g + '">' + es.map(e => card(ch, e)).join('') + '</div>';
     }
-    h += '<p class="hint">Each Sentence card is that Sentence alone, as only one enemy holds a Sentence at a time. Sentences take no support here: Economical Vow asks for a Vow and Deepened Woe for a Woe. An enemy holds two Woes at a time; the sim applies its own limits. Every number is a sim estimate.</p>';
+    h += '<p class="hint">Each Sentence card is that Sentence alone, as only one enemy holds a Sentence at a time: ticking one unticks the other. Sentences take no support here: Economical Vow asks for a Vow and Deepened Woe for a Woe. An enemy holds two Woes at a time; the sim applies its own limits. Every number is a sim estimate.</p>';
     el.innerHTML = h;
     fill(ch, list);
   }
   function card(ch, e) {
-    const sk = ctx.gd().skills[lc(e.skill)] || {}, on = onBar(ch, e.skill), lvl = ch.gemLevels[e.skill] || 0;
+    const sk = ctx.gd().skills[lc(e.skill)] || {}, on = isOn(e), lvl = (ch.gemLevels || {})[e.skill] || 0, L = cardLevel(ch, e);
     const desc = String(sk.Description || '').split(/(?<=\.)\s/)[0];
     const sup = opt.sup && e.sup ? ctx.gd().supports[e.sup] : null;
-    return '<div class="vw-card' + (on ? ' on' : '') + '" data-vwcard="' + esc(e.skill) + '"><div class="vw-top"><span class="vw-name" data-tip="skill" data-id="' + esc(e.skill) + '">' + ctx.skillDot(e.skill) + '<b>' + esc(sk.Name || e.skill) + '</b></span><span class="vw-kind">' + e.kind + '</span></div>' +
-      '<div class="meta">' + (on ? 'On your bar' : 'Not on your bar') + (lvl ? ' · level ' + lvl : ' · not owned') + (sup ? ' · with ' + esc(sup.Name) : ' · no supports') + (e.group === 'sentence' ? ' · alone' : '') + '</div>' +
-      '<p class="vw-desc">' + esc(desc) + '</p><div class="vw-num" data-vwnum><span class="meta">Working out…</span></div></div>';
+    const need = gemNeed(ch, sk, L);
+    const req = '<div class="vw-req">' + (need.length ? 'Needs ' + need.map(x => '<b data-attr="' + esc(x.attr) + '" data-need="' + x.need + '">' + num(x.need, 0) + ' ' + esc(x.attr) + '</b>').join(', ') + ' for level ' + L + (need[0].off ? ' <span class="meta">(off-class gem)</span>' : '') : 'No attribute need at level ' + L) + '</div>';
+    return '<div class="vw-card' + (on ? ' on' : '') + '" data-vwcard="' + esc(e.skill) + '"><div class="vw-top"><span class="vw-name"><input type="checkbox" data-vwon="' + esc(e.skill) + '"' + (on ? ' checked' : '') + ' aria-label="Count ' + esc(sk.Name || e.skill) + ' in the build DPS"><span class="vw-tipname" data-tip="skill" data-id="' + esc(e.skill) + '" tabindex="0">' + ctx.skillDot(e.skill) + '<b>' + esc(sk.Name || e.skill) + '</b></span></span><span class="vw-kind">' + e.kind + '</span></div>' +
+      '<div class="meta">' + (on ? 'Counted' : onBar(ch, e.skill) ? 'On your bar, not counted' : 'Not counted') + (lvl ? ' · level ' + lvl : ' · not owned') + (sup ? ' · with ' + esc(sup.Name) : ' · no supports') + (e.group === 'sentence' ? ' · alone' : '') + '</div>' +
+      req + '<p class="vw-desc">' + esc(desc) + '</p><div class="vw-num" data-vwnum><span class="meta">Working out…</span></div></div>';
   }
 
+
+  const cache = new Map();
+  let inside = false;
+  const stateKey = () => work.key + '|' + work.bar.join(',') + '|' + opt.amulet + '|' + opt.sup;
+
   function fill(ch, list) {
-    const my = ++job, base = baseChar(ch);
-    let b0;
+    if (!inside) cache.clear();
+    inside = false;
+    const my = ++job, base = baseChar(ch), sk0 = stateKey(), sent = list.filter(e => e.group === 'sentence');
+    let b0 = cache.get(sk0 + '|base'), wc = null, headDone = false;
+    const head = () => {
+      const m = b0.mana, res = shownReserved(base, m), box = $('#vwMana');
+      if (box) box.innerHTML = (m ? '<b>Mana</b> ' + num(m.max, 0) + ' <span class="meta">·</span> reserved ' + num(res, 0) + ' <span class="meta">·</span> free ' + num(Math.max(0, m.max - res), 0) +
+        (m.toggleHeld && res ? ' <span class="meta">(' + num(m.toggleHeld, 0) + ' of it held by toggles)</span>' : '') + ' <span class="meta">·</span> ' : '<span class="meta">No mana sheet for this build (no skill here costs mana).</span> ') +
+        'Build DPS <span class="vw-gold">' + num(b0.dps) + '</span>' + (opt.amulet && !wearsAmulet(ch) ? ' <span class="meta">with ' + esc((ctx.gd().uniques[AMULET] || {}).Name || 'the amulet') + '</span>' : '');
+
+      if (b0.attr) for (const b of document.querySelectorAll('#vowsPane .vw-req b[data-attr]')) {
+        const have = Math.round(b0.attr[b.dataset.attr] || 0), short = have < +b.dataset.need;
+        b.className = short ? 'delta down' : 'delta up';
+        b.title = 'You have ' + have + ' ' + b.dataset.attr + (short ? ': the gem plays at a lower level' : '');
+      }
+    };
     const step = () => {
       if (my !== job || $('#vowsPane').hidden) return;
+      if (!wc) wc = workChar(base, list);
       if (!b0) {
-        try { b0 = run(base, null); } catch (err) { b0 = { dps: 0, mana: null }; }
-        const m = b0.mana, res = shownReserved(base, m), box = $('#vwMana');
-        if (box) box.innerHTML = m ? '<b>Mana</b> ' + num(m.max, 0) + ' <span class="meta">·</span> reserved ' + num(res, 0) + ' <span class="meta">·</span> free ' + num(Math.max(0, m.max - res), 0) +
-          (m.toggleHeld && res ? ' <span class="meta">(' + num(m.toggleHeld, 0) + ' of it held by toggles)</span>' : '') + ' <span class="meta">·</span> build DPS <b>' + num(b0.dps) + '</b>' + (opt.amulet && !wearsAmulet(ch) ? ' <span class="meta">with ' + esc((ctx.gd().uniques[AMULET] || {}).Name || 'the amulet') + '</span>' : '') :
-          '<span class="meta">No mana sheet for this build (no skill here costs mana).</span> Build DPS <b>' + num(b0.dps) + '</b>';
-        return setTimeout(step, 0);
+        try { b0 = ctx.sim(wc, ticks(list)); } catch (err) { b0 = { dps: 0, mana: null, attr: null }; }
+        cache.set(sk0 + '|base', b0);
       }
+      if (!headDone) { head(); headDone = true; return setTimeout(step, 0); }
       const e = list.find(x => !x.done); if (!e) { for (const x of list) delete x.done; return sortCards(); }
       e.done = true;
       const box = document.querySelector('#vowsPane [data-vwcard="' + CSS.escape(e.skill) + '"] [data-vwnum]');
       try {
-        const w = run(withSkill(base, e), e, true), wo = run(without(base, e), e, false);
-        const d = w.dps - wo.dps, m = manaOf(e, w, wo), on = onBar(ch, e.skill);
+        let r = cache.get(sk0 + '|' + e.skill);
+        if (!r) {
+          const on = isOn(e);
+
+          const others = e.group === 'sentence' ? sent.filter(x => x !== e) : [];
+          let cw = on ? wc : withSkill(wc, e);
+          for (const x of others) cw = without(cw, x);
+          const w = on && !others.some(isOn) ? b0 : ctx.sim(cw, ticks(list, { e, on: true, off: others }));
+          const wo = ctx.sim(without(wc, e), ticks(list, { e, on: false, off: others }));
+          r = { w, wo, on };
+          cache.set(sk0 + '|' + e.skill, r);
+        }
+        const { w, wo, on } = r;
+        const d = w.dps - wo.dps, m = manaOf(e, w, wo);
         const pct = wo.dps > 0 ? d / wo.dps * 100 : 0, small = Math.abs(pct) < 0.05;
         const mana = !m ? '' : m.reserve != null ? 'Reserves ' + num(m.reserve, 0) + ' mana' + (b0.mana ? ' (' + num(m.reserve / b0.mana.max * 100, 0) + '%)' : '') : 'Costs ' + num(m.cost, 1) + ' mana a cast (before cost cuts)';
         const free = m && m.reserve != null && b0.mana && !on ? b0.mana.max - shownReserved(base, b0.mana) - m.reserve : null;
         if (box) box.closest('[data-vwcard]').dataset.score = d;
-        if (box) box.innerHTML = '<div class="vw-dps"><span class="meta">Build DPS</span> <b>' + num(w.dps) + '</b></div>' +
-          '<div class="' + (small ? 'meta' : d > 0 ? 'good' : 'bad') + '" title="' + esc('With it: ' + num(w.dps) + ' · without it: ' + num(wo.dps)) + '">' + (small ? 'No damage change in the sim' : (d > 0 ? '+' : '−') + (Math.abs(pct) < 10 ? Math.abs(pct).toFixed(1) : Math.round(Math.abs(pct))) + '% ' + (on ? 'from it' : 'if added')) + '</div>' +
-          (mana ? '<div class="meta">' + mana + '</div>' : '') + (free != null && free < 0 ? '<div class="bad">Not enough free mana: ' + num(-free, 0) + ' short</div>' : '');
+        if (box) box.innerHTML = '<div class="vw-dps"><span class="meta">Build DPS ' + (on ? 'with it' : 'if ticked') + '</span> <span class="vw-gold">' + num(w.dps) + '</span></div>' +
+          '<div class="' + (small ? 'meta' : 'delta ' + (d > 0 ? 'up' : 'down')) + '" title="' + esc('With it: ' + num(w.dps) + ' · without it: ' + num(wo.dps)) + '">' + (small ? 'No damage change in the sim' : (d > 0 ? '+' : '−') + (Math.abs(pct) < 10 ? Math.abs(pct).toFixed(1) : Math.round(Math.abs(pct))) + '% ' + (on ? 'from it' : 'if ticked')) + '</div>' +
+          (mana ? '<div class="meta">' + mana + '</div>' : '') + (free != null && free < 0 ? '<div class="delta down">Not enough free mana: ' + num(-free, 0) + ' short</div>' : '');
       } catch (err) { if (box) box.innerHTML = '<span class="meta">Could not sim this one.</span>'; }
       setTimeout(step, 0);
     };
-    setTimeout(step, 30);
+    setTimeout(step, b0 ? 0 : 30);
   }
 
   function sortCards() {
@@ -11078,10 +11193,58 @@ window.BOVows = function (ctx) {
     }
   }
 
+
+  function tick(skill, on) {
+    const ch = ctx.current(); if (!ch) return;
+    workFor(ch); note = '';
+    const list = entries(), e = list.find(x => lc(x.skill) === lc(skill)); if (!e) return;
+    const drop = id => { work.bar = work.bar.map(h => lc(h) === lc(id) ? '' : h); };
+    if (!on) drop(e.skill);
+    else if (!isOn(e)) {
+      if (e.group === 'sentence') for (const x of list) if (x.group === 'sentence' && x !== e) drop(x.skill);
+      const old = work.orig.findIndex(h => lc(h) === lc(e.skill));
+      const i = old >= 0 && !work.bar[old] ? old : work.bar.findIndex(h => !h);
+      if (i < 0) note = 'The bar is full: click a Vow, Herald or curse on it off first.';
+      else work.bar[i] = e.skill;
+    }
+    inside = true; render();
+  }
   document.addEventListener('change', e => {
-    const t = e.target, k = t && t.dataset && t.dataset.vw; if (!k || !t.closest('#vowsPane')) return;
-    opt[k] = t.checked; LS.set('vows:' + k, t.checked); render();
+    const t = e.target; if (!t || !t.closest || !t.closest('#vowsPane')) return;
+    if (t.dataset.vwon) return tick(t.dataset.vwon, t.checked);
+    const k = t.dataset.vw; if (!k) return;
+    opt[k] = t.checked; LS.set('vows:' + k, t.checked); inside = true; render();
   });
+  document.addEventListener('click', e => {
+    const t = e.target; if (!t || !t.closest || !t.closest('#vowsPane')) return;
+    const off = t.closest('[data-vwoff]');
+    if (off) { const id = work && work.bar[+off.dataset.vwoff]; hide(); if (id) tick(id, false); return; }
+    if (t.closest('[data-vwreset]')) { work.bar = work.orig.slice(); note = ''; inside = true; hide(); return render(); }
+
+    const c = t.closest('[data-vwcard]');
+    if (c && !t.closest('input, label, a, button')) { const box = c.querySelector('[data-vwon]'); if (box) tick(box.dataset.vwon, !box.checked); }
+  });
+
+  let tip = null;
+  function hide() { if (tip) tip.hidden = true; }
+  function show(e) {
+    const t0 = e.target;
+    if (!t0 || !t0.closest || t0.closest('.x')) return hide();
+    const t = t0.closest('#vowsPane [data-tip="skill"]'), ch = ctx.current();
+    if (!t || !ch) return hide();
+    let html = '';
+    try { html = ctx.planner.skillTip(ch, t.dataset.id, !!(ch.gemLevels || {})[t.dataset.id]); } catch (err) { html = ''; }
+    if (!html) return hide();
+    if (!tip) { tip = document.createElement('div'); tip.className = 'pl-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
+    tip.innerHTML = html; tip.hidden = false;
+    const r = t.getBoundingClientRect(), w = tip.offsetWidth, hg = tip.offsetHeight;
+    let y = r.bottom + 6; if (y + hg > innerHeight - 8) y = Math.max(8, r.top - hg - 6);
+    tip.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px'; tip.style.top = y + 'px';
+  }
+  document.addEventListener('mouseover', e => { if (e.target && e.target.closest && e.target.closest('#vowsPane')) show(e); else hide(); });
+  document.addEventListener('focusin', e => { if (e.target && e.target.closest && e.target.closest('#vowsPane')) show(e); });
+  document.addEventListener('focusout', hide);
+  document.addEventListener('scroll', hide, true);
   return { render };
 };
 
@@ -11100,7 +11263,7 @@ window.BOFaq = function (ctx) {
   const GROUPS = [
     ['Game mechanics', [['ailments', 'Ailments'], ['multipliers', 'Damage Multipliers'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
       ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep'], ['atlas', 'Riven Atlas'], ['tundra', 'Tundra Desert'], ['items', 'Item Quality, Riven & Mythic'], ['attrs', 'Attributes'], ['forge', 'Forge & Crafting'], ['cube', 'Cube, Vows & Runes'], ['drops', 'Drop Chances'], ['leagues', 'Custom Leagues']]],
-    ['About this site', [['sim', 'Sim vs the Game Panel'], ['data', 'Game Data & Patches'], ['privacy', 'Privacy']]],
+    ['About this site', [['tips', 'Tips for the site'], ['sim', 'Sim vs the Game Panel'], ['data', 'Game Data & Patches'], ['privacy', 'Privacy']]],
   ];
   const ALL = GROUPS.flatMap(g => g[1]);
   let section = 'ailments';
@@ -11844,6 +12007,33 @@ window.BOFaq = function (ctx) {
     return h;
   }
 
+
+
+  const PLAYLIST = 'https://www.youtube.com/playlist?list=PLKmKqJbgln3k';
+  function tips() {
+    let h = intro('Tips for the site', 'Short pointers to the features that are easy to miss.');
+    h += card('Videos', '<p>Walkthroughs of the site: <a href="' + PLAYLIST + '" target="_blank" rel="noopener">Broken Oath Builder on YouTube</a> (opens in a new tab).</p>');
+    h += card('Your characters and builds', list([
+      '<b>Load saves folder</b> loads every character at once. <b>Copy save path</b> copies the folder\'s address: paste it into the file picker\'s address bar and press Enter. Saves are read in this tab only.',
+      '<b>Copy share link</b> copies a short link to the character as you see it (gear, skills, supports, tree, Dragonling, potions). Opening it loads the build as a plan, so the other person can change it without touching yours.',
+      '<b>Load a build code</b> takes a tree code (BO1.), a plan code (BOP1.), a share link or an ItemDatabase planner link.',
+      '<b>Save as new build</b> puts the character in the <b>Saved Builds</b> tab. A saved build only changes when you press Save, so you can try things and discard them. Builds you opened from links are listed apart until you save them.',
+      'Sign in with Discord (optional) to keep your saved builds on your other devices.',
+    ]));
+    h += card('Gear', list([
+      '<b>Item Compare</b> (Item Simulator tab): pick one of your items, then fill in the item you found or paste a screenshot of it, to see what swapping does to your damage and defence.',
+      '<b>Gear Set Sim</b> looks through every unique, Oathword and rare for the best gear for a skill. <b>Sim by Slot</b> ranks everything that fits one slot, with the rest of your gear as it is.',
+      '<b>Best Rivenstone</b> shows which line on your gear is worth a Rivenstone.',
+      'The <b>Market</b> tab shows "+x% DPS" on each listing for the character on screen, and <b>Only upgrades</b> keeps just those. Nothing is bought on the site: listings are a snapshot, you buy in the game.',
+    ]));
+    h += card('Checking and sharing', list([
+      '<b>Load game log</b>, then the Damage tab\'s <b>Check Against Your Fights</b> card compares the sim with your real Guardian kills. The log is read in this tab only and never uploaded.',
+      'The <b>Loot Filter</b> tab reads the game\'s filter code: <b>Paste code</b>, change the rules, then <b>Copy code</b> and paste it into the game\'s loot filter panel. <b>Copy link</b> shares the filter with someone else.',
+      'The <b>language button</b> at the top right switches the page language. Some text stays in English until it is translated.',
+      'Something looks wrong? <b>Report a problem</b> sends a note, no account needed.',
+    ]));
+    return h;
+  }
   function sim() {
     let h = intro('Sim vs the Game Panel', 'Why the numbers on the Damage tab can differ from the in-game skill panel, and from your real kills.');
     h += card('Three different numbers', list([
@@ -12054,7 +12244,7 @@ window.BOFaq = function (ctx) {
 
 
   const atlas = () => ctx.atlas ? ctx.atlas.faqHtml({ intro, card, list, table, hint }) : intro('Riven Atlas', 'Not loaded.');
-  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, atlas, tundra, items, attrs, forge, cube, drops, leagues, sim, data, privacy };
+  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, atlas, tundra, items, attrs, forge, cube, drops, leagues, tips, sim, data, privacy };
   function show() {
     const nav = $('#faqNav'), GD = ctx.gd() || {};
     nav.innerHTML = GROUPS.map(g => '<div class="faq-group"><span class="faq-group-label">' + g[0] + '</span><div class="sc-chips">' +
@@ -15452,6 +15642,7 @@ window.BOCharacter = function (ctx) {
     const res = { skillId, notes: [], used: new Map() };
     if (!sk) return Object.assign(res, { error: 'Unknown skill ' + skillId });
     res.skill = sk;
+    if (lc(sk.Id) === 'grave_call') return Object.assign(res, { unsupported: 'Grave Call deals no damage itself: your minions deal ' + ((sk.Minion || {}).RallyBuff || 30) + '% more damage and attack 20% faster for ' + ((sk.Minion || {}).RallySeconds || 4) + ' s after each cast. Pick a summon to see it: it is counted in their vs-enemy DPS while Grave Call is on your bar.' });
     if (isSummon(sk) && !(sk.Minion && sk.Minion.MonsterId && sk.SpellMin)) return Object.assign(res, { unsupported: 'This summon has no damage of its own to count.' });
     const isAttack = (sk.Tags || []).includes('Attack');
     if (!sk.SpellMin && !isAttack) return Object.assign(res, { unsupported: 'This skill has no hit of its own (a buff, curse, Vow or movement skill). Its effects show up on your damage skills.' });
@@ -17656,7 +17847,7 @@ window.BOCharacter = function (ctx) {
         res.hit = Object.assign({}, hit); // the page shows the full hit; the struck part below is what lands
         for (const d of Object.keys(hit)) { hit[d] = Object.assign({}, hit[d], { avg: hit[d].avg * keep, min: hit[d].min * keep, max: hit[d].max * keep }); byType[d] *= keep; }
         hitDpsVs *= keep;
-        res.entropy = { share, multi, more, trig, chaosRes, taken, dps, raw: raw * share };
+        res.entropy = { share, multi, more, trig, chaosRes, taken, dps, raw: raw * share, rl, why }; // rl, why: for the page's Stats panel
         res.notes.push('Entropy (patch 88): ' + Math.round(share * 100) + '% of each hit is laid as Entropy instead of striking (no ailments from it) and implodes as Chaos damage, ignoring Armour and elemental resistance: x' + Math.max(0, 1 + multi / 100).toFixed(2) + ' Entropy multiplier' + (more !== 1 ? ', x' + more.toFixed(2) + ' more' : '') + (taken !== 1 ? ', enemy takes x' + taken.toFixed(2) : '') + ', ' + +chaosRes.toFixed(2) + '% chaos resistance (Rupture ' + rl + ')' + (why.length ? '; ' + why.join('; ') : '') + ' = ' + Math.round(dps).toLocaleString('en-US') + ' DPS. Every implosion counted (a lasting enemy); from the 88 texts and data, not checked in game.');
       }
     }
@@ -19261,7 +19452,6 @@ window.BOCharacter = function (ctx) {
 
     const golem = oneKind && !mi.GolemAuras ? null : golemBlessing(GD, ch, sk, o, mods);
     if (golem && golem.more > 0) minionMore *= 1 + golem.more / 100;
-    if (o.graveCall) minionMore *= 1.3; // Grave Call: 30% more damage (speed is added below)
     const aff = mi.Affinity && mi.AffinityDamage ? 1 + Math.min(mi.AffinityCap || 50, (attr[mi.Affinity] || 0) * mi.AffinityDamage) / 100 : 1;
     const near = o.minionNear === false ? 1 : 1 + MINION_NEAR / 100;
     const zoneLevel = o.enemyLevel || ch.level;
@@ -19402,9 +19592,6 @@ window.BOCharacter = function (ctx) {
 
 
 
-    if (o.graveCall) { spMore *= 1.2; res.notes.push('Grave Call active: minions deal 30% more damage and attack 20% faster (lasts 4 s after each cast; not in the game\'s panel).'); }
-
-
 
 
 
@@ -19432,6 +19619,28 @@ window.BOCharacter = function (ctx) {
     const maimK = 1 + minionMaim / 100 * physShare;
     if (minionMaim) res.notes.push('Maim: the enemy takes ' + minionMaim + '% more Physical damage from these minions, counted in the DPS as the panel in the game does (tooltip, build 84).');
     const dps = avg * critFactor * hitsPerSec * ruthK * armyK * maimK;
+
+
+
+
+
+
+
+
+
+
+
+    const gcOn = o.graveCall === true || (o.graveCall == null && (ch.hotbar || []).some(h => lc(h) === 'grave_call'));
+    let gcK = 1, gcMore = 1;
+    if (gcOn) {
+      const gm = (GD.skills.grave_call || {}).Minion || {};
+      gcMore = 1 + (gm.RallyBuff != null ? gm.RallyBuff : 30) / 100;
+      const spd2 = spd * 1.2;
+      const pace2 = skelFit ? 0.5917 / spd2 + 0.0501 : (mi.AttackEvery || 1) * MINION_PACE / spd2;
+      gcK = gcMore * pace / pace2;
+      res.notes.push('Grave Call (on your bar, counted as kept up): minions deal ' + Math.round((gcMore - 1) * 100) + '% more damage and attack 20% faster, x' + gcK.toFixed(3) + ' on the vs-enemy DPS (lasts ' + (gm.RallySeconds || 4) + ' s after each cast; not in the game\'s panel). Untick "Grave Call active" to leave it out.');
+    }
+    res.graveCall = { on: gcOn, onBar: (ch.hotbar || []).some(h => lc(h) === 'grave_call'), more: gcMore, k: gcK };
     res.attr = attr;
     res.base = { kind: 'minion', min: sk.SpellMin, max: sk.SpellMax, growth };
     res.hit = hit; res.hitAvg = avg; res.hitAvgCrit = avg * critFactor;
@@ -19499,7 +19708,7 @@ window.BOCharacter = function (ctx) {
     if (gAil > 0) { curseK *= 1 + gAil / 100; res.notes.push('Your ' + golem.name + ' ' + (golem.shock ? 'shocks' : 'chills') + ' enemies near it: minion hits deal ' + gAil.toFixed(1) + '% more (counted as if it always stands by the enemy; patch 88 gem text, not checked in game).'); }
     res.minionCurseK = curseK;
     res.sheetHitDps = res.panelDps = dps;
-    res.hitDps = res.totalDps = dps * curseK;
+    res.hitDps = res.totalDps = dps * gcK * curseK;
 
 
 
@@ -19514,7 +19723,7 @@ window.BOCharacter = function (ctx) {
         const rl = guardianRL(GD, o, o.enemyLevel || ch.level);
         const chaosRes = Math.max(0, (+((GD.scaling || {}).Monster || {}).ChaosResPerRL || 0) * Math.max(0, rl || 0) - pickMods(mods, 'ChaosPen', 'Flat').reduce((a, m) => a + m.v, 0));
         const taken = curseTakenK(activeCurses, 'Chaos', false, takenRule(GD, isBoss), gExtra);
-        const eDps = dps * share * Math.max(0, 1 + multi / 100) * more * taken * (1 - Math.min(90, chaosRes) / 100);
+        const eDps = dps * gcK * share * Math.max(0, 1 + multi / 100) * more * taken * (1 - Math.min(90, chaosRes) / 100);
         res.hitDps *= 1 - share; res.totalDps = res.hitDps + eDps; res.entropyDps = eDps;
         res.entropy = { share, multi, more, chaosRes, taken, dps: eDps };
         res.notes.push('Entropy (patch 88): ' + Math.round(share * 100) + '% of each minion blow is laid as your Entropy and implodes as Chaos damage: x' + Math.max(0, 1 + multi / 100).toFixed(2) + ' Entropy multiplier' + (more !== 1 ? ', x' + more.toFixed(2) + ' more' : '') + (taken !== 1 ? ', enemy takes x' + taken.toFixed(2) : '') + ', ' + +chaosRes.toFixed(2) + '% chaos resistance = ' + Math.round(eDps).toLocaleString('en-US') + ' DPS (early implosions from fallen minions and burst corpses not counted; from the 88 texts, not checked in game).');
@@ -19541,7 +19750,7 @@ window.BOCharacter = function (ctx) {
       if (!(m.tags || []).includes('Pulse') || !(m.tags || []).some(t => lc(t) === 'minion=' + lc(sk.Id))) continue;
       const t = trigParse(m); if (!t.pct) continue;
       const every = Math.ceil((t.cooldown || 1) / MINION_PULSE_STEP - 1e-9) * MINION_PULSE_STEP;
-      const size = avg * critFactor * t.pct / 100 * armyK;
+      const size = avg * critFactor * t.pct / 100 * armyK * gcMore; // gcMore: Grave Call's 30% (pulses keep their own clock)
       const el = t.element && DT.includes(t.element) ? t.element : null;
       const one = takenRule(GD, isBoss);
       const cK = el ? curseTakenK(activeCurses, el, false, one, gExtra) : curseK;
@@ -21410,7 +21619,7 @@ window.BOStartApp = function () {
 
   const st = {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0, gatherFury: 2 }, // gatherFury: Fury charges counted while Gather Fury is linked (owner, 19 Nov 2026: default 2)
-    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: null, hallowCG: false, enemyLife: null, graveCall: false, flashfire: false, otherBleed: '', windburstMoves: null, corpseKind: '', corpsesPerSec: null, leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
+    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: null, hallowCG: false, enemyLife: null, graveCall: null, flashfire: false, otherBleed: '', windburstMoves: null, corpseKind: '', corpsesPerSec: null, leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
     penFloor: false, potionsOn: store.get('potionsOn', true) !== false, opt: null, optJob: null, last: null,
     keepSup: new Set(), blockSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
   };
@@ -21836,14 +22045,17 @@ window.BOStartApp = function () {
 
 
 
+
   function vowSim(c, e) {
     const lc = x => String(x || '').toLowerCase();
     const dpsOf = r => r && !r.error && !r.unsupported && isFinite(r.totalDps) ? r.totalDps + (r.risen ? r.risen.dps || 0 : 0) : 0;
     let ex;
     if (e) {
       ex = {};
-      if (e.curse) { ex.curses = Object.assign({}, st.curses || {}); ex.curses[e.curse] = Object.assign({ dread: 0 }, ex.curses[e.curse] || {}, { on: !!e.on }); for (const id of e.alsoOff || []) ex.curses[id] = Object.assign({ dread: 0 }, ex.curses[id] || {}, { on: false }); }
-      if (e.vow) ex.off = new Set([...(st.off || [])].filter(k => k !== 'vow:' + e.vow));
+      if (e.cursesOn) { ex.curses = Object.assign({}, st.curses || {}); for (const [id, on] of Object.entries(e.cursesOn)) ex.curses[id] = Object.assign({ dread: 0 }, ex.curses[id] || {}, { on: !!on }); }
+      if (e.vowsOn) ex.off = new Set([...(st.off || [])].filter(k => !e.vowsOn.some(v => k === 'vow:' + v)));
+      if (e.curse) { ex.curses = Object.assign({}, ex.curses || st.curses || {}); ex.curses[e.curse] = Object.assign({ dread: 0 }, ex.curses[e.curse] || {}, { on: !!e.on }); for (const id of e.alsoOff || []) ex.curses[id] = Object.assign({ dread: 0 }, ex.curses[id] || {}, { on: false }); }
+      if (e.vow) ex.off = new Set([...(ex.off || st.off || [])].filter(k => k !== 'vow:' + e.vow));
     }
     let main = null, dps = 0;
     for (const id of [st.skill].concat(optExtra().map(g => g.id))) {
@@ -21856,7 +22068,7 @@ window.BOStartApp = function () {
       let r = null; try { const o = comboOpts(ex); o.gemLevel = c.gemLevels[id] || undefined; r = S.calcSkill(GD, c, id, o); } catch (err) { r = null; }
       if (r && r.mana && r.mana.max) { mana = r.mana; break; }
     }
-    return { dps, mana: mana ? { max: mana.max, reserved: mana.reserved || 0, toggleHeld: mana.toggleHeld || 0 } : null };
+    return { dps, attr: main && main.attr || null, mana: mana ? { max: mana.max, reserved: mana.reserved || 0, toggleHeld: mana.toggleHeld || 0 } : null };
   }
 
 
@@ -21991,6 +22203,8 @@ window.BOStartApp = function () {
     $('#rowCorpseKind').hidden = !(r.corpse || r.kindled || st.corpseKind || (r.skill && r.skill.Delivery === 'CorpseBurst') || (r.supports || []).some(x => /kindled_remains/i.test(x.id || x.Id || x)));
     $('#rowCorpses').hidden = !(r.kindled || st.corpsesPerSec || (r.supports || []).some(x => /kindled_remains/i.test(x.id || x.Id || x)));
     $('#rowGraveCall').hidden = !(r.minion || st.graveCall);
+
+    $('#graveCall').checked = r.graveCall ? r.graveCall.on : !!st.graveCall;
 
 
 
@@ -22286,10 +22500,10 @@ window.BOStartApp = function () {
     let r = null;
     if (st.ch && st.skill) { try { r = S.calcSkill(GD, st.ch, st.skill, opts()); } catch (e) { r = null; } }
     const ok = r && !r.error && !r.unsupported;
-    { const b = $('#bsClass'), can = !!(st.chOrig && st.chOrig.plan);
+    { const b = $('#bsClass'), can = !!(st.chOrig && st.chOrig.plan), any = !!st.ch; // a save's name opens a pop-up (nameOfSave)
       b.textContent = st.ch ? st.ch.name : '–';
-      b.classList.toggle('bs-rename', can);
-      if (can) { b.tabIndex = 0; b.setAttribute('role', 'button'); b.title = 'Click to rename this plan'; } else { b.removeAttribute('tabindex'); b.removeAttribute('role'); b.removeAttribute('title'); } }
+      b.classList.toggle('bs-rename', any);
+      if (any) { b.tabIndex = 0; b.setAttribute('role', 'button'); b.title = can ? 'Click to change the name, class or level of this plan' : 'A save character: copy it to a new build to change it'; } else { b.removeAttribute('tabindex'); b.removeAttribute('role'); b.removeAttribute('title'); } }
 
     const fromSave = st.ch && !st.ch.plan && (st.ch.file || st.ch.from === 'folder' || st.ch.from === 'file');
     $('#bsSpell').textContent = st.ch ? st.ch.classId + ' · level ' + st.ch.level + (fromSave && window.BOGrail ? ' · ' + window.BOGrail.leagueLabel(st.ch.league) : '') + (ok && r.skill ? ' · ' + r.skill.Name : '') : '';
@@ -22370,6 +22584,22 @@ window.BOStartApp = function () {
   }
   const spRow = (label, value, tip, cls) => '<div class="sp-row' + (cls ? ' ' + cls : '') + '"' + (tip ? ' tabindex="0" data-tiphtml="' + esc(tip) + '"' : '') + '><span>' + label + '</span><b>' + value + '</b></div>';
   const spSec = (id, title, body) => body ? '<details class="sp-sec" data-sec="' + id + '"' + (SP.shut.has(id) ? '' : ' open') + '><summary>' + esc(title) + '</summary>' + body + '</details>' : '';
+
+  function spEntropy(r, used, minion) {
+    const E = r.entropy; if (!E) return '';
+    const num1 = x => num(x, 1), mult = x => '×' + num(x, 3), pickS = sts => used.filter(m => sts.includes(m.stat));
+    const all = sts => (r.mods || []).filter(m => sts.includes(m.stat));
+    const eMul = Math.max(0, 1 + E.multi / 100), implode = eMul * E.more;
+    let e = spRow('Entropy DPS', num(E.dps), spTip('Entropy DPS', 'Implosions as Chaos damage, ignoring Armour and elemental resistance', [['Laid per second', num(E.raw != null ? E.raw : 0)]].filter(x => E.raw != null)), 'sp-main') +
+      spRow('Entropy share', num(E.share * 100, 0) + '%', spTip('Entropy share', (minion ? 'Of each minion blow' : 'Of each hit') + ', laid as Entropy instead of striking (no ailments or leech from it)', null, pickS(['EntropyShare']))) +
+      spRow('Entropy multiplier', (E.multi >= 0 ? '+' : '') + num1(E.multi) + '%', spTip('Entropy multiplier', 'Its lines add, like a DoT multiplier', null, pickS(['EntropyMulti', 'EntropyMarkedMulti']))) +
+      (E.more !== 1 ? spRow('More Entropy damage', mult(E.more), spTip('More Entropy damage', 'Each more line multiplies', null, pickS(['EntropyMore']))) : '') +
+      spRow('Implodes for', num(implode * 100, 0) + '% of what is laid', spTip('Implosion size', 'Before the enemy', [['Entropy multiplier', mult(eMul)], ['More', mult(E.more)]]));
+    if (E.trig != null && E.trig !== 1) e += spRow('Keystone implosion', mult(E.trig), spTip('Keystone implosion', (E.why || []).join('; '), null, all(['EntropySlam', 'EntropySlamMore', 'EntropySheathe', 'EntropyCrit', 'EntropyCritMore', 'EntropyMarks'])));
+    e += spRow('Enemy chaos resistance', num1(E.chaosRes) + '%', spTip('Enemy chaos resistance', E.rl != null ? 'Rupture ' + E.rl + ', after chaos penetration' : 'After chaos penetration', null, all(['ChaosPen'])));
+    if (E.taken !== 1) e += spRow('Chaos damage taken', mult(E.taken), spTip('Chaos damage taken', 'Curses (Woe of Entropy) and the rest, as the sim multiplies them; the implosion is not a hit, so hallowed ground and Unravel do not count'));
+    return spSec('entropy', 'Entropy', e);
+  }
   function drawStatsPanel() {
     const el = $('#statsPanel'); if (!el || !spOn() || !SP.open) return;
     let r = null, D = null, ds = null;
@@ -22409,6 +22639,7 @@ window.BOStartApp = function () {
       const addL = pick(used, ['AddedDamage', 'DamageAsExtra', 'Convert']);
       if (addL.length) o += spRow('Added, extra and converted', addL.length + ' line' + (addL.length > 1 ? 's' : ''), spTip('Added, extra and converted damage', 'Lines this skill uses', null, addL));
       sections.push(spSec('off', 'Offence · ' + (r.skill ? r.skill.Name : st.skill), o));
+      if (r.entropy) sections.push(spEntropy(r, used, false));
 
       const cr = r.crit, sp = r.speed, hs = r.hits;
       let c = spRow('Crit chance', p1(cr.chance) + '%', spTip('Crit chance', 'Capped at 95%', [['Base', p1(cr.base) + '%'], ['Increased', sgn(cr.inc)]], pick(used, ['CritChance']))) +
@@ -22447,7 +22678,7 @@ window.BOStartApp = function () {
       sections.push(spSec('enemy', 'On the enemy', en));
     } else if (ok && r.minion) {
       const M = r.minion, cr = r.crit;
-      let o = spRow('DPS vs enemy', num(r.totalDps), spTip('DPS vs enemy', 'All its minions', [['Hits', num(r.hitDps)]].concat(r.poisonDps ? [['Poison', num(r.poisonDps)]] : [])), 'sp-main') +
+      let o = spRow('DPS vs enemy', num(r.totalDps), spTip('DPS vs enemy', 'All its minions', [['Hits', num(r.hitDps)]].concat(r.poisonDps ? [['Poison', num(r.poisonDps)]] : [], r.entropyDps ? [['Entropy', num(r.entropyDps)]] : [])), 'sp-main') +
         spRow('Skill panel DPS', num(r.panelDps), spTip('Skill panel DPS', 'What the game\'s skill panel shows')) +
         spRow('Minions', String(M.alive), spTip('Minions', 'Standing at once', M.army ? [['Minions in your army', String(M.army.total)]] : null, pick(used, ['MinionCount']))) +
         spRow('Increased minion damage', sgn(M.inc || 0), spTip('Increased minion damage', 'Lines add', null, pick(used, ['MinionDamage', 'Damage'], ['Inc']))) +
@@ -22456,6 +22687,7 @@ window.BOStartApp = function () {
         spRow('Crit multiplier', num(cr.multi, 0) + '%') +
         (M.every ? spRow('Attacks every', num(M.every, 2) + ' s') : '');
       sections.push(spSec('minion', 'Minions · ' + (r.skill ? r.skill.Name : st.skill), o));
+      if (r.entropy) sections.push(spEntropy(r, used, true));
     }
 
     if (D) {
@@ -24415,24 +24647,55 @@ window.BOStartApp = function () {
     syncUnsaved(); renderSavedBuilds();
   }
 
+
+
   function nameEditor(b, ch) {
     if (!ch || !ch.plan || b.hidden) return;
+    const box = document.createElement('span'); box.className = 'bs-name-edit';
     const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'bs-name-input'; inp.value = ch.name; inp.maxLength = 60;
-    inp.setAttribute('aria-label', 'Plan name');
+    inp.setAttribute('aria-label', 'Plan name'); box.appendChild(inp);
+    const more = ch === st.chOrig && planner && planner.setPlanField;
+    let cls = null, lvl = null;
+    if (more) {
+      const row = document.createElement('span'); row.className = 'bs-name-more';
+      cls = document.createElement('select'); cls.setAttribute('aria-label', 'Class');
+      cls.innerHTML = planner.classIds().map(id => '<option value="' + esc(id) + '"' + (id === ch.classId ? ' selected' : '') + '>' + esc(id) + '</option>').join('');
+      lvl = document.createElement('input'); lvl.type = 'number'; lvl.min = 1; lvl.max = 100; lvl.value = ch.level; lvl.setAttribute('aria-label', 'Level');
+      const lab = (t, el) => { const l = document.createElement('label'); l.textContent = t + ' '; l.appendChild(el); return l; };
+      row.append(lab('Class', cls), lab('Level', lvl)); box.appendChild(row);
+    }
     let done = false;
     const commit = ok => {
       if (done) return; done = true;
-      const v = inp.value.trim(); inp.remove(); b.hidden = false;
-      if (ok) setPlanName(ch, v);
+      const v = inp.value.trim(), c = cls && cls.value, l = lvl && Math.max(1, Math.min(100, Math.round(+lvl.value) || ch.level));
+      box.remove(); b.hidden = false;
+      if (ok) {
+        setPlanName(ch, v);
+        const notes = [];
+        if (more && ch === st.chOrig && l !== ch.level) notes.push(planner.setPlanField('level', l));
+        if (more && ch === st.chOrig && c && c !== ch.classId) notes.push(planner.setPlanField('cls', c));
+        const s = notes.filter(Boolean).join(' ');
+        if (s) saveTip(s);
+        if (planner) planner.clearStatus();
+      }
       if (b.isConnected) b.focus();
     };
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(true); } else if (e.key === 'Escape') commit(false); });
-    inp.addEventListener('blur', () => commit(true));
-    b.hidden = true; b.after(inp); inp.focus(); inp.select();
+    box.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(true); } else if (e.key === 'Escape') { e.preventDefault(); commit(false); } });
+
+    box.addEventListener('focusout', e => { if (!box.contains(e.relatedTarget)) setTimeout(() => { if (!box.contains(document.activeElement)) commit(true); }, 0); });
+    b.hidden = true; b.after(box); inp.focus(); inp.select();
   }
-  const renamePlan = () => nameEditor($('#bsClass'), st.chOrig);
+
+  async function nameOfSave() {
+    const ch = st.chOrig; if (!ch || ch.plan) return;
+    const fromSave = ch.file || ch.from === 'folder' || ch.from === 'file';
+    const a = await askInPage(fromSave ? 'Save character' : 'Loaded character',
+      (fromSave ? 'This is a loaded Save character.' : 'This is a loaded character.') + ' Copy to a new build to rename/edit class/level.', 'Copy to a new build');
+    if (a === 'confirm') $('#saveBuildBtn').click();
+  }
+  const renamePlan = () => { if (!st.ch) return; if (st.chOrig && st.chOrig.plan) nameEditor($('#bsClass'), st.chOrig); else nameOfSave(); };
   $('#bsClass').addEventListener('click', renamePlan);
-  $('#bsClass').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && st.chOrig && st.chOrig.plan) { e.preventDefault(); renamePlan(); } });
+  $('#bsClass').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && st.ch) { e.preventDefault(); renamePlan(); } });
   function renameTreeTab() {
     const t = treeTabs(); if (!t) return;
     const btn = $('#treeTabs').querySelector('.tree-tab.active'); if (!btn) return;
@@ -25599,8 +25862,8 @@ window.BOStartApp = function () {
       text: 'Gear you can expect to find while working through the Rupture. Rares are item level 70 with up to 4 lines, at most one on its best tier and the rest one tier lower, rolled mid-range. Uniques that drop often (no chase uniques), rolled mid-range, no Vows. Runes up to tier 3, 2 sockets, weapon quality 10%, Base Grade 50, no Riven mods, basic bases only (no Core Touched or Ashen).' },
     end: { name: 'Endgame', set: { ilvl: 84, limited: false, vows: true, maxVows: 3, runes: true, rareSockets: 2, maxRiven: 0, basicOnly: false, oathsworn: true, lineRoll: 0.75, topLines: 3, rareLines: 6, runeTier: 5, uniquePool: 'regular', uniqueRoll: 0.75, forged: false, quality: 20, grade: 80 },
       text: 'A well-geared character. Rares are item level 84 with 6 lines, up to 3 on their best tier and the rest one tier lower (so no Great or Flawless Rares), rolled at 75% of their range, plus an Oathsworn line. Every unique that drops except the chase ones (Primal, Deep-forged, Guardian chase, Core, red Dwarven Runes), rolled at 75%, up to 3 Vows. Runes up to tier 5, 3 sockets, weapon quality 20%, Base Grade 80, no Riven mods.' },
-    bis: { name: 'BiS', set: { ilvl: 84, limited: true, vows: true, maxVows: '', runes: true, rareSockets: 2, maxRiven: '', basicOnly: false, oathsworn: true, lineRoll: 1, topLines: '', rareLines: 6, runeTier: '', uniquePool: 'all', uniqueRoll: 1, forged: true, quality: 30, grade: 100 },
-      text: 'The most the gear can give. Every rare line on its best tier at its top roll (Flawless Rares) plus an Oathsworn line, Riven mods with no limit, every unique including the chase ones as a forged copy at its best roll, up to 6 Vows. Every rune, 4 sockets on two-handers, weapon quality 30%, Base Grade 100.' },
+    bis: { name: 'BiS', set: { ilvl: 84, limited: true, vows: true, maxVows: 4, runes: true, rareSockets: 2, maxRiven: '', basicOnly: false, oathsworn: true, lineRoll: 1, topLines: '', rareLines: 6, runeTier: '', uniquePool: 'all', uniqueRoll: 1, forged: true, quality: 30, grade: 100 },
+      text: 'The most the gear can give. Every rare line on its best tier at its top roll (Flawless Rares) plus an Oathsworn line, Riven mods with no limit, every unique including the chase ones as a forged copy at its best roll, up to 4 Vows. Every rune, 4 sockets on two-handers, weapon quality 30%, Base Grade 100.' },
     custom: { name: 'Custom', set: GEAR_TIER_FIELDS, text: 'Set the boxes yourself. Every line and unique rolls at its best, with no weapon quality.' },
   };
   const gsStored = store.get('gearSim', null);
@@ -25631,14 +25894,14 @@ window.BOStartApp = function () {
     const chk = (f, label, tip, forced) => '<label class="check-row" title="' + esc(tip) + '"><input type="checkbox" data-gs-set="' + f + '"' + (S_[f] || forced ? ' checked' : '') + (off || forced ? ' disabled' : '') + '><span>' + label + '</span></label>';
     return '<div class="gs-top">' + gsTierHtml(off) + '<div class="gs-opts"><div class="gs-controls">' +
       '<label class="field inline" title="Item level of the rares: 84 and up gives the top tier of every line"><span>Item level</span><input type="number" min="1" max="100" id="gsIlvl" value="' + S_.ilvl + '"' + dis + '></label>' +
-      '<label class="field inline" title="The most Vows a unique (red) item may carry. Empty: 6"><span>Max Vows on uniques</span><input type="number" min="0" max="6" id="gsMaxVows" placeholder="6" value="' + (S_.maxVows === '' || S_.maxVows == null ? '' : S_.maxVows) + '"' + (off || !S_.vows ? ' disabled' : '') + '></label>' +
+      '<label class="field inline" title="The most Vows a unique (red) item may carry (up to 11). Empty: 3"><span>Max Vows on uniques</span><input type="number" min="0" max="11" id="gsMaxVows" placeholder="3" value="' + (S_.maxVows === '' || S_.maxVows == null ? '' : S_.maxVows) + '"' + (off || !S_.vows ? ' disabled' : '') + '></label>' +
       '<label class="field inline' + (gear ? ' gs-attn' : '') + '" title="The most Riven mods the whole build may carry, counted over all items. 0 (the default): none. Empty: no limit"><span>Max Riven mods (total)</span><input type="number" min="0" max="99" id="gsMaxRiven" placeholder="no limit" value="' + (S_.maxRiven === '' || S_.maxRiven == null ? '' : S_.maxRiven) + '"' + dis + '></label></div>' +
       (+S_.maxRiven === 0 && S_.maxRiven !== '' ? '<p class="gs-attn-note">Riven mods are off (0). Raise this number to let the search use them, or clear the box for no limit.</p>' : '') +
       '<div class="gs-checks">' +
       chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
       chk('ignoreAttr', 'Ignore attribute requirements', 'Off: every item must fit your Strength, Dexterity and Intelligence with the gear found') +
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
-      chk('vows', 'Vows on uniques', 'A red item takes up to 6 lines from rares at the cube; the best ones are added') +
+      chk('vows', 'Vows on uniques', 'A red item takes up to 11 lines from rares at the cube; the best ones are added') +
       chk('basicOnly', 'Basic items only', 'Plain bases only: the search skips Core Touched, Ashen and Gnome-made bases' + (gear ? ', and one you wear now is not kept either' : '')) +
       chk('noCore', 'No Core Touched items', S_.basicOnly ? 'Already covered by Basic items only' : gear ? 'The search skips Core Touched bases, and a Core Touched item you wear now is not kept either' : 'Skip Core Touched bases', S_.basicOnly) +
       chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') +
@@ -25945,7 +26208,7 @@ window.BOStartApp = function () {
           (r.scored ? '<td>' + (s.changed && s.dpsGain != null ? '<span class="' + (s.dpsGain >= 0 ? 'up' : 'down') + '">' + pct(s.dpsGain) + '</span>' : '<span class="meta">–</span>') + '</td>' : '') +
           '<td>' + (s.item ? num(s.worth * 100, 1) + '%' : '–') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
-    h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the prefixes and suffixes that add the most' + (r.scored ? '' : ' DPS') + ' and the best runes in their sockets' + (r.vowMax < 1 ? '; uniques carry no Vows' : r.vowMax < 6 ? '; uniques carry at most ' + r.vowMax + ' Vow' + (r.vowMax === 1 ? '' : 's') : '') + (gsFull(r) ? '; a rare with every line at its top tier counts as a Flawless Rare in the sim' : '') + '. ' + (r.scored ? gsDefNote() + ' Rune' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); rune') + ' and item prices are ignored. ' + (r.reqChecked ? 'Every item fits your Strength, Dexterity and Intelligence with the whole set on. ' : 'Attribute requirements are ignored, as set. ') + (r.idolN ? 'Idols are chosen too, each with up to ' + r.idolN + ' line' + (r.idolN === 1 ? '' : 's') + ', their lines rolled like the rares\' lines; the tree and the supports stay as they are.' : 'Idols, the tree and the supports stay as they are.') + '</p>';
+    h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the prefixes and suffixes that add the most' + (r.scored ? '' : ' DPS') + ' and the best runes in their sockets' + (r.vowMax < 1 ? '; uniques carry no Vows' : r.vowMax < 11 ? '; uniques carry at most ' + r.vowMax + ' Vow' + (r.vowMax === 1 ? '' : 's') : '') + (gsFull(r) ? '; a rare with every line at its top tier counts as a Flawless Rare in the sim' : '') + '. ' + (r.scored ? gsDefNote() + ' Rune' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); rune') + ' and item prices are ignored. ' + (r.reqChecked ? 'Every item fits your Strength, Dexterity and Intelligence with the whole set on. ' : 'Attribute requirements are ignored, as set. ') + (r.idolN ? 'Idols are chosen too, each with up to ' + r.idolN + ' line' + (r.idolN === 1 ? '' : 's') + ', their lines rolled like the rares\' lines; the tree and the supports stay as they are.' : 'Idols, the tree and the supports stay as they are.') + '</p>';
     return h + '</div>';
   }
 
@@ -26045,7 +26308,7 @@ window.BOStartApp = function () {
       r.rows.map((x, i) => '<tr class="' + (x.gain > 0.0005 ? 'gs-changed' : '') + '"><td>' + (i + 1) + '</td><td class="gs-hov" data-sbs-tip="' + i + '">' + gsItemLabel(x.item, true) +
         '<details class="gs-lines"><summary>Lines</summary><div class="cmp-tip pl-tip">' + planner.gear.tip(x.item, x.item.slot) + '</div></details>' + (x.dropsOff ? '<div class="hint">Two-handed: your off hand comes off.</div>' : '') + (x.short || []).map(s => '<div class="hint bad gs-req">With it on, your ' + esc(itemName(s.item)) + ' needs ' + s.need + ' ' + ATTR_NAME[s.attr] + ' and you would have ' + s.have + '.</div>').join('') + '</td><td>' + kind[x.kind] + '</td><td>' + num(x.dps) + '</td><td><span class="' + (x.gain >= 0 ? 'up' : 'down') + '">' + pct(x.gain) + '</span></td>' +
         '<td class="sbs-acts"><button class="btn small" type="button" data-sbs-equip="' + i + '">Equip</button> <button class="btn small ghost" type="button" data-sbs-cmp="' + i + '">Compare</button></td></tr>').join('') + '</tbody></table></div>';
-    h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the lines that add the most and the best runes; ' + (r.vowMax < 1 ? 'uniques get no Vows' : 'the best few uniques get Vows' + (r.vowMax < 6 ? ' (at most ' + r.vowMax + ')' : '')) + '. The rest of your gear, the tree and the supports stay as they are' + (r.reqChecked ? ', and every item listed fits your Strength, Dexterity and Intelligence with it on; a red note under an item names gear you wear that would then miss its own requirement' : '; attribute requirements are ignored, as set') + '. Compare opens the item in Item Compare, where you can set its lines to what dropped.' + (r.scored ? ' ' + gsDefNote() : '') + '</p>';
+    h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the lines that add the most and the best runes; ' + (r.vowMax < 1 ? 'uniques get no Vows' : 'the best few uniques get Vows' + (r.vowMax < 11 ? ' (at most ' + r.vowMax + ')' : '')) + '. The rest of your gear, the tree and the supports stay as they are' + (r.reqChecked ? ', and every item listed fits your Strength, Dexterity and Intelligence with it on; a red note under an item names gear you wear that would then miss its own requirement' : '; attribute requirements are ignored, as set') + '. Compare opens the item in Item Compare, where you can set its lines to what dropped.' + (r.scored ? ' ' + gsDefNote() : '') + '</p>';
     return h + '</div>';
   }
   function sbsHtml() {
@@ -26322,7 +26585,7 @@ window.BOStartApp = function () {
       if (t.id === 'rvCount') { RV.set.n = Math.max(1, Math.min(30, Math.round(+t.value) || 1)); store.set('rivenSim', RV.set); RV.msg = ''; return renderCompare(); }
       if (t.id === 'gsIdol') { GS.set.idolAffixes = t.value === '' ? '' : Math.max(1, Math.min(6, Math.round(+t.value) || 1)); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsMaxRiven') { const v = String(t.value).trim(); GS.set.maxRiven = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(99, Math.round(+v))); gsTierTouch('maxRiven'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
-      if (t.id === 'gsMaxVows') { const v = String(t.value).trim(); GS.set.maxVows = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(6, Math.round(+v))); gsTierTouch('maxVows'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
+      if (t.id === 'gsMaxVows') { const v = String(t.value).trim(); GS.set.maxVows = v === '' || !isFinite(+v) ? '' : Math.max(0, Math.min(11, Math.round(+v))); gsTierTouch('maxVows'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'gsIlvl') { GS.set.ilvl = Math.max(1, Math.min(100, Math.round(+t.value) || 84)); gsTierTouch('ilvl'); store.set('gearSim', GS.set); GS.msg = ''; return renderCompare(); }
       if (t.id === 'cmpFile') { if (t.files[0]) cmpReadImage(t.files[0]); return; }
       const s = side(t); if (!s || !t.dataset.f) return;

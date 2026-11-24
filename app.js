@@ -10990,7 +10990,7 @@ window.BOVows = function (ctx) {
 
 
 
-  let work = null, note = '';
+  let work = null, note = '', noteSkill = '';
   function workFor(ch) {
     const key = (ch.id || ch.name || '') + '|' + JSON.stringify(ch.hotbar || []);
     if (!work || work.key !== key) {
@@ -11089,7 +11089,7 @@ window.BOVows = function (ctx) {
           : '<div class="cr-bar-put"' + tip + '>' + inner + '</div>') + '</div>';
     };
     return '<div class="ch-bar-card vw-bar"><div class="vw-bar-head"><h3>Skill bar</h3>' + (changed() ? '<button type="button" class="btn small ghost" data-vwreset="1">Back to my bar</button>' : '') + '</div><div class="cr-bar">' + hb.slice(0, 8).map((x, i) => slot(i)).join('') + '<span class="cr-bar-label">Ctrl bar</span>' + hb.slice(8).map((x, i) => slot(8 + i)).join('') + '</div>' +
-      (note ? '<p class="hint delta down" role="status">' + esc(note) + '</p>' : '') +
+      (note ? '<div class="vw-warn" role="alert">' + esc(note) + '</div>' : '') +
       '<p class="hint">Click a Vow, Herald or curse here to take it off and free its slot; tick a card below to put it on a free slot. The numbers follow this bar; your saved bar stays as it is (change that on the Character tab).</p></div>';
   }
 
@@ -11107,7 +11107,11 @@ window.BOVows = function (ctx) {
       '<label class="check-row"><input type="checkbox" data-vw="sup"' + (opt.sup ? ' checked' : '') + '><span>Vow / Curse supports <span class="meta">· Economical Vow on each Vow and Herald (10% less reserved), Deepened Woe on each Woe (21% stronger). Off: no supports on the card\'s skill</span></span></label></div>';
     h += '<div class="vw-mana" id="vwMana" aria-live="polite"><span class="meta">Working out your mana…</span></div>';
     for (const [g, title] of [['vow', 'Vows and Heralds'], ['woe', 'Woes'], ['sentence', 'Sentences']]) {
-      const es = list.filter(e => e.group === g); if (!es.length) continue;
+
+
+      const name = e => lc((ctx.gd().skills[lc(e.skill)] || {}).Name || e.skill);
+      const es = list.filter(e => e.group === g).sort((a, b) => (onBar(ch, b.skill) - onBar(ch, a.skill)) || name(a).localeCompare(name(b)));
+      if (!es.length) continue;
       h += '<h3 class="vw-h">' + title + '</h3><div class="vw-grid" data-vwgroup="' + g + '">' + es.map(e => card(ch, e)).join('') + '</div>';
     }
     h += '<p class="hint">Each Sentence card is that Sentence alone, as only one enemy holds a Sentence at a time: ticking one unticks the other. Sentences take no support here: Economical Vow asks for a Vow and Deepened Woe for a Woe. An enemy holds two Woes at a time; the sim applies its own limits. Every number is a sim estimate.</p>';
@@ -11122,7 +11126,7 @@ window.BOVows = function (ctx) {
     const req = '<div class="vw-req">' + (need.length ? 'Needs ' + need.map(x => '<b data-attr="' + esc(x.attr) + '" data-need="' + x.need + '">' + num(x.need, 0) + ' ' + esc(x.attr) + '</b>').join(', ') + ' for level ' + L + (need[0].off ? ' <span class="meta">(off-class gem)</span>' : '') : 'No attribute need at level ' + L) + '</div>';
     return '<div class="vw-card' + (on ? ' on' : '') + '" data-vwcard="' + esc(e.skill) + '"><div class="vw-top"><span class="vw-name"><input type="checkbox" data-vwon="' + esc(e.skill) + '"' + (on ? ' checked' : '') + ' aria-label="Count ' + esc(sk.Name || e.skill) + ' in the build DPS"><span class="vw-tipname" data-tip="skill" data-id="' + esc(e.skill) + '" tabindex="0">' + ctx.skillDot(e.skill) + '<b>' + esc(sk.Name || e.skill) + '</b></span></span><span class="vw-kind">' + e.kind + '</span></div>' +
       '<div class="meta">' + (on ? 'Counted' : onBar(ch, e.skill) ? 'On your bar, not counted' : 'Not counted') + (lvl ? ' · level ' + lvl : ' · not owned') + (sup ? ' · with ' + esc(sup.Name) : ' · no supports') + (e.group === 'sentence' ? ' · alone' : '') + '</div>' +
-      req + '<p class="vw-desc">' + esc(desc) + '</p><div class="vw-num" data-vwnum><span class="meta">Working out…</span></div></div>';
+      req + (note && lc(noteSkill) === lc(e.skill) ? '<div class="vw-warn" role="alert">' + esc(note) + '</div>' : '') + '<p class="vw-desc">' + esc(desc) + '</p><div class="vw-num" data-vwnum><span class="meta">Working out…</span></div></div>';
   }
 
 
@@ -11155,7 +11159,7 @@ window.BOVows = function (ctx) {
         cache.set(sk0 + '|base', b0);
       }
       if (!headDone) { head(); headDone = true; return setTimeout(step, 0); }
-      const e = list.find(x => !x.done); if (!e) { for (const x of list) delete x.done; return sortCards(); }
+      const e = list.find(x => !x.done); if (!e) { for (const x of list) delete x.done; return; }
       e.done = true;
       const box = document.querySelector('#vowsPane [data-vwcard="' + CSS.escape(e.skill) + '"] [data-vwnum]');
       try {
@@ -11176,7 +11180,6 @@ window.BOVows = function (ctx) {
         const pct = wo.dps > 0 ? d / wo.dps * 100 : 0, small = Math.abs(pct) < 0.05;
         const mana = !m ? '' : m.reserve != null ? 'Reserves ' + num(m.reserve, 0) + ' mana' + (b0.mana ? ' (' + num(m.reserve / b0.mana.max * 100, 0) + '%)' : '') : 'Costs ' + num(m.cost, 1) + ' mana a cast (before cost cuts)';
         const free = m && m.reserve != null && b0.mana && !on ? b0.mana.max - shownReserved(base, b0.mana) - m.reserve : null;
-        if (box) box.closest('[data-vwcard]').dataset.score = d;
         if (box) box.innerHTML = '<div class="vw-dps"><span class="meta">Build DPS ' + (on ? 'with it' : 'if ticked') + '</span> <span class="vw-gold">' + num(w.dps) + '</span></div>' +
           '<div class="' + (small ? 'meta' : 'delta ' + (d > 0 ? 'up' : 'down')) + '" title="' + esc('With it: ' + num(w.dps) + ' · without it: ' + num(wo.dps)) + '">' + (small ? 'No damage change in the sim' : (d > 0 ? '+' : '−') + (Math.abs(pct) < 10 ? Math.abs(pct).toFixed(1) : Math.round(Math.abs(pct))) + '% ' + (on ? 'from it' : 'if ticked')) + '</div>' +
           (mana ? '<div class="meta">' + mana + '</div>' : '') + (free != null && free < 0 ? '<div class="delta down">Not enough free mana: ' + num(-free, 0) + ' short</div>' : '');
@@ -11186,17 +11189,10 @@ window.BOVows = function (ctx) {
     setTimeout(step, b0 ? 0 : 30);
   }
 
-  function sortCards() {
-    for (const g of document.querySelectorAll('#vowsPane [data-vwgroup]')) {
-      const cs = [...g.children].sort((x, y) => (+y.dataset.score || 0) - (+x.dataset.score || 0));
-      for (const c of cs) g.appendChild(c);
-    }
-  }
-
 
   function tick(skill, on) {
     const ch = ctx.current(); if (!ch) return;
-    workFor(ch); note = '';
+    workFor(ch); note = ''; noteSkill = '';
     const list = entries(), e = list.find(x => lc(x.skill) === lc(skill)); if (!e) return;
     const drop = id => { work.bar = work.bar.map(h => lc(h) === lc(id) ? '' : h); };
     if (!on) drop(e.skill);
@@ -11204,7 +11200,7 @@ window.BOVows = function (ctx) {
       if (e.group === 'sentence') for (const x of list) if (x.group === 'sentence' && x !== e) drop(x.skill);
       const old = work.orig.findIndex(h => lc(h) === lc(e.skill));
       const i = old >= 0 && !work.bar[old] ? old : work.bar.findIndex(h => !h);
-      if (i < 0) note = 'The bar is full: click a Vow, Herald or curse on it off first.';
+      if (i < 0) { note = 'The bar is full: take a Vow, Herald or curse off the skill bar at the top first.'; noteSkill = e.skill; }
       else work.bar[i] = e.skill;
     }
     inside = true; render();
@@ -11219,7 +11215,7 @@ window.BOVows = function (ctx) {
     const t = e.target; if (!t || !t.closest || !t.closest('#vowsPane')) return;
     const off = t.closest('[data-vwoff]');
     if (off) { const id = work && work.bar[+off.dataset.vwoff]; hide(); if (id) tick(id, false); return; }
-    if (t.closest('[data-vwreset]')) { work.bar = work.orig.slice(); note = ''; inside = true; hide(); return render(); }
+    if (t.closest('[data-vwreset]')) { work.bar = work.orig.slice(); note = ''; noteSkill = ''; inside = true; hide(); return render(); }
 
     const c = t.closest('[data-vwcard]');
     if (c && !t.closest('input, label, a, button')) { const box = c.querySelector('[data-vwon]'); if (box) tick(box.dataset.vwon, !box.checked); }

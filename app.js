@@ -317,6 +317,13 @@ window.PAGE_LANGS = {
 
 
 
+
+    const NOT_IN_GAME = ['entropic_focus', 'hastened_ruin', 'gathering_dark', 'cascading_ruin', 'pact_of_ruin'];
+    for (const id of NOT_IN_GAME) if (supports[id]) supports[id].NotInGame = true;
+
+
+
+
     const tree = J('Gameplay/passive_tree.json');
     const nodes = {};
     for (const n of tree.nodes) nodes[n.Id] = pick(n, ['Id', 'Name', 'Kind', 'Mods', 'Text', 'Region', 'X', 'Y', 'Links', 'ClassStart', 'Price', 'Choice', 'Group', 'Fp']); // Fp: the save's PassiveFp per node (the Creator tab writes it, as tools/offline-clone.js does)
@@ -3415,7 +3422,9 @@ window.BOPlanner = function (ctx) {
         (canSim && on ? '<button type="button" class="sup-pin' + (kept ? ' kept' : '') + '" data-act="suppin" data-sup="' + esc(c.id) + '" aria-pressed="' + kept + '" aria-label="' + (kept ? 'Unpin ' : 'Pin ') + esc(c.name) + '" title="' + (kept ? 'Pinned: every setup Sim Supports tries keeps it' : 'Pin: keep it in every setup Sim Supports tries') + '">' + PIN + '</button>' : '') +
         (canSim && !on ? '<button type="button" class="sup-block' + (blk ? ' kept' : '') + '" data-act="supblock" data-sup="' + esc(c.id) + '" aria-pressed="' + blk + '" aria-label="' + (blk ? 'Unblock ' : 'Block ') + esc(c.name) + '" title="' + (blk ? 'Blocked: Sim Supports never picks it. Click to allow it again' : 'Block: Sim Supports never picks it') + '">' + BLOCK + '</button>' : '') + '</span>';
     };
-    const main = choices.filter(c => !c.packOnly && !c.inert), more = choices.filter(c => c.packOnly), idle = choices.filter(c => c.inert && !c.packOnly);
+
+    const later = choices.filter(c => c.notInGame), now = choices.filter(c => !c.notInGame);
+    const main = now.filter(c => !c.packOnly && !c.inert), more = now.filter(c => c.packOnly), idle = now.filter(c => c.inert && !c.packOnly);
     const moreOn = more.some(c => inSet.has(c.id));
     return '<div class="sup-picker pl-sups">' +
       '<span class="meta' + (sups.length > slots ? ' bad' : '') + '">' + sups.length + ' / ' + slots + ' support sockets at gem level ' + lvl + (edit ? ' · click a support to socket it or take it out' : '') + '</span>' +
@@ -3425,6 +3434,7 @@ window.BOPlanner = function (ctx) {
       '<div class="sup-row">' + strays.concat(main).map(tag).join('') + '</div>' +
       (more.length ? '<details class="sup-more"' + (moreOn ? ' open' : '') + '><summary>Packs and extras <span class="meta">(' + more.length + ', no damage against one enemy)</span></summary><div class="sup-row">' + more.map(tag).join('') + '</div></details>' : '') +
       (idle.length ? '<details class="sup-more"><summary>No effect in the sim <span class="meta">(' + idle.length + ', can be socketed)</span></summary><div class="sup-row">' + idle.map(tag).join('') + '</div></details>' : '') +
+      (later.length ? '<details class="sup-more"' + (later.some(c => inSet.has(c.id)) ? ' open' : '') + '><summary>Not in the game yet <span class="meta">(' + later.length + ', in the game data but not dropping; Sim Supports leaves them out)</span></summary><div class="sup-row">' + later.map(tag).join('') + '</div></details>' : '') +
       '</div>';
   }
 
@@ -4981,7 +4991,7 @@ window.BOCreator = function (ctx) {
       for (const id of loose) count[lc(id)] = (count[lc(id)] || 0) + 1;
 
 
-      const retired = k => /^retired/i.test(k.Description || '');
+      const retired = k => /^retired/i.test(k.Description || '') || k.NotInGame; // NotInGame: gamedata.js NOT_IN_GAME, not dropping yet
       for (const k of Object.values(GD.supports).filter(k => !retired(k))) for (let c = count[lc(k.Id)] || 0; c < SUPPORT_FILL; c++) add.push(k.Id);
       if (add.length) { setArr(rec, 'SupportGems', loose.concat(add)); out.push(add.length + ' support gems (' + SUPPORT_FILL + ' loose of each).'); }
     }
@@ -5662,7 +5672,7 @@ window.BOCreator = function (ctx) {
     }
     h += '<div class="cr-qol-options">' + toggle('runes', 'Runes', RUNE_FILL + ' of every rune') +
       toggle('gems', 'All gems at level ' + GEM_FILL, 'Adds missing skill gems and raises gem levels') +
-      toggle('supports', SUPPORT_FILL + ' of every support gem', 'Loose copies, excluding retired supports') +
+      toggle('supports', SUPPORT_FILL + ' of every support gem', 'Loose copies, excluding retired supports and ones not in the game yet') +
       toggle('forge', 'Crafting materials', MAT_FILL.toLocaleString('en-US') + ' of each material, ' + ECHO_FILL + ' echoes and all forge recipes') +
       toggle('cube', 'Cube recipes unlocked', 'Unlocks the Oathstone Cube and every recipe') +
       toggle('gold', 'Gold', GOLD_FILL.toLocaleString('en-US')) +
@@ -8198,6 +8208,7 @@ window.BOItemSearch = function (ctx) {
       body = (sd.Description ? '<p class="is-desc">' + esc(sd.Description) + '</p>' : '') +
         ((sd.RequiresAnyTag || []).length ? '<p class="is-into is-chips"><span>Supports:</span>' + sd.RequiresAnyTag.map(chip).join('') + '</p>' : '<p class="is-into">Supports any skill</p>') +
         ((e.exShown || []).length ? '<p class="is-into is-chips"><span>Not for:</span>' + e.exShown.map(chip).join('') + '</p>' : '');
+      if (sd.NotInGame) badges.push(badge('Not in the game yet', 'muted')); // gamedata.js NOT_IN_GAME
     } else {
       const r = e.r;
       ico = glyphIcon(r);
@@ -12595,7 +12606,7 @@ window.BOFaq = function (ctx) {
 
 
 
-    const sups = Object.values(GD.supports || {}).filter(s => s.Level != null);
+    const sups = Object.values(GD.supports || {}).filter(s => s.Level != null && !s.NotInGame); // NotInGame: gamedata.js NOT_IN_GAME, not dropping yet
     if (sups.length) {
 
       const ART = window.SITE_VERSION && window.SITE_VERSION.local ? (location.protocol === 'file:' ? '' : '/') + 'data/game-icons/site/' : (window.SITE_BASE || '') + 'ic/';
@@ -16019,6 +16030,11 @@ window.BOCharacter = function (ctx) {
 
     if (totemAttack) for (const s of res.supports) if (s.ok && !(o.off && o.off.has(s.key)) && ['trap_support', 'skyfall'].includes(lc(s.id))) ctx.tags.add(SHAPE_TAG[lc(s.id)]);
 
+
+
+
+    if (shapeId === 'trap_support' && shapeIds.includes('skyfall')) ctx.tags.add('skyfall');
+
     const ascFlag = f => modsOf(mods, 'Dragonling').some(m => (m.tags || []).includes(f));
     const virulence = ascFlag('Asc71_Virulence') ? (GD.dragon.rules || {}).Virulence || { Cap: 60, DurMult: 0.75 } : null;
 
@@ -16738,6 +16754,11 @@ window.BOCharacter = function (ctx) {
       }
     }
 
+
+
+
+
+
     let shieldInc = 0;
     if (is0563(GD) && sk.Id === 'shield_throw' && offBase && offBase.Class === 'Shield') {
       const loc = mods.filter(m => m.local && m.key === 'item:OffHand');
@@ -16745,7 +16766,8 @@ window.BOCharacter = function (ctx) {
       for (const st of ['Armour', 'Evasion', 'EnergyShield']) {
         const flat = loc.filter(m => m.stat === st && m.mode === 'Flat').reduce((x, m) => x + m.v, 0);
         const incp = loc.filter(m => m.mode === 'Inc' && (m.stat === st || m.stat === 'Defences')).reduce((x, m) => x + m.v, 0);
-        total += ((offBase[st] || 0) + flat) * (1 + incp / 100);
+        if (!offBase[st] && !flat) continue;
+        total += ((offBase[st] || 0) * gradeMult(offItem.grade) + flat) * (1 + (incp + armourQuality(offItem, offBase)) / 100);
       }
       shieldInc = total / 5;
       res.notes.push('Shield Throw: +' + Math.round(shieldInc) + '% increased damage from ' + Math.round(total) + ' armour, evasion and energy shield on your shield (patch 0.56.3).');
@@ -20770,7 +20792,7 @@ window.BOCharacter = function (ctx) {
     const base = host ? GD.skills[lc(host.skill)] || sk : sk;
     const tags = socketTags(base);
     const fits = sp => acceptsSup(sp, base) || ((!(sp.RequiresAnyTag || []).length || minionEngine(GD, sp, base) || sp.RequiresAnyTag.some(t => tags.has(lc(t)))) && !exTagsFor(sp, base, GD).some(t => tags.has(lc(t))) && !noFit(sp, base));
-    const list = Object.values(GD.supports).filter(fits).map(sp => ({ id: lc(sp.Id), name: sp.Name, desc: sp.Description || '', packOnly: isSummon(sk) ? !(minionCounts(sp, sk) || furyForMinions(sp, sk, mods0)) : NO_SINGLE_TARGET.has(lc(sp.Id)) && !['cast_on_crit', 'channel_conduit'].includes(lc(sp.Id)), shape: SHAPES.includes(lc(sp.Id)) }))
+    const list = Object.values(GD.supports).filter(fits).map(sp => ({ id: lc(sp.Id), name: sp.Name, desc: sp.Description || '', packOnly: isSummon(sk) ? !(minionCounts(sp, sk) || furyForMinions(sp, sk, mods0)) : NO_SINGLE_TARGET.has(lc(sp.Id)) && !['cast_on_crit', 'channel_conduit'].includes(lc(sp.Id)), shape: SHAPES.includes(lc(sp.Id)), notInGame: !!sp.NotInGame }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
 
@@ -20813,7 +20835,8 @@ window.BOCharacter = function (ctx) {
     let pinned = (opt.pinned || []).map(lc).filter(id => !blocked.has(id) && fits.some(s => lc(s.Id) === id));
     const pinnedShapes = pinned.filter(id => SHAPES.includes(id) && id !== 'skyfall');
     if (pinnedShapes.length > 1) pinned = pinned.filter(id => !pinnedShapes.some((p, i) => i < pinnedShapes.indexOf(id) && shapesClash(p, id)));
-    const pool = fits.filter(s => !isSummon(sk) || minionCounts(s, sk) || furyForMinions(s, sk, mods0)).map(s => lc(s.Id)).filter(id => !pinned.includes(id) && !blocked.has(id) && (isSummon(sk) || !NO_SINGLE_TARGET.has(id) || (opt.manaOk && MANA_ONLY.has(id))) && (opt.pool === 'all' || owned.has(id)));
+
+    const pool = fits.filter(s => !s.NotInGame).filter(s => !isSummon(sk) || minionCounts(s, sk) || furyForMinions(s, sk, mods0)).map(s => lc(s.Id)).filter(id => !pinned.includes(id) && !blocked.has(id) && (isSummon(sk) || !NO_SINGLE_TARGET.has(id) || (opt.manaOk && MANA_ONLY.has(id))) && (opt.pool === 'all' || owned.has(id)));
 
     const sockets = opt.sockets || (host ? socketsFor(GD, ch, host.skill) : socketsFor(GD, ch, skillId, o.gemLevel));
     if (pinned.length > sockets) pinned = pinned.slice(0, sockets);
@@ -22568,12 +22591,15 @@ window.BOStartApp = function () {
 
     const strays = [...inSet].filter(id => !known.has(id)).map(id => ({ id, name: (GD.supports[id] || { Name: id }).Name, desc: (GD.supports[id] || {}).Description || '' }));
     const granted = (r.supports || []).filter(s => s.name.includes('(granted)'));
-    const main = choices.filter(c => !c.packOnly && !c.inert), more = choices.filter(c => c.packOnly), idle = choices.filter(c => c.inert && !c.packOnly);
+
+    const later = choices.filter(c => c.notInGame), now = choices.filter(c => !c.notInGame);
+    const main = now.filter(c => !c.packOnly && !c.inert), more = now.filter(c => c.packOnly), idle = now.filter(c => c.inert && !c.packOnly);
     const moreOn = more.filter(c => inSet.has(c.id)).length;
     box.innerHTML = '<div class="sup-row">' + strays.concat(main).map(tag).join('') + '</div>' +
       (granted.length ? '<div class="sup-row granted"><span class="meta">From your tree or gear:</span>' + granted.map(s => '<span class="sup granted' + (st.off.has(s.key) ? '' : ' on') + '"><button type="button" class="sup-name" data-granted="' + esc(s.key) + '" aria-pressed="' + !st.off.has(s.key) + '" title="Granted: click to see the skill without it">' + esc(s.name.replace(' (granted)', '')) + '</button></span>').join('') + '</div>' : '') +
       (more.length ? '<details class="sup-more"' + (st.supMore || moreOn ? ' open' : '') + '><summary>' + (r.minion ? 'No effect on minion damage' : 'Packs and extras') + ' <span class="meta">(' + more.length + (r.minion ? ')' : ', no damage against one enemy)') + '</span></summary><div class="sup-row">' + more.map(tag).join('') + '</div></details>' : '') +
-      (idle.length ? '<details class="sup-more" data-idle="1"' + (st.supIdle ? ' open' : '') + '><summary>No effect in the sim <span class="meta">(' + idle.length + ', can be socketed)</span></summary><div class="sup-row">' + idle.map(tag).join('') + '</div></details>' : '');
+      (idle.length ? '<details class="sup-more" data-idle="1"' + (st.supIdle ? ' open' : '') + '><summary>No effect in the sim <span class="meta">(' + idle.length + ', can be socketed)</span></summary><div class="sup-row">' + idle.map(tag).join('') + '</div></details>' : '') +
+      (later.length ? '<details class="sup-more"' + (later.some(c => inSet.has(c.id)) ? ' open' : '') + '><summary>Not in the game yet <span class="meta">(' + later.length + ', in the game data but not dropping; the search leaves them out)</span></summary><div class="sup-row">' + later.map(tag).join('') + '</div></details>' : '');
     $('#supportInfo').textContent = st.supMsg || SUP_HINT;
     $('#supportInfo').classList.toggle('bad', !!st.supMsg && /^All |cannot/.test(st.supMsg));
   }

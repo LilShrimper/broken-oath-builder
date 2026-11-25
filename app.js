@@ -1857,6 +1857,8 @@ window.PAGE_LANGS = {
 
 
 
+
+
 (function (root) {
   'use strict';
 
@@ -2259,7 +2261,14 @@ window.PAGE_LANGS = {
         if (slot === 'MainHand' && !offOk(baseOf(it), baseOf(at(its, 'OffHand')))) its = put(its, 'OffHand', null);
         return its;
       };
-      const mk = (b, over) => ({ slot: realSlot(slot), base: b.Id, rarity: 'Rare', unique: 'None', name: '', level: ilvl, quality: newQuality, ...(newGrade ? { grade: newGrade } : {}), affixes: [], runes: [], ...over });
+
+
+      const qOf = b => !(b.Armour || b.Evasion || b.EnergyShield || b.DamageMin) ? 0 : Math.min(newQuality, (b.Tags || []).includes('Ashen') ? 10 : 30);
+      const mk = (b, over) => {
+        const it = { slot: realSlot(slot), base: b.Id, rarity: 'Rare', unique: 'None', name: '', level: ilvl, quality: qOf(b), ...(newGrade ? { grade: newGrade } : {}), affixes: [], runes: [], ...over };
+        if (it.rarity === 'Unique') delete it.grade;
+        return it;
+      };
       const bases = baseList(slot).filter(okBase);
 
 
@@ -25493,8 +25502,14 @@ window.BOStartApp = function () {
       return '<path class="tban" d="M' + (x - r) + ' ' + (y - r) + 'L' + (x + r) + ' ' + (y + r) + 'M' + (x - r) + ' ' + (y + r) + 'L' + (x + r) + ' ' + (y - r) + '"/>';
     }).join('') + [...(st.keep || [])].map(id => {
 
+
       const c = $('#treeSvg').querySelector('circle.tn[data-id="' + id + '"]'); if (!c) return '';
-      return '<circle class="tkeep' + (have.has(id) ? '' : ' want') + '" cx="' + c.getAttribute('cx') + '" cy="' + c.getAttribute('cy') + '" r="' + ((+c.getAttribute('r') || 20) * 1.45) + '"/>';
+      const x = +c.getAttribute('cx'), y = +c.getAttribute('cy'), R = (+c.getAttribute('r') || 20) * 1.45;
+      const ring = '<circle class="tkeep' + (have.has(id) ? '' : ' want') + '" cx="' + x + '" cy="' + y + '" r="' + R + '"/>';
+      if (have.has(id)) return ring;
+      const bx = x + R * 0.71, by = y - R * 0.71, top = by - R * 1.25, w = R * 0.85, h = R * 0.55;
+      return ring + '<path class="tkeep-pole" d="M' + bx + ' ' + by + 'L' + bx + ' ' + top + '"/>' +
+        '<path class="tkeep-flag" d="M' + bx + ' ' + top + 'L' + (bx + w) + ' ' + (top + h / 2) + 'L' + bx + ' ' + (top + h) + 'Z"/>';
     }).join('') + (q ? [...$('#treeSvg').querySelectorAll('circle.tn.found')].map(c =>
 
       '<circle class="tfound" cx="' + c.getAttribute('cx') + '" cy="' + c.getAttribute('cy') + '" r="' + Math.max(85, (+c.getAttribute('r') || 20) * 2.2) + '"/>').join('') +
@@ -25721,7 +25736,7 @@ window.BOStartApp = function () {
     if (n.Price) h += '<div class="gain down">' + esc(n.Price) + '</div>';
     if (n.Kind === 'Start') return h;
     if (banned(id) && !on) return h + '<div class="gain down">Marked never take: Optimize, Plan and the node values skip it.</div><div class="tk tk-ban">' + markHint(id) + '</div>';
-    if (keepMarked(id)) h += '<div class="gain keep">' + (on ? 'Marked keep: Optimize never refunds it.' : 'Marked must take: Optimize and Plan route to it first.') + '</div>';
+    if (keepMarked(id)) h += '<div class="gain keep' + (on ? '' : ' want') + '">' + (on ? 'Marked keep: Optimize never refunds it.' : 'Marked must take: Optimize and Plan route to it first.') + '</div>';
     const s = T.scores.get(id);
     const skillName = optLabel() + (optExtra().length ? ' weighted' : '');
 
@@ -26256,15 +26271,15 @@ window.BOStartApp = function () {
 
 
 
-  const GEAR_TIER_FIELDS = { lineRoll: 1, topLines: '', rareLines: '', runeTier: '', uniquePool: 'all', uniqueRoll: 1, forged: false, quality: 0, grade: 0 };
+  const GEAR_TIER_FIELDS = { lineRoll: 1, topLines: '', rareLines: '', runeTier: '', uniquePool: 'all', uniqueRoll: 1, forged: false, quality: 30, grade: 100 };
   const GEAR_TIERS = {
-    mid: { name: 'Midgame', set: { ilvl: 70, limited: false, vows: false, maxVows: 0, runes: true, rareSockets: 2, maxRiven: 0, basicOnly: true, oathsworn: false, lineRoll: 0.5, topLines: 1, rareLines: 4, runeTier: 3, uniquePool: 'common', uniqueRoll: 0.5, forged: false, quality: 10, grade: 50 },
-      text: 'Gear you can expect to find while working through the Rupture. Rares are item level 70 with up to 4 lines, at most one on its best tier and the rest one tier lower, rolled mid-range. Uniques that drop often (no chase uniques), rolled mid-range, no Vows. Runes up to tier 3, 2 sockets, weapon quality 10%, Base Grade 50, no Riven mods, basic bases only (no Core Touched or Ashen).' },
-    end: { name: 'Endgame', set: { ilvl: 84, limited: false, vows: true, maxVows: 3, runes: true, rareSockets: 2, maxRiven: 0, basicOnly: false, oathsworn: true, lineRoll: 0.75, topLines: 3, rareLines: 6, runeTier: 5, uniquePool: 'regular', uniqueRoll: 0.75, forged: false, quality: 20, grade: 80 },
-      text: 'A well-geared character. Rares are item level 84 with 6 lines, up to 3 on their best tier and the rest one tier lower (so no Great or Flawless Rares), rolled at 75% of their range, plus an Oathsworn line. Every unique that drops except the chase ones (Primal, Deep-forged, Guardian chase, Core, red Dwarven Runes), rolled at 75%, up to 3 Vows. Runes up to tier 5, 3 sockets, weapon quality 20%, Base Grade 80, no Riven mods.' },
+    mid: { name: 'Midgame', set: { ilvl: 70, limited: false, vows: false, maxVows: 0, runes: true, rareSockets: 2, maxRiven: 0, basicOnly: true, oathsworn: false, lineRoll: 0.5, topLines: 1, rareLines: 4, runeTier: 3, uniquePool: 'common', uniqueRoll: 0.5, forged: false, quality: 30, grade: 100 },
+      text: 'Gear you can expect to find while working through the Rupture. Rares are item level 70 with up to 4 lines, at most one on its best tier and the rest one tier lower, rolled mid-range. Uniques that drop often (no chase uniques), rolled mid-range, no Vows. Runes up to tier 3, 2 sockets, 30% quality on weapons and armour on Truesworn bases (Base Grade 100), no Riven mods, basic bases only (no Core Touched or Ashen).' },
+    end: { name: 'Endgame', set: { ilvl: 84, limited: false, vows: true, maxVows: 3, runes: true, rareSockets: 2, maxRiven: 0, basicOnly: false, oathsworn: true, lineRoll: 0.75, topLines: 3, rareLines: 6, runeTier: 5, uniquePool: 'regular', uniqueRoll: 0.75, forged: false, quality: 30, grade: 100 },
+      text: 'A well-geared character. Rares are item level 84 with 6 lines, up to 3 on their best tier and the rest one tier lower (so no Great or Flawless Rares), rolled at 75% of their range, plus an Oathsworn line. Every unique that drops except the chase ones (Primal, Deep-forged, Guardian chase, Core, red Dwarven Runes), rolled at 75%, up to 3 Vows. Runes up to tier 5, 3 sockets, 30% quality on weapons and armour on Truesworn bases (Base Grade 100), no Riven mods.' },
     bis: { name: 'BiS', set: { ilvl: 84, limited: true, vows: true, maxVows: 4, runes: true, rareSockets: 2, maxRiven: '', basicOnly: false, oathsworn: true, lineRoll: 1, topLines: '', rareLines: 6, runeTier: '', uniquePool: 'all', uniqueRoll: 1, forged: true, quality: 30, grade: 100 },
-      text: 'The most the gear can give. Every rare line on its best tier at its top roll (Flawless Rares) plus an Oathsworn line, Riven mods with no limit, every unique including the chase ones as a forged copy at its best roll, up to 4 Vows. Every rune, 4 sockets on two-handers, weapon quality 30%, Base Grade 100.' },
-    custom: { name: 'Custom', set: GEAR_TIER_FIELDS, text: 'Set the boxes yourself. Every line and unique rolls at its best, with no weapon quality.' },
+      text: 'The most the gear can give. Every rare line on its best tier at its top roll (Flawless Rares) plus an Oathsworn line, Riven mods with no limit, every unique including the chase ones as a forged copy at its best roll, up to 4 Vows. Every rune, 4 sockets on two-handers, 30% quality on weapons and armour on Truesworn bases (Base Grade 100).' },
+    custom: { name: 'Custom', set: GEAR_TIER_FIELDS, text: 'Set the boxes yourself. Every line and unique rolls at its best, 30% quality on weapons and armour on Truesworn bases (Base Grade 100).' },
   };
   const gsStored = store.get('gearSim', null);
   const GS = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ ilvl: 84, ignoreLevel: false, limited: true, vows: true, runes: true, prio: 0, maxRes: false, resTarget: 0, resPoison: false, maxVows: '', maxRiven: 0, noCore: false, rareSockets: 2, idolAffixes: '', layers: { life: true, es: true, armour: true, evasion: true, block: true } }, GEAR_TIER_FIELDS, gsStored || {}) };
@@ -26279,6 +26294,9 @@ window.BOStartApp = function () {
   if (!GEAR_TIERS[GS.set.tier]) setGearTier(gsStored ? 'custom' : 'end');
   if (GS.set.basicOnly == null) GS.set.basicOnly = !!GEAR_TIERS[GS.set.tier].set.basicOnly; // settings saved before the box existed (17 Nov 2026)
   if (GS.set.oathsworn == null) GS.set.oathsworn = !!GEAR_TIERS[GS.set.tier].set.oathsworn; // the same for Oathsworn rares (23 Nov 2026)
+
+
+  Object.assign(GS.set, { quality: 30, grade: 100 });
 
   const gsTierTouch = f => { if (GS.set.tier !== 'custom' && f in GEAR_TIERS[GS.set.tier].set) GS.set.tierEdited = true; };
   const gsTierHtml = off => {
@@ -26576,7 +26594,7 @@ window.BOStartApp = function () {
     else t += 'rare lines are item level ' + r.ilvl + ', ' + (g.topLines > 0 ? 'at most ' + g.topLines + ' on their best tier and the rest one tier lower' : 'one tier under their best') + ', rolled at ' + pc(g.lineRoll) + ' of their range' + (g.rareLines < 6 ? ', up to ' + g.rareLines + ' lines' : '') + '; uniques are rolled at ' + pc(g.uniqueRoll) + (g.uniquePool === 'common' ? ', only the ones that drop often' : g.uniquePool === 'regular' ? ', no chase uniques' : '') + '.';
     if (g.oathsworn) t += ' Rares found here carry an Oathsworn line (a 7th line from the Cube).';
     if (g.runeTier < 6) t += ' Runes up to tier ' + g.runeTier + '.';
-    if (g.quality || g.grade) t += ' Items found here have ' + [g.quality ? 'weapon quality ' + g.quality + '%' : '', g.grade ? 'Base Grade ' + g.grade : ''].filter(Boolean).join(' and ') + '.';
+    if (g.quality || g.grade) t += ' Items found here have ' + [g.quality ? g.quality + '% quality on weapons and armour' : '', g.grade ? 'Base Grade ' + g.grade + (g.grade >= 90 ? ' (Truesworn)' : '') : ''].filter(Boolean).join(' and ') + '.';
     return t;
   }
   function gsResultHtml(r) {

@@ -2568,6 +2568,13 @@ window.PAGE_LANGS = {
       out.push({ slot, item: it, was, worth, changed, gain: changed ? value / (V(put(items, slot, was)) || value) - 1 : 0, dpsGain: changed ? dpsGainOf(put(items, slot, was)) : null });
     }
 
+
+    const worn = s => at(ch.items || [], s);
+    for (const o of out) if (o.changed && o.item) {
+      if (o.slot === 'MainHand') o.dropsOff = !!worn('OffHand') && !offOk(baseOf(o.item), baseOf(worn('OffHand')));
+      if (o.slot === 'OffHand') o.needsMain = !!worn('MainHand') && !offOk(baseOf(worn('MainHand')), baseOf(o.item));
+    }
+
     if (idolN) {
       const was = (ch.items || []).filter(i => i.slot === 'Idol'), now = items.filter(i => i.slot === 'Idol');
       for (let k = 0; k < Math.max(was.length, now.length); k++) {
@@ -14460,7 +14467,11 @@ window.BOCharacter = function (ctx) {
 
     'CritVsChilled113', 'IgniteVsUnique113', 'SureCritVsSentenced113', 'SpellCritVsFaltering113', 'BallistaVsSentenced113', 'BleedDotVsSentenced113', 'HeraldEffectPerHerald113',
 
-    'AspectEffect124', 'SplitAspect124', 'PoisonNoExpire124', 'BellToll124', 'BladeVolley124', 'HammerChorus124', 'SpikeErupt124', 'PierceMore124']);
+    'AspectEffect124', 'SplitAspect124', 'PoisonNoExpire124', 'BellToll124', 'BladeVolley124', 'HammerChorus124', 'SpikeErupt124', 'PierceMore124',
+
+
+
+    'ManaMore', 'SpeedMore', 'CastSpeedMore', 'TotemCountMore', 'ItemOath114', 'ManaAsAddedLightning113', 'ArmourAsAddedHolyPermille113', 'IgniteStacks']);
 
 
 
@@ -17787,6 +17798,15 @@ window.BOCharacter = function (ctx) {
 
 
       const noExpire = modsOf(mods, 'Keystone').some(m => m.stat === 'Keystone' && m.mode === 'Flag' && (m.tags || []).includes('TotemNoExpire'));
+
+
+
+
+
+      if (ascFlag('Asc71_EyrieWatch') && sk.Totem && sk.Totem.Kind === 'Ballista') {
+        const longer = (((GD.dragon || {}).rules || {}).EyrieWatch || {}).Longer;
+        durMore *= 1 + (Number.isFinite(longer) ? longer : 60) / 100;
+      }
       const life = noExpire ? Infinity : res.totem.baseLife * Math.max(0, 1 + durInc / 100) * durMore, rate = res.totem.shotsPerSec || 0;
       const capShot = SPOTTER_RAMP_MAX / SPOTTER_RAMP_PER + 1, toCap = rate > 0 ? (capShot - 1) / rate : Infinity;
       const shots = life * rate, endless = !Number.isFinite(shots);
@@ -26652,6 +26672,25 @@ window.BOStartApp = function () {
     if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {});
   }
 
+
+
+  function gsEquipOne(i) {
+    const r = GS.res, s = r && r.slots[i]; if (!s || !s.changed || !s.item || s.slot === 'Idol' || s.needsMain || !st.ch || r.key !== gsKey()) return;
+    const ch = buildEditable(), item = Object.assign(JSON.parse(JSON.stringify(s.item)), { slot: s.slot });
+    const nth = r.slots.filter((x, k) => k < i && x.slot === s.slot).length; // the second ring row is the second Ring item
+    const same = ch.items.filter(x => x.slot === s.slot);
+    if (same[nth]) ch.items[ch.items.indexOf(same[nth])] = item; else ch.items.push(item);
+    const off = s.dropsOff && r.slots.find(x => x.slot === 'OffHand');
+    if (s.dropsOff) ch.items = ch.items.filter(x => x.slot !== 'OffHand');
+    s.was = s.item; s.changed = false; s.equipped = true;
+    if (off) { off.was = null; off.changed = !!off.item; off.needsMain = false; }
+
+    if (s.slot === 'MainHand') for (const x of r.slots) if (x.slot === 'OffHand') x.needsMain = false;
+    r.rekey = true; CMP.aEdited = false; CMP.a = null; CMP.b = null; CMP.read = null;
+    GS.msg = 'Equipped ' + itemName(item) + ' on ' + ch.name + ' in this page' + (s.dropsOff ? ' (the off hand came off: it cannot be held with that weapon)' : '') + '; the Build and Damage tabs use it too. The list below still shows the numbers found with the whole set on.' + (ch.plan ? '' : ' Your save is never changed: Reset to save on the Build tab undoes it.');
+    if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {});
+  }
+
   const gsFull = r => { const g = r.gearLevel || {}; return !(g.lineRoll < 1) && !(g.uniqueRoll < 1) && !(g.topLines < g.rareLines); };
   function gsLevelNote(r) {
     const g = r.gearLevel || {}, T = GEAR_TIERS[r.tier], pc = x => Math.round(x * 100) + '%';
@@ -26680,17 +26719,20 @@ window.BOStartApp = function () {
       stat('Best gear', num(r.value), '', 'main', esc(skillName) + ', total DPS') +
       stat('Change', (r.gain >= 0 ? '+' : '') + num(r.value - r.base) + ' DPS', '<div class="delta ' + (r.gain >= 0 ? 'up' : 'down') + '">' + pct(r.gain) + '</div>', '', 'found in ' + (r.ms / 1000).toFixed(1) + ' s' + (r.timedOut ? ' (stopped at the time limit)' : '')) + '</div>';
     h += '<div class="cmp-actions"><button class="btn" type="button" data-gs="equip">Equip the best set</button><span class="hint">Puts every changed slot on ' + esc(st.ch.name) + ' in this page; ' + (r.idolN ? 'the idols are replaced too (' + r.idolCells + ' of 21 Fossil cells used, a layout that fits) and the tree stays.' : 'idols and the tree stay.') + (st.ch.plan ? '' : ' Your save is never changed.') + '</span></div>';
-    h += '<div class="table-wrap"><table class="tbl gs-table"><thead><tr><th>Slot</th><th>Your item</th><th>Best item</th><th title="' + (r.scored ? 'Score (DPS and defence, weighed as set)' : 'DPS') + ' this slot\'s pick adds over your current item, with the rest of the best set in place">Adds</th>' + (r.scored ? '<th title="DPS alone: what this slot\'s pick changes in damage over your current item, with the rest of the best set in place. The Adds score also counts defence and resistances, so it can be far bigger">DPS</th>' : '') + '<th title="' + (r.scored ? 'Score' : 'DPS') + ' lost if this slot were left empty in the best set">Slot worth</th></tr></thead><tbody>' +
+    h += '<div class="table-wrap"><table class="tbl gs-table"><thead><tr><th>Slot</th><th>Your item</th><th>Best item</th><th title="' + (r.scored ? 'Score (DPS and defence, weighed as set)' : 'DPS') + ' this slot\'s pick adds over your current item, with the rest of the best set in place">Adds</th>' + (r.scored ? '<th title="DPS alone: what this slot\'s pick changes in damage over your current item, with the rest of the best set in place. The Adds score also counts defence and resistances, so it can be far bigger">DPS</th>' : '') + '<th title="' + (r.scored ? 'Score' : 'DPS') + ' lost if this slot were left empty in the best set">Slot worth</th><th aria-label="Equip"></th></tr></thead><tbody>' +
       r.slots.map(s => {
         const tip = s.item ? '<details class="gs-lines"><summary>Lines</summary><div class="cmp-tip pl-tip">' + g.tip(s.item, s.item.slot) + '</div></details>' : '';
         const si = r.slots.indexOf(s);
 
         const sh = s.needs;
         const req = sh ? '<div class="hint bad gs-req">Needs ' + sh.need + ' ' + ATTR_NAME[sh.attr] + ': you have ' + sh.have + ' now, ' + sh.withSet + ' with the rest of this set on. Equip the other new items first.</div>' : '';
-        return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(s.label || gsSlotName(s.slot)) + '</td><td' + (s.was ? ' class="gs-hov" data-gs-tip="was:' + si + '"' : '') + '>' + gsItemLabel(s.was) + '</td><td' + (s.item ? ' class="gs-hov" data-gs-tip="item:' + si + '"' : '') + '>' + (s.changed ? '' : '<span class="meta">kept: </span>') + gsItemLabel(s.item, s.changed) + tip + req + '</td><td>' +
-          (s.changed ? '<span class="' + (s.gain >= 0 ? 'up' : 'down') + '">' + pct(s.gain) + '</span>' : '<span class="meta">–</span>') + '</td>' +
-          (r.scored ? '<td>' + (s.changed && s.dpsGain != null ? '<span class="' + (s.dpsGain >= 0 ? 'up' : 'down') + '">' + pct(s.dpsGain) + '</span>' : '<span class="meta">–</span>') + '</td>' : '') +
-          '<td>' + (s.item ? num(s.worth * 100, 1) + '%' : '–') + '</td></tr>';
+        const shown = s.changed || s.equipped;
+        const act = s.equipped ? '<span class="meta">equipped</span>' : !s.changed || !s.item ? '' : s.slot === 'Idol' ? '<span class="meta" title="Idols are placed together in the Fossil: equip them with the whole set">with the set</span>' :
+          '<button class="btn small" type="button" data-gs-one="' + si + '"' + (s.needsMain ? ' disabled title="Your main hand cannot hold this off hand: equip the new main hand first"' : s.dropsOff ? ' title="Your off hand comes off: it cannot be held with this weapon"' : '') + '>Equip</button>';
+        return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(s.label || gsSlotName(s.slot)) + '</td><td' + (s.was ? ' class="gs-hov" data-gs-tip="was:' + si + '"' : '') + '>' + gsItemLabel(s.was) + '</td><td' + (s.item ? ' class="gs-hov" data-gs-tip="item:' + si + '"' : '') + '>' + (s.changed ? '' : '<span class="meta">' + (s.equipped ? 'equipped: ' : 'kept: ') + '</span>') + gsItemLabel(s.item, s.changed) + tip + req + '</td><td>' +
+          (shown ? '<span class="' + (s.gain >= 0 ? 'up' : 'down') + '">' + pct(s.gain) + '</span>' : '<span class="meta">–</span>') + '</td>' +
+          (r.scored ? '<td>' + (shown && s.dpsGain != null ? '<span class="' + (s.dpsGain >= 0 ? 'up' : 'down') + '">' + pct(s.dpsGain) + '</span>' : '<span class="meta">–</span>') + '</td>' : '') +
+          '<td>' + (s.item ? num(s.worth * 100, 1) + '%' : '–') + '</td><td class="sbs-acts">' + act + '</td></tr>';
       }).join('') + '</tbody></table></div>';
     h += '<p class="hint">' + gsLevelNote(r) + ' Rares carry the prefixes and suffixes that add the most' + (r.scored ? '' : ' DPS') + ' and the best runes in their sockets' + (r.vowMax < 1 ? '; uniques carry no Vows' : r.vowMax < 11 ? '; uniques carry at most ' + r.vowMax + ' Vow' + (r.vowMax === 1 ? '' : 's') : '') + (gsFull(r) ? '; a rare with every line at its top tier counts as a Flawless Rare in the sim' : '') + '. ' + (r.scored ? gsDefNote() + ' Rune' : 'Life, resistances and other defences are only counted where the sim counts them for damage (move the slider or tick Reach max resistances to weigh them); rune') + ' and item prices are ignored. ' + (r.reqChecked ? 'Every item fits your Strength, Dexterity and Intelligence with the whole set on. ' : 'Attribute requirements are ignored, as set. ') + (r.idolN ? 'Idols are chosen too, each with up to ' + r.idolN + ' line' + (r.idolN === 1 ? '' : 's') + ', their lines rolled like the rares\' lines; the tree and the supports stay as they are.' : 'Idols, the tree and the supports stay as they are.') + '</p>';
     return h + '</div>';
@@ -26712,7 +26754,8 @@ window.BOStartApp = function () {
   function gsHtml() {
     const S_ = GS.set, key = gsKey();
     if (GS.running && GS.key !== key) { GS.job++; GS.running = false; GS.msg = 'The character or a setting changed, so the search was stopped.'; }
-    if (GS.res && GS.res.key !== key) GS.res = null;
+    if (GS.res && GS.res.key !== key) { if (GS.res.rekey) GS.res.key = key; else GS.res = null; }
+    if (GS.res) GS.res.rekey = false;
     const chk = (f, label, tip) => '<label class="check-row" title="' + esc(tip) + '"><input type="checkbox" data-gs-set="' + f + '"' + (S_[f] ? ' checked' : '') + (GS.running ? ' disabled' : '') + '><span>' + label + '</span></label>';
     const gsIntro = '<p class="hint">Finds the best gear for the selected skill' + (optExtra().length ? ' and the ' + optExtra().length + ' ticked under Also count (weighted)' : '') + ': every unique (with Vows), every Oathword, and rare items with the best prefixes and suffixes. Your passive tree, skills and supports stay as they are' + (S_.idolAffixes ? '; so do your red idols' : ', and so do your idols unless you pick idol lines below') + '.</p>';
     let h = '<div class="card gs-card"><div class="cmp-pick-head"><div class="gs-head-text"><h2>Gear Set Sim</h2>' + gsIntro + '</div><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + (GS.running ? ' disabled' : '') + '>' + cmpSkillOptions() + '</select></label>' + (GS.running ? '' : cmpMultiHtml() + enemyBtn()) + '</span></div>' +
@@ -27084,6 +27127,8 @@ window.BOStartApp = function () {
       if (tb) { if (!GS.running && !SBS.running && !tb.disabled) { setGearTier(tb.dataset.gsTier); store.set('gearSim', GS.set); GS.msg = ''; SBS.msg = ''; renderCompare(); } return; }
       const gb = e.target.closest('[data-gs]');
       if (gb) { const a = gb.dataset.gs; if (a === 'run') gsRun(); else if (a === 'cancel') gsCancel(); else if (a === 'equip') gsEquip(); return; }
+      const g1 = e.target.closest('[data-gs-one]');
+      if (g1) { gsEquipOne(+g1.dataset.gsOne); return; }
       const rvb = e.target.closest('[data-rv],[data-rv-roll]');
       if (rvb) { const d = rvb.dataset; if (d.rv === 'run') rvRun(); else if (d.rv === 'cancel') rvCancel(); else if (d.rv === 'apply') rvApply(); else if (d.rvRoll && !RV.running && d.rvRoll !== RV.set.roll) { RV.set.roll = d.rvRoll; store.set('rivenSim', RV.set); RV.msg = ''; renderCompare(); } return; }
       const sbb = e.target.closest('[data-sbs],[data-sbs-equip],[data-sbs-cmp]');

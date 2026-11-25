@@ -1430,7 +1430,7 @@ body.compare-page #controls { display: none; }
 .gs-table td { font-size: 12.5px; vertical-align: top; }
 .gs-table th:nth-child(-n+3), .gs-table td:nth-child(-n+3) { text-align: left; }
 .gs-table td:nth-child(n+4) { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.sbs-table td.sbs-acts { text-align: right; }
+.sbs-table td.sbs-acts, .gs-table td.sbs-acts { text-align: right; }
 .sbs-table tr.gs-changed td:nth-child(2) { background: color-mix(in srgb, var(--good) 6%, transparent); }
 .gs-table tr.gs-changed td:nth-child(3) { background: color-mix(in srgb, var(--good) 6%, transparent); }
 .gs-unique { color: var(--dashboard-gold); }

@@ -11056,7 +11056,7 @@ window.BOScaling = function (ctx) {
     if (sk.ManaCost) meta.push('Mana ' + mana(sk, G, 1) + ' → ' + mana(sk, G, max));
     if (meta.length) h += '<p class="sc-meta">' + esc(meta.join(' · ')) + '</p>';
     const sc = scalers(sk, id);
-    if (sc.length) h += '<div class="sc-scale"><b class="sc-scale-h">How to make it stronger</b><ul>' + sc.map(([l, t]) => '<li><b>' + esc(l === 'Also' ? 'Also scales' : l) + ':</b> ' + esc(t) + '</li>').join('') + '</ul></div>';
+    if (sc.length) h += '<details class="sc-scale"><summary class="sc-scale-h">How to make it stronger</summary><ul>' + sc.map(([l, t]) => '<li><b>' + esc(l === 'Also' ? 'Also scales' : l) + ':</b> ' + esc(t) + '</li>').join('') + '</ul></details>';
     if (k === 'attack' || k === 'spell') {
       let rows = '';
       for (let L = 1; L <= max; L++) rows += '<tr><td>' + L + '</td><td>' + at(sk, G, L) + '</td><td>' + (mana(sk, G, L) || '–') + '</td></tr>';

@@ -1997,6 +1997,13 @@ body.lootfilter-page #buildSummary { display: none !important; } /* the characte
 .sc-card .table-wrap { margin-top: 6px; max-height: 260px; overflow: auto; }
 :root[data-theme="light"] .sc-row b { color: #8a6a1e; }
 .sc-ext { margin-top: 6px; border-style: dashed; }
+/* "How to make it stronger" on every Skill Scaling card (25 Nov 2026) */
+.sc-scale { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--line); border-left: 3px solid var(--dashboard-gold); border-radius: 8px; background: var(--panel-2); font-size: 12px; color: var(--muted); }
+.sc-scale-h { display: block; color: var(--dashboard-gold); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
+.sc-scale ul { margin: 0; padding: 0; list-style: none; }
+.sc-scale li { margin: 4px 0 0; line-height: 1.4; }
+.sc-scale li b { color: var(--text); font-weight: 600; }
+:root[data-theme="light"] .sc-scale-h { color: #8a6a1e; }
 /* Sort by flat damage / effectiveness at a level, and the "Changed in Patch N" tile (24 Nov 2026) */
 .sc-sort { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .sc-lv { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 13px; }

@@ -10904,6 +10904,123 @@ window.BOScaling = function (ctx) {
 
 
 
+
+  let lineTagsFor = null, lineTags = null;
+  function damageLineTags(GD) {
+
+    if (lineTagsFor === GD) return lineTags;
+    const set = new Set(), seen = new Set();
+    const walk = o => {
+      if (!o || typeof o !== 'object' || seen.has(o)) return; seen.add(o);
+      if (Array.isArray(o)) { o.forEach(walk); return; }
+      if (o.stat === 'Damage' || o.Stat === 'Damage') (o.tags || o.Tags || []).forEach(t => set.add(t));
+      for (const k in o) if (o[k] && typeof o[k] === 'object') walk(o[k]);
+    };
+    ['affixes', 'nodes', 'uniques', 'supports', 'runes', 'runewords', 'masteries', 'oaths', 'dragon', 'potions'].forEach(k => walk(GD[k]));
+    lineTagsFor = GD; lineTags = set; return set;
+  }
+  function scalers(sk, id) {
+    const GD = ctx.gd(), H = (GD.scaling || {}).Hero || {}, META = (GD.scaling || {}).Meta || {}, R = GD.rules || {};
+    const rule = (key, d) => R[key] != null && !isNaN(+R[key]) ? +R[key] : d;
+    const tags = new Set(sk.Tags || []), k = kindOf(sk), atk = k === 'attack', spd = atk ? 'attack speed' : 'cast speed';
+    const f2 = x => String(+x.toFixed(2)), pct = x => Math.round(x * 100) + '%';
+    const out = [], add = (label, text) => out.push([label, text]);
+    const lid = String(id || sk.Id || '').toLowerCase();
+
+
+
+    const LT = damageLineTags(GD), names = [];
+    for (const t of sk.Tags || []) if (LT.has(t) && !names.includes(t)) names.push(t);
+    const dt = sk.DamageType;
+    if (dt && !names.includes(dt)) names.push(dt);
+    if (['Fire', 'Cold', 'Lightning'].includes(dt)) names.push('Elemental');
+    if (sk.ConvertShare && dt && dt !== 'Physical' && !names.includes('Physical')) names.push('Physical');
+    add('Damage', 'increased and more damage lines for ' + names.join(', ') + ', and plain damage lines' + (sk.ConvertShare && dt !== 'Physical' ? ' (its damage starts Physical, so Physical lines count too)' : '') + '.');
+
+    if (k === 'spell') add('Attribute', '+' + (H.IntSpellDamagePer10 || 2) + '% increased spell damage per 10 ' + (sk.Attribute === 'Str' ? 'Strength' : 'Intelligence') + '.');
+    else if (atk && tags.has('Melee') && H.StrMeleePhysPer10) add('Attribute', '+' + H.StrMeleePhysPer10 + '% increased melee physical damage per 10 Strength; +' + (H.DexAttackSpeedPer10 || 1) + '% attack speed per 10 Dexterity.');
+    else if (atk) add('Attribute', '+' + (H.DexAttackSpeedPer10 || 1) + '% attack speed per 10 Dexterity.');
+
+
+    const ct = sk.CastTime || 0.5, rateMax = H.ActionRateMax || 4, capX = Math.min(rateMax, ct / 0.12);
+    const exp = rule('r87.SPARKS.CastSpeedExp', 0.7), ex = x => f2(Math.pow(x, exp));
+    const capLine = 'Speed tops out at x' + f2(rateMax) + ' (and 0.12 s a use); past the cap, extra speed turns into damage at its square root.';
+    const cd = sk.Cooldown > 0 ? sk.Cooldown : 0, cdTxt = cd ? (sk.CooldownLate > 0 && sk.CooldownLateAt > 1 ? cd + ' s, falling to ' + sk.CooldownLate + ' s by gem level ' + sk.CooldownLateAt : cd + ' s') : '';
+    const g = sk.Ground;
+    if (sk.Delivery === 'Aura' || (g && g.Tick && !g.Duration)) {
+      if (g && g.Tick) add('Speed', 'cast speed does nothing once it is on: it ticks ' + f2(1 / g.Tick) + ' times a second' + (g.TickScale && g.TickScale !== 1 ? ' at ' + pct(g.TickScale) + ' of the hit' : '') + '. Lines that make auras and consecrated ground tick faster speed it up.');
+    } else if (sk.Delivery === 'Brand') {
+      add('Speed', 'cast speed makes the Sparks strike faster at its ' + exp + ' power: +50% cast speed = x' + ex(1.5) + ' strikes, +100% = x' + ex(2) + ' (cast speed under x1 does not slow them). "Spark strike rate" lines count in full. It stops at the cast speed cap (x' + f2(capX) + '). Cast speed also shortens the ' + cdTxt + ' cooldown.');
+      const life = (sk.BrandDuration || 0) + rule('r87.SPARKS.DurAdd', 7);
+      add('Hits', '"+ maximum Sparks" lines add Sparks (up to ' + rule('r80.CAPS.Sparks', 27) + '); every Spark strikes, each 3 gather into one body at ' + pct(rule('r87.SPARKS.DamageMult', 0.85)) + ' a Spark. They last ' + life + ' s (skill duration lengthens it): recast before then to keep them all up. As your only Spark skill they build up to ' + pct(rule('r99.META.fConvergeMax99', 0.5)) + ' faster strikes on Rares and Guardians; two Spark skills on one enemy each strike for less.');
+    } else if (sk.Orbit && sk.Orbit.AngularSpeed && sk.Delivery === 'Orbit') {
+      const ob = sk.Orbit, n = (ob.Count || 0) + (ob.CountPerLevels || []).length;
+      add('Speed', spd + ' does not change its hits: each ' + (lid === 'blade_vortex' ? 'blade' : 'hammer') + ' in the ring passes the enemy once a turn (' + f2(ob.AngularSpeed / 360) + ' turns a second). Lines that make orbiting blades and hammers turn faster speed it up' + (ob.EmpowerSpeed ? '; Hammerstorm on your bar turns them x' + ob.EmpowerSpeed + ' faster, adds ' + (ob.EmpowerExtra || 0) + ' and hits ' + (ob.EmpowerMore || 0) + '% harder' : '') + '.');
+      add('Hits', (ob.CountPerLevels && ob.CountPerLevels.length ? ob.Count + ' in the ring, one more at gem level ' + ob.CountPerLevels.join(', ') + ' (' + n + ')' : (ob.Count || 0) + ' in the ring') + '; "+ orbiting projectile" lines add more.');
+    } else if (sk.Totem && sk.Totem.Interval > 0) {
+      const t = sk.Totem, cap = t.Kind === 'Ballista' ? rule('r80.CAPS.Ballistas', 7) : rule('r80.CAPS.Totems', 11);
+      add('Speed', 'attack speed only places them faster. Each fires every ' + t.Interval + ' s; increased totem speed makes it fire faster.');
+      add('Hits', '"+ Totem" lines add more (up to ' + cap + ' at once); each past the first adds ' + pct(rule('r85.METASYS.fTotemExtraShare', 0.5)) + ' of one. Extra bolts spread out: one hits a lone enemy (Rain or Focused Volley make more of them land).');
+    } else if (sk.Orb && sk.Orb.Interval > 0 && sk.Delivery === 'Orb') {
+      const ob = sk.Orb;
+      add('Speed', 'cast speed makes the icicles come faster at its ' + exp + ' power: +50% cast speed = x' + ex(1.5) + ', +100% = x' + ex(2) + ', stopped at the cast speed cap (x' + f2(capX) + '). "Icicles faster" lines count in full.');
+      add('Hits', 'each orb throws an icicle every ' + ob.Interval + ' s for ' + (ob.Duration || 6) + ' s, then bursts for ' + pct(ob.ExplodeScale || 0) + ' of an icicle; "+ maximum Winter Orbs" lines add orbs.');
+    } else if (sk.Channel && sk.Channel.Tick) {
+      add('Speed', spd + ' counts in full: one tick every ' + sk.Channel.Tick + ' s at base. ' + capLine);
+    } else if (atk && sk.Mirage && sk.Mirage.Hops > 0) {
+      const m = sk.Mirage;
+      add('Speed', 'attack speed speeds the swing only; the ' + (m.Hops - 1) + ' gaps of ' + m.HopTime + ' s between its hops are not sped up.');
+      add('Hits', m.Hops + ' cuts a use, the last one ' + pct(m.FinalScale || 1) + '.');
+    } else if (!atk && sk.Mirage && sk.Mirage.Hops > 0) {
+      add('Speed', 'cast speed speeds the cast and each flight (' + (sk.Mirage.HopTime || 0.15) + ' s apart at base).');
+      add('Hits', sk.Mirage.Hops + ' flights a cast, one more at gem level 10 and 20, and one more per Chain; the last bursts for ' + pct(sk.Mirage.FinalScale || 1) + '.');
+    } else if (atk) {
+      add('Speed', 'attack speed counts in full: your weapon\'s attacks a second x your attack speed' + (sk.ActionSpeed && sk.ActionSpeed !== 1 ? ' x' + sk.ActionSpeed + ' (this skill\'s own speed)' : '') + '. ' + capLine);
+    } else if (k === 'spell') {
+      add('Speed', 'cast speed counts in full (' + ct + ' s a cast). ' + capLine);
+    }
+
+
+    const toggled = sk.Delivery === 'Aura' || (g && g.Tick && !g.Duration);
+    if (cd && !toggled && !['Brand', 'Orbit', 'Orb'].includes(sk.Delivery) && !(sk.Totem && sk.Totem.Interval > 0)) {
+      if (tags.has('Movement') && H.DexMoveRechargePer10 > 0) add('Cooldown', cdTxt + '; it recovers ' + H.DexMoveRechargePer10 + '% faster per 10 Dexterity, not with ' + spd + ' (down to 0.3 s). Cooldown Recovery lines count too.');
+      else if (sk.Delivery === 'Rain' && META.bRainCooldownBySpeed) add('Cooldown', cdTxt + '; it recovers with attack speed, down to ' + (META.RainCooldownFloor || 0) + ' s.');
+      else add('Cooldown', cdTxt + '; it recovers with ' + spd + ' and Cooldown Recovery lines' + (sk.MinCooldown ? ', down to ' + sk.MinCooldown + ' s' + (atk ? '' : '; past that floor, extra speed turns into damage at its square root') : '') + '.');
+    }
+
+
+    const hits = [];
+    if (lid === 'viper_fang' && sk.Strikes) hits.push((sk.Strikes && sk.Strikes.Count) + ' strikes a use, ' + (sk.Strikes && sk.Strikes.Interval) + ' s apart (not sped up by attack speed)');
+    else if (sk.Strikes && typeof sk.Strikes === 'object' && sk.Strikes.Count > 1) hits.push(sk.Strikes.Count + ' strikes a use' + (sk.Strikes.FinalScale > 0 ? ', the last ' + pct(sk.Strikes.FinalScale) : ''));
+    if (sk.Delivery === 'Rain' && sk.Rain && sk.Rain.Waves > 0) hits.push('each use rains ' + sk.Rain.Waves + ' waves; an enemy standing in it is struck by each');
+    if (sk.bReturnFlight) hits.push('it cuts twice a throw, on the way out and back');
+    if (sk.Delivery === 'Skyfall') hits.push('each enemy is struck once a cast; lines that make Skyfall fall again add a second strike (up to 100%)');
+    if (tags.has('Projectile') && !(sk.Totem && sk.Totem.Interval > 0) && sk.Delivery !== 'Orbit' && sk.Delivery !== 'Orb') hits.push('extra projectiles fly at other enemies: one hits a lone enemy (with the Orbit support, Focused Volley or Rain more of them strike it)');
+    if (tags.has('Chain') && sk.Delivery !== 'Brand' && !(sk.Mirage && sk.Mirage.Hops > 0)) hits.push('chains reach other enemies; a lone enemy is hit once');
+    if (sk.Channel && sk.Channel.bStrike && sk.Channel.StrikeScale > 0) hits.push('every turn it also strikes one enemy for ' + pct(sk.Channel.StrikeScale) + ' of the hit');
+    if (hits.length) add('Hits', hits.map((h, i) => i ? h : h[0].toUpperCase() + h.slice(1)).join('. ') + '.');
+
+
+    if (k === 'spell') add('Crit', (H.SpellCritBase || 6) + '% base chance, or your staff\'s or wand\'s own crit chance (its local crit line counts); critical strike multiplier from ' + (H.CritMultiBase || 150) + '%.');
+    else if (atk) add('Crit', 'your weapon\'s crit chance (its local crit line applies first); critical strike multiplier from ' + (H.CritMultiBase || 150) + '%.');
+
+
+    const pre = rule('r114.META.AilPreCrit114', 0), noCrit = bit => (pre & bit) ? ' Crits do not make it bigger.' : '';
+    const deals = new Set([dt]); if (sk.ConvertShare && sk.ConvertShare < 100 && dt !== 'Physical') deals.add('Physical'); // Glacial Shards converts all of it: no bleed
+    const ail = [];
+    if (deals.has('Poison') || tags.has('Poison')) ail.push('Poison: poison chance, poison damage and damage over time multiplier lines; each stack is made from one hit.' + noCrit(4));
+    if (deals.has('Fire')) ail.push('Ignite: ignite chance, burning damage and damage over time multiplier lines.' + noCrit(2));
+    if (deals.has('Cold')) ail.push('Cold: hits fill a Guardian\'s freeze bar and chill; Crack on Rares and Guardians grows with damage over time multiplier and freeze duration (the two multiply).');
+    if (deals.has('Lightning')) ail.push('Shock: shock chance and shock effect; the shocked enemy takes more from all your skills.');
+    if (atk && deals.has('Physical')) ail.push('Bleed: bleed chance lines.' + noCrit(1));
+    ail.forEach(t => add('Ailment', t));
+
+    extras(sk).forEach(t => add('Also', t));
+    return out;
+  }
+
+
+
   function tickNote(sk) {
     if (!(sk.Delivery === 'Aura' || (sk.Ground && sk.Ground.Tick && !sk.Ground.Duration))) return '';
     let tps, scale;
@@ -10938,8 +11055,8 @@ window.BOScaling = function (ctx) {
     if (sk.Cooldown) meta.push('Cooldown ' + sk.Cooldown + 's');
     if (sk.ManaCost) meta.push('Mana ' + mana(sk, G, 1) + ' → ' + mana(sk, G, max));
     if (meta.length) h += '<p class="sc-meta">' + esc(meta.join(' · ')) + '</p>';
-    const ex = extras(sk);
-    if (ex.length) h += '<p class="sc-meta sc-extra">' + ex.map(t => '<b>Also scales:</b> ' + esc(t)).join('<br>') + '</p>';
+    const sc = scalers(sk, id);
+    if (sc.length) h += '<div class="sc-scale"><b class="sc-scale-h">How to make it stronger</b><ul>' + sc.map(([l, t]) => '<li><b>' + esc(l === 'Also' ? 'Also scales' : l) + ':</b> ' + esc(t) + '</li>').join('') + '</ul></div>';
     if (k === 'attack' || k === 'spell') {
       let rows = '';
       for (let L = 1; L <= max; L++) rows += '<tr><td>' + L + '</td><td>' + at(sk, G, L) + '</td><td>' + (mana(sk, G, L) || '–') + '</td></tr>';
@@ -15175,6 +15292,8 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
   const minionDefShare = GD => is078(GD) ? 0.5 : 1;
 
 
@@ -15459,6 +15578,22 @@ window.BOCharacter = function (ctx) {
   const ruleNum = (GD, key, def) => { const v = (GD.rules || {})[key]; const n = typeof v === 'object' && v ? +v.value : +v; return v != null && isFinite(n) ? n : def; };
 
   const bSwitch = (GD, key, def) => { const v = (GD.rules || {})[key]; const x = v && typeof v === 'object' ? v.value : v; return x == null ? !!def : String(x).toLowerCase() === 'true'; };
+
+
+
+
+
+
+
+
+
+  const ADDED_EFF_SEEN = { leap_slam: 1.5 };
+  const addedEffOf = (GD, id) => {
+    id = lc(id);
+    const s = (GD.rules || {})['r99.META.sAddedEff99'], txt = s && typeof s === 'object' ? s.value : s;
+    for (const kv of String(txt || '').split(',')) { const [k, v] = kv.split('='); if (k && lc(k.trim()) === id && isFinite(+v)) return +v; }
+    return bSwitch(GD, 'r100.META.bAddedEff100', false) && ADDED_EFF_SEEN[id] ? ADDED_EFF_SEEN[id] : 1;
+  };
 
 
 
@@ -15771,7 +15906,10 @@ window.BOCharacter = function (ctx) {
 
   function uniqueLineValue(uid, i, x, GD) {
     const k = uniqueLineScale(uid, i, GD); if (k === 1 || x == null || typeof x !== 'number') return x;
-    const p = Math.pow(10, (String(x).split('.')[1] || '').length);
+
+
+
+    const p = Math.pow(10, (String(+x.toPrecision(7)).split('.')[1] || '').length);
 
 
     const r = Math.round(x * k * p) / p;
@@ -17169,12 +17307,23 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+      if (ctx.isSpell || ctx.tags.has('spell')) for (const m of pickMods(mods, 'IntSpellMore', 'Flat')) if (applies(ctx, m))
+        dEng.push({ intEng: true, v: m.v * attr.Int / 10 * dShare, types: [], src: m.src + ' (' + attr.Int + ' Int, half for minions)' });
+
+
+
+
+
+
       {
         const gl = pickMods(mods, 'GolemLifeMore', 'Flat'), per = gl.reduce((t, m) => t + m.v, 0);
         if (per) {
           const golem = /^summon_.*golem$/.test(lc(sk.Id)), life = heroMaxLife(GD, ch, mods, attr), share = golem ? 1 : 0.35;
           gl.forEach(m => use(m, 'minion more damage per 100 life'));
-          dEng.push({ v: per * life / 100 * share, types: [], src: gl[0].src + ' (' + Math.round(life).toLocaleString('en-US') + ' life' + (golem ? '' : ', 35% for minions other than the golem') + ')' });
+          dEng.push({ pyre: true, v: per * life / 100 * share, types: [], src: gl[0].src + ' (' + Math.round(life).toLocaleString('en-US') + ' life' + (golem ? '' : ', 35% for minions other than the golem') + ')' });
         }
       }
       if (dEng.length) {
@@ -17182,7 +17331,7 @@ window.BOCharacter = function (ctx) {
         for (const e of dEng) for (const t of e.types) byType[t] = (byType[t] || 0) + e.v;
         if (U) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: U, v2: 0, local: false, src: 'Damage engine (defences, added together, patch 0.56.5)', key: 'engine' });
         for (const [t, S] of Object.entries(byType)) mods.push({ stat: 'Damage', mode: 'More', tags: [t], v: ((1 + (U + S) / 100) / (1 + U / 100) - 1) * 100, v2: 0, local: false, src: 'Damage engine, ' + t + ' only', key: 'engine' });
-        res.notes.push('Damage engine on minions: ' + dEng.map(e => e.src.replace(/^[^·]*·\s*/, '') + ' +' + e.v.toFixed(1) + '%').join(', ') + (dEng.some(e => e.def) ? ' (defence lines: game panel and log, 11 Nov 2026' + (dShare < 1 ? '; half for minions from patch 78, patch notes' : '') + ')' : '') + (dEng.some(e => !e.def) ? ' (Pyre Spark: from its text and the developer stacking table, not checked in game)' : '') + '.');
+        res.notes.push('Damage engine on minions: ' + dEng.map(e => e.src.replace(/^[^·]*·\s*/, '') + ' +' + e.v.toFixed(1) + '%').join(', ') + (dEng.some(e => e.def) ? ' (defence lines: game panel and log, 11 Nov 2026' + (dShare < 1 ? '; half for minions from patch 78, proven by game tooltips 25 Nov 2026' : '') + ')' : '') + (dEng.some(e => e.intEng) ? ' (Boundless Mind: half for minions, game tooltips 25 Nov 2026)' : '') + (dEng.some(e => e.pyre) ? ' (Pyre Spark: from its text and the developer stacking table, not checked in game)' : '') + '.');
       }
       return minionSheet(GD, ch, sk, res, mods, use, attr, L, o);
     }
@@ -17235,6 +17384,10 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
       let spellLife = 0;
       if (sk.LifeAsBase) {
         res.heroLife = heroMaxLife(GD, ch, mods, attr);
@@ -17270,10 +17423,12 @@ window.BOCharacter = function (ctx) {
 
 
     const gemGrowth = isAttack && is079(GD) ? spellLevelGrowth(G.DamageGrowth || 1.19, own, 0, BONUS_FADE_ADDED) : spellLevelGrowth(G.DamageGrowth || 1.19, own, bonus, BONUS_FADE_ADDED);
+    const addEff = isAttack ? addedEffOf(GD, skillId) : 1;
+    if (addEff !== 1) res.notes.push(sk.Name + ': "Adds ... to Attacks" lines on gear count x' + addEff + ' (the game\'s added damage effectiveness for this skill; Copy stats, 25 Nov 2026).');
     for (const m of pickMods(mods, 'AddedDamage', 'Flat')) {
       const { types, conds, gemScaled } = splitTags(m.tags);
       if (!condsOk(ctx, conds) || !types.length) continue;
-      const k = isAttack ? attackMult * (gemScaled ? gemGrowth : 1) : (gemScaled ? spellGrowth : effAt(1));
+      const k = isAttack ? attackMult * (gemScaled ? gemGrowth : addEff) : (gemScaled ? spellGrowth : effAt(1));
       addPart(types[0], m.v * k, m.v2 * k); use(m, 'adds ' + types[0]);
     }
     res.baseParts = clone(parts);
@@ -18011,6 +18166,11 @@ window.BOCharacter = function (ctx) {
       usesPerSec = count * turns; useTime = 1 / usesPerSec;
       res.orbitRing = { count, turnsPerSec: turns };
       res.notes.push(sk.Name + ': ' + count + ' in the ring, turning ' + turns.toFixed(2) + ' times a second, so a target is struck ' + usesPerSec.toFixed(2) + ' times a second (cast speed does not change it).');
+
+
+
+
+      if (lc(skillId) === 'orbiting_hammers') res.notes.push(sk.Name + ': this counts every hammer striking the enemy on every turn, as the game\'s own panel does. That holds when the enemy is right next to you; from farther away the ring strikes it less often (game test: about 95% of these hits when touching, about 75% at 3.7 m, under 20% at the edge of the ring\'s reach).');
     } else if (sk.Totem && sk.Totem.Interval > 0 && shape !== 'totem_support' && (shape !== 'trap_support' || totemAttack)) {
 
 
@@ -19556,7 +19716,9 @@ window.BOCharacter = function (ctx) {
         (res.triggers = res.triggers || []).push({ src: name, when: t.when, nth: t.nth, pct: t.pct, count: t.count, element: t.element, perSec: events, dps });
         const what = t.when === 'Hit' ? (t.nth > 1 ? 'every ' + t.nth + 'th hit' : 'every hit') + (t.state.length ? ' on a ' + (t.state.includes('VsBurningOrShocked') ? 'Burning or Shocked' : 'Burning') + ' enemy (' + Math.round(share * 100) + '% of the time)' : '')
           : t.when === 'Crit' ? (t.nth > 1 ? 'every ' + t.nth + 'th crit' : 'every crit') : (t.nth > 1 ? 'every ' + t.nth + 'th use' : 'every use');
-        res.notes.push(name + ': ' + what + ' adds ' + (t.count > 1 ? t.count + ' x ' : '') + +(+t.pct).toFixed(1) + '% of the hit' + (t.element ? ' as ' + t.element : '') + capped + ', ' + events.toFixed(2) + ' a second = +' + Math.round(hitDpsNow > 0 ? dps / hitDpsNow * 100 : 0) + '% hit damage on one enemy (splash to others not counted).' + (/Pyre|Overclock|Ninth Storm|One Breath/.test(name) ? '' : ' From the node text; not checked against the game yet.'));
+
+
+        res.notes.push(name + ': ' + what + ' adds ' + (t.count > 1 ? t.count + ' x ' : '') + +(+t.pct).toFixed(1) + '% of the hit' + (t.element ? ' as ' + t.element : '') + capped + ', ' + events.toFixed(2) + ' a second = +' + Math.round(hitDpsNow > 0 ? dps / hitDpsNow * 100 : 0) + '% hit damage on one enemy (splash to others not counted).' + (/Pyre|Overclock|Ninth Storm|One Breath|Anvil of Heaven/.test(name) ? '' : ' From the node text; not checked against the game yet.'));
       }
 
 
@@ -19877,7 +20039,13 @@ window.BOCharacter = function (ctx) {
       panelAil = res.entropy.share < 1 ? shown / (1 - res.entropy.share) : 0;
     }
     const panelHitDps = res.sheetHitDps * (1 + (hit.Physical ? hit.Physical.avg / (hitAvg || 1) : 0) * maimPct / 100);
-    res.panelDps = panelHitDps + panelAil * ((ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * ail.ignite.panelBurning : 0) + (ail.bleed ? ail.bleed.dps1 * ail.bleed.uptime : 0));
+
+
+
+
+
+    const igPanelCrit = ail.ignite ? critFactor / ailCrit('Ignite') : 1;
+    res.panelDps = panelHitDps + panelAil * ((ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * igPanelCrit * ail.ignite.panelBurning : 0) + (ail.bleed ? ail.bleed.dps1 * ail.bleed.uptime : 0));
 
 
 
@@ -21215,6 +21383,11 @@ window.BOCharacter = function (ctx) {
       let b = 0;
       for (const it of ch.items || []) { const base = GD.bases[lc(it.base)]; if (base && base.Block) b += base.Block; }
       b += modsOf(mods, 'Block').filter(m => m.stat === 'Block' && m.mode === 'Flat' && plain(m)).reduce((x, m) => x + m.v, 0);
+
+
+
+      const pips = (H.AttrPipAt || []).filter(t => (attr.Str || 0) >= t).length;
+      if (pips) b += (H.BulwarkBlock || [])[pips - 1] || 0;
       return clamp(b, 0, H.BlockMax || 75);
     }
     const attrInc = { Armour: (H.StrArmourPctPer10 || 0) * (attr.Str || 0), Evasion: (H.DexEvasionPctPer10 || 0) * (attr.Dex || 0), EnergyShield: (H.IntEsPctPer10 || 0) * (attr.Int || 0) }[stat] / 10 || 0;

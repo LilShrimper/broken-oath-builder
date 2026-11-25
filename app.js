@@ -14702,7 +14702,13 @@ window.BOCharacter = function (ctx) {
 
 
 
-    'ManaMore', 'SpeedMore', 'CastSpeedMore', 'TotemCountMore', 'ItemOath114', 'ManaAsAddedLightning113', 'ArmourAsAddedHolyPermille113', 'IgniteStacks']);
+    'ManaMore', 'SpeedMore', 'CastSpeedMore', 'TotemCountMore', 'ItemOath114', 'ManaAsAddedLightning113', 'ArmourAsAddedHolyPermille113', 'IgniteStacks',
+
+
+
+    'Feed85_FuryCharges', 'Feed85_MaimEffect', 'Feed85_IgniteStacks', 'Feed85_MarkStacks', 'Feed85_ChillEffect', 'Feed85_PoisonChance',
+    'Feed85_ExtraProjectiles', 'Feed85_CritChance', 'Feed85_WoeEffectMatch', 'Feed85_BlockChance', 'Feed85_OrbitCount',
+    'Feed85Ail_FuryCharges', 'Feed85Ail_MarkStacks', 'Feed85Ail_RepeatIndex']);
 
 
 
@@ -26159,6 +26165,7 @@ window.BOStartApp = function () {
       if (on) h += '<div class="gain ' + cls + '">Refund: ' + pct(s.d) + ' ' + what + (s.cost < -1 ? ' (' + (-s.cost) + ' nodes go with it)' : '') + '</div>';
       else if (s.swapped) h += '<div class="gain ' + cls + '">Swap for ' + esc(GD.nodes[s.swapped].Name) + ' (one choice per altar): ' + pct(s.d) + ' ' + what + (s.cost > 0 ? ' · ' + s.cost + ' more point' + (s.cost > 1 ? 's' : '') : '') + '</div>';
       else h += '<div class="gain ' + cls + '">Take: ' + pct(s.cost > 1 ? s.d / s.cost : s.d) + ' ' + what + (s.cost > 1 ? ' per point · ' + s.cost + ' points (' + pct(s.d) + ' total)' : ' · ' + s.cost + ' point') + '</div>';
+      if (!on && !s.swapped && s.via && s.via.length) h += '<div class="tk">With the path: ' + esc(s.via.map(x => GD.nodes[x].Name).join(', ')) + '</div>';
       if (s.def != null) h += '<div class="tk">' + esc(skillName) + ' DPS ' + pct(s.dps) + ' · defence ' + pct(s.def) + ' · ' + esc(gsPrioText(Math.round(heatW() * 100))) + '</div>';
     } else h += '<div class="tk">' + (on ? 'Click to refund' : 'Click to take') + ' · scoring…</div>';
     if ((n.Mods || []).some(m => m.Stat === 'MinionOneKind') && optExtra().length) h += '<div class="tk" style="margin-top:5px">Only one kind of minion stands with this node: of the summon skills you count, only the strongest is counted, the others as 0.</div>';
@@ -26263,7 +26270,9 @@ window.BOStartApp = function () {
         let swapped = null;
         if (have.has(id)) { const rem = refundList(have, id); const r = new Set(rem); list = [...have].filter(x => !r.has(x)); cost = -rem.length; }
         else { const pl = planTake(have, id); if (!pl) continue; list = pl.list; cost = pl.cost; swapped = pl.swapped; }
-        T.scores.set(id, Object.assign(rel(list), { cost, swapped }));
+
+        const via = cost > 1 ? list.filter(x => x !== id && !have.has(x) && GD.nodes[x]) : null;
+        T.scores.set(id, Object.assign(rel(list), { cost, swapped, via }));
       }
       while (i >= ids.length && j < mids.length && performance.now() - t0 < 25) oathScore(GD.masteries[mids[j++]]);
       if (i < ids.length || j < mids.length) { $('#treeStatus').textContent = 'Scoring nodes for ' + skillName + '… ' + Math.round(i / ids.length * 100) + '%'; if (i < ids.length && i % 200 < 30) paintTree(); soon(step); }

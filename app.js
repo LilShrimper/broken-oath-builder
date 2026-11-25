@@ -15044,6 +15044,8 @@ window.BOCharacter = function (ctx) {
 
   const TRIG_SHAPE = new Set(['Nova', 'DawnPillar', 'SkySwords', 'Eruption', 'Whirl', 'StormWolf', 'Afterimage']);
   const TRIG_STATE = new Set(['VsBurning', 'VsBurningOrShocked']);
+
+  const trigCounted = m => { const t = trigParse({ tags: m.tags || m.Tags || [] }); return ['Hit', 'Crit', 'SkillUse'].includes(t.when) && t.pct > 0 && (!t.shape || TRIG_SHAPE.has(t.shape)); };
   function trigParse(m) {
     const p = {}; let when = null, shape = null; const conds = [], types = [], state = [];
     for (const t of m.tags || []) {
@@ -16680,6 +16682,8 @@ window.BOCharacter = function (ctx) {
 
         convRules.forEach((r, i) => { if (!(shares[i] > 0)) return; if (r.own) out.push({ type: r.to, scales: new Set([...p.scales, r.to]), min: p.min * shares[i] * scale, max: p.max * shares[i] * scale, own: true, orig: p.orig || p.type }); else byTo[r.to] = (byTo[r.to] || 0) + shares[i] * scale; });
         convRules.forEach((r, i) => { if (shares[i] > 0) convTrace.push({ from: p.type, to: r.to, pct: shares[i] * scale * 100, src: r.src }); });
+
+
 
 
 
@@ -18707,7 +18711,13 @@ window.BOCharacter = function (ctx) {
         if (named.length) { if (!named.some(x => lc(x) === lc(skillId))) continue; t.conds = t.conds.filter(x => !GD.skills[lc(x)]); }
         if (!condsOk(ctx, t.conds)) continue;
 
-        if (t.shape !== 'StormWolf' && !t.types.every(d => ctx.tags.has(lc(d)))) continue; // Storm Wolf: its own "a quarter Lightning" check below
+
+
+
+
+
+        const byCarry = !t.conds.length;
+        if (t.shape !== 'StormWolf' && !t.types.every(d => ctx.tags.has(lc(d)) || (byCarry && byType[d] > 0))) continue; // Storm Wolf: its own "a quarter Lightning" check below
         let share = 1; // VsBurning: only while the enemy burns
         if (t.state.includes('VsBurning')) share = ail.ignite ? ail.ignite.uptime : 0;
         if (t.state.includes('VsBurningOrShocked')) { const ig = ail.ignite ? ail.ignite.uptime : 0, sh = ail.shock ? 1 - Math.exp(-ail.shock.rate * ail.shock.duration) : 0; share = 1 - (1 - ig) * (1 - sh); }
@@ -21101,7 +21111,7 @@ window.BOCharacter = function (ctx) {
     for (const id of ch.dragonNodes || []) { const k = T[id] ? id : moved[id]; if (k && T[k] && !out.includes(k)) out.push(k); }
     return out;
   }
-  const api = { dragonIds, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, rampEff, late2K: (GD, id, lvl) => late2K(GD, id, lvl), vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, affixLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
+  const api = { dragonIds, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, rampEff, late2K: (GD, id, lvl) => late2K(GD, id, lvl), vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, affixLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, trigCounted, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
 
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -25220,7 +25230,7 @@ window.BOStartApp = function () {
     const verb = d.state === 'taken' ? 'Refund' : 'Take';
     if (g != null) h += '<div class="gain ' + (g > 0.0005 ? 'up' : g < -0.0005 ? 'down' : '') + '">' + verb + ': ' + pct(g) + ' ' + esc(skillName) + ' DPS' + (verb === 'Take' ? (d.cost === 0 ? ' · uses no points' : ' · ' + (d.cost || 1) + ' point' + ((d.cost || 1) === 1 ? '' : 's')) : '') + '</div>';
     else h += '<div class="tk">Click to ' + verb.toLowerCase() + '</div>';
-    const unc = d.mods.filter(m => m.Mode === 'Trigger' || (m.Mode === 'Flag' && m.Stat !== 'Dragonling') || (m.Mode !== 'Flag' && !S.counted(m.Stat))).map(m => m.Mode === 'Flag' || m.Mode === 'Trigger' ? d.text : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
+    const unc = d.mods.filter(m => (m.Mode === 'Trigger' && !S.trigCounted(m)) || (m.Mode === 'Flag' && m.Stat !== 'Dragonling') || (m.Mode !== 'Flag' && !S.counted(m.Stat))).map(m => m.Mode === 'Flag' || m.Mode === 'Trigger' ? d.text : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
     if (unc.length) h += '<div class="tk" style="margin-top:5px">Not in the DPS number: ' + esc(unc.join(' · ')) + '</div>';
     return h;
   }
@@ -25723,7 +25733,7 @@ window.BOStartApp = function () {
   }
 
   function uncounted(n) {
-    return (n.Mods || []).filter(m => m.Mode === 'Trigger' || m.Mode === 'Flag' || !S.counted(m.Stat))
+    return (n.Mods || []).filter(m => (m.Mode === 'Trigger' && !S.trigCounted(m)) || m.Mode === 'Flag' || !S.counted(m.Stat))
       .map(m => m.Mode === 'Trigger' || m.Mode === 'Flag' || (n.Text && !S.hasStatText(GD, m)) ? (n.Text || n.Name) : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
   }
   function tipHtml(id) {

@@ -3249,7 +3249,13 @@ window.BOPlanner = function (ctx) {
   const vowKind = m => m ? m.Stat + '|' + (m.Tags || []).slice().sort().join(',') : '';
   const redOf = it => it && it.rarity === 'Unique' && it.unique && it.unique !== 'None' ? GD.uniques[lc(it.unique)] : null;
   const heldKinds = it => { const u = redOf(it); return new Set(u ? (u.Mods || []).filter(m => m.Mod).map(m => vowKind(m.Mod)) : []); };
-  const vowAffixes = (slot, base, it) => { if (!base) return []; const all = affixesFor(base), held = heldKinds(it); return held.size ? all.filter(a => !held.has(vowKind(a.Mod))) : all; };
+
+
+
+
+  const COUNT_STATS = new Set(['Chains', 'TotemCount', 'OrbitCount', 'MinionCap', 'WaveCount', 'Projectiles', 'Afterimages', 'TrapCount', 'BrandCount']);
+  const idolCountLine = a => !!(a && a.Mod && a.Mod.Mode === 'Flat' && COUNT_STATS.has(a.Mod.Stat) && (a.BaseTags || []).some(t => /^Idol/.test(t)));
+  const vowAffixes = (slot, base, it) => { if (!base) return []; const all = affixesFor(base).filter(a => !idolCountLine(a)), held = heldKinds(it); return held.size ? all.filter(a => !held.has(vowKind(a.Mod))) : all; };
   const vowPool = (slot, base) => new Set(vowAffixes(slot, base).map(a => lc(a.Id)));
 
   function vowMovesTo(it, base, a) {
@@ -3262,6 +3268,7 @@ window.BOPlanner = function (ctx) {
 
   const vowMisfit = (pool, a, slot, base, it) => {
     if (!GD.affixes[lc(a.id)]) return '';
+    if (idolCountLine(GD.affixes[lc(a.id)])) return ' <span class="bad">(' + esc('a Vow can not take an idol\'s +1 count line') + ')</span>';
     if (!pool.has(lc(a.id))) return ' <span class="bad">(' + esc('this base can not roll it') + ')</span>';
     const mv = it && vowMovesTo(it, base, a);
     if (!mv) return '';
@@ -3598,7 +3605,7 @@ window.BOPlanner = function (ctx) {
     let dots = '';
     for (const n of nodes) {
       const st = dState(ch, n.Id), lab = dLabel(ch, n);
-      const tip = lab.name + ' (' + n.Kind + (n.Path ? ', ' + n.Path : '') + (asc2() && isCrown(n) ? (dCost(n, ch) ? ', ' + dCost(n, ch) + ' points' : ', free') : '') + ')\n' + lab.text + (st.why ? '\n— ' + st.why : '') + (edit && (st.s === 'open' || (st.s === 'taken' && !st.why)) ? '\n(click to ' + (st.s === 'taken' ? 'refund' : 'take') + ')' : '');
+      const tip = lab.name + ' (' + n.Kind + (n.Path ? ', ' + n.Path : '') + (asc2() && isCrown(n) ? (dCost(n, ch) ? ', ' + dCost(n, ch) + ' points' : ', free') : '') + ')\n' + lab.text + (st.why ? '\n— ' + st.why : '') + (edit && (st.s === 'open' || st.s === 'locked' || (st.s === 'taken' && !st.why)) ? '\n(click to ' + (st.s === 'taken' ? 'refund' : 'take') + ')' : '');
       const ic = icon(n, st.s === 'taken' || n.Kind === 'Core');
 
       dots += '<g class="dl-n dl-' + st.s + ' dl-' + lc(n.Kind) + (ic ? ' dl-ic' : '') + '" data-dn="' + esc(n.Id) + '"' + (edit && n.Kind !== 'Core' ? ' data-act="dnode" data-id="' + esc(n.Id) + '"' : '') + '>' + ic + '<circle cx="' + n.X + '" cy="' + n.Y + '" r="' + (R[n.Kind] || 9) + '"/>' +
@@ -4614,6 +4621,17 @@ window.BOPlanner = function (ctx) {
     const st = dState(ch, id);
     if (st.s === 'open') return { nodes: [...(ch.dragonNodes || []), id] };
     if (st.s === 'taken' && !st.why) return { nodes: ch.dragonNodes.filter(x => x !== id) };
+
+
+
+    if (st.s === 'locked') {
+      const p = dPlan(ch, id); if (!p) return { msg: dLabel(ch, n).name + ': no path to it from the nodes you hold.' };
+      if (isCrown(n) && asc2()) {
+        const c = dCost(n, ch), free = dPoints(ch) - dUsed(ch) - (p.n - 1);
+        if (c > free) return { msg: dLabel(ch, n).name + ': a crown costs ' + c + ' Dragonling points: you have ' + Math.max(0, free) + ' after its path.' };
+      }
+      return { nodes: p.nodes };
+    }
     return { msg: dLabel(ch, n).name + ': ' + (st.why || 'not reachable yet') + '.' };
   }
 
@@ -11634,6 +11652,343 @@ window.BOVows = function (ctx) {
 
 
 
+
+
+
+
+
+
+window.BOAdvanced = function (ctx) {
+  'use strict';
+  const { $, esc, num } = ctx;
+  const S = window.BOSim;
+  const TYPES = ['Physical', 'Fire', 'Cold', 'Lightning', 'Poison'];
+  const pct = (v, d) => (v >= 0 ? '+' : '') + num(v, d == null ? 1 : d) + '%';
+  const times = (v, d) => '×' + num(v, d == null ? 2 : d);
+  const plain = m => !S.splitTags(m.tags || []).conds.length;
+
+  const typesOf = m => { const t = S.splitTags(m.tags || []).types; return t.length ? t : null; };
+  const forType = (m, d) => { const t = typesOf(m); return !t || t.includes(d); };
+
+
+
+
+  function srcTip(title, mods, o) {
+    o = o || {};
+    const more = o.more, by = new Map();
+    for (const m of mods) {
+      const k = m.src || 'Other';
+      const v = o.value ? o.value(m) : m.v;
+      by.set(k, more ? (by.has(k) ? by.get(k) : 1) * (1 + v / 100) : (by.get(k) || 0) + v);
+    }
+    const rows = [...by].sort((a, b) => more ? Math.abs(b[1] - 1) - Math.abs(a[1] - 1) : Math.abs(b[1]) - Math.abs(a[1]));
+    const fmt = o.fmt || (v => more ? times(v, 3) : (o.unit === '%' || o.unit == null ? pct(v) : (v >= 0 ? '+' : '') + num(v, 1)));
+    const sum = more ? rows.reduce((a, r) => a * r[1], 1) : rows.reduce((a, r) => a + r[1], 0);
+    let h = '<b>' + esc(title) + '</b>' + (o.sub ? '<span class="pl-tip-sub">' + esc(o.sub) + '</span>' : '');
+    if (!rows.length) h += '<span class="pl-tip-desc">' + esc(o.none || 'No lines for this.') + '</span>';
+    else h += '<table class="adv-tip-list">' + rows.map(r => '<tr><td>' + esc(r[0]) + '</td><td>' + fmt(r[1]) + '</td></tr>').join('') + '</table>';
+    if (o.shown != null && rows.length) {
+      const left = more ? o.shown / (sum || 1) : o.shown - sum;
+      if (more ? Math.abs(left - 1) > 0.0005 : Math.abs(left) >= 0.05)
+        h += '<table class="adv-tip-list adv-tip-left"><tr><td>' + esc(o.leftLabel || 'Other rules of the sim (attributes, conversion, conditions)') + '</td><td>' + fmt(left) + '</td></tr></table>';
+    }
+    if (rows.length) h += '<span class="pl-tip-desc">' + (o.total || ((more ? 'Each line multiplies: ' : 'Lines add up: ') + fmt(o.shown != null ? o.shown : sum))) + (o.note ? '. ' + esc(o.note) : '') + '</span>';
+    else if (o.note) h += '<span class="pl-tip-desc">' + esc(o.note) + '</span>';
+    if (more) h += '<span class="pl-tip-head">How "more" works</span><span class="pl-tip-desc">' + esc(o.explain || MORE_EXPLAIN) + '</span>';
+    return h;
+  }
+
+  const MORE_EXPLAIN = 'Increased lines add together first; each more line then multiplies the result on its own. ×1.20 and ×1.10 give ×1.32, not ×1.30. Under ×1 means less: a "less" line, or a rule of the game that takes some off.';
+  const MORE_DMG_EXPLAIN = MORE_EXPLAIN + " For damage it also holds the game's own factors: the hero damage factor every hero hit gets (the developer's switch r108.BAL.fHeroDamage108), less damage while the skill's support sockets are not all filled (patch 79), and the damage engine (lines that add into one more multiplier, patch 0.56.5).";
+  const textTip = (title, text) => '<b>' + esc(title) + '</b><span class="pl-tip-desc">' + esc(text) + '</span>';
+
+
+
+  function row(label, value, o) {
+    o = o || {};
+    const tip = o.tip ? ' tabindex="0" data-tiphtml="' + esc(o.tip) + '"' : '';
+    return '<div class="adv-row' + (o.strong ? ' strong' : '') + (o.tip ? ' has-tip' : '') + (o.cls ? ' ' + o.cls : '') + '"' + tip + '><span class="adv-k"' + (o.color ? ' style="color:' + o.color + '"' : '') + '>' + label + '</span><span class="adv-v">' + value + '</span></div>';
+  }
+  const note = t => '<p class="adv-note">' + t + '</p>';
+  const card = (title, body, tone) => body ? '<section class="adv-card' + (tone ? ' adv-' + tone : '') + '"><h3>' + esc(title) + '</h3>' + body + '</section>' : '';
+
+
+  function skillCard(r, info) {
+
+    const sel = '<select class="adv-skill" aria-label="Main skill">' + ctx.skillOptions() + '</select>';
+    const sk = r.skill, tags = (sk.Tags || []).join(', ');
+    const sups = (r.supports || []).filter(x => x.ok).map(x => esc(x.name)).join(', ');
+    const off = info.off || new Set();
+    const vows = (r.sources || []).filter(s => s.group === 'Vows & Heralds' && !off.has(s.key)).map(s => esc(s.label)).join(', ');
+    return card('Skill', row('Main skill', sel) +
+      row('Calculated against', esc(info.enemy) + ' <button type="button" class="adv-link" data-enemy-cfg>Change</button>') +
+      row('Type', esc([r.base.kind === 'attack' ? 'Attack' : r.minion ? 'Minion' : 'Spell', sk.Delivery, sk.DamageType].filter(Boolean).join(' · '))) +
+      (tags ? row('Tags', esc(tags)) : '') +
+      row('Gem level', r.gem.own + (r.gem.bonus ? ' + ' + r.gem.bonus + ' = plays at ' + r.gem.total : '')) +
+      '<div class="adv-block"><span class="adv-k">Supports counted</span><span>' + (sups || 'None') + '</span></div>' +
+      (vows ? '<div class="adv-block"><span class="adv-k">Vows, Heralds and ground in use</span><span>' + vows + '</span></div>' : ''));
+  }
+
+  function rateCard(r, used) {
+    const sp = r.speed, stat = sp.stat, word = stat === 'CastSpeed' ? 'cast' : 'attack';
+
+    const H = ctx.gd().scaling.Hero || {}, dex = r.base.kind === 'attack' && stat === 'AttackSpeed' && H.DexAttackSpeedPer10 ? (r.attr.Dex || 0) / 10 * H.DexAttackSpeedPer10 : 0;
+    const inc = used.filter(m => m.stat === stat && m.mode === 'Inc' && !m.local).concat(dex ? [{ src: 'Dexterity ' + r.attr.Dex, v: dex }] : []), more = used.filter(m => m.stat === stat && m.mode === 'More' && !m.local);
+    const base = sp.rateMult > 0 ? sp.usesPerSec / sp.rateMult : 0;
+    return card(word === 'cast' ? 'Cast rate' : 'Attack rate',
+      (!sp.cooldown && base > 0 ? row(r.base.kind === 'attack' ? 'Base attacks per second' : 'Base casts per second', num(base, 2), { tip: textTip('Base rate', r.base.kind === 'attack' ? "The weapon's own speed with its local lines, and the skill's own attack time." : "The skill's own cast time.") }) : '') +
+      row('Increased ' + word + ' speed', pct(sp.inc, 0), { tip: srcTip('Increased ' + word + ' speed', inc, { shown: sp.inc }) }) +
+      row('More ' + word + ' speed', times(sp.more), { tip: srcTip('More ' + word + ' speed', more, { more: true, shown: sp.more }) }) +
+      (sp.animRate && sp.animRate !== 1 ? row('Animation speed', times(sp.animRate), { tip: textTip('Animation speed', "This skill's own clip speed.") }) : '') +
+      (sp.cooldown ? row('Cooldown', num(sp.cooldown, 2) + ' s') : '') +
+      (r.totem ? row(r.skill.Totem && r.skill.Totem.Kind === 'Ballista' ? 'Ballistas standing' : 'Totems standing', r.totem.count + ', each every ' + num(r.totem.every, 2) + ' s') : '') +
+      row(word === 'cast' ? 'Casts per second' : 'Attacks per second', num(sp.usesPerSec, 2), { strong: true }), 'speed');
+  }
+
+  function critCard(r, used) {
+    const cr = r.crit;
+    return card('Critical strikes',
+      row('Base crit chance', num(cr.base, 1) + '%', { tip: textTip('Base crit chance', r.base.kind === 'attack' ? 'The weapon\'s own chance with its local crit lines.' : 'Spells: 6%, or the chance of the staff or wand you hold.') }) +
+      row('Increased crit chance', pct(cr.inc, 0), { tip: srcTip('Increased crit chance', used.filter(m => m.stat === 'CritChance' && m.mode === 'Inc' && !m.local), { shown: cr.inc, note: r.base.kind === 'attack' ? "The weapon's local crit lines are in its base chance" : '' }) }) +
+      row('Crit chance', num(cr.chance, 1) + '%', { strong: true }) +
+      row('Crit multiplier', num(cr.multi, 0) + '%', { tip: srcTip('Crit multiplier', [{ src: 'Base', v: 150 }].concat(used.filter(m => m.stat === 'CritMulti' && m.mode === 'Flat')), { shown: cr.multi }) }) +
+      row('Crit effect on damage', times(cr.factor, 2), { strong: true }), 'crit');
+  }
+
+  function hitCard(r, used) {
+    const types = TYPES.filter(d => r.hit[d] && r.hit[d].avg > 0);
+    const b = r.base, w = b.weapon;
+    let h = '';
+    if (b.kind === 'attack' && w) h += row('Weapon', esc(w.name || 'Unarmed'));
+    else if (b.min != null) h += row('Spell base', num(b.min, 0) + '–' + num(b.max, 0));
+    if (b.effectiveness) h += row('Skill effectiveness', times(b.effectiveness, 2), { tip: textTip('Skill effectiveness', 'How much of added damage the skill deals ("of added damage" in the game\'s tooltip), at the level the gem plays at.') });
+    for (const d of types) {
+      const si = r.scaleInfo[d] || {}, p = r.convertedParts[d] || [0, 0];
+      const H = ctx.gd().scaling.Hero || {}, str = d === 'Physical' && (r.skill.Tags || []).includes('Melee') && H.StrMeleePhysPer10 ? (r.attr.Str || 0) / 10 * H.StrMeleePhysPer10 : 0;
+
+
+      const spellAttr = r.base.kind !== 'attack' && !r.minion ? (r.skill.Attribute === 'Str' ? 'Str' : 'Int') : '', spellInc = spellAttr && H.IntSpellDamagePer10 ? (r.attr[spellAttr] || 0) / 10 * H.IntSpellDamagePer10 : 0;
+      const heroF = +((ctx.gd().rules || {})['r108.BAL.fHeroDamage108']) || 1;
+      const inc = used.filter(m => m.stat === 'Damage' && m.mode === 'Inc' && !m.local && forType(m, d)).concat(str ? [{ src: 'Strength ' + r.attr.Str + ' (melee physical)', v: str }] : [], spellInc ? [{ src: (spellAttr === 'Str' ? 'Strength ' : 'Intelligence ') + r.attr[spellAttr] + ' (spells, ' + H.IntSpellDamagePer10 + '% per 10)', v: spellInc }] : []);
+      const more = used.filter(m => m.stat === 'Damage' && m.mode === 'More' && forType(m, d)).concat(heroF !== 1 && !r.minion ? [{ src: 'Hero damage factor (game rule)', v: (heroF - 1) * 100 }] : []);
+      h += '<div class="adv-sub" style="--c:' + ctx.typeColor(d) + '">' + d + '</div>' +
+        row('Base after conversion', num(p[0], 0) + '–' + num(p[1], 0)) +
+        (si.inc != null ? row('Increased', pct(si.inc, 0), { tip: srcTip('Increased ' + d + ' damage', inc, { shown: si.inc }) }) : '') +
+        (si.more != null ? row('More', times(si.more, 3), { tip: srcTip('More ' + d + ' damage', more, { more: true, shown: si.more, leftLabel: 'Other rules of the sim (young-character boost, lines of the damage type it converted from)', explain: MORE_DMG_EXPLAIN }) }) : '') +
+        (types.length > 1 ? row('Average hit', num(r.hit[d].avg), { color: ctx.typeColor(d) }) : '');
+    }
+    h += row('Average hit', num(r.hitAvg), { strong: true }) +
+      row('Average hit with crits', num(r.hitAvgCrit)) +
+      (r.hits.hitsPerUse && r.hits.hitsPerUse !== 1 ? row('Hits on one enemy per use', num(r.hits.hitsPerUse, 2)) : '') +
+      row('Hits per second on the enemy', num(r.hits.hitsPerSec, 2));
+    return card('Hit damage', h, 'hit');
+  }
+
+  function enemyCard(r, used) {
+    const e = r.enemy, types = TYPES.filter(d => r.hit[d] && r.hit[d].avg > 0);
+    let h = '';
+    for (const d of types) {
+      const m = r.mitig[d] || {}, pen = e.pen[d] || 0;
+      h += row('Enemy ' + d.toLowerCase() + ' resistance', num(e.resist[d], 0) + '%' + (pen ? ' − ' + num(pen, 0) + '% pen = ' + num(m.effRes, 0) + '%' : ''),
+        { color: ctx.typeColor(d), tip: pen ? srcTip(d + ' penetration', used.filter(x => x.stat === 'Penetration' && forType(x, d)), { shown: pen, note: 'Taken off the enemy\'s resistance' }) : '' });
+    }
+    if (r.mitig.armourReduction) h += row('Enemy armour stops', num(r.mitig.armourReduction * 100, 1) + '% of physical', { tip: textTip('Enemy armour', 'The enemy has ' + num(e.armour) + ' armour against your physical hit.') });
+    const tk = types.map(d => (r.mitig[d] || {}).taken).filter(x => x && x !== 1);
+    if (tk.length) h += row('Enemy takes more damage', times(Math.max(...tk), 2), { tip: textTip('Damage taken', 'Curses, Marks, shock and other "takes more damage" sources on the enemy, as the sim stacks them for this enemy.') });
+    const curses = (e.activeCurses || e.curses || []).map(c => c.name).filter(Boolean);
+    if (curses.length) h += row('Curses on it', esc(curses.join(', ')));
+    if (r.ailments.shock) h += row('Shock', '+' + num(r.ailments.shock.pct, 1) + '% damage taken');
+    h += row('Tooltip DPS', num(r.panelDps), { tip: textTip('Tooltip DPS', 'What the skill\'s panel in the game shows: no enemy resistances or curses.') }) +
+      row('Hit DPS', num(r.hitDps)) +
+      (r.poisonDps ? row('Poison DPS', num(r.poisonDps)) : '') + (r.igniteDps ? row('Ignite DPS', num(r.igniteDps)) : '') + (r.bleedDps ? row('Bleeding DPS', num(r.bleedDps)) : '') +
+      (r.entropyDps ? row('Entropy DPS', num(r.entropyDps)) : '') +
+      row('Total DPS vs this enemy', num(r.totalDps), { strong: true });
+    return card('Damage on the enemy', h, 'enemy');
+  }
+
+  function skillStatsCard(r) {
+    const hs = r.hits;
+    const h = (hs.projectiles ? row('Projectiles', hs.projectiles + (hs.projOnTarget !== hs.projectiles ? ' (' + hs.projOnTarget + ' on this target)' : '')) : '') +
+      (hs.strikes > 1 ? row('Strikes per use', hs.strikes) : '') + (hs.repeats ? row('Repeats per use', '+' + hs.repeats) : '') +
+      (r.skill.Chains ? row('Chains (gem)', r.skill.Chains) : '') + (r.skill.Pierce ? row('Pierce (gem)', r.skill.Pierce) : '') +
+      (r.ailments.durationInc ? row('Increased ailment duration', pct(r.ailments.durationInc, 0)) : '') +
+      (r.ailments.dotMulti ? row('Damage over time multiplier', pct(r.ailments.dotMulti, 0)) : '') +
+      (r.ailments.poison ? row('Poison chance', num(r.ailments.poison.chance, 0) + '%') + row('Poison stacks', num(r.ailments.poison.stacks, 1) + ' of ' + r.ailments.poison.cap) : '');
+    return card('Skill stats', h);
+  }
+
+  function manaCard(r) {
+    const m = r.mana; if (!m) return '';
+    if (m.skip) return card('Mana use', note('Not counted: ' + esc(m.skip) + '.'), 'mana');
+    return card('Mana use',
+      row('Cost per use', num(m.cost, 1) + (m.mult > 1.001 ? ' <small>×' + num(m.mult, 2) + ' from supports</small>' : '')) +
+      row('Spent per second', '<span class="' + (m.sustained ? 'good' : m.ok ? '' : 'bad') + '">' + num(m.spend, 1) + '</span>') +
+      row('Regenerated per second', num(m.regen, 1)) +
+      (m.onHit ? row('Gained on hit', num(m.onHit, 1) + '/s') : '') + (m.leech ? row('Leeched', num(m.leech, 1) + '/s') : '') +
+      row('Reserved', num(m.reserved || 0, 0) + ' of ' + num(m.max, 0)) +
+      row('Lasts', m.sustained ? 'sustained' : m.lasts >= 600 ? '10+ min of nonstop use' : num(m.lasts, 0) + ' s of nonstop use', { strong: true }), 'mana');
+  }
+
+
+  function attrCard(hd, dm, ch, H) {
+    const cls = ctx.gd().classes[String(ch.classId || '').toLowerCase()] || {};
+    const rowA = (a, name) => {
+      const base = (cls[a] || 0) + (cls[a + 'PerLevel'] || 0) * Math.max(0, ch.level - 1);
+      const lines = dm.filter(m => (m.stat === a || m.stat === 'Attributes') && plain(m));
+      return row(name, num(hd.attr[a], 0), { strong: true, tip: srcTip(name, [{ src: ch.classId + ' at level ' + ch.level, v: base }].concat(lines.filter(m => m.mode === 'Flat')), { unit: '', fmt: v => (v >= 0 ? '+' : '') + num(v, 1), total: (() => { const inc = lines.filter(m => m.mode === 'Inc').reduce((x, m) => x + m.v, 0), flat = base + lines.filter(m => m.mode === 'Flat').reduce((x, m) => x + m.v, 0); return 'Lines add up: ' + num(flat, 1) + (inc ? ', then ' + pct(inc, 0) + ' increased' : '') + ' = ' + num(hd.attr[a], 0) + ' (rounded)'; })() }) });
+    };
+    const gives = [];
+    if (H.LifePerStr || H.StrArmourPctPer10) gives.push('each 10 Strength: ' + [H.LifePerStr ? '+' + num(H.LifePerStr * 10, 0) + ' life' : '', H.StrArmourPctPer10 ? '+' + H.StrArmourPctPer10 + '% armour' : ''].filter(Boolean).join(', '));
+    if (H.DexEvasionPctPer10 || H.EvasionPerDex79) gives.push('each 10 Dexterity: ' + [H.EvasionPerDex79 ? '+' + num(H.EvasionPerDex79 * 10, 0) + ' evasion' : '', H.DexEvasionPctPer10 ? '+' + H.DexEvasionPctPer10 + '% evasion' : ''].filter(Boolean).join(', '));
+    if (H.IntEsPctPer10 || H.EsPerInt79) gives.push('each 10 Intelligence: ' + [H.EsPerInt79 ? '+' + num(H.EsPerInt79 * 10, 0) + ' energy shield' : '', H.IntEsPctPer10 ? '+' + H.IntEsPctPer10 + '% energy shield' : ''].filter(Boolean).join(', '));
+    return card('Attributes', rowA('Str', 'Strength') + rowA('Dex', 'Dexterity') + rowA('Int', 'Intelligence') + (gives.length ? note(esc(gives.join('; ').replace(/^./, c => c.toUpperCase())) + '.') : ''));
+  }
+
+  function lifeCard(hd, dm, ch, H) {
+    const base = (H.LifeBase || 130) + (H.LifePerLevel || 11.5) * Math.max(0, ch.level - 1);
+    const fromStr = (H.LifePerStr || 0.5) * (hd.attr.Str || 0);
+    const L = dm.filter(m => plain(m) && m.stat === 'Life'), dexL = dm.filter(m => plain(m) && m.stat === 'DexLife' && m.mode === 'Flat');
+    const flatM = L.filter(m => m.mode === 'Flat').concat(dexL.map(m => Object.assign({}, m, { v: m.v * (hd.attr.Dex || 0) / 10 })));
+    const flat = flatM.reduce((a, m) => a + m.v, 0), inc = L.filter(m => m.mode === 'Inc'), more = L.filter(m => m.mode === 'More');
+    const incV = inc.reduce((a, m) => a + m.v, 0), moreV = more.reduce((a, m) => a * (1 + m.v / 100), 1);
+    return card('Life',
+      row('Base at level ' + ch.level, num(base, 0)) + row('From Strength', num(fromStr, 0)) +
+      row('Flat from gear and tree', num(flat, 0), { tip: srcTip('Flat life', flatM, { unit: '' }) }) +
+      row('Increased', pct(incV, 0), { tip: srcTip('Increased life', inc) }) +
+      (more.length ? row('More', times(moreV, 2), { tip: srcTip('More life', more, { more: true }) }) : '') +
+      row('Total', num(hd.life, 0), { strong: true }), 'life');
+  }
+
+  function esCard(hd, D, dm, ch, H) {
+    const GD = ctx.gd(), loc = {};
+    for (const m of dm) if (m.local && (m.stat === 'EnergyShield' || m.stat === 'Defences')) { const o = loc[m.key] || (loc[m.key] = { es: 0, def: 0 }); if (m.stat === 'EnergyShield' && m.mode === 'Flat') o.es += m.v; else if (m.stat === 'Defences' && m.mode === 'Inc') o.def += m.v; }
+    const gearM = [];
+    for (const it of ch.items || []) {
+      const bs = GD.bases[String(it.base || '').toLowerCase()] || {}, o = loc['item:' + it.slot] || { es: 0, def: 0 }, v = ((bs.EnergyShield || 0) + o.es) * (1 + o.def / 100);
+      if (v) gearM.push({ src: (bs.Name || it.base) + ' (' + it.slot + ')', v });
+    }
+    const gl = dm.filter(m => !m.local && m.stat === 'EnergyShield');
+    const flatM = gl.filter(m => m.mode === 'Flat'), incM = gl.filter(m => m.mode === 'Inc');
+    const int = hd.attr.Int || 0, fromInt = (H.EsPerInt79 || 0) * int, intInc = (H.IntEsPctPer10 || 0) * int / 10;
+    const gear = gearM.reduce((a, m) => a + m.v, 0), flat = flatM.reduce((a, m) => a + m.v, 0), incV = incM.reduce((a, m) => a + m.v, 0);
+    if (!hd.es && !gear && !flat) return card('Energy shield', row('Total', '0', { strong: true }), 'es');
+    return card('Energy shield',
+      row('From gear', num(gear, 0), { tip: srcTip('Energy shield from gear', gearM, { unit: '', note: 'Each item\'s base with its own lines' }) }) +
+      row('Flat from tree and other lines', num(flat, 0), { tip: srcTip('Flat energy shield', flatM, { unit: '' }) }) +
+      (fromInt ? row('From Intelligence', num(fromInt, 0)) : '') +
+      row('Increased', pct(incV + intInc, 0), { tip: srcTip('Increased energy shield', incM.concat(intInc ? [{ src: 'Intelligence ' + int, v: intInc }] : []), { shown: incV + intInc }) }) +
+      row('Total', num(hd.es, 0), { strong: true }), 'es');
+  }
+
+
+
+  function defParts(stat, hd, dm, ch, H) {
+    const GD = ctx.gd(), gearM = [];
+    for (const it of ch.items || []) {
+      const b = GD.bases[String(it.base || '').toLowerCase()]; if (!b || !b[stat]) continue;
+      const key = 'item:' + it.slot, loc = dm.filter(m => m.local && m.key === key);
+      const lf = loc.filter(m => m.stat === stat && m.mode === 'Flat').reduce((x, m) => x + m.v, 0);
+      const li = loc.filter(m => m.mode === 'Inc' && (m.stat === stat || m.stat === 'Defences')).reduce((x, m) => x + m.v, 0);
+      gearM.push({ src: (b.Name || it.base) + ' (' + it.slot + ')', v: (b[stat] * S.gradeMult(it.grade) + lf) * (1 + (li + S.armourQuality(it, b)) / 100) });
+    }
+    const flatM = dm.filter(m => !m.local && m.stat === stat && m.mode === 'Flat' && plain(m));
+    const incM = dm.filter(m => !m.local && m.mode === 'Inc' && (m.stat === stat || m.stat === 'Defences') && plain(m));
+    const moreM = dm.filter(m => !m.local && m.mode === 'More' && m.stat === stat && plain(m));
+    const attr = stat === 'Armour' ? ['Strength', hd.attr.Str || 0, H.StrArmourPctPer10 || 0] : ['Dexterity', hd.attr.Dex || 0, H.DexEvasionPctPer10 || 0];
+    const attrInc = attr[2] * attr[1] / 10;
+    const extra = stat === 'Evasion' ? (H.EvasionPerDex79 || 0) * (hd.attr.Dex || 0) + 3.12 * (ch.level || 0) : 0;
+    return { gearM, flatM, incM, moreM, attr, attrInc, extra,
+      gear: gearM.reduce((a, m) => a + m.v, 0), flat: flatM.reduce((a, m) => a + m.v, 0), inc: incM.reduce((a, m) => a + m.v, 0) + attrInc, more: moreM.reduce((a, m) => a * (1 + m.v / 100), 1) };
+  }
+  function defRows(stat, p) {
+    return row('From gear', num(p.gear, 0), { tip: srcTip(stat + ' from gear', p.gearM, { unit: '', note: 'Each item\'s base (with its Base Grade and quality) and its own lines' }) }) +
+      row('Flat from tree and other lines', num(p.flat, 0), { tip: srcTip('Flat ' + stat.toLowerCase(), p.flatM, { unit: '' }) }) +
+      (p.extra ? row('From Dexterity and level', num(p.extra, 0), { tip: textTip('From Dexterity and level', 'Every point of Dexterity adds flat evasion, and the hero has a base that grows with level.') }) : '') +
+      row('Increased', pct(p.inc, 0), { tip: srcTip('Increased ' + stat.toLowerCase(), p.incM.concat(p.attrInc ? [{ src: p.attr[0] + ' ' + p.attr[1], v: p.attrInc }] : []), { shown: p.inc }) }) +
+      (p.moreM.length ? row('More', times(p.more, 2), { tip: srcTip('More ' + stat.toLowerCase(), p.moreM, { more: true }) }) : '');
+  }
+  function armourCard(hd, D, dm, ch, H) {
+    const p = defParts('Armour', hd, dm, ch, H), af = H.ArmourFactor75 || H.ArmourFactor || 5, mx = (H.ArmourMaxReduction || 80) / 100;
+    const stops = hit => D.armHit > 0 ? Math.min(mx, D.armHit / (D.armHit + af * Math.min(hit, H.ArmourBigHitRef || 1000))) : 0;
+    const esShare = D.armHit - D.armour;
+    return card('Armour', defRows('Armour', p) + row('Total', num(hd.armour, 0), { strong: true }) +
+      (esShare > 0.5 ? row('Energy shield counted as armour', '+' + num(esShare, 0)) : '') +
+      row('Stops of a 1,000 hit', num(stops(1000) * 100, 1) + '%') + row('Stops of a 10,000 hit', num(stops(10000) * 100, 1) + '%') +
+      note('A hit over ' + num(H.ArmourBigHitRef || 1000) + ' counts as that size, so armour cuts every big hit by the same share. At most ' + Math.round(mx * 100) + '%.'), 'armour');
+  }
+  function evasionCard(hd, D, dm, ch, H, lvl) {
+    if (!hd.evasion) return card('Evasion', row('Total', '0', { strong: true }) + (hd.evasion === 0 && dm.some(m => m.stat === 'Keystone') ? note('A keystone (Glass Cannon) sets Evasion to 0.') : ''), 'evasion');
+    const p = defParts('Evasion', hd, dm, ch, H);
+    return card('Evasion', defRows('Evasion', p) + row('Total', num(hd.evasion, 0), { strong: true }) +
+      row('Evade chance vs a level ' + lvl + ' monster', num(D.evade * 100, 1) + '%') +
+      (D.glance > 0 ? row('Attacks you cannot evade glance', num(D.glance * 100, 1) + '% lighter') : ''), 'evasion');
+  }
+  function resCard(D, dm) {
+    let h = '';
+    for (const d of ['Fire', 'Cold', 'Lightning', 'Poison']) {
+      const raw = D.res[d] || 0, cap = (D.caps || {})[d] || 75, eff = D.resCapped[d], over = raw - D.pen - cap;
+      const lines = dm.filter(m => m.stat === 'Resist' && m.mode === 'Flat' && plain(m) && ((m.tags || [])[0] === d || ((m.tags || [])[0] === 'Elemental' && d !== 'Poison')));
+      h += row(d, '<span class="' + (eff >= cap ? 'good' : eff < 0 ? 'bad' : '') + '">' + num(eff, 0) + '%</span> <small>max ' + cap + '%' + (over > 0 ? ', +' + num(over, 0) + ' over' : over < 0 ? ', ' + num(-over, 0) + ' short' : '') + '</small>',
+        { color: ctx.typeColor(d), tip: srcTip(d + ' resistance', lines, { total: 'Lines add up: ' + num(raw, 0) + '%' + (D.pen ? ', less the ' + D.pen + '% penalty' : '') + '; your maximum is ' + cap + '%, so it counts as ' + num(eff, 0) + '%' + (over > 0 ? ' (' + num(over, 0) + ' over the cap: room to swap resistance for other lines)' : over < 0 ? ' (' + num(-over, 0) + ' short of the cap)' : '') }) });
+    }
+    return card('Resistances', h + note(D.pen ? 'With the ' + D.pen + '% resistance penalty set for the EHP (Gear Set Sim settings).' : 'No resistance penalty counted (Gear Set Sim settings: each Gate broken takes 10% off, 50% in all).'), 'res');
+  }
+  function takenCard(D) {
+    const less = ctx.ehpLessList(D);
+    return card('Block and damage taken',
+      row('Block chance', num(D.block * 100, 0) + '%') +
+      (D.physAsEle ? row('Physical taken as elemental', num(D.physAsEle, 1) + '%', { tip: textTip('Physical taken as elemental', 'That part of a physical hit meets Fire, Cold and Lightning resistance (a third each) instead of armour.') }) : '') +
+      (D.manaFirst ? row('Taken from mana before life', num(D.manaFirst, 0) + '%') : '') +
+      (less.length ? '<div class="adv-block"><span class="adv-k">Less damage taken</span><span>' + less.map(esc).join('<br>') + '</span></div>' : ''), 'taken');
+  }
+  function maxHitCard(D) {
+    const M = ctx.maxHits(D, 5000);
+    let h = row('Hit pool (life + energy shield)', num(Math.floor(M.pool)), { strong: true }) +
+      '<table class="adv-table"><tr><th>Damage type</th><th>Max hit</th></tr>' +
+      M.rows.map(([t, mh]) => '<tr><td style="color:' + ctx.typeColor(t) + '">' + t + '</td><td>' + num(Math.floor(mh)) + '</td></tr>').join('') + '</table>';
+    if (M.glancePhys) h += row('Physical attack you cannot evade', num(Math.floor(M.glancePhys)), { tip: textTip('Glancing blows', 'An attack you cannot evade glances off your evasion for ' + Math.round(D.glance * 100) + '% less.') });
+    return card('Max hit taken', h + note('The biggest single hit that lands (not evaded, not blocked), after armour or that resistance and your less damage taken. EHP ' + num(D.ehp) + ' (estimate).'), 'maxhit');
+  }
+
+
+  function render() {
+    const pane = $('#advancedPane'); if (!pane) return;
+    const ch = ctx.current();
+    if (!ch) { pane.innerHTML = '<p class="hint">Load a character first.</p>'; return; }
+    const info = ctx.info();
+    let r = null, D = null, hd = null, dm = [];
+    try { r = ctx.calc(); } catch (e) { r = null; }
+    const okR = r && !r.error && !r.unsupported;
+
+
+    try { D = ctx.defence(); hd = ctx.heroDefence(okR ? r.attr : null); dm = ctx.defenceMods(); } catch (e) { D = null; }
+    const H = ctx.gd().scaling.Hero || {};
+    const used = okR ? r.mods.filter(m => r.used.has(m)) : [];
+    const offence = okR ? [skillCard(r, info), rateCard(r, used), critCard(r, used), hitCard(r, used), enemyCard(r, used), skillStatsCard(r), manaCard(r)]
+      : [card('Skill', note(r && r.unsupported ? esc(r.unsupported) : 'Pick a main skill on the Character tab to see its numbers.'))];
+    const defence = D && hd ? [attrCard(hd, dm, ch, H), lifeCard(hd, dm, ch, H), esCard(hd, D, dm, ch, H), armourCard(hd, D, dm, ch, H), evasionCard(hd, D, dm, ch, H, info.enemyLevel), resCard(D, dm), takenCard(D), maxHitCard(D)] : [];
+    pane.innerHTML = '<div class="results-heading adv-head"><div><div class="eyebrow">BUILD PLANNER</div><h2>Advanced</h2>' +
+      '<p>Every number behind the build. Rows with a dotted line show where they come from when you hover or tap them. Damage is against the enemy set in Configure Enemy; defences are the EHP\'s.</p></div>' + ctx.enemyBtn() + '</div>' +
+      (okR && r.minion ? note('Minion skill: the numbers are the minion\'s. Minion Scaling has more.') : '') +
+      (okR ? '<div class="adv-top">' + ctx.topCards(r) + '</div>' : '') +
+      '<div class="adv-grid">' + offence.concat(defence).join('') + '</div>' +
+      (okR ? '<div class="adv-where">' + ctx.whereFrom(r) + '</div>' : '');
+    ctx.bindPie(pane);
+    const s = pane.querySelector('.adv-skill'); if (s) s.value = info.skill;
+  }
+  $('#advancedPane').addEventListener('change', e => { if (e.target.matches('.adv-skill')) { ctx.selectSkill(e.target.value); render(); } });
+  return { render };
+};
+
+;
+
+
+
+
+
+
+
+
 window.BOFaq = function (ctx) {
   'use strict';
   const { $, esc } = ctx;
@@ -11785,7 +12140,7 @@ window.BOFaq = function (ctx) {
 
   function ailments(GD) {
     const A = (GD.scaling || {}).Ailments, H = (GD.scaling || {}).Hero || {};
-    let h = intro('Ailments', 'Ignite, shock, poison, freeze and bleed: how they work and why some do little on Guardians.');
+    let h = intro('Ailments', 'Ignite, shock, poison, freeze and bleed: how they work and why some do little on Guardians. Also Crack and Entropy.');
     if (!A) return needData(h);
     if (A.bEnabled === false) return h + card('Ailments are off', hint('In this game build ailments are looks only.'));
     const shockAt = f => Math.max(A.ShockMin, Math.min(A.ShockMax, A.ShockCoef * Math.pow(f, A.ShockPow)));
@@ -11834,6 +12189,27 @@ window.BOFaq = function (ctx) {
           'The game stores a little less than ' + cp + '% (about 95% of it, on the Post and on Guardians alike). We do not know why yet; the Damage tab uses the full ' + cp + '%.',
           'On a Guardian, +60% Freeze Duration measured ×1.50 rather than ×1.60 (20 Nov 2026). A Guardian really freezes and a freeze breaks the crack early, which may explain it (not checked).',
           'Cracks do not fill the freeze bar (game log, 19 Nov 2026). Only Cold hits do.',
+        ]));
+    }
+
+
+
+    if (+GD.apiBuild >= 88) {
+      const cr = +(((GD.scaling || {}).Monster || {}).ChaosResPerRL) || 0;
+      h += card('Entropy (Chaos support)', '<p class="faq-stats faq-formula"><b>Implosion</b> = the laid share of the hit, before Armour and resistance, crits included × (1 + Entropy Multiplier) × each Entropy "more" line × the enemy takes more Chaos damage × (1 − its Chaos resistance)</p>' +
+        '<p class="faq-stats faq-formula"><b>Game panel</b> = hit × (1 − share + share × (1 + Entropy Multiplier) × Entropy "more")</p>' +
+        list([
+          '<b>Laying:</b> part of each hit does not strike. It is laid on the enemy as Entropy instead (the Chaos support lays 40%). Share lines add together, up to 100%.',
+          '<b>The struck part:</b> only the rest lands as a normal hit. Ailments, shock, chill and leech come from that part only; Entropy itself causes no ailments or leech.',
+          '<b>Implosion:</b> about 3 s later everything laid on the enemy implodes at once as Chaos damage (Hastened Ruin 1.5 s, Gathering Dark 6 s). It ignores Armour and elemental resistance. On an enemy that lives through it, the delay does not change your damage.',
+          '<b>Not a hit:</b> the implosion never crits and is not a hit, so lines that work on hits only (hallowed ground, Unravel) do not raise it. A crit does lay crit-sized Entropy: in the game log crit lays were ×2.01 the size of the others (23 Nov 2026).',
+          '<b>Entropy Multiplier</b> lines add together, like a Damage over Time Multiplier. Entropy <b>"more"</b> lines each multiply. A Woe that makes the enemy take more Chaos damage (Woe of Entropy) counts too.',
+          cr ? '<b>Chaos resistance:</b> monsters have ' + cr + '% per Rupture Level (' + r1(cr * 100) + '% at Rupture 100, ' + r1(cr * 160) + '% at 160). "Implosions ignore X% Chaos Resistance" lines take it off.' : '',
+          '<b>Your hero damage rule</b> (every hero hit deals ×0.8) cuts only the struck part. The laid share comes from the hit before it: the lays in the game log were exactly 40% of the uncut hit (23 Nov 2026).',
+          '<b>Keystones that implode it at once, for more:</b> Blood Ledger on a Slam (+20%), Quiet Ruin by Sheathe (+30%; Iaido Thrust implodes it too; with neither on your bar the Entropy only fades), Entropic Overload by a spell crit (+20%), Ruin Fletching at 10 Hunter\'s Marks (+25%).',
+          '<b>Minions:</b> Grave Debt lays 25% of your minions\' hit damage as your Entropy, by the same rules.',
+          'If the enemy dies before its Entropy implodes, the Entropy bursts onto the monsters around it. The Damage tab does not count that burst.',
+          'Not checked yet: whether the curses\' general "takes more damage" counts on the implosion (the Damage tab counts it), and whether minion lays skip the ×0.8 rule. The patch 89 notes say implosions deal 20% less; the game log shows the same implosion step on builds 88 and 89, so if that cut is live it sits in some line value we cannot see.',
         ]));
     }
     h += card('Good to know', list([
@@ -13465,8 +13841,9 @@ window.BOCharacter = function (ctx) {
     let h = '<div class="cmp-intro results-heading"><div><div class="eyebrow">BUILD OVERVIEW</div><h2>Character</h2><p>The loaded character at a glance: gear by slot, skills with their supports and the notable passives. Click a gear slot to pick or edit an item; hover an item or gem for its details.</p></div>' + (ch && ctx.enemyBtn ? ctx.enemyBtn() : '') + '</div>';
     if (!ch) { el.innerHTML = h + '<div class="card"><p class="hint">No character loaded. Load a save, a build code or start a plan first.</p></div>'; return; }
     if (note && note.id === ch.id) h += '<p class="hint pl-status" role="status">' + esc(note.text) + '</p>';
-    el.innerHTML = h + planRow(ch) + undoBar(ch) + '<div class="ch-cols"><div class="ch-col">' + gearCard(ch) + (ctx.beltCard ? ctx.beltCard() : '') + notesCard() + '</div><div class="ch-col">' + skillsCard(ch) + passivesCard(ch) + '</div></div>';
+    el.innerHTML = h + planRow(ch) + undoBar(ch) + '<div class="ch-cols"><div class="ch-col">' + gearCard(ch) + (ctx.beltCard ? ctx.beltCard() : '') + '<div id="chOptimizerSlot"></div>' + notesCard() + '</div><div class="ch-col">' + skillsCard(ch) + passivesCard(ch) + '</div></div>';
     fillContribs();
+    if (ctx.afterRender) ctx.afterRender(); // app.js fills #chOptimizerSlot (Top Optimization Suggestions)
   }
 
 
@@ -16390,7 +16767,10 @@ window.BOCharacter = function (ctx) {
 
     {
       const R = (GD.dragon || {}).rules || {}, big = ['rare', 'boss', 'unique'].includes(o.enemyRarity || 'rare');
-      const own = !isSummon(sk) && !(sk.Totem && sk.Totem.Interval > 0) && !host;
+
+
+
+      const own = !isSummon(sk) && !(sk.Totem && sk.Totem.Interval > 0) && !ctx.tags.has('totem') && !host;
       const proj = ctx.tags.has('projectile'), slam = ctx.tags.has('slam'), melee = ctx.tags.has('melee'), orbitSk = ctx.tags.has('orbit');
       const dist = o.enemyDistance != null ? +o.enemyDistance : proj ? 6 : 2;
       const asc = (flag, v, tags, why) => {
@@ -16429,6 +16809,7 @@ window.BOCharacter = function (ctx) {
         mods.push({ stat: 'ShockChance', mode: 'Flat', tags: [], v: 100, v2: 0, local: false, src: 'Dragonling · Eye of the Tempest (always Shock)', key: 'dragon:Tempest' });
         mods.push({ stat: 'ShockEffect', mode: 'More', tags: [], v: (R.Tempest || {}).ShockMore ?? 50, v2: 0, local: false, src: 'Dragonling · Eye of the Tempest (Shocks stronger)', key: 'dragon:Tempest' });
       }
+
 
 
     }
@@ -16585,6 +16966,19 @@ window.BOCharacter = function (ctx) {
         engine.push({ def: true, v: m.v * units, types: splitTags(m.tags).types, src: m.src + ' (' + Math.round(t).toLocaleString('en-US') + (s === 'Block' ? '' : ' ') + label[s] + ', estimated)' });
       }
       for (const { m, row, why } of best.values()) { use(m, why); engine.push(row); }
+
+
+
+
+
+
+
+      if (engine.some(r => / armour, estimated/.test(r.src || ''))) {
+        const bar = (ch.hotbar || []).map(lc);
+        const iceG = bar.some(id => { const k = GD.skills[id]; const a = k && k.Minion && (k.Minion.GolemAuras || {}).Default; return is088(GD) && a && [a.Stat, a.Stat2, a.Stat3].includes('ArmourPct'); });
+        const guard = (ch.sockets || []).some(s => bar.includes(lc(s.skill)) && (s.supports || []).some(id => lc(id) === 'bone_guard'));
+        if (iceG || guard) res.notes.push('Armour engine: counts your sheet armour. ' + [guard && 'Bone Guard', iceG && (guard ? 'the' : 'The') + ' Ice Golem\'s blessing'].filter(Boolean).join(' and ') + (guard && iceG ? ' raise' : ' raises') + ' only the armour used against hits, which the engine does not read (game log).');
+      }
 
 
       for (const m of pickMods(mods, 'BlockToDamage', 'Flat')) if (applies(ctx, m) && ctx.tags.has('shield')) {
@@ -18243,7 +18637,7 @@ window.BOCharacter = function (ctx) {
     res.marks = markPct ? { pct: markPct } : null;
 
 
-    const golemB = golemBlessing(GD, ch, sk, o, mods);
+    const golemB = golemBlessing(GD, ch, sk, o, mods, attr);
     const golemTaken = golemB && golemB.taken > 0 ? 1 + golemB.taken / 100 : 1;
     if (golemTaken !== 1) res.notes.push('Your ' + golemB.name + ' makes enemies near it take ' + +golemB.taken.toFixed(2) + '% more damage (counted as if it is always within 9 m of the enemy).');
 
@@ -19191,6 +19585,25 @@ window.BOCharacter = function (ctx) {
           (res.triggers = res.triggers || []).push({ src: 'Dragonling · Windburst', when: 'Move', nth: every, pct: pct * 100, count: 1, element: 'Physical', perSec: events, dps });
           res.notes.push('Windburst: every ' + nth + ' movement skill (' + moves + ' a second) bursts for ' + (+pct * 100) + '% of your last Bow hit (' + Math.round(stored).toLocaleString('en-US') + ' dealt, the average hit) as Physical, ' + events.toFixed(2) + ' a second = +' + Math.round(dps / hitDpsNow * 100) + '% hit damage on one enemy. The game stores the hit\'s number when it lands and keeps it even with the bow taken off (game log, 17 Nov 2026).');
         }
+      }
+
+
+
+
+
+
+
+
+
+      if (ascFlag('Asc71_RainOfBolts') && sk.Totem && sk.Totem.Kind === 'Ballista' && hitsPerSec > 0 && hitDpsNow > 0) {
+        const rb = ((GD.dragon || {}).rules || {}).RainOfBolts || {};
+        const pct = rb.Pct > 0 ? rb.Pct : 0.25, cap = rb.PerSec > 0 ? rb.PerSec : 10;
+        const events = Math.min(hitsPerSec, cap), size = hitDpsNow / hitsPerSec * pct, mt = mitig.Physical;
+        let dps = size * events;
+        if (mt) { const dr = Math.min(H.ArmourMaxReduction, 100 * armour / (armour + H.ArmourFactor * size)); dps *= (1 - dr / 100) * (1 - mt.effRes / 100) * mt.taken * shockF; }
+        byType.Physical = (byType.Physical || 0) + dps; hitDpsVs += dps; res.hitDps = hitDpsVs;
+        (res.triggers = res.triggers || []).push({ src: 'Dragonling · Rain of Bolts', when: 'Hit', nth: 1, pct: pct * 100, count: 1, element: 'Physical', perSec: events, dps });
+        res.notes.push('Rain of Bolts: each Ballista bolt also strikes its own target for ' + Math.round(pct * 100) + '% of the damage dealt as Physical' + (hitsPerSec > cap ? ' (at most ' + cap + ' a second)' : '') + ', ' + events.toFixed(2) + ' a second = +' + Math.round(dps / hitDpsNow * 100) + '% hit damage on one enemy; enemies within 2 m take it too (not counted). Game log, 25 Nov 2026.');
       }
 
 
@@ -20152,7 +20565,7 @@ window.BOCharacter = function (ctx) {
     for (const m of pickMods(mods, 'MinionKindMore', 'Flat')) { kind *= 1 + m.v / 100 * kinds; use(m, 'minion, ' + kinds + ' kinds'); }
 
 
-    const golem = oneKind && !mi.GolemAuras ? null : golemBlessing(GD, ch, sk, o, mods);
+    const golem = oneKind && !mi.GolemAuras ? null : golemBlessing(GD, ch, sk, o, mods, attr);
     if (golem && golem.more > 0) minionMore *= 1 + golem.more / 100;
     const aff = mi.Affinity && mi.AffinityDamage ? 1 + Math.min(mi.AffinityCap || 50, (attr[mi.Affinity] || 0) * mi.AffinityDamage) / 100 : 1;
     const near = o.minionNear === false ? 1 : 1 + MINION_NEAR / 100;
@@ -20642,7 +21055,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-  function golemBlessing(GD, ch, sk, o, mods) {
+  function golemBlessing(GD, ch, sk, o, mods, attr) {
     if (o.golemAura === false) return null;
     const isG = id => { const k = GD.skills[lc(id)]; return k && k.Minion && k.Minion.GolemAuras; };
     const p88 = is088(GD);
@@ -20676,10 +21089,13 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
     const gBase = is085(GD) ? ruleNum(GD, 'r108.CURSE.GolemBlessBase', 0.5) : is084(GD) ? 0.7 : 1;
     let grow = 1;
     if (gBase < 1) {
-      let incs = 0;
+      let incs = attr ? Math.min(50, (attr.Int || 0) / 10 * (GD.scaling.Hero.IntMinionDamagePer10 || 0)) : 0;
       for (const st of ['MinionDamage', 'MinionLife']) for (const m of pickMods(mods || NO_MODS, st, 'Inc')) if (!String(m.key || '').startsWith('support:')) incs += m.v || 0;
       grow = gBase + (1 - gBase) * clamp(incs / 100, 0, 1);
     }
@@ -20703,7 +21119,7 @@ window.BOCharacter = function (ctx) {
     const stat = DMG.find(s => parts[s] > 0) || a.Stat;
     const v = parts[stat] || 0;
     const f = x => +x.toFixed(2);
-    const SAY = { MinionDamage: x => 'minions near it deal ' + f(x) + '% more damage', MinionSpeed: x => 'minions near it are ' + f(x) + '% faster', EnemyTaken: x => 'enemies near it take ' + f(x) + '% more damage', EnemyShock: x => 'hits shock enemies near it for ' + f(x) + '% more damage taken', EnemyChill: x => 'enemies near it are chilled ' + f(x) + '%', LifeRegenPct: x => 'you regenerate ' + f(x) + '% of your life a second near it (not simmed)', GolemRedirect: x => 'it takes ' + f(x) + '% of the damage of hits you take near it (not simmed)', ArmourPct: x => 'you have ' + f(x) + '% more armour near it (not simmed)', EnemyDealtLess: x => 'enemies near it deal ' + f(x) + '% less damage (not simmed)', EnemyDeathBurst: x => 'enemies dying near it burst for ' + f(x) + '% of their life as Fire (not simmed)', EnemyPoisonChance: x => f(x) + '% poison chance (not simmed)' };
+    const SAY = { MinionDamage: x => 'minions near it deal ' + f(x) + '% more damage', MinionSpeed: x => 'minions near it are ' + f(x) + '% faster', EnemyTaken: x => 'enemies near it take ' + f(x) + '% more damage', EnemyShock: x => 'hits shock enemies near it for ' + f(x) + '% more damage taken', EnemyChill: x => 'enemies near it are chilled ' + f(x) + '%', LifeRegenPct: x => 'you regenerate ' + f(x) + '% of your life a second near it (not simmed)', GolemRedirect: x => 'it takes ' + f(x) + '% of the damage of hits you take near it (not simmed)', ArmourPct: x => 'you have ' + f(x) + '% more armour near it (against hits only; armour engines read your sheet armour without it)', EnemyDealtLess: x => 'enemies near it deal ' + f(x) + '% less damage (not simmed)', EnemyDeathBurst: x => 'enemies dying near it burst for ' + f(x) + '% of their life as Fire (not simmed)', EnemyPoisonChance: x => f(x) + '% poison chance (not simmed)' };
     const text = Object.entries(parts).map(([s, x]) => (SAY[s] || (y => s + ' ' + f(y)))(x)).join(', ');
     return { element: el, stat, v, parts, more: parts.MinionDamage || 0, speed: parts.MinionSpeed || 0, taken: parts.EnemyTaken || 0, shock: parts.EnemyShock || 0, chill: parts.EnemyChill || 0, id: gid, grow, golems, name: name + (golems > 1 ? ' x' + golems + ' golems' : '') + (gh ? ' (Golemheart +' + gh + '%)' : '') + (grow < 1 ? ' (blessing at ' + Math.round(grow * 100) + '% strength: under 100% increased minion damage and life)' : ''), text };
   }
@@ -22279,7 +22695,8 @@ window.BOStartApp = function () {
     if (d == null) d = Math.abs(x) >= 100 ? 0 : Math.abs(x) >= 10 ? 1 : 2;
     return x.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: d });
   };
-  const pct = x => (x >= 0 ? '+' : '') + num(x * 100, 1) + '%';
+
+  const pct = x => (Math.abs(x) < 0.0005 ? 0 : x) >= 0 ? '+' + num(Math.abs(x) < 0.0005 ? 0 : x * 100, 1) + '%' : num(x * 100, 1) + '%';
   const typeColor = d => 'var(--t-' + d.toLowerCase() + ')';
 
 
@@ -22363,6 +22780,7 @@ window.BOStartApp = function () {
   let scaling = null; // the Skills tab (scaling.js)
   let faq = null; // the FAQ / Game Mechanics tab (faq.js)
   let atlas = null; // the Riven Atlas tab (atlas.js), a Build Planner view
+  let advancedTab = null; // the Advanced tab (advanced.js): every number behind the build, a Build Planner view
   let vowsTab = null; // the Vows, Curses, Sentences tab (vows.js), a Build Planner view
   let character = null; // the Character tab (character.js)
   let itemSearch = null; // the Item Search tab (itemsearch.js)
@@ -22528,6 +22946,7 @@ window.BOStartApp = function () {
     if (!ch) return;
     store.set('char', ch.id);
     if (character && !$('#characterPane').hidden) character.render();
+    if (advancedTab && !$('#advancedPane').hidden) setTimeout(() => advancedTab.render(), 0);
     if (vowsTab && !$('#vowsPane').hidden) setTimeout(() => vowsTab.render(), 0); // after the skill and curse ticks are set
     if (brewery && !$('#breweryPane').hidden) brewery.render(); // the Brewery shows this character's potions
     if (lootFilter && !$('#lootFilterPane').hidden) setTimeout(() => lootFilter.render(), 0); // its preset fits the character (after the skill is picked)
@@ -23098,7 +23517,7 @@ window.BOStartApp = function () {
   $('#supportChips').addEventListener('mouseleave', () => { st.supMsg = ''; if (st.last) renderSupportPicker(st.last); });
 
 
-  function render() { renderSupportSkillSelect(); renderMain(); renderSupportSearchResults(); treeAfterRender(); renderCompare(); renderBuildStats(); syncUnsaved(); }
+  function render() { if (advancedTab && !$('#advancedPane').hidden) advancedTab.render(); renderSupportSkillSelect(); renderMain(); renderSupportSearchResults(); treeAfterRender(); renderCompare(); renderBuildStats(); syncUnsaved(); if (!$('#characterPane').hidden) fillOptimizerSlot(); }
 
 
 
@@ -23487,7 +23906,7 @@ window.BOStartApp = function () {
       return;
     }
     mainFull = true;
-    if (out.hidden && wasFull) { st.last = r; mainStale = true; return; }
+    if (out.hidden) { st.last = r; mainStale = true; bindResultsRest(); return; } // the Damage pane is no longer shown (25 Nov 2026)
     const pin = st.pinned;
     const delta = (v, base) => base == null ? '' : '<div class="delta ' + (v >= base ? 'up' : 'down') + '">' + pct(base ? v / base - 1 : 0) + ' vs pinned (' + num(base) + ')</div>';
     if (r.minion) { st.last = r; out.innerHTML = minionHtml(r, pin, delta); bindResults(r, out); return; }
@@ -23549,7 +23968,15 @@ window.BOStartApp = function () {
       '<h3>Your attributes</h3><dl class="kv">' + kv('Strength / Dexterity / Intelligence', r.attr.Str + ' / ' + r.attr.Dex + ' / ' + r.attr.Int) + '</dl>' +
       '</div></div></details>';
 
+    html += whereFromCard(r);
+    html += '</div>';
+    out.innerHTML = html;
+    bindResults(r, out);
+  }
 
+
+  function whereFromCard(r) {
+    let html = '';
     const used = r.mods.filter(m => r.used.has(m));
     const groups = {};
     for (const m of used) { const k = m.stat + ' ' + m.mode; (groups[k] = groups[k] || []).push(m); }
@@ -23581,9 +24008,7 @@ window.BOStartApp = function () {
       '<li>Minions: summon gems show their own sheet (the game\'s skill panel DPS, checked 2 Nov on Grave Golem, Skeletal Mage and Skeletons within 0.5%), not yet against an enemy\'s resistances.</li>' +
       '<li>Not modelled: War Banner, shock and freeze, bleeding, Skyfall repeat strikes, other triggers (on kill / on crit), keystone flags, dual-wield alternation.</li>' +
       '</ul></details></div>';
-    html += '</div>';
-    out.innerHTML = html;
-    bindResults(r, out);
+    return html;
   }
 
   function snapshotCard(r, dpsLabel, dps) {
@@ -23896,9 +24321,9 @@ window.BOStartApp = function () {
       const supportProgress = O.supportJob.total ? Math.round(O.supportJob.tried / O.supportJob.total * 100) : 100;
       O.progress = 'Running full build optimization (may take a few seconds): supports ' + supportProgress +
         '% · passive tree ' + O.treeProgress + ' · gear affixes ' + O.gearIndex + '/' + O.gearCandidates.length + '.';
-      const list = document.querySelector('.top-optimizer-card .optimizer-status');
+      const list = document.querySelector('#chOptimizerSlot .optimizer-status');
       if (list) list.textContent = O.progress;
-      const results = document.querySelector('.top-optimizer-card .optimizer-results');
+      const results = document.querySelector('#chOptimizerSlot .optimizer-results');
       if (results) results.innerHTML = O.results.length ? '<ol class="optimizer-list">' + O.results.map((x, i) => {
         const action = x.kind === 'support' ? '<button class="btn small" data-optimizer-action="' + i + '" disabled>Use</button>' :
           x.kind === 'tree' ? '<button class="btn small" data-optimizer-action="' + i + '" disabled>Apply</button>' :
@@ -24009,6 +24434,12 @@ window.BOStartApp = function () {
     out.querySelectorAll('[data-tree-preview]').forEach(button => {
       button.onclick = () => openPassiveProposal(+button.dataset.treePreview);
     });
+    bindSourcePie(out);
+    out.querySelectorAll('[data-use]').forEach(b => b.onclick = () => useSetup(+b.dataset.use));
+    bindResultsRest();
+  }
+
+  function bindSourcePie(out) {
     const pie = out.querySelector('.source-pie'), tooltip = out.querySelector('.source-tooltip');
     if (pie && tooltip) {
       let activeSlice = null;
@@ -24050,7 +24481,21 @@ window.BOStartApp = function () {
         if (e.target.closest('.source-slice') && !pie.contains(e.relatedTarget)) hideSourceTip(e.target);
       });
     }
-    out.querySelectorAll('[data-use]').forEach(b => b.onclick = () => useSetup(+b.dataset.use));
+  }
+
+
+  function fillOptimizerSlot() {
+    const slot = $('#chOptimizerSlot'); if (!slot) return;
+    if (!st.ch || !st.skill) { slot.innerHTML = ''; return; }
+    slot.innerHTML = optimizerCard() + optCard();
+    const run = slot.querySelector('#runUpgradeOptimizer');
+    if (run) run.onclick = () => runUpgradeOptimizer(st.last || S.calcSkill(GD, st.ch, st.skill, opts()));
+    slot.querySelectorAll('[data-optimizer-action]').forEach(b => { b.onclick = () => applyOptimizerResult(+b.dataset.optimizerAction); });
+    slot.querySelectorAll('[data-tree-preview]').forEach(b => { b.onclick = () => openPassiveProposal(+b.dataset.treePreview); });
+    slot.querySelectorAll('[data-use]').forEach(b => b.onclick = () => useSetup(+b.dataset.use));
+    const oc = slot.querySelector('#optClose'); if (oc) oc.onclick = () => { st.opt = null; render(); };
+  }
+  function bindResultsRest() {
     const oc = $('#optClose'); if (oc) oc.onclick = () => { st.opt = null; render(); };
     const ur = $('#useFightRate'); if (ur) ur.onclick = () => { st.cps = +ur.dataset.rate; render(); };
     const cfr = $('#clearFightRate'); if (cfr) cfr.onclick = () => { st.cps = null; render(); };
@@ -25616,7 +26061,8 @@ window.BOStartApp = function () {
     if (lines.length) h += '<ul>' + lines.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>';
 
     if (d.title && !lines.length && d.text) h += '<div>' + d.text.split('  ·  ').map(s => esc(s.replace(/^./, c => c.toUpperCase()))).join('<br>') + '</div>';
-    else if (d.text && !d.title && d.kind !== 'Core' && d.text !== lines.join('  ·  ') && (d.kind !== 'Small' && d.kind !== 'Shared' || !lines.length)) h += '<div>' + esc(d.text) + '</div>';
+
+    else if (d.text && !d.title && d.kind !== 'Core' && d.text.toLowerCase() !== lines.join('  ·  ').toLowerCase() &&(d.kind !== 'Small' && d.kind !== 'Shared' || !lines.length)) h += '<div>' + esc(d.text) + '</div>';
     const skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
     if (d.kind === 'Core') {
 
@@ -25632,8 +26078,11 @@ window.BOStartApp = function () {
       if (verb === 'Refund') h += '<div class="gain ' + cls + '">Refund: ' + pct(g) + ' ' + esc(skillName) + ' DPS' + (v.n > 1 ? ' (' + (v.n - 1) + ' more node' + (v.n > 2 ? 's go' : ' goes') + ' with it)' : '') + '</div>';
       else h += '<div class="gain ' + cls + '">Take: ' + (v.cost > 1 ? pct(dPerPt(v)) + ' ' + esc(skillName) + ' DPS per point · ' + v.cost + ' points (' + pct(g) + ' total)' : pct(g) + ' ' + esc(skillName) + ' DPS · ' + (v.cost === 1 ? '1 point' : 'uses no points')) + (v.n > 1 ? ' · path of ' + v.n + ' nodes' : '') + '</div>';
     }
-    if (d.why) h += '<div class="gain down">' + esc(d.why.replace(/^./, c => c.toUpperCase())) + '</div>';
+    if (d.state === 'locked' && v) h += '<div class="tk" style="margin-top:5px">Click to take it with its path</div>';
+    else if (d.why) h += '<div class="gain down">' + esc(d.why.replace(/^./, c => c.toUpperCase())) + '</div>';
     else if (!v) h += '<div class="tk">Click to ' + verb.toLowerCase() + '</div>';
+    const tw = v ? totemWhy(d.mods, v.d) : '';
+    if (tw) h += '<div class="tk tk-note" style="margin-top:5px">' + esc(tw) + '</div>';
     const unc = d.mods.filter(m => m.Mode === 'Flag' ? m.Stat !== 'Dragonling' : lineUncounted(m)).map(m => m.Mode === 'Flag' || m.Mode === 'Trigger' ? d.text : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
     if (unc.length) h += '<div class="tk" style="margin-top:5px">Not in the DPS number: ' + esc(unc.join(' · ')) + '</div>';
     return h;
@@ -26141,6 +26590,20 @@ window.BOStartApp = function () {
 
   function lineUncounted(m) { return m.Mode === 'Trigger' ? !S.trigCounted(m) : m.Mode === 'Flag' || !S.counted(m.Stat); }
 
+
+
+
+  function totemWhy(mods, g) {
+    if (g == null || Math.abs(g) > 0.0005 || !st.skill) return '';
+    const tl = (mods || []).filter(m => (m.Tags || m.tags || []).includes('Totem') || /^Totem/.test(m.Stat));
+    if (!tl.length) return '';
+    const sk = GD.skills[String(st.skill).toLowerCase()] || {}, name = sk.Name || st.skill;
+    const onTotem = !!sk.Totem || (sk.Tags || []).includes('Totem') || (st.supports || []).some(s => ['totem_support', 'arrow_totem'].includes(String(s).toLowerCase().replace('@granted', '')));
+    if (!onTotem) return 'Totem lines only reach a skill a totem uses: ' + name + ' is not linked to a totem, so they add nothing to it.';
+    if (tl.some(m => /^(AttackSpeed|CastSpeed|Speed)$/.test(m.Stat))) return 'A totem fires on its own clock: attack and cast speed only place totems faster, so they add no DPS (Totem Speed lines do).';
+    return '';
+  }
+
   function uncounted(n) {
     return (n.Mods || []).filter(lineUncounted)
       .map(m => m.Mode === 'Trigger' || m.Mode === 'Flag' || (n.Text && !S.hasStatText(GD, m)) ? (n.Text || n.Name) : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
@@ -26169,6 +26632,8 @@ window.BOStartApp = function () {
       if (s.def != null) h += '<div class="tk">' + esc(skillName) + ' DPS ' + pct(s.dps) + ' · defence ' + pct(s.def) + ' · ' + esc(gsPrioText(Math.round(heatW() * 100))) + '</div>';
     } else h += '<div class="tk">' + (on ? 'Click to refund' : 'Click to take') + ' · scoring…</div>';
     if ((n.Mods || []).some(m => m.Stat === 'MinionOneKind') && optExtra().length) h += '<div class="tk" style="margin-top:5px">Only one kind of minion stands with this node: of the summon skills you count, only the strongest is counted, the others as 0.</div>';
+    const tw = s && !s.swapped ? totemWhy(n.Mods, s.d) : '';
+    if (tw) h += '<div class="tk tk-note" style="margin-top:5px">' + esc(tw) + '</div>';
     const unc = [n, s && s.swapped ? GD.nodes[s.swapped] : null].filter(Boolean).flatMap(uncounted);
     if (unc.length) h += '<div class="tk" style="margin-top:5px">Not in the DPS number: ' + esc(unc.join(' · ')) + '</div>';
     h += '<div class="tk tk-ban">' + markHint(id) + '</div>';
@@ -27589,10 +28054,10 @@ window.BOStartApp = function () {
 
 
 
-  const ROUTES = { character: 'build/character', tree: 'build/tree', atlas: 'build/atlas', 'build:skills': 'build/skills', damage: 'build/damage', vows: 'build/vows',
+  const ROUTES = { character: 'build/character', tree: 'build/tree', atlas: 'build/atlas', 'build:skills': 'build/skills', damage: 'build/damage', vows: 'build/vows', advanced: 'build/advanced',
     compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', market: 'market', patch: 'patch', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', lootfilter: 'lootfilter', faq: 'faq',
     skillscaling: 'skills', minions: 'skills/minions', gemlevels: 'skills/levels', creator: 'creator', plan: 'plan', code: 'code', builds: 'savedbuilds' };
-  const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', atlas: 'Riven Atlas', 'build:skills': 'Skills', damage: 'Damage Analysis', vows: 'Vows, Curses, Sentences',
+  const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', atlas: 'Riven Atlas', 'build:skills': 'Skills', damage: 'Damage Analysis', vows: 'Vows, Curses, Sentences', advanced: 'Advanced',
     compare: 'Item Simulator', items: 'Database', grail: 'Grail', ladder: 'Ladder', market: 'Market', patch: 'Recent Patch', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery", lootfilter: 'Loot Filter',
     faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', gemlevels: 'Gem Levels', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code', builds: 'Saved Builds' };
 
@@ -27670,6 +28135,7 @@ window.BOStartApp = function () {
 
   function showTab(tab) {
     if (tab === 'build' && st.ch) tab = 'character'; // the Skills view is gone (20 Nov 2026): skills are edited on the Character tab
+    if (tab === 'damage') tab = 'advanced'; // Damage Analysis is gone (owner, 25 Nov 2026): its composition, DPS scaling and notes are on Advanced
     T.visible = tab === 'tree';
     document.body.classList.remove('landing-view');
     $('#homeTab').classList.remove('active'); $('#homeTab').setAttribute('aria-current', 'false');
@@ -27680,9 +28146,10 @@ window.BOStartApp = function () {
     document.body.classList.toggle('plan-page', tab === 'plan'); // the plan setup page: no Damage-tab controls beside it
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'builds' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'lootfilter' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'market' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character' || tab === 'atlas' || tab === 'vows');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'builds' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'lootfilter' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'market' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character' || tab === 'atlas' || tab === 'vows' || tab === 'advanced');
     document.body.classList.toggle('atlas-page', tab === 'atlas');
     document.body.classList.toggle('vows-page', tab === 'vows');
+    document.body.classList.toggle('advanced-page', tab === 'advanced');
     document.body.classList.toggle('character-page', tab === 'character');
     document.body.classList.toggle('ladder-page', tab === 'ladder' || tab === 'market'); // the Market tab too: no character strip
     document.body.classList.toggle('lootfilter-page', tab === 'lootfilter'); // nor on the Loot Filter tab // no character strip on the Ladder tab
@@ -27695,9 +28162,9 @@ window.BOStartApp = function () {
     }
     syncSettingsToViewport();
 
-    document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'atlas', 'damage', 'vows'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
-    if (tab === 'tree' || tab === 'damage' || tab === 'character' || tab === 'atlas' || tab === 'vows') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#savedBuildsPane').hidden = tab !== 'builds'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#lootFilterPane').hidden = tab !== 'lootfilter'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#marketPane').hidden = tab !== 'market'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character'; $('#atlasPane').hidden = tab !== 'atlas'; $('#vowsPane').hidden = tab !== 'vows';
+    document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'atlas', 'damage', 'vows', 'advanced'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
+    if (tab === 'tree' || tab === 'damage' || tab === 'character' || tab === 'atlas' || tab === 'vows' || tab === 'advanced') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#savedBuildsPane').hidden = tab !== 'builds'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#lootFilterPane').hidden = tab !== 'lootfilter'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#marketPane').hidden = tab !== 'market'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character'; $('#atlasPane').hidden = tab !== 'atlas'; $('#vowsPane').hidden = tab !== 'vows'; $('#advancedPane').hidden = tab !== 'advanced';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     renderBuildStats();
@@ -27718,6 +28185,7 @@ window.BOStartApp = function () {
     if (tab === 'character') character.render();
     if (tab === 'atlas') atlas.render();
     if (tab === 'vows') vowsTab.render();
+    if (tab === 'advanced') advancedTab.render();
     if (tab === 'damage' && (breweryDirty || mainStale) && st.ch) { breweryDirty = false; render(); }
     syncUrl(tab);
     if (T.visible) { if (!st.ch) { $('#treeStatus').textContent = 'Load a character first.'; return; } syncTreeTab(); renderTreeTabs(); if (!T.built) buildTree(); else if (!T.vb) fitTree(); paintTree(); scoreSoon(); renderDragon(); }
@@ -27733,7 +28201,7 @@ window.BOStartApp = function () {
   }));
 
 
-  $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && (document.body.classList.contains('tree-page') || document.body.classList.contains('dashboard-view') || document.body.classList.contains('character-page') || document.body.classList.contains('atlas-page') || document.body.classList.contains('vows-page'))) showTab('build'); });
+  $('#buildSubtabs').addEventListener('click', e => { if (e.target.closest('[data-sub]') && (document.body.classList.contains('tree-page') || document.body.classList.contains('dashboard-view') || document.body.classList.contains('character-page') || document.body.classList.contains('atlas-page') || document.body.classList.contains('vows-page') || document.body.classList.contains('advanced-page'))) showTab('build'); });
 
 
   const view = $('#treeView'), tip = $('#treeTip');
@@ -28155,10 +28623,17 @@ window.BOStartApp = function () {
     modLabel: id => { const a = GD.affixes[id] || GD.affixes[String(id).toLowerCase()]; return a && a.Mod ? modLine(Object.assign({}, a.Mod, { Value: 1, Value2: 2 })).replace(/[+-]?\d+(\.\d+)?/g, '#').replace(/^#(?=[%\s])/, '+#') : ''; },
     art: (cat, id, cls) => itemSearch && itemSearch.art ? itemSearch.art(cat, id, cls) : '' });
   atlas = window.BOAtlas({ $, esc, current: () => st.ch });
+
+  advancedTab = window.BOAdvanced({ $, esc, num, typeColor, gd: () => GD, current: () => st.ch, skillOptions: () => $('#skillSelect').innerHTML, selectSkill,
+    info: () => ({ skill: st.skill, enemy: enemyLabel(), enemyLevel: +st.enemyLevel || (st.ch ? st.ch.level : 1), off: opts().off }),
+    calc: () => S.calcSkill(GD, st.ch, st.skill, opts()), defence: () => gsDefence(st.ch, opts()), heroDefence: attr => { const o = opts(), mods = defenceMods(st.ch, S.collectMods(GD, st.ch, o).mods); if (!attr) return heroDefence(st.ch, o); const tot = k => { try { return S.defenceTotal(GD, st.ch, mods, attr, k) || 0; } catch (e) { return 0; } }; return Object.assign(defenceCore(st.ch, mods, attr), { attr, armour: tot('Armour'), evasion: tot('Evasion') }); },
+    defenceMods: () => defenceMods(st.ch, S.collectMods(GD, st.ch, opts()).mods), maxHits, ehpLessList, enemyBtn: () => enemyBtn(),
+
+    topCards: r => damageMixCard(r) + upgradeCard(S.statWeights(GD, st.ch, st.skill, opts(), r)), whereFrom: r => whereFromCard(r), bindPie: el => bindSourcePie(el) });
   vowsTab = window.BOVows({ $, esc, num, planner, gd: () => GD, current: () => st.ch, skillDot, sim: vowSim });
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, atlas, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '',
     skillTip: id => planner.skillTip(null, id, false, true), supTip: id => planner.supTip(id) }); // Gem Levels tiles: the Build tab's tooltips
-  character = window.BOCharacter({
+  character = window.BOCharacter({ afterRender: () => fillOptimizerSlot(),
     beltCard: () => brewery ? brewery.beltCard() : '',
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, num, pct, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
     supportSearch: supportSearchFor, supMarks: marksFor, simSkill: () => st.skill, // the main skill: the plan's own, or the one the Damage tab sims
@@ -28365,7 +28840,7 @@ window.BOStartApp = function () {
   chatbox.check(); // the question chat's button, for an account it is open to
 
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
-  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (CHARS.length ? 'character' : 'home'); if (['character', 'tree', 'atlas', 'vows', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'market', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (CHARS.length ? 'character' : 'home'); if (['character', 'tree', 'atlas', 'vows', 'advanced', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'market', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
   else if (lastTab === 'home') goHome(false); // left on the landing page last time (the address stays as opened)
   routingReady = true; // from here on, switching tabs changes the address
 

@@ -140,7 +140,7 @@ h3 { font-size: 11.5px; margin: 14px 0 6px; color: var(--muted); text-transform:
 .fight-check-banner { max-width: 1500px; margin: 12px auto 0; padding: 0 20px; }
 .fight-check-banner[hidden] { display: none; }
 /* The fight check belongs to the Damage Analysis view only. */
-body:not(.dashboard-view) .fight-check-banner { display: none; }
+body:not(.dashboard-view):not(.advanced-page) .fight-check-banner { display: none; }
 .combo-list { display: grid; gap: 2px; max-height: 240px; overflow-y: auto; padding: 4px 0; }
 .combo-list .opt-multi-row input[type=number] { width: 64px; }
 .combo-list .check-row { margin: 0; }
@@ -504,6 +504,7 @@ details.report pre { white-space: pre-wrap; word-break: break-word; font-size: 1
 .tree-tip { position: absolute; z-index: 3; max-width: 300px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-size: 12.5px; pointer-events: none; box-shadow: var(--shadow); }
 .tree-tip b { color: var(--accent); }
 .tree-tip .tk { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.tree-tip .tk.tk-note { text-transform: none; letter-spacing: 0; } /* a full sentence (why a node adds nothing) reads better in plain case */
 .tree-tip ul { margin: 5px 0; padding-left: 16px; }
 .tree-tip .gain { font-weight: 600; } .tree-tip .gain.up { color: var(--good); } .tree-tip .gain.down { color: var(--bad); }
 .tree-zoom { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 4px; }
@@ -1243,7 +1244,7 @@ body.dashboard-view .configure-heading { display: flex; }
   .view-bar .tab.active { box-shadow: inset 0 -2px 0 var(--dashboard-gold); }
 }
 /* Build tab: Gear / Skills sub-tabs (top bar), skills and gear in columns */
-body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page):not(.atlas-page):not(.vows-page) .build-subtabs { display: none !important; }
+body:not(.build-page):not(.tree-page):not(.dashboard-view):not(.character-page):not(.atlas-page):not(.vows-page):not(.advanced-page) .build-subtabs { display: none !important; }
 /* Current Build Setup: total DPS, tooltip DPS and average hit on top */
 .build-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .build-stats[hidden] { display: none; }
@@ -3324,3 +3325,48 @@ body.stats-folded .stats-panel { padding: 0; border: 0; background: none; overfl
 .opt-aspect { margin: 6px 0 8px; }
 .opt-aspect > summary { cursor: pointer; padding: 4px 0; }
 .opt-aspect .best-list li.on { outline: 1px solid var(--good); border-radius: 6px; }
+/* Advanced tab (src/advanced.js): every number behind the build, in small cards that flow in columns (masonry by CSS columns). */
+.advanced-pane .adv-head p { max-width: 760px; }
+.adv-grid { columns: 3 300px; column-gap: 12px; margin-top: 12px; }
+.adv-card { break-inside: avoid; display: inline-block; width: 100%; box-sizing: border-box; margin: 0 0 12px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--panel) 85%, var(--bg)); overflow: hidden; }
+.adv-card h3 { margin: 0; padding: 7px 12px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dashboard-gold); background: color-mix(in srgb, var(--adv-tone, var(--dashboard-gold)) 12%, var(--panel-2)); border-bottom: 1px solid var(--line); }
+.adv-card.adv-speed, .adv-card.adv-crit, .adv-card.adv-hit { --adv-tone: var(--t-fire); }
+.adv-card.adv-enemy { --adv-tone: var(--bad); }
+.adv-card.adv-mana, .adv-card.adv-es { --adv-tone: var(--mana); }
+.adv-card.adv-life { --adv-tone: var(--life); }
+.adv-card.adv-armour { --adv-tone: var(--t-physical); }
+.adv-card.adv-evasion, .adv-card.adv-maxhit { --adv-tone: var(--dashboard-green); }
+.adv-card.adv-res { --adv-tone: var(--t-cold); }
+.adv-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 5px 12px; border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); font-size: 13px; }
+.adv-card h3 + .adv-row, .adv-sub + .adv-row { border-top: 0; }
+.adv-k { color: var(--muted); }
+.adv-v { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+.adv-v small { color: var(--faint); font-family: inherit; }
+.adv-row.strong { background: color-mix(in srgb, var(--dashboard-gold) 7%, transparent); }
+.adv-row.strong .adv-k { color: var(--text); font-weight: 600; }
+.adv-row.strong .adv-v { color: var(--dashboard-gold); font-weight: 700; }
+.adv-row.has-tip { cursor: help; }
+.adv-row.has-tip .adv-k { text-decoration: underline dotted color-mix(in srgb, var(--muted) 70%, transparent); text-underline-offset: 3px; }
+.adv-row.has-tip:hover, .adv-row.has-tip:focus-visible { background: color-mix(in srgb, var(--dashboard-gold) 10%, transparent); outline: none; }
+.adv-v .good { color: var(--good); } .adv-v .bad { color: var(--bad); }
+.adv-skill { max-width: 190px; font-family: inherit; }
+.adv-link { padding: 0 4px; border: 0; background: none; color: var(--dashboard-gold); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
+.adv-block { display: flex; flex-direction: column; gap: 2px; padding: 6px 12px; border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); font-size: 12.5px; line-height: 1.45; }
+.adv-sub { padding: 6px 12px 2px; border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); color: var(--c); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.adv-note { margin: 0; padding: 6px 12px 8px; border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); color: var(--faint); font-size: 11.5px; line-height: 1.45; }
+.adv-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.adv-table th { padding: 5px 12px; color: var(--faint); font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; text-align: left; }
+.adv-table th + th, .adv-table td + td { text-align: right; font-variant-numeric: tabular-nums; }
+.adv-table td { padding: 4px 12px; border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+.adv-tip-list { width: 100%; margin: 4px 0 2px; border-collapse: collapse; font-size: 12px; }
+.adv-tip-list td { padding: 1px 0; vertical-align: top; }
+.adv-tip-list td + td { padding-left: 12px; text-align: right; white-space: nowrap; color: var(--dashboard-gold); font-variant-numeric: tabular-nums; }
+.adv-tip-left { padding-top: 3px; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); color: var(--muted); }
+/* Damage Composition and DPS Scaling (moved from Damage Analysis) above the cards; Where the numbers come from below them. */
+.adv-top { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 12px; align-items: stretch; margin-top: 12px; }
+.adv-top > .card { margin: 0; }
+.adv-top h2 { font-family: Georgia, "Times New Roman", serif; font-size: 15px; letter-spacing: 0; }
+.adv-where { margin-top: 4px; }
+@media (max-width: 1100px) { .adv-top { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { .adv-grid { columns: 1; } .adv-skill { max-width: 150px; } }
+:root[data-theme="light"] .adv-row.strong .adv-v, :root[data-theme="light"] .adv-card h3, :root[data-theme="light"] .adv-tip-list td + td, :root[data-theme="light"] .adv-link { color: #795714; }

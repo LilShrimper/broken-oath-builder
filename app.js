@@ -1378,6 +1378,10 @@ window.PAGE_LANGS = {
 
 
 
+
+
+
+
 (function (root) {
   'use strict';
 
@@ -1425,13 +1429,14 @@ window.PAGE_LANGS = {
 
     const dOn = dragonOn(GD, ch, cfg), dT = dragonTreeOf(GD, ch);
     const dHave0 = dOn ? (S.dragonIds ? S.dragonIds(GD, ch) : (ch.dragonNodes || []).filter(id => dT[id])) : [];
-    let dList = dHave0.slice(), dK = '';
-    const setD = set => { dList = [...set].sort(); dK = '|d:' + dList.join(','); };
+    let dList = dHave0.slice(), dK = '', dA = ch.dragonAspect || '';
+    const setD = set => { dList = [...set].sort(); dK = '|d:' + dA + ':' + dList.join(','); };
+    const setA = a => { dA = a || ''; setD(dList); };
     if (dOn) setD(dHave0);
-    const defence = list => cfg.defence(list, oathMap, dOn ? dList : null);
+    const defence = list => cfg.defence(list, oathMap, dOn ? dList : null, dOn ? dA : null);
     const dpsOf = (g, list) => {
       calcs++;
-      const r = g.r = S.calcSkill(GD, Object.assign({}, ch, { passives: list, oaths: oathMap }, dOn ? { dragonNodes: dList } : null), g.id, g.opt);
+      const r = g.r = S.calcSkill(GD, Object.assign({}, ch, { passives: list, oaths: oathMap }, dOn ? { dragonNodes: dList, dragonAspect: dA } : null), g.id, g.opt);
       let v = r && r.totalDps > 0 ? r.totalDps : 0;
 
 
@@ -1785,7 +1790,7 @@ window.PAGE_LANGS = {
 
 
     function* dragonStep(pset) {
-      const R = GD.dragon.tree, aspect = ch.dragonAspect || '';
+      const R = GD.dragon.tree, aspect0 = ch.dragonAspect || '';
       const core = Object.values(dT).find(n => n.Kind === 'Core'), c0 = core ? core.Id : null;
       const dadj = {};
       for (const n of Object.values(dT)) for (const l of n.Links || []) if (dT[l]) { (dadj[n.Id] = dadj[n.Id] || []).push(l); (dadj[l] = dadj[l] || []).push(n.Id); }
@@ -1793,7 +1798,7 @@ window.PAGE_LANGS = {
       const isCrown = id => crowns.has(dT[id].Kind);
       const cost = set => { let n = 0, c = 0; for (const id of set) { if (isCrown(id)) c++; else n++; } return n + Math.max(0, c - 1) * crownCost; };
       const walk = id => !!dT[id] && dT[id].Kind !== 'Core';
-      const lines = id => (dT[id].Mods || []).concat(((dT[id].AspectMods || {})[aspect]) || []);
+      const lines = id => (dT[id].Mods || []).concat(((dT[id].AspectMods || {})[dA]) || []);
 
       const unc = m => m.Mode === 'Trigger' || (m.Mode === 'Flag' && m.Stat !== 'Dragonling') || !S.counted(m.Stat);
       const dmg = m => !unc(m) && (S.damageStat(m.Stat) || ATTR.includes(m.Stat) || m.Stat === 'Dragonling');
@@ -1809,88 +1814,106 @@ window.PAGE_LANGS = {
       const dpath = (b, set, t) => { const p = []; let x = t; while (x && !set.has(x) && x !== c0) { p.push(x); x = b.prev.get(x); } return p.reverse(); };
       const deps = (set, id) => { const s = new Set(set); s.delete(id); const k = reach(s); return [...set].filter(x => !k.has(x)); };
       const have = new Set(dHave0.filter(walk)), points = Math.max(0, +cfg.dragon.points || 0);
-      const vHave = VD(have);
-      const why = {};
-      if (!cfg.addOnly) for (const id of have) {
-        if (!bigD(id)) continue;
-        const ls = lines(id);
-        if (ls.some(unc)) why[id] = 'has lines the sim does not count';
-        else if (cfg.keepDefence && ls.length && !ls.some(dmg)) why[id] = 'no damage lines';
-      }
-      const kept = new Set(Object.keys(why));
-      const useful = Object.keys(dT).filter(id => walk(id) && lines(id).some(m => dmg(m) || defish(m)));
 
-      function* spendD(start, pts, steps) {
-        const set = new Set(start), total = Math.max(1, pts); let cur = VD(set);
-        for (;;) {
-          const b = dbfs(set), have0 = cost(set); let pick = null;
-          for (const id of useful) {
-            if (set.has(id) || !b.dist.has(id)) continue;
-            const path = dpath(b, set, id), s = new Set(set); for (const x of path) s.add(x);
-            const c = cost(s) - have0; if (c > pts) continue;
-            const g = VD(s) / cur - 1; if (g <= 1e-6) continue;
-            const per = g / Math.max(c, 0.5);
-            if (!pick || per > pick.per) pick = { path, c, g, per };
-            if (++tries % 6 === 0) yield null;
-          }
-          if (!pick) break;
-          for (const x of pick.path) set.add(x);
-          pts -= pick.c; cur = VD(set);
-          if (steps) { steps.push({ nodes: pick.path, cost: pick.c, gain: pick.g }); yield { phase: 'Dragonling tree', p: 1 - pts / total, q: DRAGON_Q + (1 - DRAGON_Q) * (1 - pts / total), dq: true }; }
+      function* planFor() {
+        const why = {};
+        if (!cfg.addOnly) for (const id of have) {
+          if (!bigD(id)) continue;
+          const ls = lines(id);
+          if (ls.some(unc)) why[id] = 'has lines the sim does not count';
+          else if (cfg.keepDefence && ls.length && !ls.some(dmg)) why[id] = 'no damage lines';
         }
-        setD(set);
-        return set;
-      }
-      const steps = [];
-      let best = have, bestV = vHave;
-      yield { phase: 'Dragonling tree', p: 0, q: DRAGON_Q, dq: true };
-      if (cfg.addOnly) {
-        best = yield* spendD(have, points - cost(have), steps); bestV = VD(best);
-      } else {
-        const budget = Math.max(points, cost(have));
+        const kept = new Set(Object.keys(why));
+        const useful = Object.keys(dT).filter(id => walk(id) && lines(id).some(m => dmg(m) || defish(m)));
 
-        const bare = new Set();
-        for (const t of [...kept].sort()) { const b = dbfs(bare); for (const x of dpath(b, bare, t)) bare.add(x); }
-        const starts = [have]; if (cost(bare) <= budget) starts.push(bare);
-        for (const s of starts) {
-          const t = yield* spendD(s, budget - cost(s)), v = VD(t);
-          if (v > bestV * (1 + 1e-9)) { best = t; bestV = v; }
-        }
-
-        for (let iter = 0; iter < 6; iter++) {
-          yield { phase: 'Dragonling tree', p: (iter + 1) / 7, q: DRAGON_Q + (1 - DRAGON_Q) * (iter + 1) / 7, dq: true };
-          const cur = bestV, seen = new Set(), branches = [];
-          for (const id of best) {
-            if (kept.has(id)) continue;
-            const rem = deps(best, id); if (rem.some(x => kept.has(x))) continue;
-            const key = rem.slice().sort().join(','); if (seen.has(key)) continue; seen.add(key);
-            const s = new Set(best); for (const x of rem) s.delete(x);
-            branches.push({ rem, loss: (1 - VD(s) / cur) / Math.max(1, cost(best) - cost(s)) });
+        function* spendD(start, pts, steps) {
+          const set = new Set(start), total = Math.max(1, pts); let cur = VD(set);
+          for (;;) {
+            const b = dbfs(set), have0 = cost(set); let pick = null;
+            for (const id of useful) {
+              if (set.has(id) || !b.dist.has(id)) continue;
+              const path = dpath(b, set, id), s = new Set(set); for (const x of path) s.add(x);
+              const c = cost(s) - have0; if (c > pts) continue;
+              const g = VD(s) / cur - 1; if (g <= 1e-6) continue;
+              const per = g / Math.max(c, 0.5);
+              if (!pick || per > pick.per) pick = { path, c, g, per };
+              if (++tries % 6 === 0) yield null;
+            }
+            if (!pick) break;
+            for (const x of pick.path) set.add(x);
+            pts -= pick.c; cur = VD(set);
+            if (steps) { steps.push({ nodes: pick.path, cost: pick.c, gain: pick.g }); yield { phase: 'Dragonling tree', p: 1 - pts / total, q: DRAGON_Q + (1 - DRAGON_Q) * (1 - pts / total), dq: true }; }
           }
-          branches.sort((a, b) => a.loss - b.loss);
-          const trials = branches.slice(0, 4).map(b => b.rem);
-          for (let i = 0; i < Math.min(3, branches.length); i++) for (let j = i + 1; j < Math.min(3, branches.length); j++) trials.push([...new Set([...branches[i].rem, ...branches[j].rem])]);
-          let found = null, fv = cur * (1 + MIN_GAIN);
-          for (const rem of trials) {
-            const s = new Set(best); for (const x of rem) s.delete(x);
+          setD(set);
+          return set;
+        }
+        const steps = [];
+        const vHave = VD(have);
+        let best = have, bestV = vHave;
+        yield { phase: 'Dragonling tree', p: 0, q: DRAGON_Q, dq: true };
+        if (cfg.addOnly) {
+          best = yield* spendD(have, points - cost(have), steps); bestV = VD(best);
+        } else {
+          const budget = Math.max(points, cost(have));
+
+          const bare = new Set();
+          for (const t of [...kept].sort()) { const b = dbfs(bare); for (const x of dpath(b, bare, t)) bare.add(x); }
+          const starts = [have]; if (cost(bare) <= budget) starts.push(bare);
+          for (const s of starts) {
             const t = yield* spendD(s, budget - cost(s)), v = VD(t);
-            if (v > fv) { found = t; fv = v; }
+            if (v > bestV * (1 + 1e-9)) { best = t; bestV = v; }
           }
-          if (!found) break;
-          best = found; bestV = fv;
+
+          for (let iter = 0; iter < 6; iter++) {
+            yield { phase: 'Dragonling tree', p: (iter + 1) / 7, q: DRAGON_Q + (1 - DRAGON_Q) * (iter + 1) / 7, dq: true };
+            const cur = bestV, seen = new Set(), branches = [];
+            for (const id of best) {
+              if (kept.has(id)) continue;
+              const rem = deps(best, id); if (rem.some(x => kept.has(x))) continue;
+              const key = rem.slice().sort().join(','); if (seen.has(key)) continue; seen.add(key);
+              const s = new Set(best); for (const x of rem) s.delete(x);
+              branches.push({ rem, loss: (1 - VD(s) / cur) / Math.max(1, cost(best) - cost(s)) });
+            }
+            branches.sort((a, b) => a.loss - b.loss);
+            const trials = branches.slice(0, 4).map(b => b.rem);
+            for (let i = 0; i < Math.min(3, branches.length); i++) for (let j = i + 1; j < Math.min(3, branches.length); j++) trials.push([...new Set([...branches[i].rem, ...branches[j].rem])]);
+            let found = null, fv = cur * (1 + MIN_GAIN);
+            for (const rem of trials) {
+              const s = new Set(best); for (const x of rem) s.delete(x);
+              const t = yield* spendD(s, budget - cost(s)), v = VD(t);
+              if (v > fv) { found = t; fv = v; }
+            }
+            if (!found) break;
+            best = found; bestV = fv;
+          }
+          if (!(bestV > vHave * (1 + MIN_GAIN))) { best = have; bestV = vHave; } // not worth moving points for less than 0.1%
         }
-        if (!(bestV > vHave * (1 + MIN_GAIN))) { best = have; bestV = vHave; } // not worth moving points for less than 0.1%
+        return { best, bestV, steps, kept, why };
       }
+
+      function* part(gen, i, n) {
+        let r; while (!(r = gen.next()).done) { const v = r.value; yield v && v.dq ? Object.assign({}, v, { p: (i + v.p) / n, q: DRAGON_Q + (1 - DRAGON_Q) * (i + (v.q - DRAGON_Q) / (1 - DRAGON_Q)) / n }) : v; }
+        return r.value;
+      }
+      const vHave = VD(have); // the tree and Aspect held now
+      const asps = cfg.dragon.aspects ? [aspect0].concat([''].concat(Object.keys(GD.dragon.aspects || {})).filter(a => a !== aspect0)) : [aspect0];
+      const plans = [];
+      for (let i = 0; i < asps.length; i++) { setA(asps[i]); plans.push(Object.assign({ a: asps[i] }, yield* part(planFor(), i, asps.length))); }
+      let pick = plans.reduce((m, p) => p.bestV > m.bestV ? p : m, plans[0]);
+      if (!(pick.bestV > plans[0].bestV * (1 + MIN_GAIN))) pick = plans[0]; // the Aspect held now unless another gains 0.1% or more
+      setA(pick.a);
+      const { best, steps, kept, why } = pick;
       const fin = reach(best); setD(fin);
       const vFin = V(pset);
       const worth = id => { const s = new Set(fin); s.delete(id); const v = VD(s); setD(fin); return 1 - v / vFin; };
-      const own = id => { const s = new Set(have); s.delete(id); const v = VD(s); setD(fin); return 1 - v / vHave; };
+      const own = id => { setA(aspect0); const s = new Set(have); s.delete(id); const v = VD(s); setA(pick.a); setD(fin); return 1 - v / vHave; };
       const order = [...dHave0.filter(id => fin.has(id)), ...steps.flatMap(s => s.nodes), ...[...fin].filter(id => !have.has(id))].filter((x, i, a) => a.indexOf(x) === i);
       const out = {
         list: order, points, used: cost(fin), before: cost(have), gain: vFin / vHave - 1, steps,
         add: [...fin].filter(id => !have.has(id)).map(id => ({ id, d: worth(id) })).sort((a, b) => b.d - a.d),
         remove: [...have].filter(id => !fin.has(id)).map(id => ({ id, d: own(id) })).sort((a, b) => b.d - a.d),
         kept: [...kept].map(id => ({ id, why: why[id] })),
+        aspect: plans.length > 1 ? { from: aspect0, to: pick.a, rows: plans.map(p => ({ a: p.a, gain: p.bestV / plans[0].bestV - 1 })).sort((x, y) => y.gain - x.gain) } : null,
       };
       setD(fin);
       return out;
@@ -2260,7 +2283,11 @@ window.PAGE_LANGS = {
       L = L || { type: LIMIT, total: lineMax };
       const base = baseOf(it), pool = [], cap = vow ? vowMax : L.total;
 
-      const lines = vow && typeof cfg.vowLines === 'function' ? cfg.vowLines(realSlot(slot), base) : affixesFor(base);
+
+
+      const held = new Set(vow ? ((GD.uniques[lc(it.unique || '')] || {}).Mods || []).filter(m => m.Mod).map(m => m.Mod.Stat + '|' + (m.Mod.Tags || []).slice().sort().join(',')) : []);
+      const lines = (vow && typeof cfg.vowLines === 'function' ? cfg.vowLines(realSlot(slot), base, it) : affixesFor(base))
+        .filter(af => !held.has(af.Mod ? af.Mod.Stat + '|' + (af.Mod.Tags || []).slice().sort().join(',') : ''));
 
       const entry = (af, ti, top) => {
         const t = af.Tiers[ti], a = { id: af.Id, tier: ti, v: rollAt(t.Min, t.Max, lineRoll), v2: t.Max2 != null ? rollAt(t.Min2, t.Max2, lineRoll) : 0 };
@@ -3210,10 +3237,37 @@ window.BOPlanner = function (ctx) {
 
 
 
-  const vowAffixes = (slot, base) => base ? affixesFor(base) : [];
+
+
+
+
+
+
+
+
+
+  const vowKind = m => m ? m.Stat + '|' + (m.Tags || []).slice().sort().join(',') : '';
+  const redOf = it => it && it.rarity === 'Unique' && it.unique && it.unique !== 'None' ? GD.uniques[lc(it.unique)] : null;
+  const heldKinds = it => { const u = redOf(it); return new Set(u ? (u.Mods || []).filter(m => m.Mod).map(m => vowKind(m.Mod)) : []); };
+  const vowAffixes = (slot, base, it) => { if (!base) return []; const all = affixesFor(base), held = heldKinds(it); return held.size ? all.filter(a => !held.has(vowKind(a.Mod))) : all; };
   const vowPool = (slot, base) => new Set(vowAffixes(slot, base).map(a => lc(a.Id)));
 
-  const vowMisfit = (pool, a, slot, base) => pool.has(lc(a.id)) || !GD.affixes[lc(a.id)] ? '' : ' <span class="bad">(' + esc('this base can not roll it') + ')</span>';
+  function vowMovesTo(it, base, a) {
+    const af = GD.affixes[lc(a.id)], held = heldKinds(it);
+    if (!base || !af || !held.has(vowKind(af.Mod))) return null;
+    const all = affixesFor(base), at = all.indexOf(af);
+    const next = all.slice(at + 1).find(x => !held.has(vowKind(x.Mod)));
+    return next ? { af: next, tier: topTier(next, (it && it.level) || 84) } : null;
+  }
+
+  const vowMisfit = (pool, a, slot, base, it) => {
+    if (!GD.affixes[lc(a.id)]) return '';
+    if (!pool.has(lc(a.id))) return ' <span class="bad">(' + esc('this base can not roll it') + ')</span>';
+    const mv = it && vowMovesTo(it, base, a);
+    if (!mv) return '';
+    const t = mv.af.Tiers[mv.tier];
+    return ' <span class="bad">(' + esc('the unique already has this kind of line: in the game this Vow becomes "' + modLine(mv.af.Mod, t.Max, t.Max2) + '", tier ' + (mv.tier + 1)) + ')</span>';
+  };
   function runeSlots(base) {
     if (!base) return 0;
     const R = GD.runeSockets || {}, tags = base.Tags || [];
@@ -3845,10 +3899,10 @@ window.BOPlanner = function (ctx) {
       const pool = vowPool(slot, base);
       const vix = it.affixes.map((a, ai) => a.id.startsWith('unique:') ? -1 : ai).filter(ai => ai >= 0);
       const reorder = edit && !dis && vix.length > 1;
-      if (vix.length) h += '<div class="vow-list" data-mv="act">' + vix.map((ai, n) => affixRow(it, it.affixes[ai], ai, edit, dis, vowTag(vi++, it.affixes[ai]), vowMisfit(pool, it.affixes[ai], slot, base),
+      if (vix.length) h += '<div class="vow-list" data-mv="act">' + vix.map((ai, n) => affixRow(it, it.affixes[ai], ai, edit, dis, vowTag(vi++, it.affixes[ai]), vowMisfit(pool, it.affixes[ai], slot, base, it),
         reorder ? vowMove('act', ai, n ? vix[n - 1] : null, n < vix.length - 1 ? vix[n + 1] : null) : '')).join('') + '</div>';
       if (u && edit && nVows < VOW_MAX) {
-        const all = vowAffixes(slot, base);
+        const all = vowAffixes(slot, base, it);
         const used = new Set(it.affixes.map(a => (GD.affixes[lc(a.id)] || {}).Group));
         const grp = t => all.filter(a => a.Type === t && !used.has(a.Group)).sort((x, y) => x.Id.localeCompare(y.Id)).map(a => opt(a.Id, modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2) + (a.Kind ? ' · ' + a.Kind : '') + ' (' + a.Id + ')')).join('');
         h += '<label class="field"><span>Add a Vow <span class="meta">an affix from a rare, bound to this unique at the cube</span></span><select data-f="addaffix"><option value="">Pick an affix…</option>' +
@@ -4639,7 +4693,7 @@ window.BOPlanner = function (ctx) {
     return p;
   }
 
-  const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, baseLine, gradeField, gradeChange, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, markBases, affixesFor, vowAffixes, vowPool, vowMisfit, vowMove, moveAffix, fixHands, handOk,
+  const gear = { newKit, editor: itemEditor, tip: itemTip, baseStats, baseLine, gradeField, gradeChange, change: gearChange, click: gearClick, SLOTS, SLOT_NAME, basesFor, uniquesFor, markBases, affixesFor, vowAffixes, vowPool, vowMisfit, vowMovesTo, vowMove, moveAffix, fixHands, handOk,
 
     oathwordsFor, oathwordBases, rollUnique, newUnique, topTier, runeSlots, runeSockets, runeList, modLine, LIMIT, VOW_MAX };
 
@@ -14145,7 +14199,7 @@ window.BOCharacter = function (ctx) {
   function addSelect(it, base, type, label, isIdol, flag, vow) {
     const gd = GD(), used = new Set(it.affixes.map(a => (gd.affixes[lc(a.id)] || {}).Group));
 
-    const all = vow ? G.vowAffixes(M.slot, base) : base ? G.affixesFor(base) : isIdol ? Object.values(gd.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length) : G.affixesFor(base);
+    const all = vow ? G.vowAffixes(M.slot, base, it) : base ? G.affixesFor(base) : isIdol ? Object.values(gd.affixes).filter(a => (a.BaseTags || []).some(t => /^Idol/.test(t)) && (a.Tiers || []).length) : G.affixesFor(base);
 
     const opts = T => all.filter(a => a.Type === T && !used.has(a.Group)).map(a => ({ id: a.Id, t: safe(() => G.modLine(a.Mod, a.Tiers[0].Max, a.Tiers[0].Max2)) + (a.Kind ? ' (' + a.Kind + ')' : ''), c: rollChance(a, base) })).sort((x, y) => x.t.localeCompare(y.t))
       .map(o => '<option value="' + esc(o.id) + '"' + (o.c ? ' data-c="' + esc(o.c.pct + '|' + o.c.of) + '"' : '') + '>' + esc(o.t) + '</option>').join('');
@@ -14303,7 +14357,7 @@ window.BOCharacter = function (ctx) {
       const pool = G.vowPool(M.slot, base); // a Vow its base can't roll is marked (planner.js vowMisfit)
 
       const vix = it.affixes.map((a, ai) => a.id.startsWith('unique:') ? -1 : ai).filter(ai => ai >= 0);
-      if (vix.length) vows += '<div class="vow-list" data-mv="io">' + vix.map((ai, n) => affixRow(it, it.affixes[ai], ai, 'Vow ' + (++vi), '', G.vowMisfit(pool, it.affixes[ai], M.slot, base),
+      if (vix.length) vows += '<div class="vow-list" data-mv="io">' + vix.map((ai, n) => affixRow(it, it.affixes[ai], ai, 'Vow ' + (++vi), '', G.vowMisfit(pool, it.affixes[ai], M.slot, base, it),
         vix.length > 1 ? G.vowMove('io', ai, n ? vix[n - 1] : null, n < vix.length - 1 ? vix[n + 1] : null) : '')).join('') + '</div>';
       if (u && nV < G.VOW_MAX) vows += addSelect(it, base, '', 'Add a Vow', isIdol, '', true);
       r += section('Vows <small>' + nV + ' / ' + G.VOW_MAX + '</small>' + fxKillBox(), vows || '<div class="io-imp meta">None</div>');
@@ -25232,9 +25286,10 @@ window.BOStartApp = function () {
   }
 
 
-  function setPassives(list, undo, oaths, dragonNodes) {
-    if (undo !== false) { const u = st.ch.passives.slice(); if (oaths) u.oaths = Object.assign({}, st.ch.oaths || {}); if (dragonNodes) u.dragonNodes = (st.ch.dragonNodes || []).slice(); T.undo.push(u); }
-    const lv = Object.assign(levelFor(dragonNodes ? Object.assign({}, st.ch, { dragonNodes }) : st.ch, list), oaths ? { oaths: Object.assign({}, oaths) } : null, dragonNodes ? { dragonNodes: dragonNodes.slice() } : null);
+  function setPassives(list, undo, oaths, dragonNodes, dragonAspect) {
+    const aspOn = dragonAspect != null && dragonAspect !== (st.ch.dragonAspect || '');
+    if (undo !== false) { const u = st.ch.passives.slice(); if (oaths) u.oaths = Object.assign({}, st.ch.oaths || {}); if (dragonNodes) u.dragonNodes = (st.ch.dragonNodes || []).slice(); if (aspOn) u.dragonAspect = st.ch.dragonAspect || ''; T.undo.push(u); }
+    const lv = Object.assign(levelFor(dragonNodes ? Object.assign({}, st.ch, { dragonNodes }) : st.ch, list), oaths ? { oaths: Object.assign({}, oaths) } : null, dragonNodes ? { dragonNodes: dragonNodes.slice() } : null, aspOn ? { dragonAspect } : null);
     if (st.chOrig && st.chOrig.plan) { Object.assign(st.chOrig, lv, { passives: list }); st.ch = st.chOrig; keepChars(); }
     else st.ch = Object.assign({}, st.ch, lv, { passives: list }); // keeps Dragonling edits made on this tab
     st.pinned = null; stopSearch(); st.opt = null;
@@ -26246,7 +26301,7 @@ window.BOStartApp = function () {
 
 
   const optDragonOn = () => !!(st.ch && $('#optDragon').checked && (GD.dragon.tree || {}).asc2 && Object.keys((GD.dragon.classes || {})[String(st.ch.classId).toLowerCase()] || {}).length);
-  const optDragon = () => optDragonOn() ? { points: planner.dragon.points(st.ch).total } : null;
+  const optDragon = () => optDragonOn() ? { points: planner.dragon.points(st.ch).total, aspects: true } : null; // aspects: also try every Aspect (25 Nov 2026)
   const optDragonKey = () => optDragonOn() ? JSON.stringify([st.ch.dragonNodes || [], st.ch.dragonAspect || '', planner.dragon.points(st.ch).total]) : '';
   const dNode = id => ((GD.dragon.classes || {})[String(st.ch.classId).toLowerCase()] || {})[id];
   const D_KIND = { WarCrown: 'War crown', WardCrown: 'Ward crown' };
@@ -26261,24 +26316,34 @@ window.BOStartApp = function () {
     }
     return rows.join('') || '<li><span class="c">nothing</span></li>';
   }
-  const optDragonMoves = o => !!(o.dragon && (o.dragon.add.length || o.dragon.remove.length));
+  const optAspectMove = o => !!(o.dragon && o.dragon.aspect && o.dragon.aspect.to !== o.dragon.aspect.from);
+  const optDragonMoves = o => !!(o.dragon && (o.dragon.add.length || o.dragon.remove.length || optAspectMove(o)));
+  const aspName = a => { const A = a ? (GD.dragon.aspects || {})[a] : null; return A ? (A.Name || a) : a ? a : 'No Aspect'; };
+
+  function optAspectHtml(o) {
+    const x = o.dragon && o.dragon.aspect; if (!x) return '';
+    const head = optAspectMove(o) ? 'Aspect: switch <b>' + esc(aspName(x.from)) + '</b> → <b>' + esc(aspName(x.to)) + '</b>' : 'Aspect: keep <b>' + esc(aspName(x.from)) + '</b>';
+    const rows = x.rows.map(r => '<li' + (r.a === x.to ? ' class="on"' : '') + '><span>' + esc(aspName(r.a)) + (r.a === x.from ? ' <span class="c">now</span>' : '') + '</span><span class="v">' + (r.a === x.from ? '' : pct(r.gain)) + '</span></li>').join('');
+    return '<details class="opt-aspect"><summary>' + head + (optAspectMove(o) ? ' <span class="g">' + pct((x.rows.find(r => r.a === x.to) || {}).gain || 0) + '</span>' : '') + '</summary>' +
+      '<ul class="best-list">' + rows + '</ul><p class="hint">Each Aspect with its own best Dragonling picks, against the best picks for the Aspect you have now.</p></details>';
+  }
   function optDragonHtml(o) {
     const d = o.dragon; if (!d || !(d.points || d.before)) return ''; // no Dragon Rupture cleared yet: nothing to plan
     const kept = d.kept.length ? ' Dragonling nodes left where they are: ' + d.kept.map(k => esc((dNode(k.id) || { Name: k.id }).Name) + ' (' + esc(k.why) + ')').join(', ') + '.' : '';
-    const note = '<p class="hint">Dragonling picks are green and red on the Dragonling panel. They keep your Aspect and may include keystones and crowns: the first crown is free, each further one costs ' + ((GD.dragon.tree || {}).crownCost || 3) + ' points.</p>';
+    const note = '<p class="hint">Dragonling picks are green and red on the Dragonling panel. They may include keystones and crowns: the first crown is free, each further one costs ' + ((GD.dragon.tree || {}).crownCost || 3) + ' points.</p>';
     if (o.addOnly) {
       let n = d.before;
       const rows = d.steps.map(s => { const from = n + 1; n += s.cost;
         const nm = s.nodes.map(id => { const x = dNode(id); return x ? (['Small', 'Shared', 'Entry'].includes(x.Kind) ? esc(x.Name) : '<b>' + esc(x.Name) + '</b>') : ''; }).join(' › ');
         return '<li data-dfocus="' + esc(s.nodes[s.nodes.length - 1]) + '"><span><span class="c">' + (s.cost === 0 ? 'Free crown' : s.cost > 1 ? 'Points ' + from + '–' + n : 'Point ' + from) + '</span> ' + nm + '</span><span class="v">' + pct(s.gain) + '</span></li>'; }).join('');
       const left = d.points - d.used;
-      return '<h3>Dragonling <span class="hint">' + d.used + ' / ' + d.points + ' points</span></h3>' +
+      return '<h3>Dragonling <span class="hint">' + d.used + ' / ' + d.points + ' points</span></h3>' + optAspectHtml(o) +
         (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">' + (d.points - d.before > 0 ? 'No Dragonling node within reach adds ' + (o.scored ? 'anything at this setting' : 'DPS to this skill') + '.' : 'No free Dragonling points (one for each Dragon Rupture cleared).') + '</p>') +
         (left > 0 && rows ? '<p class="hint">' + left + ' Dragonling point' + (left > 1 ? 's' : '') + ' left over: nothing else within reach adds DPS.</p>' : '') + (rows ? note : '');
     }
-    if (!optDragonMoves(o)) return '<p class="hint">Dragonling: your ' + d.used + ' of ' + d.points + ' points already look right.' + kept + '</p>';
-    return '<h3>Dragonling <span class="hint">' + d.before + ' → ' + d.used + ' of ' + d.points + ' points · ' + pct(d.gain) + '</span></h3>' +
-      '<div class="opt-cols"><div><h3 class="rem">Refund</h3><ul>' + optDragonRows(d.remove, -1) + '</ul></div><div><h3 class="add">Take</h3><ul>' + optDragonRows(d.add, 1) + '</ul></div></div>' +
+    if (!optDragonMoves(o)) return '<p class="hint">Dragonling: your ' + d.used + ' of ' + d.points + ' points already look right.' + kept + '</p>' + optAspectHtml(o);
+    return '<h3>Dragonling <span class="hint">' + d.before + ' → ' + d.used + ' of ' + d.points + ' points · ' + pct(d.gain) + '</span></h3>' + optAspectHtml(o) +
+      (d.add.length || d.remove.length ? '<div class="opt-cols"><div><h3 class="rem">Refund</h3><ul>' + optDragonRows(d.remove, -1) + '</ul></div><div><h3 class="add">Take</h3><ul>' + optDragonRows(d.add, 1) + '</ul></div></div>' : '') +
       (kept ? '<p class="hint">' + kept.trim() + '</p>' : '') + note;
   }
 
@@ -26316,7 +26381,7 @@ window.BOStartApp = function () {
     card.hidden = false; card.innerHTML = '<p class="hint">' + (plan ? 'Planning your next ' + extra + ' point' + (extra > 1 ? 's' : '') : 'Optimizing the tree') + ' for ' + esc(skillName) + '…</p>';
 
     const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])], keep: [...(st.keep || [])], oaths: $('#optOaths').checked, dragon: optDragon(),
-      defWeight: GS.set.prio / 100, defStats: gsDefStats(), defence: (list, oaths, dragonNodes) => gsDefence(Object.assign({}, st.ch, { passives: list }, oaths ? { oaths } : null, dragonNodes ? { dragonNodes } : null)) });
+      defWeight: GS.set.prio / 100, defStats: gsDefStats(), defence: (list, oaths, dragonNodes, dragonAspect) => gsDefence(Object.assign({}, st.ch, { passives: list }, oaths ? { oaths } : null, dragonNodes ? { dragonNodes } : null, dragonAspect != null ? { dragonAspect } : null)) });
 
     let phase = 'Starting', q = 0;
     const busy = on => { btn.classList.toggle('opt-busy', on); btn.style.setProperty('--q', on ? q : 0); btn.setAttribute('aria-busy', on ? 'true' : 'false'); };
@@ -26389,7 +26454,7 @@ window.BOStartApp = function () {
         (at.length ? '<p class="hint">Attributes from the tree: ' + esc(at.join(', ')) + '. Check your gear and gem requirements still fit.</p>' : '') + kept +
         '<p class="hint">Each value is that node\'s share of the ' + (o.scored ? 'score (DPS and defence, weighed as set)' : 'DPS') + '. The sim cannot weigh lines it does not count (see a node\'s tooltip), so check the picks fit how you play. Click a row to find it on the tree.</p>' +
         '<div class="opt-actions"><button class="btn small" type="button" id="optApply">Apply to my tree</button><button class="btn small ghost" type="button" id="optDismiss">Dismiss</button></div>';
-      $('#optApply').onclick = () => { const list = o.list, msg = optOathMsg(o) + (optDragonMoves(o) ? ' Dragonling nodes moved.' : ''); clearOpt(); setPassives(list, true, (o.oaths || []).length ? o.oathMap : null, optDragonMoves(o) ? o.dragon.list : null); $('#treeStatus').textContent = 'Optimized tree applied.' + msg + ' Undo goes back; Copy build code gives it to the game.'; };
+      $('#optApply').onclick = () => { const list = o.list, msg = optOathMsg(o) + (optDragonMoves(o) ? ' Dragonling nodes moved.' : ''); clearOpt(); setPassives(list, true, (o.oaths || []).length ? o.oathMap : null, optDragonMoves(o) ? o.dragon.list : null, optAspectMove(o) ? o.dragon.aspect.to : null); $('#treeStatus').textContent = 'Optimized tree applied.' + msg + ' Undo goes back; Copy build code gives it to the game.'; };
     }
     $('#optDismiss').onclick = () => { clearOpt(); paintTree(); };
     optCardClicks(card);
@@ -26434,7 +26499,7 @@ window.BOStartApp = function () {
       (at.length ? '<p class="hint">Attributes from these picks: ' + esc(at.join(', ')) + '.</p>' : '') +
       '<p class="hint">Take them top to bottom: each row is worth most per point at that moment, its path included (gains are on top of the rows above). Keystones and skill-changing nodes are left out; Channel Conduit builds keep their channel 1% slower than the cast interval. Green on the tree. Click a row to find it.</p>' +
       '<div class="opt-actions">' + (rows || (o.oaths || []).length || optDragonMoves(o) ? '<button class="btn small" type="button" id="optApply">Add to my tree</button>' : '') + '<button class="btn small ghost" type="button" id="optDismiss">Dismiss</button></div>';
-    if (rows || (o.oaths || []).length || optDragonMoves(o)) $('#optApply').onclick = () => { const list = o.list, msg = optOathMsg(o) + (optDragonMoves(o) ? ' Dragonling points spent.' : ''); clearOpt(); setPassives(list, true, (o.oaths || []).length ? o.oathMap : null, optDragonMoves(o) ? o.dragon.list : null); $('#treeStatus').textContent = 'Planned points added.' + msg + ' Copy build code gives the game a code to follow; Undo goes back.'; };
+    if (rows || (o.oaths || []).length || optDragonMoves(o)) $('#optApply').onclick = () => { const list = o.list, msg = optOathMsg(o) + (optDragonMoves(o) ? ' Dragonling points spent.' : ''); clearOpt(); setPassives(list, true, (o.oaths || []).length ? o.oathMap : null, optDragonMoves(o) ? o.dragon.list : null, optAspectMove(o) ? o.dragon.aspect.to : null); $('#treeStatus').textContent = 'Planned points added.' + msg + ' Copy build code gives the game a code to follow; Undo goes back.'; };
     $('#optDismiss').onclick = () => { clearOpt(); paintTree(); };
     optCardClicks(card);
   }
@@ -27778,7 +27843,7 @@ window.BOStartApp = function () {
   $('#treeLegendBtn').onclick = () => { T.heat = T.heat === false; store.set('treeHeat', T.heat); paintTree(); paintDragonHeat(); };
 
   $('#treeSeats').onclick = () => { const list = T.unsworn || []; if (list.length) focusSeat(list[(list.indexOf(T.selM) + 1) % list.length]); };
-  $('#treeUndo').onclick = () => { if (T.undo.length) { const u = T.undo.pop(); setPassives(u, false, u.oaths, u.dragonNodes); } };
+  $('#treeUndo').onclick = () => { if (T.undo.length) { const u = T.undo.pop(); setPassives(u, false, u.oaths, u.dragonNodes, u.dragonAspect); } };
   $('#treeReset').onclick = () => { if (st.chOrig) { clearOpt(); T.undo.push(st.ch.passives.slice()); st.ch = st.chOrig; st.pinned = null; T.job++; T.scores = new Map(); render(); } };
   $('#treeCopy').onclick = async () => {
     try {

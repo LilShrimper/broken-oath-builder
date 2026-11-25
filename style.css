@@ -3320,3 +3320,7 @@ body.stats-folded .stats-panel { padding: 0; border: 0; background: none; overfl
 .dl-n.dl-opt-add:not(.dl-ic) circle:not(.dl-find) { fill: var(--good) !important; }
 .dl-n.dl-opt-add.dl-ic circle:not(.dl-find) { fill: var(--good) !important; fill-opacity: .3; }
 .dl-n.dl-opt-rem.dl-ic circle:not(.dl-find) { fill: var(--bad) !important; fill-opacity: .3; }
+/* Optimize tree: the recommended Dragonling Aspect (opt-aspect, 25 Nov 2026) */
+.opt-aspect { margin: 6px 0 8px; }
+.opt-aspect > summary { cursor: pointer; padding: 4px 0; }
+.opt-aspect .best-list li.on { outline: 1px solid var(--good); border-radius: 6px; }

@@ -2404,7 +2404,18 @@ window.PAGE_LANGS = {
           mine.push({ b: best.c.b, u: best.c.u, w: best.c.w, h: best.c.h, it: best.f.item }); v = V(build(mine));
         }
       }
-      return { items: build(mine), v: V(build(mine)), layout: firstLayout(sizesOf(mine)), cells: sizesOf(mine).reduce((n, s) => n + s[0] * s[1], 0) };
+
+
+
+
+      const layout = firstLayout(sizesOf(mine));
+      let k = 0;
+      const placed = build(mine).map(i => {
+        if (i.slot !== 'Idol') return i;
+        const p = layout && layout[k++];
+        return p ? Object.assign({}, i, { gx: p[0], gy: p[1] }) : i;
+      });
+      return { items: placed, v: V(placed), layout, cells: sizesOf(mine).reduce((n, s) => n + s[0] * s[1], 0) };
     }
 
 
@@ -3277,15 +3288,21 @@ window.BOPlanner = function (ctx) {
 
 
 
-
-
-
   const dTree = ch => (GD.dragon.classes || {})[lc(ch.classId)] || {};
   const dRules = () => GD.dragon.tree || { milestones: [40, 45, 50, 55, 60, 70, 80, 90], hatch: 1, maxCrowns: 1, crownKinds: ['Keystone', 'Capstone'] };
   const dCore = T => Object.values(T).find(n => n.Kind === 'Core');
   const isCrown = n => (dRules().crownKinds || []).includes(n.Kind);
   const asc2 = () => !!dRules().asc2;
-  const dCost = n => asc2() && n && isCrown(n) ? (dRules().crownCost || 3) : 1;
+
+
+
+
+
+
+  const dCrownNeed = () => dRules().crownCost || 3;
+  const dCrowns = ch => { const T = dTree(ch); let c = 0; for (const id of dTaken(ch)) if (T[id] && isCrown(T[id])) c++; return c; };
+
+  const dCost = (n, ch) => { if (!(asc2() && n && isCrown(n))) return 1; if (!ch) return 0; const c = dCrowns(ch), held = dTaken(ch).has(n.Id); return (held ? c - 1 : c) > 0 ? dCrownNeed() : 0; };
 
   const dRupturesAt = rl => (dRules().ruptures || []).filter(l => (+rl || 0) >= l).length;
   const ascOn = ch => !!(GD.dragon.ascend && GD.dragon.ascend.enabled && (GD.dragon.ascend.classes || []).includes(lc(ch.classId)));
@@ -3318,7 +3335,7 @@ window.BOPlanner = function (ctx) {
   }
 
   const dTaken = ch => new Set(S.dragonIds ? S.dragonIds(GD, ch) : (ch.dragonNodes || []).filter(id => dTree(ch)[id]));
-  const dUsed = ch => { const T = dTree(ch); let n = 0; for (const id of dTaken(ch)) n += dCost(T[id]); return n; };
+  const dUsed = ch => { const T = dTree(ch); let n = 0; for (const id of dTaken(ch)) n += asc2() && T[id] && isCrown(T[id]) ? 0 : 1; return n + (asc2() ? Math.max(0, dCrowns(ch) - 1) * dCrownNeed() : 0); };
 
   function dConnected(T, set, drop) {
     const core = dCore(T); if (!core) return true;
@@ -3331,9 +3348,11 @@ window.BOPlanner = function (ctx) {
     if (n.Kind === 'Core') return { s: 'core' };
     if (taken.has(id)) return dConnected(T, taken, id) ? { s: 'taken' } : { s: 'taken', why: 'other picks hang from it: refund those first' };
 
-    if (isCrown(n) && [...taken].some(t => isCrown(T[t]))) return { s: 'blocked', why: asc2() ? 'one crown (Keystone, War or Ward crown) at a time' : 'one Keystone or Capstone at a time' };
+    if (isCrown(n) && !asc2() && [...taken].some(t => isCrown(T[t]))) return { s: 'blocked', why: 'one Keystone or Capstone at a time' };
     const adj = dAdj(T), core = dCore(T);
     if (![...adj[id] || []].some(v => taken.has(v) || (core && v === core.Id))) return { s: 'locked', why: 'not next to a node you hold' };
+
+    if (isCrown(n) && asc2() && dCost(n, ch) > dPoints(ch) - dUsed(ch)) return { s: 'blocked', why: 'a crown costs ' + dCost(n, ch) + ' Dragonling points: you have ' + Math.max(0, dPoints(ch) - dUsed(ch)) };
     return { s: 'open' };
   }
   function dLabel(ch, n) {
@@ -3368,7 +3387,7 @@ window.BOPlanner = function (ctx) {
     let dots = '';
     for (const n of nodes) {
       const st = dState(ch, n.Id), lab = dLabel(ch, n);
-      const tip = lab.name + ' (' + n.Kind + (n.Path ? ', ' + n.Path : '') + (dCost(n) > 1 ? ', ' + dCost(n) + ' points' : '') + ')\n' + lab.text + (st.why ? '\n— ' + st.why : '') + (edit && (st.s === 'open' || (st.s === 'taken' && !st.why)) ? '\n(click to ' + (st.s === 'taken' ? 'refund' : 'take') + ')' : '');
+      const tip = lab.name + ' (' + n.Kind + (n.Path ? ', ' + n.Path : '') + (asc2() && isCrown(n) ? (dCost(n, ch) ? ', ' + dCost(n, ch) + ' points' : ', free') : '') + ')\n' + lab.text + (st.why ? '\n— ' + st.why : '') + (edit && (st.s === 'open' || (st.s === 'taken' && !st.why)) ? '\n(click to ' + (st.s === 'taken' ? 'refund' : 'take') + ')' : '');
       const ic = icon(n, st.s === 'taken' || n.Kind === 'Core');
 
       dots += '<g class="dl-n dl-' + st.s + ' dl-' + lc(n.Kind) + (ic ? ' dl-ic' : '') + '" data-dn="' + esc(n.Id) + '"' + (edit && n.Kind !== 'Core' ? ' data-act="dnode" data-id="' + esc(n.Id) + '"' : '') + '>' + ic + '<circle cx="' + n.X + '" cy="' + n.Y + '" r="' + (R[n.Kind] || 9) + '"/>' +
@@ -3382,7 +3401,7 @@ window.BOPlanner = function (ctx) {
 
     let h = '<div class="card dl-card"><div class="dl-side"><h2>Dragonling <small>' + used + ' / ' + pts + ' points' + (paths.length ? ' · ' + esc(paths.join(' + ')) + (paths.length > 1 ? ' paths' : ' path') : '') + '</small></h2>';
     h += '<div class="pl-row">' + (aspects.length ? '<label class="field inline"><span>Aspect</span><select data-f="aspect"' + dis + '>' + opt('', 'None', !ch.dragonAspect) + aspects.map(a => opt(a, GD.dragon.aspects[a].Name || a, a === ch.dragonAspect)).join('') + '</select></label>' : '') +
-      (asc2() ? '<label class="field inline" title="' + esc('Points: one for each Dragon Rupture you have cleared, at Rupture Levels ' + (dRules().ruptures || []).join(', ') + ' (' + dExtraMax() + ' at most). A crown costs ' + (dRules().crownCost || 3) + ' points.') + '"><span>Dragon Ruptures</span><input'
+      (asc2() ? '<label class="field inline" title="' + esc('Points: one for each Dragon Rupture you have cleared, at Rupture Levels ' + (dRules().ruptures || []).join(', ') + ' (' + dExtraMax() + ' at most). Your first crown is free, each further crown costs ' + dCrownNeed() + '.') + '"><span>Dragon Ruptures</span><input'
         : '<label class="field inline" title="' + esc('Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, +1 each for Gates 4 to 7' + (dSeal80() ? ', the Seal of 80' : '') + ' and the Pinnacle (' + (dBase({ level: 100 }) + dExtraMax()) + ' at most). This box follows the nodes you take.') + '"><span>Gate kills + Pinnacle</span><input') + ' type="number" min="0" max="' + dExtraMax() + '" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
       (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') + '</div>';
 
@@ -3392,7 +3411,7 @@ window.BOPlanner = function (ctx) {
     h += asp ? '<p class="dl-aspect"><b>' + esc(asp.Name || ch.dragonAspect) + ' Aspect:</b> ' + esc(asp.Text || '') + '</p>'
       : '<p class="hint">No Aspect chosen: each one gives its own bonuses (pick one above to see them).</p>';
     h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? (asc2() ? 'Not a valid tree: these nodes cost ' + used + ' points but the Dragonling has ' + pts + ' (one for each Dragon Rupture cleared), so the game would not allow it. Raise Dragon Ruptures cleared, or refund ' + (used - pts) + ' point' + (used - pts === 1 ? '' : 's') + '. The damage numbers still count every node taken.' : 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.') :
-      (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + (asc2() ? 'Ascension 2.0 (patch 86): take nodes from any of your paths; a crown costs ' + (dRules().crownCost || 3) + ' points; one crown at a time.' : 'Paths can be mixed; one Keystone or Capstone at a time.')) + '</p>';
+      (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + (asc2() ? 'Ascension 2.0 (patch 86): take nodes from any of your paths; your first crown is free, each further crown costs ' + dCrownNeed() + ' points.' : 'Paths can be mixed; one Keystone or Capstone at a time.')) + '</p>';
     if (list) h += '<h3 class="dl-list-h">Taken</h3><ul class="dl-list">' + list + '</ul>';
 
     let vb = '-545 -625 1090 1065';
@@ -4387,7 +4406,7 @@ window.BOPlanner = function (ctx) {
     if (!a && n.AspectMods && n.AspectMods[ch.dragonAspect]) mods = mods.concat(n.AspectMods[ch.dragonAspect]);
     const aspect = n.Kind === 'Core' && GD.dragon.aspects && GD.dragon.aspects[ch.dragonAspect];
 
-    return { id, cost: dCost(n), kind: n.Kind, kindLabel: n.Heart ? 'Shared' : n.Kind, title: lab.title || '', path: n.Path || '', name: lab.name, text: aspect ? (aspect.Name || ch.dragonAspect) + ' Aspect: ' + aspect.Text : lab.text, mods: aspect ? aspect.Mods || [] : mods, state: st.s, why: st.why || '' };
+    return { id, cost: dCost(n, ch), kind: n.Kind, kindLabel: n.Heart ? 'Shared' : n.Kind, title: lab.title || '', path: n.Path || '', name: lab.name, text: aspect ? (aspect.Name || ch.dragonAspect) + ' Aspect: ' + aspect.Text : lab.text, mods: aspect ? aspect.Mods || [] : mods, state: st.s, why: st.why || '' };
   }
   const dragon = { html: (ch, q) => dragonCard(ch, true, '', q), toggle: dToggle, info: dInfo, points: ch => ({ total: dPoints(ch), used: dUsed(ch) }), extra: dExtra, levelNeed: ch => dLevelNeed(dTaken(ch).size) };
 
@@ -14403,6 +14422,7 @@ window.BOCharacter = function (ctx) {
 
 
     'EsRechargeKeep', 'MarkJump', 'CorpseKeepMinion',
+    'MoveUseCostPct124', // The Roadless Stride: each movement use costs life and ES (24 Nov 2026)
     'DexLife']); // Wind Dancer: "+{v} to maximum Life for every 10 Dexterity" (statText)
 
   const HANDLED = new Set(['MinionOneKind', 'GolemLifeMore', 'RepeatOwnDamage', 'StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'UnravelOnHit', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
@@ -14429,7 +14449,9 @@ window.BOCharacter = function (ctx) {
 
     'HallowStill',
 
-    'CritVsChilled113', 'IgniteVsUnique113', 'SureCritVsSentenced113', 'SpellCritVsFaltering113', 'BallistaVsSentenced113', 'BleedDotVsSentenced113', 'HeraldEffectPerHerald113']);
+    'CritVsChilled113', 'IgniteVsUnique113', 'SureCritVsSentenced113', 'SpellCritVsFaltering113', 'BallistaVsSentenced113', 'BleedDotVsSentenced113', 'HeraldEffectPerHerald113',
+
+    'AspectEffect124', 'SplitAspect124', 'PoisonNoExpire124', 'BellToll124', 'BladeVolley124', 'HammerChorus124', 'SpikeErupt124', 'PierceMore124']);
 
 
 
@@ -15382,11 +15404,30 @@ window.BOCharacter = function (ctx) {
 
     const dcls = GD.dragon.classes[lc(ch.classId)] || {};
     const dIds = dragonIds(GD, ch);
-    if (dIds.length || ch.dragonAspect) {
+    if (dIds.length || ch.dragonAspect || mods.some(m => m.stat === 'SplitAspect124')) {
       sources.push({ key: 'dragon', label: 'Dragonling (' + (ch.dragonAspect || 'no aspect') + ', ' + dIds.length + ' nodes)', group: 'Character' });
       if (!off.has('dragon')) {
         const asp = GD.dragon.aspects[ch.dragonAspect];
-        if (asp) for (const m of asp.Mods) add(m, m.Value, m.Value2, 'Dragonling · ' + asp.Name + ' Aspect', 'dragon');
+
+
+
+
+
+        const aspInc = mods.filter(m => m.stat === 'AspectEffect124').reduce((x, m) => x + (+m.v || 0), 0);
+
+
+
+
+        const split = mods.filter(m => m.stat === 'SplitAspect124' && (m.tags || []).length);
+        const splitK = split.length ? Math.max(0, Math.min(...split.map(m => +m.v || 0))) / 100 : 1;
+        const aspK = Math.max(0, 1 + aspInc / 100) * splitK;
+        const kTxt = aspK !== 1 ? ' (x' + +aspK.toFixed(2) + ')' : '';
+        if (asp) for (const m of asp.Mods) add(m, (m.Value || 0) * aspK, m.Value2, 'Dragonling · ' + asp.Name + ' Aspect' + kTxt, 'dragon');
+        for (const sm of split) {
+          const el = sm.tags[0], a2 = GD.dragon.aspects[el] || Object.values(GD.dragon.aspects).find(x => lc(x.Name || '') === lc(el));
+          if (!a2) { notes.push('The Split Aspect: no ' + el + ' Aspect in the game data'); continue; }
+          for (const m of a2.Mods) add(m, (m.Value || 0) * aspK, m.Value2, 'Dragonling · ' + (a2.Name || el) + ' Aspect (Split Aspect)' + kTxt, 'dragon');
+        }
 
 
         const ascOn = GD.dragon.ascend && GD.dragon.ascend.enabled && GD.dragon.ascend.classes.includes(lc(ch.classId));
@@ -19019,6 +19060,59 @@ window.BOCharacter = function (ctx) {
         if (!(k > 1)) continue;
         if (key === 'poison') { poisonDps *= k; ail.poison.dps = poisonDps; } else if (key === 'ignite') { igniteDps *= k; ail.ignite.dps = igniteDps; } else { bleedDps *= k; ail.bleed.dps = bleedDps; }
         res.notes.push(name + ': your crits always cause it (patch 88 red line): chance ' + Math.round(p * 100) + '% -> ' + Math.round(p2 * 100) + '%, its damage taken as growing with the chance (x' + k.toFixed(3) + '; from the line\'s text, not checked in game).');
+      }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      {
+        const sentRot = activeCurses.some(r => lc(r.id) === 'sentence_of_rot');
+        const why90 = []; let k90 = 1;
+        const noExp = sumOf88('PoisonNoExpire124'), toll = sumOf88('BellToll124');
+        if (sentRot && ail.poison && poisonDps > 0) {
+          const P = ail.poison, rolls = P.duration > 0 ? P.stacksRaw / P.duration : 0;
+          if (noExp && P.stacks < P.cap && P.stacks > 0) {
+            const k = P.cap / P.stacks; poisonDps *= k; P.stacks = P.cap;
+            res.notes.push('Sentence of the Ninth Bell: your poisons never expire under Sentence of Rot, so they build to the ' + P.cap + '-stack cap (x' + k.toFixed(2) + ', reached after about ' + (rolls > 0 ? (P.cap / rolls).toFixed(1) : '?') + ' s; from the line\'s text, not checked in game).');
+          }
+          if (toll && rolls > 0) {
+            const add = poisonDps * toll / 100 * rolls / 9; poisonDps += add;
+            res.notes.push('Sentence of the Ninth Bell: every ninth poison tolls (' + (rolls / 9).toFixed(2) + ' a second), each dealing ' + (toll / 100) + ' s of your poisons at once = +' + Math.round(add).toLocaleString('en-US') + ' DPS (from the line\'s text, not checked in game).');
+          }
+          P.dps = poisonDps;
+        } else if ((noExp || toll) && ail.poison) res.notes.push('Sentence of the Ninth Bell: needs your Sentence of Rot on the enemy (tick it in the enemy setup).');
+        const blade = sumOf88('BladeVolley124');
+        const bar90 = new Set((ch.hotbar || []).map(lc));
+        if (blade && lc(skillId) === 'iaido_thrust' && bar90.has('sheathe') && bar90.has('blade_vortex')) {
+          let blades = ((GD.skills.blade_vortex || {}).Orbit || {}).Max || 8;
+          for (const m of pickMods(mods, 'OrbitMax', 'Flat')) blades += m.v || 0;
+          const w = res.extraHits ? res.extraHits.weight : 1, k = (w + blades * blade / 100) / w;
+          k90 *= k; why90.push('Sheathe gathers ' + blades + ' Blade Vortex blades into the next Iaido Thrust, ' + blade + '% of its hit each (counted on every thrust and a full ring: an upper bound)');
+        }
+        const chorus = sumOf88('HammerChorus124');
+        if (chorus && lc(skillId) === 'hammer_blow' && bar90.has('orbiting_hammers')) {
+          const hr = barSheet('orbiting_hammers', (ch.hotbar || []).find(h => lc(h) === 'orbiting_hammers'));
+          const n = hr && hr.orbitRing ? hr.orbitRing.count : 0;
+          if (n > 0) { k90 *= 1 + n * chorus / 100; why90.push('Hammer Blow also strikes with your ' + n + ' orbiting hammers at ' + chorus + '% each'); }
+        }
+        if (k90 !== 1 && isFinite(k90)) {
+          for (const d of Object.keys(byType)) byType[d] *= k90;
+          hitDpsVs *= k90; res.hitDps = hitDpsVs;
+          if (res.entropy) res.entropy.dps *= k90;
+          res.notes.push('Patch 90 red lines: ' + why90.join('; ') + ' = x' + k90.toFixed(3) + ' on hits (from the lines\' texts, not checked in game).');
+        }
+        if (sumOf88('SpikeErupt124') && lc(skillId) === 'earthshatter') res.notes.push('The Avalanche Edict: Earthshatter\'s spikes come from kills, so the second eruption adds nothing against one enemy.');
+        if (sumOf88('PierceMore124')) res.notes.push('The Twinfletch Idol: its more damage per enemy already pierced adds nothing against one enemy.');
       }
     }
     res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
@@ -22880,11 +22974,12 @@ window.BOStartApp = function () {
   const spLineText = m => m.text ? m.text.replace(/\{(0|v)\}/g, m.v).replace(/\{1\}/g, m.v2) : S.modText(GD, m);
 
   function spTip(head, sub, rows, lines, foot) {
-    const L = lines || [], cut = 16;
+
+
+    const L = lines || [];
     return '<b>' + esc(head) + '</b>' + (sub ? '<span class="pl-tip-sub">' + esc(sub) + '</span>' : '') +
       (rows && rows.length ? '<span class="sp-tip-rows">' + rows.map(x => '<span><i>' + esc(x[0]) + '</i><em>' + esc(x[1]) + '</em></span>').join('') + '</span>' : '') +
-      (L.length ? '<span class="pl-tip-head">From</span><span class="sp-tip-lines">' + L.slice(0, cut).map(m => '<span><i>' + esc(spLineText(m)) + '</i><small>' + esc(m.src || '') + '</small></span>').join('') +
-        (L.length > cut ? '<span><i>... and ' + (L.length - cut) + ' more</i></span>' : '') + '</span>' : '') +
+      (L.length ? '<span class="pl-tip-head">From</span><span class="sp-tip-lines' + (L.length > 12 ? ' sp-tip-two' : '') + '">' + L.map(m => '<span><i>' + esc(spLineText(m)) + '</i><small>' + esc(m.src || '') + '</small></span>').join('') + '</span>' : '') +
       (foot ? '<span class="pl-tip-desc sp-tip-foot">' + esc(foot) + '</span>' : '');
   }
   const spRow = (label, value, tip, cls) => '<div class="sp-row' + (cls ? ' ' + cls : '') + '"' + (tip ? ' tabindex="0" data-tiphtml="' + esc(tip) + '"' : '') + '><span>' + label + '</span><b>' + value + '</b></div>';
@@ -25114,7 +25209,7 @@ window.BOStartApp = function () {
     if (d.why) return h + '<div class="gain down">' + esc(d.why.replace(/^./, c => c.toUpperCase())) + '</div>';
     const g = dragonGain(id), skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
     const verb = d.state === 'taken' ? 'Refund' : 'Take';
-    if (g != null) h += '<div class="gain ' + (g > 0.0005 ? 'up' : g < -0.0005 ? 'down' : '') + '">' + verb + ': ' + pct(g) + ' ' + esc(skillName) + ' DPS' + (verb === 'Take' ? ' · ' + (d.cost || 1) + ' point' + ((d.cost || 1) === 1 ? '' : 's') : '') + '</div>';
+    if (g != null) h += '<div class="gain ' + (g > 0.0005 ? 'up' : g < -0.0005 ? 'down' : '') + '">' + verb + ': ' + pct(g) + ' ' + esc(skillName) + ' DPS' + (verb === 'Take' ? (d.cost === 0 ? ' · uses no points' : ' · ' + (d.cost || 1) + ' point' + ((d.cost || 1) === 1 ? '' : 's')) : '') + '</div>';
     else h += '<div class="tk">Click to ' + verb.toLowerCase() + '</div>';
     const unc = d.mods.filter(m => m.Mode === 'Trigger' || (m.Mode === 'Flag' && m.Stat !== 'Dragonling') || (m.Mode !== 'Flag' && !S.counted(m.Stat))).map(m => m.Mode === 'Flag' || m.Mode === 'Trigger' ? d.text : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
     if (unc.length) h += '<div class="tk" style="margin-top:5px">Not in the DPS number: ' + esc(unc.join(' · ')) + '</div>';

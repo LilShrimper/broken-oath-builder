@@ -3239,6 +3239,9 @@ body.stats-folded .stats-panel { padding: 0; border: 0; background: none; overfl
 .sp-tip-rows em { font-style: normal; color: var(--dashboard-gold); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sp-tip-lines > span { flex-direction: column; gap: 0; padding: 2px 0; border-bottom: 1px dotted color-mix(in srgb, var(--line) 70%, transparent); }
 .sp-tip-lines small { color: var(--faint); font-size: 10.5px; }
+.sp-tip-lines.sp-tip-two { display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; }
+.pl-tip:has(.sp-tip-two) { max-width: min(640px, calc(100vw - 16px)); }
+@media (max-width: 560px) { .sp-tip-lines.sp-tip-two { grid-template-columns: 1fr; } }
 .sp-tip-foot { margin-top: 6px; color: var(--faint); font-size: 11px; }
 @media (max-width: 1100px) {
   body.stats-on .results-wrap, body.stats-on.stats-folded .results-wrap { grid-template-columns: minmax(0, 1fr); }

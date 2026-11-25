@@ -1368,14 +1368,34 @@ window.PAGE_LANGS = {
 
 
 
+
+
+
+
+
+
+
+
+
+
 (function (root) {
   'use strict';
 
   const ATTR = ['Str', 'Dex', 'Int', 'Attributes'];
   const MIN_GAIN = 0.001;    // a swap must gain at least 0.1% DPS
   const OWN_KEEP = 0.002;    // a taken node worth 0.2% or more is a target, not a path node
+  const DRAGON_Q = 0.9;      // with the Dragonling step on, the passive search reports 0-90% and the Dragonling 90-100%
 
+  const dragonTreeOf = (GD, ch) => ((GD.dragon || {}).classes || {})[String(ch.classId).toLowerCase()] || {};
+  const dragonOn = (GD, ch, cfg) => !!(cfg && cfg.dragon && ((GD.dragon || {}).tree || {}).asc2 && Object.keys(dragonTreeOf(GD, ch)).length);
   function* optimize(GD, S, ch, skill, simOpt, cfg) {
+    const g = run(GD, S, ch, skill, simOpt, cfg), k = dragonOn(GD, ch, cfg) ? DRAGON_Q : 1;
+    let r;
+    while (!(r = g.next()).done) { const v = r.value; yield v && v.q != null && !v.dq && k !== 1 ? Object.assign({}, v, { q: v.q * k }) : v; }
+    return r.value;
+  }
+
+  function* run(GD, S, ch, skill, simOpt, cfg) {
     cfg = cfg || {};
     const t0 = Date.now();
     const nodes = GD.nodes;
@@ -1402,10 +1422,16 @@ window.PAGE_LANGS = {
     const oaths0 = Object.assign({}, ch.oaths || {});
     let oathMap = oaths0, oKey = '';
     const setOaths = map => { oathMap = map; oKey = map === oaths0 ? '' : '|' + Object.keys(map).sort().map(k => k + '=' + map[k]).join(','); };
-    const defence = list => cfg.defence(list, oathMap);
+
+    const dOn = dragonOn(GD, ch, cfg), dT = dragonTreeOf(GD, ch);
+    const dHave0 = dOn ? (S.dragonIds ? S.dragonIds(GD, ch) : (ch.dragonNodes || []).filter(id => dT[id])) : [];
+    let dList = dHave0.slice(), dK = '';
+    const setD = set => { dList = [...set].sort(); dK = '|d:' + dList.join(','); };
+    if (dOn) setD(dHave0);
+    const defence = list => cfg.defence(list, oathMap, dOn ? dList : null);
     const dpsOf = (g, list) => {
       calcs++;
-      const r = g.r = S.calcSkill(GD, Object.assign({}, ch, { passives: list, oaths: oathMap }), g.id, g.opt);
+      const r = g.r = S.calcSkill(GD, Object.assign({}, ch, { passives: list, oaths: oathMap }, dOn ? { dragonNodes: dList } : null), g.id, g.opt);
       let v = r && r.totalDps > 0 ? r.totalDps : 0;
 
 
@@ -1428,7 +1454,7 @@ window.PAGE_LANGS = {
     const defW = typeof cfg.defence === 'function' ? Math.max(0, Math.min(1, +cfg.defWeight || 0)) : 0, scored = defW > 0;
     const def0 = scored ? defence(haveList) : null;
     const V = set => {
-      const list = [...set].sort(); const key = list.join(',') + oKey;
+      const list = [...set].sort(); const key = list.join(',') + oKey + dK;
       let v = cache.get(key);
       if (v === undefined) {
         if (goals.length === 1 && !multi && !scored) v = dpsOf(goals[0], list);
@@ -1757,6 +1783,120 @@ window.PAGE_LANGS = {
     }
 
 
+
+    function* dragonStep(pset) {
+      const R = GD.dragon.tree, aspect = ch.dragonAspect || '';
+      const core = Object.values(dT).find(n => n.Kind === 'Core'), c0 = core ? core.Id : null;
+      const dadj = {};
+      for (const n of Object.values(dT)) for (const l of n.Links || []) if (dT[l]) { (dadj[n.Id] = dadj[n.Id] || []).push(l); (dadj[l] = dadj[l] || []).push(n.Id); }
+      const crowns = new Set(R.crownKinds || []), crownCost = R.crownCost || 3;
+      const isCrown = id => crowns.has(dT[id].Kind);
+      const cost = set => { let n = 0, c = 0; for (const id of set) { if (isCrown(id)) c++; else n++; } return n + Math.max(0, c - 1) * crownCost; };
+      const walk = id => !!dT[id] && dT[id].Kind !== 'Core';
+      const lines = id => (dT[id].Mods || []).concat(((dT[id].AspectMods || {})[aspect]) || []);
+
+      const unc = m => m.Mode === 'Trigger' || (m.Mode === 'Flag' && m.Stat !== 'Dragonling') || !S.counted(m.Stat);
+      const dmg = m => !unc(m) && (S.damageStat(m.Stat) || ATTR.includes(m.Stat) || m.Stat === 'Dragonling');
+      const bigD = id => !['Small', 'Shared', 'Entry'].includes(dT[id].Kind);
+      const VD = set => { setD(set); return V(pset); };
+      const reach = set => { const keep = new Set(), q = c0 ? [c0] : []; for (let i = 0; i < q.length; i++) for (const v of dadj[q[i]] || []) if (set.has(v) && !keep.has(v)) { keep.add(v); q.push(v); } return keep; };
+      const dbfs = set => {
+        const dist = new Map(), prev = new Map(), q = (c0 ? [c0] : []).concat([...set]);
+        for (const x of q) dist.set(x, 0);
+        for (let i = 0; i < q.length; i++) { const u = q[i], d = dist.get(u); for (const v of dadj[u] || []) if (!dist.has(v) && walk(v)) { dist.set(v, d + 1); prev.set(v, u); q.push(v); } }
+        return { dist, prev };
+      };
+      const dpath = (b, set, t) => { const p = []; let x = t; while (x && !set.has(x) && x !== c0) { p.push(x); x = b.prev.get(x); } return p.reverse(); };
+      const deps = (set, id) => { const s = new Set(set); s.delete(id); const k = reach(s); return [...set].filter(x => !k.has(x)); };
+      const have = new Set(dHave0.filter(walk)), points = Math.max(0, +cfg.dragon.points || 0);
+      const vHave = VD(have);
+      const why = {};
+      if (!cfg.addOnly) for (const id of have) {
+        if (!bigD(id)) continue;
+        const ls = lines(id);
+        if (ls.some(unc)) why[id] = 'has lines the sim does not count';
+        else if (cfg.keepDefence && ls.length && !ls.some(dmg)) why[id] = 'no damage lines';
+      }
+      const kept = new Set(Object.keys(why));
+      const useful = Object.keys(dT).filter(id => walk(id) && lines(id).some(m => dmg(m) || defish(m)));
+
+      function* spendD(start, pts, steps) {
+        const set = new Set(start), total = Math.max(1, pts); let cur = VD(set);
+        for (;;) {
+          const b = dbfs(set), have0 = cost(set); let pick = null;
+          for (const id of useful) {
+            if (set.has(id) || !b.dist.has(id)) continue;
+            const path = dpath(b, set, id), s = new Set(set); for (const x of path) s.add(x);
+            const c = cost(s) - have0; if (c > pts) continue;
+            const g = VD(s) / cur - 1; if (g <= 1e-6) continue;
+            const per = g / Math.max(c, 0.5);
+            if (!pick || per > pick.per) pick = { path, c, g, per };
+            if (++tries % 6 === 0) yield null;
+          }
+          if (!pick) break;
+          for (const x of pick.path) set.add(x);
+          pts -= pick.c; cur = VD(set);
+          if (steps) { steps.push({ nodes: pick.path, cost: pick.c, gain: pick.g }); yield { phase: 'Dragonling tree', p: 1 - pts / total, q: DRAGON_Q + (1 - DRAGON_Q) * (1 - pts / total), dq: true }; }
+        }
+        setD(set);
+        return set;
+      }
+      const steps = [];
+      let best = have, bestV = vHave;
+      yield { phase: 'Dragonling tree', p: 0, q: DRAGON_Q, dq: true };
+      if (cfg.addOnly) {
+        best = yield* spendD(have, points - cost(have), steps); bestV = VD(best);
+      } else {
+        const budget = Math.max(points, cost(have));
+
+        const bare = new Set();
+        for (const t of [...kept].sort()) { const b = dbfs(bare); for (const x of dpath(b, bare, t)) bare.add(x); }
+        const starts = [have]; if (cost(bare) <= budget) starts.push(bare);
+        for (const s of starts) {
+          const t = yield* spendD(s, budget - cost(s)), v = VD(t);
+          if (v > bestV * (1 + 1e-9)) { best = t; bestV = v; }
+        }
+
+        for (let iter = 0; iter < 6; iter++) {
+          yield { phase: 'Dragonling tree', p: (iter + 1) / 7, q: DRAGON_Q + (1 - DRAGON_Q) * (iter + 1) / 7, dq: true };
+          const cur = bestV, seen = new Set(), branches = [];
+          for (const id of best) {
+            if (kept.has(id)) continue;
+            const rem = deps(best, id); if (rem.some(x => kept.has(x))) continue;
+            const key = rem.slice().sort().join(','); if (seen.has(key)) continue; seen.add(key);
+            const s = new Set(best); for (const x of rem) s.delete(x);
+            branches.push({ rem, loss: (1 - VD(s) / cur) / Math.max(1, cost(best) - cost(s)) });
+          }
+          branches.sort((a, b) => a.loss - b.loss);
+          const trials = branches.slice(0, 4).map(b => b.rem);
+          for (let i = 0; i < Math.min(3, branches.length); i++) for (let j = i + 1; j < Math.min(3, branches.length); j++) trials.push([...new Set([...branches[i].rem, ...branches[j].rem])]);
+          let found = null, fv = cur * (1 + MIN_GAIN);
+          for (const rem of trials) {
+            const s = new Set(best); for (const x of rem) s.delete(x);
+            const t = yield* spendD(s, budget - cost(s)), v = VD(t);
+            if (v > fv) { found = t; fv = v; }
+          }
+          if (!found) break;
+          best = found; bestV = fv;
+        }
+        if (!(bestV > vHave * (1 + MIN_GAIN))) { best = have; bestV = vHave; } // not worth moving points for less than 0.1%
+      }
+      const fin = reach(best); setD(fin);
+      const vFin = V(pset);
+      const worth = id => { const s = new Set(fin); s.delete(id); const v = VD(s); setD(fin); return 1 - v / vFin; };
+      const own = id => { const s = new Set(have); s.delete(id); const v = VD(s); setD(fin); return 1 - v / vHave; };
+      const order = [...dHave0.filter(id => fin.has(id)), ...steps.flatMap(s => s.nodes), ...[...fin].filter(id => !have.has(id))].filter((x, i, a) => a.indexOf(x) === i);
+      const out = {
+        list: order, points, used: cost(fin), before: cost(have), gain: vFin / vHave - 1, steps,
+        add: [...fin].filter(id => !have.has(id)).map(id => ({ id, d: worth(id) })).sort((a, b) => b.d - a.d),
+        remove: [...have].filter(id => !fin.has(id)).map(id => ({ id, d: own(id) })).sort((a, b) => b.d - a.d),
+        kept: [...kept].map(id => ({ id, why: why[id] })),
+      };
+      setD(fin);
+      return out;
+    }
+
+
     const finalSet = connected(best);
 
 
@@ -1789,6 +1929,7 @@ window.PAGE_LANGS = {
       oathRows.sort((a, b) => b.d - a.d);
       setOaths(oathOut);
     }
+    const dragon = dOn ? yield* dragonStep(finalSet) : null;
     const value = V(finalSet);
     const finalList = [...finalSet].sort();
     const skills = goals.map(g => { const v = dpsOf(g, finalList); return { id: g.id, w: g.w, base: g.base, value: v, gain: v / g.base - 1 }; });
@@ -1800,7 +1941,7 @@ window.PAGE_LANGS = {
     return {
       base, value, gain: value / base - 1, points: budget, used: finalSet.size,
       list: order(finalSet).concat(seats0.filter(id => (adj[id] || []).some(x => finalSet.has(x)))),
-      oathMap: oathOut, oaths: oathRows, oathsLost,
+      oathMap: oathOut, oaths: oathRows, oathsLost, dragon,
       add: add.map(id => ({ id, d: worth(finalSet, id) })).sort((a, b) => b.d - a.d),
       remove: remove.map(id => ({ id, d: own[id] })).sort((a, b) => b.d - a.d),
       kept: [...kept].filter(id => why[id]).map(id => ({ id, why: why[id] })), steps, addOnly: !!cfg.addOnly,
@@ -3416,10 +3557,16 @@ window.BOPlanner = function (ctx) {
 
 
     let h = '<div class="card dl-card"><div class="dl-side"><h2>Dragonling <small>' + used + ' / ' + pts + ' points' + (paths.length ? ' · ' + esc(paths.join(' + ')) + (paths.length > 1 ? ' paths' : ' path') : '') + '</small></h2>';
-    h += '<div class="pl-row">' + (aspects.length ? '<label class="field inline"><span>Aspect</span><select data-f="aspect"' + dis + '>' + opt('', 'None', !ch.dragonAspect) + aspects.map(a => opt(a, GD.dragon.aspects[a].Name || a, a === ch.dragonAspect)).join('') + '</select></label>' : '') +
-      (asc2() ? '<label class="field inline" title="' + esc('Points: one for each Dragon Rupture you have cleared, at Rupture Levels ' + (dRules().ruptures || []).join(', ') + ' (' + dExtraMax() + ' at most). Your first crown is free, each further crown costs ' + dCrownNeed() + '.') + '"><span>Dragon Ruptures</span><input'
+    h += '<div class="pl-row">' + (asc2() ? '<label class="field inline" title="' + esc('Points: one for each Dragon Rupture you have cleared, at Rupture Levels ' + (dRules().ruptures || []).join(', ') + ' (' + dExtraMax() + ' at most). Your first crown is free, each further crown costs ' + dCrownNeed() + '.') + '"><span>Dragon Ruptures</span><input'
         : '<label class="field inline" title="' + esc('Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, +1 each for Gates 4 to 7' + (dSeal80() ? ', the Seal of 80' : '') + ' and the Pinnacle (' + (dBase({ level: 100 }) + dExtraMax()) + ' at most). This box follows the nodes you take.') + '"><span>Gate kills + Pinnacle</span><input') + ' type="number" min="0" max="' + dExtraMax() + '" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
       (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') + '</div>';
+
+
+    if (aspects.length) h += '<div class="dl-asp-h">Aspect</div><div class="cmp-modes dl-asps" role="group" aria-label="Aspect">' + [''].concat(aspects).map(a => {
+      const A = a ? GD.dragon.aspects[a] : null, on = (ch.dragonAspect || '') === a;
+      return '<button type="button" class="cmp-mode dl-asp' + (on ? ' on' : '') + '" aria-pressed="' + on + '" data-dasp="' + esc(a || '-') + '"' + (edit && !dis ? ' data-act="daspect" data-asp="' + esc(a) + '"' : ' disabled') + '>' +
+        (A && A.Color ? '<i class="dl-asp-dot" style="background:' + esc(A.Color) + '"></i>' : '') + '<span>' + esc(A ? A.Name || a : 'None') + '</span><span class="dl-asp-g notranslate" data-asp-g="' + esc(a || '-') + '"></span></button>';
+    }).join('') + '</div>';
 
     h += '<label class="field dl-search"><input type="search" data-f="dsearch" placeholder="Find a node or stat" autocomplete="off" value="' + esc(q || '') + '"><span class="tree-found-count" data-dl-count hidden></span></label>';
 
@@ -3428,6 +3575,8 @@ window.BOPlanner = function (ctx) {
       : '<p class="hint">No Aspect chosen: each one gives its own bonuses (pick one above to see them).</p>';
     h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? (asc2() ? 'Not a valid tree: these nodes cost ' + used + ' points but the Dragonling has ' + pts + ' (one for each Dragon Rupture cleared), so the game would not allow it. Raise Dragon Ruptures cleared, or refund ' + (used - pts) + ' point' + (used - pts === 1 ? '' : 's') + '. The damage numbers still count every node taken.' : 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.') :
       (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + (asc2() ? 'Ascension 2.0 (patch 86): take nodes from any of your paths; your first crown is free, each further crown costs ' + dCrownNeed() + ' points.' : 'Paths can be mixed; one Keystone or Capstone at a time.')) + '</p>';
+
+    h += '<div class="dl-best" data-dl-best hidden></div>';
     if (list) h += '<h3 class="dl-list-h">Taken</h3><ul class="dl-list">' + list + '</ul>';
 
     let vb = '-545 -625 1090 1065';
@@ -4386,7 +4535,8 @@ window.BOPlanner = function (ctx) {
   let wheelT = 0;
   document.addEventListener('wheel', e => {
     const t = e.target && e.target.closest && e.target.closest('input[type="number"]');
-    if (!t || t.disabled || !['level', 'bonus'].includes(t.dataset.f || t.dataset.plf) || !e.deltaY) return;
+
+    if (!t || t.disabled || !['level', 'bonus', 'dextra'].includes(t.dataset.f || t.dataset.plf) || !e.deltaY) return;
     e.preventDefault();
     const lo = t.min === '' ? -Infinity : +t.min, hi = t.max === '' ? Infinity : +t.max;
     t.value = Math.max(lo, Math.min(hi, (+t.value || 0) + (e.deltaY < 0 ? 1 : -1)));
@@ -4424,7 +4574,32 @@ window.BOPlanner = function (ctx) {
 
     return { id, cost: dCost(n, ch), kind: n.Kind, kindLabel: n.Heart ? 'Shared' : n.Kind, title: lab.title || '', path: n.Path || '', name: lab.name, text: aspect ? (aspect.Name || ch.dragonAspect) + ' Aspect: ' + aspect.Text : lab.text, mods: aspect ? aspect.Mods || [] : mods, state: st.s, why: st.why || '' };
   }
-  const dragon = { html: (ch, q) => dragonCard(ch, true, '', q), toggle: dToggle, info: dInfo, points: ch => ({ total: dPoints(ch), used: dUsed(ch) }), extra: dExtra, levelNeed: ch => dLevelNeed(dTaken(ch).size) };
+
+
+
+
+  function dPlan(ch, id) {
+    const T = dTree(ch), n = T[id]; if (!n || n.Kind === 'Core') return null;
+    const taken = dTaken(ch), core = dCore(T), adj = dAdj(T), used = dUsed(ch);
+    const costOf = nodes => dUsed(Object.assign({}, ch, { dragonNodes: nodes })) - used;
+    if (taken.has(id)) {
+      const seen = new Set(), q = core ? [core.Id] : [];
+      for (let i = 0; i < q.length; i++) for (const v of adj[q[i]] || []) if (v !== id && taken.has(v) && !seen.has(v)) { seen.add(v); q.push(v); }
+      const nodes = [...seen];
+      return { nodes, cost: costOf(nodes), n: taken.size - nodes.length };
+    }
+    const prev = new Map(), q = [];
+    for (const s of [...taken].concat(core ? [core.Id] : [])) { prev.set(s, null); q.push(s); }
+    for (let i = 0; i < q.length && !prev.has(id); i++) {
+      const u = q[i]; if (!taken.has(u) && u !== (core && core.Id) && isCrown(T[u])) continue;
+      for (const v of adj[u] || []) if (!prev.has(v)) { prev.set(v, u); q.push(v); }
+    }
+    if (!prev.has(id)) return null;
+    const path = []; for (let v = id; v != null && !taken.has(v) && v !== (core && core.Id); v = prev.get(v)) path.push(v);
+    const nodes = [...taken].concat(path.reverse());
+    return { nodes, cost: costOf(nodes), n: path.length };
+  }
+  const dragon = { html: (ch, q) => dragonCard(ch, true, '', q), toggle: dToggle, info: dInfo, plan: dPlan, ids: ch => Object.values(dTree(ch)).filter(n => n.Kind !== 'Core').map(n => n.Id), points: ch => ({ total: dPoints(ch), used: dUsed(ch) }), extra: dExtra, levelNeed: ch => dLevelNeed(dTaken(ch).size) };
 
 
 
@@ -8354,8 +8529,10 @@ window.BOItemSearch = function (ctx) {
     const sorts = (F.cat === 'rune' ? [['path', 'Upgrade path']] : []).concat(GEM_CATS[F.cat] ? [['name', 'Name, A to Z']] : [['level', 'Level, low to high'], ['leveldesc', 'Level, high to low'], ['name', 'Name, A to Z']].concat(['unique', 'base', 'mod', 'all'].includes(F.cat) ? [['rare', 'Drop weight, rarest first'], ['common', 'Drop weight, commonest first']] : []), mods ? [['affix', 'Prefixes, then suffixes']] : F.cat === 'all' ? [['cat', 'Category']] : []);
     if (!sorts.some(s => s[0] === F.sort)) F.sort = sorts[0][0];
 
-    const newBtn = '<button type="button" id="isNew" class="is-cat is-newfirst' + (F.newFirst ? ' active' : '') + '" aria-pressed="' + !!F.newFirst + '" title="Items new this patch on top; the sort orders the rest">New first</button>';
-    return '<div class="is-cats" role="group" aria-label="Category">' + CATS.map(([k, t]) => (k === 'all' && NEWEST ? newBtn : '') + '<button type="button" class="is-cat' + (F.cat === k ? ' active' : '') + '" data-cat="' + k + '" aria-pressed="' + (F.cat === k) + '">' + esc(t) + ' <small>' + (k === 'all' ? all.length : counts[k] || 0) + '</small></button>').join('') + '</div>' +
+
+    const newBtn = NEWEST ? '<div class="is-newrow"><button type="button" id="isNew" class="is-cat is-newfirst' + (F.newFirst ? ' active' : '') + '" aria-pressed="' + !!F.newFirst + '" title="Items new this patch on top; the sort orders the rest"><span class="is-nf-box" aria-hidden="true">' + (F.newFirst ? '✓' : '') + '</span>New first</button></div>' : '';
+
+    return '<div class="is-cats" role="group" aria-label="Category">' + CATS.map(([k, t]) => '<button type="button" class="is-cat' + (F.cat === k ? ' active' : '') + '" data-cat="' + k + '" aria-pressed="' + (F.cat === k) + '"' + (F.cat === k && k !== 'all' ? ' title="Click again for All"' : '') + '>' + esc(t) + ' <small>' + (k === 'all' ? all.length : counts[k] || 0) + '</small></button>').join('') + '</div>' + newBtn +
       '<div class="is-filters' + (mods || kindOk ? ' with-affix' : '') + (F.cat === 'unique' ? ' with-eight' : '') + '">' +
       field('Search', '<input type="text" id="isQ" enterkeyhint="search" placeholder="Name or mod text, e.g. critical, life, &quot;fire damage&quot;" value="' + esc(F.q) + '" autocomplete="off">', 'grow') +
       field(L[0], '<select id="isSlot">' + opt('', L[1], !F.slot) + slots.map(s => opt(s, s, F.slot === s)).join('') + '</select>') +
@@ -8406,7 +8583,7 @@ window.BOItemSearch = function (ctx) {
     el.addEventListener('toggle', e => { const d = e.target; if (d && d.classList && d.classList.contains('is-hist') && d.open) fillHist(d); }, true);
     el.addEventListener('click', e => {
       const c = e.target.closest('[data-cat]');
-      if (c) { F.cat = c.dataset.cat; F.tier = ''; F.gtier = ''; F.type = ''; F.affix = ''; F.sort = sortFor(F.cat); shown = PAGE; return refresh(); }
+      if (c) { const k = c.dataset.cat; if (k === F.cat && k === 'all') return; F.cat = k === F.cat ? 'all' : k; F.tier = ''; F.gtier = ''; F.type = ''; F.affix = ''; F.sort = sortFor(F.cat); shown = PAGE; return refresh(); }
       if (e.target.closest('#isMore')) { shown += PAGE * 2; $('#isResults').innerHTML = results(); return; }
       if (e.target.closest('#isNew')) { F.newFirst = !F.newFirst; shown = PAGE; return refresh(); }
       if (e.target.closest('#isReset')) { F = Object.assign({}, BLANK, { sort: F.sort, sortBy: F.sortBy, secrets: F.secrets, newFirst: F.newFirst }); shown = PAGE; refresh(); }
@@ -17803,11 +17980,15 @@ window.BOCharacter = function (ctx) {
 
 
 
-      if (ascFlag('Asc71_EyrieWatch') && sk.Totem && sk.Totem.Kind === 'Ballista') {
+
+
+
+      const eyrie = ascFlag('Asc71_EyrieWatch') && sk.Totem && sk.Totem.Kind === 'Ballista';
+      if (eyrie) {
         const longer = (((GD.dragon || {}).rules || {}).EyrieWatch || {}).Longer;
         durMore *= 1 + (Number.isFinite(longer) ? longer : 60) / 100;
       }
-      const life = noExpire ? Infinity : res.totem.baseLife * Math.max(0, 1 + durInc / 100) * durMore, rate = res.totem.shotsPerSec || 0;
+      const life = noExpire || eyrie ? Infinity : res.totem.baseLife * Math.max(0, 1 + durInc / 100) * durMore, rate = res.totem.shotsPerSec || 0;
       const capShot = SPOTTER_RAMP_MAX / SPOTTER_RAMP_PER + 1, toCap = rate > 0 ? (capShot - 1) / rate : Infinity;
       const shots = life * rate, endless = !Number.isFinite(shots);
       let avg;
@@ -17820,9 +18001,11 @@ window.BOCharacter = function (ctx) {
         avg = (upTo(whole) + (n - whole) * Math.min(SPOTTER_RAMP_MAX, SPOTTER_RAMP_PER * whole)) / n;
       }
       hitFactor *= 1 + avg / 100; res.spotterRamp = avg;
-      res.spotterRampInfo = { life, shotsPerSec: rate, shots, toCap, noExpire };
+      res.spotterRampInfo = { life, shotsPerSec: rate, shots, toCap, noExpire, eyrie };
       res.notes.push("Bina's Spotter's Helm: each Ballista's shots in a row deal " + SPOTTER_RAMP_PER + '% more each (its own count, from 0 again for a new one), up to ' + SPOTTER_RAMP_MAX + '% from shot ' + capShot + '. ' + (endless
-        ? (noExpire ? 'The Unfallen Ancestor: your Ballistas never expire, so each keeps its count: ' : 'Each Ballista keeps its count: ') + SPOTTER_RAMP_MAX + '% after ' + toCap.toFixed(1) + ' s, counted in full'
+        ? (noExpire ? 'The Unfallen Ancestor: your Ballistas never expire, so each keeps its count: '
+          : eyrie ? 'Eyrie Watch: placing one at your maximum refreshes them all (counted as the node says; a game test did not show it yet), so each keeps its count: '
+          : 'Each Ballista keeps its count: ') + SPOTTER_RAMP_MAX + '% after ' + toCap.toFixed(1) + ' s, counted in full'
         : 'Each fires ' + rate.toFixed(2) + ' shots a second for ' + +life.toFixed(1) + ' s (' + Math.round(shots) + ' shots' + (toCap <= life ? ', ' + SPOTTER_RAMP_MAX + '% after ' + toCap.toFixed(1) + ' s' : ', never reaching ' + SPOTTER_RAMP_MAX + '%') + '): ' + avg.toFixed(1) + '% more on average over its life') + ' on a Rare or Guardian. Packs do not get it.');
     }
 
@@ -25048,9 +25231,10 @@ window.BOStartApp = function () {
     return { level, levelBase: level !== base ? base : undefined };
   }
 
-  function setPassives(list, undo, oaths) {
-    if (undo !== false) { const u = st.ch.passives.slice(); if (oaths) u.oaths = Object.assign({}, st.ch.oaths || {}); T.undo.push(u); }
-    const lv = Object.assign(levelFor(st.ch, list), oaths ? { oaths: Object.assign({}, oaths) } : null);
+
+  function setPassives(list, undo, oaths, dragonNodes) {
+    if (undo !== false) { const u = st.ch.passives.slice(); if (oaths) u.oaths = Object.assign({}, st.ch.oaths || {}); if (dragonNodes) u.dragonNodes = (st.ch.dragonNodes || []).slice(); T.undo.push(u); }
+    const lv = Object.assign(levelFor(dragonNodes ? Object.assign({}, st.ch, { dragonNodes }) : st.ch, list), oaths ? { oaths: Object.assign({}, oaths) } : null, dragonNodes ? { dragonNodes: dragonNodes.slice() } : null);
     if (st.chOrig && st.chOrig.plan) { Object.assign(st.chOrig, lv, { passives: list }); st.ch = st.chOrig; keepChars(); }
     else st.ch = Object.assign({}, st.ch, lv, { passives: list }); // keeps Dragonling edits made on this tab
     st.pinned = null; stopSearch(); st.opt = null;
@@ -25219,7 +25403,6 @@ window.BOStartApp = function () {
     else if (a === 'left') moveTreeTab(-1); else if (a === 'right') moveTreeTab(1); else if (a === 'delete') deleteTreeTab();
   });
   $('#treeTabs').addEventListener('dblclick', e => { if (e.target.closest('.tree-tab.active')) renameTreeTab(); });
-  const dTipCache = new Map(); // Dragonling tooltip DPS values (cleared on each redraw)
 
   let dFind = '';
   function renderDragon() {
@@ -25242,8 +25425,75 @@ window.BOStartApp = function () {
     badge.hidden = free === 0; badge.textContent = free > 0 ? free : free;
     badge.classList.toggle('over', free < 0);
     btn.title = 'Dragonling tree: ' + p.used + ' of ' + p.total + ' points' + (free > 0 ? ', ' + free + ' to spend' : free < 0 ? ' (' + -free + ' over)' : '');
-    dTipCache.clear(); const tipEl = $('#dragonTip'); tipEl.hidden = true; tipEl.dataset.id = '';
-    if (!panel.hidden) { $('#dragonBody').innerHTML = planner.dragon.html(st.ch, dFind) + '<p class="hint dragon-status" id="dragonStatus"></p>'; paintDragonFind(); }
+    const tipEl = $('#dragonTip'); tipEl.hidden = true; tipEl.dataset.id = '';
+    if (!panel.hidden) { $('#dragonBody').innerHTML = planner.dragon.html(st.ch, dFind) + '<p class="hint dragon-status" id="dragonStatus"></p>'; paintDragonFind(); paintDragonOpt(); dragonScore(); }
+  }
+
+
+
+
+
+  const DV = { key: '', nodes: new Map(), asp: new Map(), job: 0, base: 0 };
+  const dragonKey = () => JSON.stringify([st.skill, st.ch && st.ch.classId, st.ch, opts(), GD.steamBuild, GD.apiBuild, GD.apiHash, GD.filesAt]);
+  function dragonScore() {
+    if ($('#dragonPanel').hidden || !st.ch || !st.skill) { DV.key = ''; DV.nodes = new Map(); DV.asp = new Map(); paintDragonHeat(); return; }
+    const key = dragonKey(); if (key === DV.key) { paintDragonHeat(); return; }
+    DV.key = key; DV.nodes = new Map(); DV.asp = new Map(); const job = ++DV.job, ch = st.ch, skill = st.skill, o = opts();
+    DV.base = S.calcSkill(GD, ch, skill, o).totalDps;
+    if (!(DV.base > 0)) { paintDragonHeat(); return; }
+    const dps = c => S.calcSkill(GD, Object.assign({}, ch, c), skill, o).totalDps / DV.base - 1;
+    const ids = planner.dragon.ids(ch), asps = ['-'].concat(Object.keys(GD.dragon.aspects || {})), now = ch.dragonAspect || '-';
+    let i = 0, j = 0;
+    const step = () => {
+      if (job !== DV.job || DV.key !== key) return;
+      if ($('#dragonPanel').hidden) { DV.key = ''; return; } // closed: start again when it opens
+      const t0 = performance.now();
+      while (i < ids.length && performance.now() - t0 < 25) dragonValue(ids[i++], dps);
+      while (i >= ids.length && j < asps.length && performance.now() - t0 < 25) { const a = asps[j++]; DV.asp.set(a, a === now ? 0 : dps({ dragonAspect: a === '-' ? '' : a })); }
+      paintDragonHeat();
+      if (i < ids.length || j < asps.length) soon(step);
+    };
+    step();
+  }
+
+  function dragonValue(id, dps) {
+    if (DV.nodes.has(id)) return DV.nodes.get(id);
+    if (!st.ch || !st.skill || !DV.key || !(DV.base > 0)) return null;
+    const p = planner.dragon.plan(st.ch, id), refund = planner.dragon.info(st.ch, id).state === 'taken';
+    const out = p ? { d: (dps || (c => S.calcSkill(GD, Object.assign({}, st.ch, c), st.skill, opts()).totalDps / DV.base - 1))({ dragonNodes: p.nodes }), cost: p.cost, n: p.n, refund } : null;
+    DV.nodes.set(id, out); return out;
+  }
+
+  const dPerPt = v => v.d / Math.max(1, v.cost);
+  function paintDragonHeat() {
+    const body = $('#dragonBody'), svg = body.querySelector('.dl-tree'); if (!svg) return;
+    const heat = T.heat !== false;
+    const tipEl = $('#dragonTip'); if (!tipEl.hidden && /^asp:/.test(tipEl.dataset.id || '')) tipEl.innerHTML = aspectTipHtml(tipEl.dataset.id.slice(4)); // its value may have just come in
+    const vals = []; for (const v of DV.nodes.values()) if (v && !v.refund && v.d > 0.0005) vals.push(dPerPt(v));
+    vals.sort((x, y) => x - y);
+    const rank = v => { let lo = 0, hi = vals.length; while (lo < hi) { const m = (lo + hi) >> 1; if (vals[m] <= v + 1e-12) lo = m + 1; else hi = m; } return vals.length > 1 ? Math.max(0, lo - 1) / (vals.length - 1) : 1; };
+    for (const g of svg.querySelectorAll('[data-dn]')) {
+      const v = DV.nodes.get(g.dataset.dn), c = g.querySelector('circle:not(.dl-find)'); if (!c) continue;
+      const gain = heat && v && !v.refund && v.d > 0.0005, loss = heat && v && !v.refund && v.d < -0.0005;
+      c.style.fill = gain ? heatFill(rank(dPerPt(v))) : ''; c.style.fillOpacity = gain && g.classList.contains('dl-ic') ? '0.45' : '';
+      g.classList.toggle('loss', !!loss);
+    }
+
+    for (const s of body.querySelectorAll('[data-asp-g]')) {
+      const v = DV.asp.get(s.dataset.aspG), on = s.closest('.dl-asp') && s.closest('.dl-asp').classList.contains('on');
+      const t = v == null || on || Math.abs(v) < 0.0005 ? '' : pct(v);
+      if (s.textContent !== t) s.textContent = t;
+      s.className = 'dl-asp-g notranslate' + (v > 0.0005 ? ' up' : v < -0.0005 ? ' down' : '');
+    }
+    const best = body.querySelector('[data-dl-best]'); if (!best) return;
+    const rows = [...DV.nodes].filter(([, v]) => v && !v.refund && v.d > 0.0005).sort((a, b) => dPerPt(b[1]) - dPerPt(a[1])).slice(0, 6);
+    const skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
+    const h = rows.length ? '<h3 class="dl-list-h">Best next picks <span class="notranslate">·</span> ' + esc(skillName) + ' DPS</h3><ul class="best-list dl-best-list">' + rows.map(([id, v]) => {
+      const d = planner.dragon.info(st.ch, id);
+      return '<li data-dtake="' + esc(id) + '" data-dn="' + esc(id) + '"><span>' + esc(d.name) + ' <span class="c">' + esc(d.kindLabel || d.kind) + ' · ' + (v.cost > 0 ? v.cost + ' pt' + (v.cost > 1 ? 's' : '') : 'free') + (v.n > 1 ? ' · ' + v.n + ' nodes' : '') + '</span></span><span class="g">' +
+        (v.cost > 1 ? pct(dPerPt(v)) + '/pt · ' : '') + pct(v.d) + '</span></li>';
+    }).join('') + '</ul>' : '';
+    if (best._h !== h) { best._h = h; best.innerHTML = h; best.hidden = !h; }
   }
   function paintDragonFind() {
     const body = $('#dragonBody'), svg = body.querySelector('.dl-tree'); if (!svg || !st.ch) return;
@@ -25264,8 +25514,12 @@ window.BOStartApp = function () {
   $('#dragonBtn').onclick = () => { const p = $('#dragonPanel'); p.hidden = !p.hidden; $('#dragonBtn').setAttribute('aria-expanded', String(!p.hidden)); renderDragon(); };
   $('#dragonClose').onclick = () => { $('#dragonPanel').hidden = true; $('#dragonBtn').setAttribute('aria-expanded', 'false'); };
   $('#dragonBody').addEventListener('click', e => {
+
+    const bt = e.target.closest('[data-dtake]');
+    if (bt && st.ch) { const p = planner.dragon.plan(st.ch, bt.dataset.dtake); if (p) setDragon({ dragonNodes: p.nodes }); return; }
     const b = e.target.closest('[data-act]'); if (!b || !st.ch) return;
     if (b.dataset.act === 'dreset') return setDragon({ dragonNodes: [] });
+    if (b.dataset.act === 'daspect') return setDragon({ dragonAspect: b.dataset.asp || '' });
     if (b.dataset.act !== 'dnode') return;
     const r = planner.dragon.toggle(st.ch, b.dataset.id);
     if (!r.nodes) { const s = $('#dragonStatus'); if (s) s.textContent = r.msg; return; }
@@ -25275,17 +25529,23 @@ window.BOStartApp = function () {
 
 
   window.BOTreeTips = true;
-  function dragonGain(id) {
-    if (!st.skill) return null;
-    const key = st.skill + '|' + id; // cleared whenever the page redraws (renderDragon)
-    if (dTipCache.has(key)) return dTipCache.get(key);
-    const r = planner.dragon.toggle(st.ch, id); let out = null;
-    if (r.nodes) {
-      const o = opts(), base = S.calcSkill(GD, st.ch, st.skill, o).totalDps;
-      const v = S.calcSkill(GD, Object.assign({}, st.ch, { dragonNodes: r.nodes }), st.skill, o).totalDps;
-      if (base > 0) out = v / base - 1;
-    }
-    dTipCache.set(key, out); return out;
+
+  function aspectTipHtml(a) {
+    const A = a === '-' ? null : (GD.dragon.aspects || {})[a];
+    if (a !== '-' && !A) return '';
+    let h = '<div class="tk">Dragonling Aspect</div><b>' + esc(A ? (A.Name || a) + ' Aspect' : 'No Aspect') + '</b>';
+    const lines = A ? (A.Mods || []).filter(m => m.Mode !== 'Flag' && m.Mode !== 'Trigger').map(modLine).filter(Boolean) : [];
+    if (lines.length) h += '<ul>' + lines.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>';
+    else if (A && A.Text) h += '<div>' + A.Text.split(/\s+·\s+/).map(s => esc(s.replace(/^./, c => c.toUpperCase()))).join('<br>') + '</div>';
+    else if (!A) h += '<div>The Dragonling gives no Aspect bonuses.</div>';
+    const skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
+    const on = (st.ch.dragonAspect || '-') === a, v = DV.asp.get(a);
+    if (on) h += '<div class="tk" style="margin-top:5px">Chosen</div>';
+    else if (v != null) h += '<div class="gain ' + (v > 0.0005 ? 'up' : v < -0.0005 ? 'down' : '') + '">Switch to it: ' + pct(v) + ' ' + esc(skillName) + ' DPS</div>';
+    else h += '<div class="tk" style="margin-top:5px">' + (st.skill ? 'Click to choose · scoring…' : 'Click to choose') + '</div>';
+    const unc = A ? (A.Mods || []).filter(lineUncounted).map(modLine).filter((x, i, l) => x && l.indexOf(x) === i) : [];
+    if (unc.length) h += '<div class="tk" style="margin-top:5px">Not in the DPS number: ' + esc(unc.join(' · ')) + '</div>';
+    return h;
   }
   function dragonTipHtml(id) {
     const d = planner.dragon.info(st.ch, id); if (!d) return '';
@@ -25296,20 +25556,32 @@ window.BOStartApp = function () {
 
     if (d.title && !lines.length && d.text) h += '<div>' + d.text.split('  ·  ').map(s => esc(s.replace(/^./, c => c.toUpperCase()))).join('<br>') + '</div>';
     else if (d.text && !d.title && d.kind !== 'Core' && d.text !== lines.join('  ·  ') && (d.kind !== 'Small' && d.kind !== 'Shared' || !lines.length)) h += '<div>' + esc(d.text) + '</div>';
-    if (d.kind === 'Core') return h + '<div class="tk" style="margin-top:5px">Pick the Aspect at the top of this panel</div>';
-    if (d.why) return h + '<div class="gain down">' + esc(d.why.replace(/^./, c => c.toUpperCase())) + '</div>';
-    const g = dragonGain(id), skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
-    const verb = d.state === 'taken' ? 'Refund' : 'Take';
-    if (g != null) h += '<div class="gain ' + (g > 0.0005 ? 'up' : g < -0.0005 ? 'down' : '') + '">' + verb + ': ' + pct(g) + ' ' + esc(skillName) + ' DPS' + (verb === 'Take' ? (d.cost === 0 ? ' · uses no points' : ' · ' + (d.cost || 1) + ' point' + ((d.cost || 1) === 1 ? '' : 's')) : '') + '</div>';
-    else h += '<div class="tk">Click to ' + verb.toLowerCase() + '</div>';
+    const skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
+    if (d.kind === 'Core') {
+
+      const v = st.ch.dragonAspect ? DV.asp.get('-') : null;
+      if (v != null && Math.abs(v) > 0.0005) h += '<div class="gain ' + (v > 0 ? 'up' : 'down') + '">Without it: ' + pct(v) + ' ' + esc(skillName) + ' DPS</div>';
+      return h + '<div class="tk" style="margin-top:5px">Pick the Aspect at the top of this panel</div>';
+    }
+
+
+    const verb = d.state === 'taken' ? 'Refund' : 'Take', v = dragonValue(id);
+    if (v) {
+      const g = v.d, cls = g > 0.0005 ? 'up' : g < -0.0005 ? 'down' : '';
+      if (verb === 'Refund') h += '<div class="gain ' + cls + '">Refund: ' + pct(g) + ' ' + esc(skillName) + ' DPS' + (v.n > 1 ? ' (' + (v.n - 1) + ' more node' + (v.n > 2 ? 's go' : ' goes') + ' with it)' : '') + '</div>';
+      else h += '<div class="gain ' + cls + '">Take: ' + (v.cost > 1 ? pct(dPerPt(v)) + ' ' + esc(skillName) + ' DPS per point · ' + v.cost + ' points (' + pct(g) + ' total)' : pct(g) + ' ' + esc(skillName) + ' DPS · ' + (v.cost === 1 ? '1 point' : 'uses no points')) + (v.n > 1 ? ' · path of ' + v.n + ' nodes' : '') + '</div>';
+    }
+    if (d.why) h += '<div class="gain down">' + esc(d.why.replace(/^./, c => c.toUpperCase())) + '</div>';
+    else if (!v) h += '<div class="tk">Click to ' + verb.toLowerCase() + '</div>';
     const unc = d.mods.filter(m => m.Mode === 'Flag' ? m.Stat !== 'Dragonling' : lineUncounted(m)).map(m => m.Mode === 'Flag' || m.Mode === 'Trigger' ? d.text : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
     if (unc.length) h += '<div class="tk" style="margin-top:5px">Not in the DPS number: ' + esc(unc.join(' · ')) + '</div>';
     return h;
   }
   $('#dragonBody').addEventListener('pointermove', e => {
-    const g = e.target.closest && e.target.closest('[data-dn]'), tipEl = $('#dragonTip'), view = $('#treeView');
+    const g = e.target.closest && e.target.closest('[data-dn], [data-dasp]'), tipEl = $('#dragonTip'), view = $('#treeView');
     if (!g || !st.ch) { tipEl.hidden = true; return; }
-    if (tipEl.dataset.id !== g.dataset.dn || tipEl.hidden) { tipEl.innerHTML = dragonTipHtml(g.dataset.dn); tipEl.dataset.id = g.dataset.dn; tipEl.hidden = false; }
+    const tid = g.dataset.dn ? g.dataset.dn : 'asp:' + g.dataset.dasp;
+    if (tipEl.dataset.id !== tid || tipEl.hidden) { tipEl.innerHTML = g.dataset.dn ? dragonTipHtml(g.dataset.dn) : aspectTipHtml(g.dataset.dasp); tipEl.dataset.id = tid; tipEl.hidden = false; }
 
     const r = view.getBoundingClientRect();
     let x = e.clientX - r.left + 14, y = e.clientY - r.top + 14;
@@ -25971,13 +26243,57 @@ window.BOStartApp = function () {
 
 
 
-  const optKey = () => GS.set.prio + JSON.stringify(GS.set.layers) + '|' + ($('#optOaths').checked ? JSON.stringify(st.ch.oaths || {}) : '') + '|' + st.skill + '|' + JSON.stringify(optExtra()) + '|' + [...allocSet()].sort().join(',') + '|' + [...(st.ban || [])].sort().join(',') + '|' + [...(st.keep || [])].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
+
+
+  const optDragonOn = () => !!(st.ch && $('#optDragon').checked && (GD.dragon.tree || {}).asc2 && Object.keys((GD.dragon.classes || {})[String(st.ch.classId).toLowerCase()] || {}).length);
+  const optDragon = () => optDragonOn() ? { points: planner.dragon.points(st.ch).total } : null;
+  const optDragonKey = () => optDragonOn() ? JSON.stringify([st.ch.dragonNodes || [], st.ch.dragonAspect || '', planner.dragon.points(st.ch).total]) : '';
+  const dNode = id => ((GD.dragon.classes || {})[String(st.ch.classId).toLowerCase()] || {})[id];
+  const D_KIND = { WarCrown: 'War crown', WardCrown: 'Ward crown' };
+
+  function optDragonRows(list, sign) {
+    const big = [], small = [];
+    for (const x of list) { const n = dNode(x.id); if (n) (['Small', 'Shared', 'Entry'].includes(n.Kind) ? small : big).push(x); }
+    const rows = big.map(x => { const n = dNode(x.id); return '<li data-dfocus="1"><span>' + esc(n.Name) + ' <span class="c">' + esc(D_KIND[n.Kind] || n.Kind) + (n.Path ? ' · ' + esc(n.Path) : '') + '</span></span><span class="v">' + pct(sign * x.d || 0) + '</span></li>'; });
+    if (small.length) {
+      const names = [...new Set(small.map(x => dNode(x.id).Name))];
+      rows.push('<li data-dfocus="1"><span>' + small.length + ' small node' + (small.length > 1 ? 's' : '') + ' <span class="c">' + esc(names.slice(0, 4).join(', ') + (names.length > 4 ? ' …' : '')) + '</span></span><span class="v">' + pct(sign * small.reduce((a, x) => a + x.d, 0) || 0) + '</span></li>');
+    }
+    return rows.join('') || '<li><span class="c">nothing</span></li>';
+  }
+  const optDragonMoves = o => !!(o.dragon && (o.dragon.add.length || o.dragon.remove.length));
+  function optDragonHtml(o) {
+    const d = o.dragon; if (!d || !(d.points || d.before)) return ''; // no Dragon Rupture cleared yet: nothing to plan
+    const kept = d.kept.length ? ' Dragonling nodes left where they are: ' + d.kept.map(k => esc((dNode(k.id) || { Name: k.id }).Name) + ' (' + esc(k.why) + ')').join(', ') + '.' : '';
+    const note = '<p class="hint">Dragonling picks are green and red on the Dragonling panel. They keep your Aspect and may include keystones and crowns: the first crown is free, each further one costs ' + ((GD.dragon.tree || {}).crownCost || 3) + ' points.</p>';
+    if (o.addOnly) {
+      let n = d.before;
+      const rows = d.steps.map(s => { const from = n + 1; n += s.cost;
+        const nm = s.nodes.map(id => { const x = dNode(id); return x ? (['Small', 'Shared', 'Entry'].includes(x.Kind) ? esc(x.Name) : '<b>' + esc(x.Name) + '</b>') : ''; }).join(' › ');
+        return '<li data-dfocus="' + esc(s.nodes[s.nodes.length - 1]) + '"><span><span class="c">' + (s.cost === 0 ? 'Free crown' : s.cost > 1 ? 'Points ' + from + '–' + n : 'Point ' + from) + '</span> ' + nm + '</span><span class="v">' + pct(s.gain) + '</span></li>'; }).join('');
+      const left = d.points - d.used;
+      return '<h3>Dragonling <span class="hint">' + d.used + ' / ' + d.points + ' points</span></h3>' +
+        (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">' + (d.points - d.before > 0 ? 'No Dragonling node within reach adds ' + (o.scored ? 'anything at this setting' : 'DPS to this skill') + '.' : 'No free Dragonling points (one for each Dragon Rupture cleared).') + '</p>') +
+        (left > 0 && rows ? '<p class="hint">' + left + ' Dragonling point' + (left > 1 ? 's' : '') + ' left over: nothing else within reach adds DPS.</p>' : '') + (rows ? note : '');
+    }
+    if (!optDragonMoves(o)) return '<p class="hint">Dragonling: your ' + d.used + ' of ' + d.points + ' points already look right.' + kept + '</p>';
+    return '<h3>Dragonling <span class="hint">' + d.before + ' → ' + d.used + ' of ' + d.points + ' points · ' + pct(d.gain) + '</span></h3>' +
+      '<div class="opt-cols"><div><h3 class="rem">Refund</h3><ul>' + optDragonRows(d.remove, -1) + '</ul></div><div><h3 class="add">Take</h3><ul>' + optDragonRows(d.add, 1) + '</ul></div></div>' +
+      (kept ? '<p class="hint">' + kept.trim() + '</p>' : '') + note;
+  }
+
+  function paintDragonOpt() {
+    const o = T.opt, a = o && o.dAddSet || new Set(), r = o && o.dRemSet || new Set();
+    document.querySelectorAll('#dragonBody [data-dn]').forEach(g => { g.classList.toggle('dl-opt-add', a.has(g.dataset.dn)); g.classList.toggle('dl-opt-rem', r.has(g.dataset.dn)); });
+  }
+  const optKey = () => GS.set.prio + JSON.stringify(GS.set.layers) + '|' + ($('#optOaths').checked ? JSON.stringify(st.ch.oaths || {}) : '') + '|' + optDragonKey() + '|' + st.skill + '|' + JSON.stringify(optExtra()) + '|' + [...allocSet()].sort().join(',') + '|' + [...(st.ban || [])].sort().join(',') + '|' + [...(st.keep || [])].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
   function clearOpt() {
     T.optJob = (T.optJob || 0) + 1; T.opt = null; $('#treeOpt').hidden = true;
     const b = $('#treeOptimize'); b.disabled = false; b.textContent = 'Optimize tree';
     const p = $('#treePlan'); p.disabled = false; p.textContent = 'Plan next points';
     const pa = $('#treePlanAll'); pa.disabled = false; pa.textContent = 'Plan tree';
     for (const x of [b, p, pa]) { x.classList.remove('opt-busy'); x.removeAttribute('aria-busy'); }
+    paintDragonOpt();
   }
 
 
@@ -25999,8 +26315,8 @@ window.BOStartApp = function () {
     $('#treePlan').disabled = true; $('#treePlanAll').disabled = true; $('#treeOptimize').disabled = true;
     card.hidden = false; card.innerHTML = '<p class="hint">' + (plan ? 'Planning your next ' + extra + ' point' + (extra > 1 ? 's' : '') : 'Optimizing the tree') + ' for ' + esc(skillName) + '…</p>';
 
-    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])], keep: [...(st.keep || [])], oaths: $('#optOaths').checked,
-      defWeight: GS.set.prio / 100, defStats: gsDefStats(), defence: (list, oaths) => gsDefence(Object.assign({}, st.ch, { passives: list }, oaths ? { oaths } : null)) });
+    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])], keep: [...(st.keep || [])], oaths: $('#optOaths').checked, dragon: optDragon(),
+      defWeight: GS.set.prio / 100, defStats: gsDefStats(), defence: (list, oaths, dragonNodes) => gsDefence(Object.assign({}, st.ch, { passives: list }, oaths ? { oaths } : null, dragonNodes ? { dragonNodes } : null)) });
 
     let phase = 'Starting', q = 0;
     const busy = on => { btn.classList.toggle('opt-busy', on); btn.style.setProperty('--q', on ? q : 0); btn.setAttribute('aria-busy', on ? 'true' : 'false'); };
@@ -26020,8 +26336,9 @@ window.BOStartApp = function () {
       if (res.error) { card.innerHTML = '<p class="hint">' + esc(res.error) + '</p>'; return; }
       if (key !== optKey()) { card.innerHTML = '<p class="hint">The tree or a setting changed while optimizing: press ' + label + ' again.</p>'; return; }
       const worth = res.gain > 0.001;
-      Object.assign(res, { list: optOrder(res, st.ch.passives), key, skill: st.skill, skillName, base0: res.points - extra, addSet: new Set(worth ? res.add.map(x => x.id) : []), remSet: new Set(worth ? res.remove.map(x => x.id) : []), oathSet: new Set(worth ? (res.oaths || []).map(x => x.mid) : []) });
-      T.opt = res; showOpt(); paintTree();
+      Object.assign(res, { list: optOrder(res, st.ch.passives), key, skill: st.skill, skillName, base0: res.points - extra, addSet: new Set(worth ? res.add.map(x => x.id) : []), remSet: new Set(worth ? res.remove.map(x => x.id) : []), oathSet: new Set(worth ? (res.oaths || []).map(x => x.mid) : []),
+        dAddSet: new Set(worth && res.dragon ? res.dragon.add.map(x => x.id) : []), dRemSet: new Set(worth && res.dragon ? res.dragon.remove.map(x => x.id) : []) });
+      T.opt = res; showOpt(); paintTree(); paintDragonOpt();
     };
     step();
   }
@@ -26053,6 +26370,7 @@ window.BOStartApp = function () {
   const optOathMsg = o => { const n = (o.oaths || []).length; return n ? ' ' + n + ' Oath' + (n > 1 ? 's' : '') + ' sworn.' : ''; };
   function optCardClicks(card) {
     card.querySelectorAll('[data-focus]').forEach(li => li.onclick = () => focusNode(li.dataset.focus));
+    card.querySelectorAll('[data-dfocus]').forEach(li => li.onclick = () => { if ($('#dragonPanel').hidden) $('#dragonBtn').click(); $('#treeView').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
     card.querySelectorAll('[data-seat]').forEach(li => li.onclick = () => { focusSeat(li.dataset.seat); $('#treeView').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
   }
   function showOpt() {
@@ -26067,11 +26385,11 @@ window.BOStartApp = function () {
       const at = Object.entries(o.attrs).filter(([, v]) => v).map(([k, v]) => k + ' ' + (v > 0 ? '+' : '−') + Math.abs(v));
       card.innerHTML = '<h2>Optimized for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.scored ? 'score' : o.multi ? 'weighted DPS' : 'DPS') + '</span> <span class="hint">same ' + o.points + ' points' + (o.multi || o.scored ? '' : ' · ' + num(o.base) + ' → ' + num(o.value)) + '</span></h2>' + optScoredRows(o) + optSkillRows(o) +
         '<div class="opt-cols"><div><h3 class="rem">Refund (red on the tree)</h3><ul>' + optRows(o.remove, -1) + '</ul></div>' +
-        '<div><h3 class="add">Take (green on the tree)</h3><ul>' + optRows(o.add, 1) + '</ul></div>' + optOathCol(o) + '</div>' + optOathNote(o) +
+        '<div><h3 class="add">Take (green on the tree)</h3><ul>' + optRows(o.add, 1) + '</ul></div>' + optOathCol(o) + '</div>' + optOathNote(o) + optDragonHtml(o) +
         (at.length ? '<p class="hint">Attributes from the tree: ' + esc(at.join(', ')) + '. Check your gear and gem requirements still fit.</p>' : '') + kept +
         '<p class="hint">Each value is that node\'s share of the ' + (o.scored ? 'score (DPS and defence, weighed as set)' : 'DPS') + '. The sim cannot weigh lines it does not count (see a node\'s tooltip), so check the picks fit how you play. Click a row to find it on the tree.</p>' +
         '<div class="opt-actions"><button class="btn small" type="button" id="optApply">Apply to my tree</button><button class="btn small ghost" type="button" id="optDismiss">Dismiss</button></div>';
-      $('#optApply').onclick = () => { const list = o.list, msg = optOathMsg(o); clearOpt(); setPassives(list, true, (o.oaths || []).length ? o.oathMap : null); $('#treeStatus').textContent = 'Optimized tree applied.' + msg + ' Undo goes back; Copy build code gives it to the game.'; };
+      $('#optApply').onclick = () => { const list = o.list, msg = optOathMsg(o) + (optDragonMoves(o) ? ' Dragonling nodes moved.' : ''); clearOpt(); setPassives(list, true, (o.oaths || []).length ? o.oathMap : null, optDragonMoves(o) ? o.dragon.list : null); $('#treeStatus').textContent = 'Optimized tree applied.' + msg + ' Undo goes back; Copy build code gives it to the game.'; };
     }
     $('#optDismiss').onclick = () => { clearOpt(); paintTree(); };
     optCardClicks(card);
@@ -26111,12 +26429,12 @@ window.BOStartApp = function () {
     const left = o.points - o.used;
     card.innerHTML = '<h2>Next ' + (o.points - o.base0) + ' points for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.scored ? 'score' : o.multi ? 'weighted DPS' : 'DPS') + '</span>' + (o.multi || o.scored ? '' : ' <span class="hint">' + num(o.base) + ' → ' + num(o.value) + '</span>') + '</h2>' + optScoredRows(o) + optSkillRows(o) +
       (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">No node within reach adds ' + (o.scored ? 'anything at this setting' : 'DPS to this skill') + '.</p>') + keepMissedHtml(o) +
-      (optOathCol(o) ? '<div class="opt-cols">' + optOathCol(o) + '</div><p class="hint">A row\'s gain counts the Oath sworn at a seat its notable opens.</p>' : '') + optOathNote(o) +
+      (optOathCol(o) ? '<div class="opt-cols">' + optOathCol(o) + '</div><p class="hint">A row\'s gain counts the Oath sworn at a seat its notable opens.</p>' : '') + optOathNote(o) + optDragonHtml(o) +
       (left > 0 && rows ? '<p class="hint">' + left + ' point' + (left > 1 ? 's' : '') + ' left over: nothing else within reach adds DPS.</p>' : '') +
       (at.length ? '<p class="hint">Attributes from these picks: ' + esc(at.join(', ')) + '.</p>' : '') +
       '<p class="hint">Take them top to bottom: each row is worth most per point at that moment, its path included (gains are on top of the rows above). Keystones and skill-changing nodes are left out; Channel Conduit builds keep their channel 1% slower than the cast interval. Green on the tree. Click a row to find it.</p>' +
-      '<div class="opt-actions">' + (rows || (o.oaths || []).length ? '<button class="btn small" type="button" id="optApply">Add to my tree</button>' : '') + '<button class="btn small ghost" type="button" id="optDismiss">Dismiss</button></div>';
-    if (rows || (o.oaths || []).length) $('#optApply').onclick = () => { const list = o.list, msg = optOathMsg(o); clearOpt(); setPassives(list, true, (o.oaths || []).length ? o.oathMap : null); $('#treeStatus').textContent = 'Planned points added.' + msg + ' Copy build code gives the game a code to follow; Undo goes back.'; };
+      '<div class="opt-actions">' + (rows || (o.oaths || []).length || optDragonMoves(o) ? '<button class="btn small" type="button" id="optApply">Add to my tree</button>' : '') + '<button class="btn small ghost" type="button" id="optDismiss">Dismiss</button></div>';
+    if (rows || (o.oaths || []).length || optDragonMoves(o)) $('#optApply').onclick = () => { const list = o.list, msg = optOathMsg(o) + (optDragonMoves(o) ? ' Dragonling points spent.' : ''); clearOpt(); setPassives(list, true, (o.oaths || []).length ? o.oathMap : null, optDragonMoves(o) ? o.dragon.list : null); $('#treeStatus').textContent = 'Planned points added.' + msg + ' Copy build code gives the game a code to follow; Undo goes back.'; };
     $('#optDismiss').onclick = () => { clearOpt(); paintTree(); };
     optCardClicks(card);
   }
@@ -26127,6 +26445,7 @@ window.BOStartApp = function () {
     $('#treeView').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
   $('#optOaths').onchange = () => { if (T.opt) { clearOpt(); paintTree(); } };
+  $('#optDragon').onchange = () => { if (T.opt) { clearOpt(); paintTree(); renderDragon(); } };
   $('#treeOptimize').onclick = () => runOptimize(false);
   $('#treePlan').onclick = () => runOptimize(true);
   $('#treePlanAll').onclick = () => runOptimize(true, true);
@@ -27456,10 +27775,10 @@ window.BOStartApp = function () {
 
 
   T.heat = store.get('treeHeat', true) !== false;
-  $('#treeLegendBtn').onclick = () => { T.heat = T.heat === false; store.set('treeHeat', T.heat); paintTree(); };
+  $('#treeLegendBtn').onclick = () => { T.heat = T.heat === false; store.set('treeHeat', T.heat); paintTree(); paintDragonHeat(); };
 
   $('#treeSeats').onclick = () => { const list = T.unsworn || []; if (list.length) focusSeat(list[(list.indexOf(T.selM) + 1) % list.length]); };
-  $('#treeUndo').onclick = () => { if (T.undo.length) { const u = T.undo.pop(); setPassives(u, false, u.oaths); } };
+  $('#treeUndo').onclick = () => { if (T.undo.length) { const u = T.undo.pop(); setPassives(u, false, u.oaths, u.dragonNodes); } };
   $('#treeReset').onclick = () => { if (st.chOrig) { clearOpt(); T.undo.push(st.ch.passives.slice()); st.ch = st.chOrig; st.pinned = null; T.job++; T.scores = new Map(); render(); } };
   $('#treeCopy').onclick = async () => {
     try {
@@ -28099,7 +28418,7 @@ window.BOStartApp = function () {
   'use strict';
   if (typeof document === 'undefined') return;
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const OWN = '[data-tip], [data-gs-tip], [data-dn]';
+  const OWN = '[data-tip], [data-gs-tip], [data-dn], [data-dasp]';
   let tip = null, cur = null;
   const hide = () => { if (tip) tip.hidden = true; cur = null; };
 

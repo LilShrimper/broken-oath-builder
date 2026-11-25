@@ -809,6 +809,22 @@ tr.cmp-counted td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 :root[data-theme="light"] .dl-n circle.dl-find { stroke: #d01818 !important; }
 .dl-tree.searching .dl-n:not(.found) { opacity: .4; }
 .dragon-tip { z-index: 7; }
+/* Dragonling Aspects as buttons (25 Nov 2026): the segmented .cmp-modes look, made small for the panel's side column. */
+.dl-asp-h { margin: 8px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+.cmp-modes.dl-asps { flex-wrap: wrap; width: auto; margin: 0 0 6px; gap: 4px; padding: 3px; }
+.cmp-modes.dl-asps .cmp-mode { flex: 1 1 auto; min-width: 0; min-height: 30px; padding: 4px 9px; gap: 5px; font-size: 12.5px; white-space: nowrap; }
+.cmp-modes.dl-asps .cmp-mode:disabled { cursor: default; }
+.dl-asp-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, .35); }
+.dl-asp-g { font-size: 11px; font-weight: 600; color: var(--faint); }
+.dl-asp-g:empty { display: none; }
+.dl-asp-g.up { color: var(--good); }
+.dl-asp-g.down { color: var(--bad); }
+/* Node values on the Dragonling tree: the heat map colours come inline (app.js paintDragonHeat); red = taking it lowers DPS. */
+.dl-n.loss circle:not(.dl-find) { fill: #8c3a3a; }
+.dl-n.dl-ic.loss circle:not(.dl-find) { fill: #8c3a3a; fill-opacity: .45; }
+.dl-best { margin: 6px 0 0; }
+.dl-best-list li { padding: 4px 7px; font-size: 12.5px; gap: 8px; }
+.dl-best-list .c { font-size: 11.5px; }
 /* Dragonling button: the framed dragon tile for the chosen Aspect (6 tiles in one strip) */
 .dragon-btn.tiled { padding: 0; background: transparent; border: 0; box-shadow: var(--shadow); width: 60px; height: 60px; }
 .dragon-btn.tiled:hover, .dragon-btn.tiled[aria-expanded="true"] { filter: brightness(1.18); }
@@ -2266,12 +2282,17 @@ input.io-add::placeholder { color: var(--faint); }
 .is-filters { display: grid; grid-template-columns: minmax(200px, 2fr) repeat(5, minmax(120px, 1fr)); gap: 10px; align-items: end; }
 .is-filters .field { margin: 0; }
 .is-filters select, .is-filters input { width: 100%; min-width: 0; }
-/* New first toggle (left of All): purple, apart from the gold category chips */
-.is-cat.is-newfirst { border-color: color-mix(in srgb, #a78bfa 55%, var(--line)); color: #c4b5fd; background: color-mix(in srgb, #a78bfa 10%, var(--panel-2)); }
-.is-cat.is-newfirst:hover { border-color: #a78bfa; }
-.is-cat.is-newfirst.active { border-color: #a78bfa; background: color-mix(in srgb, #a78bfa 30%, var(--panel-2)); color: #ede9fe; }
-:root[data-theme="light"] .is-cat.is-newfirst { color: #6d28d9; border-color: color-mix(in srgb, #7c3aed 45%, var(--line)); background: color-mix(in srgb, #7c3aed 8%, var(--panel)); }
-:root[data-theme="light"] .is-cat.is-newfirst.active { color: #fff; background: #7c3aed; border-color: #7c3aed; }
+/* New first toggle (own row under the category chips): purple, apart from the gold category chips.
+   Off = outlined, muted, empty box; on = filled purple with a check mark. */
+.is-newrow { display: flex; margin: -4px 0 12px; }
+.is-cat.is-newfirst { display: inline-flex; align-items: center; gap: 7px; border-color: color-mix(in srgb, #a78bfa 45%, var(--line)); color: color-mix(in srgb, #c4b5fd 70%, var(--muted, #9aa4b2)); background: transparent; }
+.is-cat.is-newfirst:hover { border-color: #a78bfa; color: #c4b5fd; }
+.is-nf-box { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid currentColor; font-size: 11px; line-height: 1; font-weight: 700; }
+.is-cat.is-newfirst.active { border-color: #8b5cf6; background: #7c3aed; color: #fff; font-weight: 600; box-shadow: 0 0 0 2px color-mix(in srgb, #a78bfa 35%, transparent); }
+.is-cat.is-newfirst.active .is-nf-box { background: #fff; color: #6d28d9; border-color: #fff; }
+:root[data-theme="light"] .is-cat.is-newfirst { color: #7c5bbf; border-color: color-mix(in srgb, #7c3aed 40%, var(--line)); background: transparent; }
+:root[data-theme="light"] .is-cat.is-newfirst:hover { color: #6d28d9; border-color: #7c3aed; }
+:root[data-theme="light"] .is-cat.is-newfirst.active { color: #fff; background: #7c3aed; border-color: #6d28d9; }
 .is-range { display: flex; align-items: center; gap: 4px; }
 .is-range span { color: var(--faint); }
 .is-range input { width: 0; flex: 1; }
@@ -3293,3 +3314,9 @@ body.stats-folded .stats-panel { padding: 0; border: 0; background: none; overfl
 .vw-req b.delta { font-size: inherit; }
 .vw-warn { margin: 8px 0 2px; padding: 8px 12px; border: 1px solid var(--bad); border-left-width: 4px; border-radius: 8px; background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--text); font-weight: 600; font-size: 13.5px; }
 .vw-card .vw-warn { margin: 4px 0; font-size: 12.5px; }
+/* Optimize tree / Plan picks on the Dragonling panel (app.js paintDragonOpt): green = take, red = refund, as on the passive tree. */
+.dl-n.dl-opt-add circle:not(.dl-find) { stroke: var(--good) !important; stroke-width: 5 !important; opacity: 1 !important; }
+.dl-n.dl-opt-rem circle:not(.dl-find) { stroke: var(--bad) !important; stroke-width: 5 !important; opacity: 1 !important; }
+.dl-n.dl-opt-add:not(.dl-ic) circle:not(.dl-find) { fill: var(--good) !important; }
+.dl-n.dl-opt-add.dl-ic circle:not(.dl-find) { fill: var(--good) !important; fill-opacity: .3; }
+.dl-n.dl-opt-rem.dl-ic circle:not(.dl-find) { fill: var(--bad) !important; fill-opacity: .3; }

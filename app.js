@@ -25230,7 +25230,7 @@ window.BOStartApp = function () {
     const verb = d.state === 'taken' ? 'Refund' : 'Take';
     if (g != null) h += '<div class="gain ' + (g > 0.0005 ? 'up' : g < -0.0005 ? 'down' : '') + '">' + verb + ': ' + pct(g) + ' ' + esc(skillName) + ' DPS' + (verb === 'Take' ? (d.cost === 0 ? ' · uses no points' : ' · ' + (d.cost || 1) + ' point' + ((d.cost || 1) === 1 ? '' : 's')) : '') + '</div>';
     else h += '<div class="tk">Click to ' + verb.toLowerCase() + '</div>';
-    const unc = d.mods.filter(m => (m.Mode === 'Trigger' && !S.trigCounted(m)) || (m.Mode === 'Flag' && m.Stat !== 'Dragonling') || (m.Mode !== 'Flag' && !S.counted(m.Stat))).map(m => m.Mode === 'Flag' || m.Mode === 'Trigger' ? d.text : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
+    const unc = d.mods.filter(m => m.Mode === 'Flag' ? m.Stat !== 'Dragonling' : lineUncounted(m)).map(m => m.Mode === 'Flag' || m.Mode === 'Trigger' ? d.text : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
     if (unc.length) h += '<div class="tk" style="margin-top:5px">Not in the DPS number: ' + esc(unc.join(' · ')) + '</div>';
     return h;
   }
@@ -25619,7 +25619,7 @@ window.BOStartApp = function () {
     const rows = m.Oaths.map(oid => {
       const o = GD.oaths[oid]; if (!o) return '';
       const on = !!cur && cur.Id === oid, why = on ? '' : oathBlocked(m, oid, have, sw), d = gains.get(oid);
-      const unc = (o.Mods || []).filter(x => !S.counted(x.Stat)).length;
+      const unc = (o.Mods || []).filter(lineUncounted).length;
       const body = '<span class="on">' + esc(o.Name) + (on ? ' <span class="c">sworn</span>' : '') + '</span><span class="ot">' + esc(o.Text) + '</span>' +
         (o.Vow ? '<span class="ov">Price: ' + esc(o.Vow) + '</span>' : '') +
         (d != null && !why ? '<span class="gain ' + (d > 0.0005 ? 'up' : d < -0.0005 ? 'down' : '') + '">' + (on ? 'Give up: ' : cur ? 'Swear instead: ' : 'Swear: ') + pct(d) + ' ' + esc(skillName) + ' DPS' + (unc ? ' (has lines not in the DPS number)' : '') + '</span>' : '') +
@@ -25732,8 +25732,12 @@ window.BOStartApp = function () {
     return (n.Mods || []).filter(m => !['Keystone', 'Trigger', 'Dragonling'].includes(m.Mode) && (!n.Text || S.hasStatText(GD, m))).map(modLine).filter(Boolean);
   }
 
+
+
+  function lineUncounted(m) { return m.Mode === 'Trigger' ? !S.trigCounted(m) : m.Mode === 'Flag' || !S.counted(m.Stat); }
+
   function uncounted(n) {
-    return (n.Mods || []).filter(m => (m.Mode === 'Trigger' && !S.trigCounted(m)) || m.Mode === 'Flag' || !S.counted(m.Stat))
+    return (n.Mods || []).filter(lineUncounted)
       .map(m => m.Mode === 'Trigger' || m.Mode === 'Flag' || (n.Text && !S.hasStatText(GD, m)) ? (n.Text || n.Name) : modLine(m)).filter((x, i, a) => x && a.indexOf(x) === i);
   }
   function tipHtml(id) {

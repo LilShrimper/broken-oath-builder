@@ -16679,16 +16679,17 @@ window.BOCharacter = function (ctx) {
         const byTo = {};
 
         convRules.forEach((r, i) => { if (!(shares[i] > 0)) return; if (r.own) out.push({ type: r.to, scales: new Set([...p.scales, r.to]), min: p.min * shares[i] * scale, max: p.max * shares[i] * scale, own: true, orig: p.orig || p.type }); else byTo[r.to] = (byTo[r.to] || 0) + shares[i] * scale; });
-
-
-
         convRules.forEach((r, i) => { if (shares[i] > 0) convTrace.push({ from: p.type, to: r.to, pct: shares[i] * scale * 100, src: r.src }); });
 
 
 
 
 
-        for (const [to, s] of Object.entries(byTo)) out.push(Object.assign({ type: to, scales: new Set([...p.scales, to]), min: p.min * s, max: p.max * s, conv: true, orig: p.orig || p.type }, p.type === 'Physical' && !p.moreScales ? {} : { moreScales: new Set(p.moreScales || p.scales) }));
+
+
+
+
+        for (const [to, s] of Object.entries(byTo)) out.push({ type: to, scales: new Set([...p.scales, to]), min: p.min * s, max: p.max * s, conv: true, orig: p.orig || p.type });
       }
       pieces = out;
     }
@@ -16841,9 +16842,8 @@ window.BOCharacter = function (ctx) {
     const dmgInc = dmgLines('Inc'), dmgMore = dmgLines('More');
     for (const p of pieces) {
       let inc = intSpell + shieldInc, more = intMore;
-      const moreSc = p.moreScales || p.scales;
       for (const e of dmgInc) if (!e.types.length || e.types.some(t => p.scales.has(t))) { inc += e.m.v; use(e.m); }
-      for (const e of dmgMore) if (!e.types.length || e.types.some(t => moreSc.has(t))) { more *= 1 + e.m.v / 100; use(e.m); }
+      for (const e of dmgMore) if (!e.types.length || e.types.some(t => p.scales.has(t))) { more *= 1 + e.m.v / 100; use(e.m); }
 
       if (is0567(GD) && !is0568(GD) && more > 8) { kneeHit = Math.max(kneeHit, more); more = moreKnee(more); }
       more *= early * heroDamage(GD);

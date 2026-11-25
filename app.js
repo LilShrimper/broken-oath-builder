@@ -17300,7 +17300,11 @@ window.BOCharacter = function (ctx) {
 
 
 
-      const dShare = minionDefShare(GD), dEng = engine.filter(e => e.def).map(e => Object.assign({}, e, { v: e.v * dShare }));
+
+
+
+
+      const dShare = minionDefShare(GD), dEng = engine.map(e => Object.assign({}, e, { v: e.v * dShare, half: !e.def }));
 
 
 
@@ -17311,7 +17315,12 @@ window.BOCharacter = function (ctx) {
 
 
       if (ctx.isSpell || ctx.tags.has('spell')) for (const m of pickMods(mods, 'IntSpellMore', 'Flat')) if (applies(ctx, m))
-        dEng.push({ intEng: true, v: m.v * attr.Int / 10 * dShare, types: [], src: m.src + ' (' + attr.Int + ' Int, half for minions)' });
+        dEng.push({ intEng: true, half: true, v: m.v * attr.Int / 10 * dShare, types: [], src: m.src + ' (' + attr.Int + ' Int, half for minions)' });
+
+      for (const m of mods) if ((m.key === 'charge:bloodlust' || m.key === 'fortify') && m.stat === 'Damage' && m.mode === 'More' && applies(ctx, m))
+        dEng.push({ half: true, v: m.v * dShare, types: splitTags(m.tags).types, src: m.src + ' (half for minions)' });
+
+
 
 
 
@@ -17323,15 +17332,17 @@ window.BOCharacter = function (ctx) {
         if (per) {
           const golem = /^summon_.*golem$/.test(lc(sk.Id)), life = heroMaxLife(GD, ch, mods, attr), share = golem ? 1 : 0.35;
           gl.forEach(m => use(m, 'minion more damage per 100 life'));
-          dEng.push({ pyre: true, v: per * life / 100 * share, types: [], src: gl[0].src + ' (' + Math.round(life).toLocaleString('en-US') + ' life' + (golem ? '' : ', 35% for minions other than the golem') + ')' });
+          const v = per * life / 100 * share, src = gl[0].src + ' (' + Math.round(life).toLocaleString('en-US') + ' life' + (golem ? '' : ', 35% for minions other than the golem') + ')';
+          mods.push({ stat: 'Damage', mode: 'More', tags: [], v, v2: 0, local: false, src, key: 'engine' }); // key 'engine': the minion sheet takes it; its own multiplier
+          res.notes.push(src.replace(/^[^·]*·s*/, '') + ' = ' + v.toFixed(1) + '% more, its own multiplier (game tooltips 25 Nov 2026' + (golem ? '' : '; the 35% for other minions is from its text') + ').');
         }
       }
       if (dEng.length) {
         const U = sum(dEng.filter(e => !e.types.length).map(e => e.v)), byType = {};
         for (const e of dEng) for (const t of e.types) byType[t] = (byType[t] || 0) + e.v;
-        if (U) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: U, v2: 0, local: false, src: 'Damage engine (defences, added together, patch 0.56.5)', key: 'engine' });
+        if (U) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: U, v2: 0, local: false, src: 'Damage engine (added together, half for minions)', key: 'engine' });
         for (const [t, S] of Object.entries(byType)) mods.push({ stat: 'Damage', mode: 'More', tags: [t], v: ((1 + (U + S) / 100) / (1 + U / 100) - 1) * 100, v2: 0, local: false, src: 'Damage engine, ' + t + ' only', key: 'engine' });
-        res.notes.push('Damage engine on minions: ' + dEng.map(e => e.src.replace(/^[^·]*·\s*/, '') + ' +' + e.v.toFixed(1) + '%').join(', ') + (dEng.some(e => e.def) ? ' (defence lines: game panel and log, 11 Nov 2026' + (dShare < 1 ? '; half for minions from patch 78, proven by game tooltips 25 Nov 2026' : '') + ')' : '') + (dEng.some(e => e.intEng) ? ' (Boundless Mind: half for minions, game tooltips 25 Nov 2026)' : '') + (dEng.some(e => e.pyre) ? ' (Pyre Spark: from its text and the developer stacking table, not checked in game)' : '') + '.');
+        res.notes.push('Damage engine on minions: ' + dEng.map(e => e.src.replace(/^[^·]*·\s*/, '') + ' +' + e.v.toFixed(1) + '%').join(', ') + (dEng.some(e => e.def) ? ' (defence lines: game panel and log, 11 Nov 2026' + (dShare < 1 ? '; half for minions from patch 78, proven by game tooltips 25 Nov 2026' : '') + ')' : '') + (dEng.some(e => e.intEng) ? ' (Boundless Mind: half for minions, game tooltips 25 Nov 2026)' : '') + (dEng.some(e => e.half && !e.intEng) ? ' (other engine lines: half for minions by the same rule, not checked in game)' : '') + '.');
       }
       return minionSheet(GD, ch, sk, res, mods, use, attr, L, o);
     }

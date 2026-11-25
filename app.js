@@ -14729,6 +14729,12 @@ window.BOCharacter = function (ctx) {
 
 
   const curseEffK = (GD, inc, dreadPct) => is089(GD) && bSwitch(GD, 'r113.META.bDreadAdd116', true) ? 1 + (inc + dreadPct) / 100 : (1 + inc / 100) * (1 + dreadPct / 100);
+
+
+
+
+  const AIL_BIT = { Bleed: 1, Ignite: 2, Poison: 4 };
+  const ailPreCrit = (GD, kind) => (ruleNum(GD, 'r114.META.AilPreCrit114', 0) & AIL_BIT[kind]) !== 0;
   const VOW_BUILT_IN = 0.15; // every Vow gem's lines x1.15 since patch 82 (gem texts, API game data build 85; see the Vow block)
   const takenRule = (GD, isBoss) => is084(GD) ? 'kinds' : is082(GD) ? 'add' : !!(isBoss && guardianStrongestTaken(GD));
 
@@ -15515,7 +15521,11 @@ window.BOCharacter = function (ctx) {
 
 
 
-        eff = (1 + inc / 100) * (is082(GD) ? 1 + VOW_BUILT_IN + linked / 100 : 1 + linked / 100);
+
+
+
+        const vowAdd = is082(GD) && bSwitch(GD, 'r113.META.bVowAdd131', false);
+        eff = vowAdd ? 1 + VOW_BUILT_IN + (inc + linked) / 100 : (1 + inc / 100) * (is082(GD) ? 1 + VOW_BUILT_IN + linked / 100 : 1 + linked / 100);
       }
       const effOn = m => herald ? m.Stat === 'DamageAsExtra' : true;
       for (const m of b.Mods || []) add(m, ((m.Value || 0) + (m.PerLevel || 0) * (lvl - 1)) * brk * (m.Stat === 'DamageAsExtra' ? lone : 1) * (effOn(m) ? eff : 1), m.Value2, b.Name + (brk > 1 ? ' (Vowbreak x' + brk + ')' : '') + (lone > 1 ? ' (Lone Herald x' + +lone.toFixed(2) + ')' : '') + (eff !== 1 ? ' (' + (herald ? 'Herald' : 'Vow') + ' effect x' + +eff.toFixed(2) + ')' : ''), key);
@@ -16916,6 +16926,7 @@ window.BOCharacter = function (ctx) {
     const nonCritMult = hallowedCritBonus ? ijNonCrit : 1;
     const critFactor = (1 - critChance / 100) * nonCritMult + critChance / 100 * effectiveMulti / 100;
     res.crit = { base: baseCrit, chance: critChance, multi: effectiveMulti, factor: critFactor, inc: critInc };
+    const ailCrit = kind => ailPreCrit(GD, kind) ? 1 : critFactor; // patch 90: ailments from the hit before crit (AilPreCrit114)
     if (hallowedCritBonus) res.notes.push('Inevitable Judgement: on this enemy your critical strikes keep ' + ijBonus + 'x their critical bonus (' + multi + '% becomes ' + +effectiveMulti.toFixed(1) + '% critical damage) and your non-critical hits deal ' + Math.round((1 - ijNonCrit) * 100) + '% less.');
 
 
@@ -18443,7 +18454,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-      const eligible = ((hit.Poison ? hit.Poison.avg : 0) + (poisonChanceStat > 0 && hit.Physical ? hit.Physical.avg / ruthK : 0)) * critFactor / hitFactor; // ruthK: Ruthless does not raise the poison (its text, build 85)
+      const eligible = ((hit.Poison ? hit.Poison.avg : 0) + (poisonChanceStat > 0 && hit.Physical ? hit.Physical.avg / ruthK : 0)) * ailCrit('Poison') / hitFactor; // ruthK: Ruthless does not raise the poison (its text, build 85)
       if (!hasPoison && !(poisonChanceStat > 0 && hit.Physical)) pChance = 0;
       if (pChance > 0 && eligible > 0) {
         const pInc = sumMod('PoisonDamage', 'Inc') + ailSpill(pChanceRaw, 'Poison'), pMore = sumMod('PoisonDamage', 'More');
@@ -18492,7 +18503,7 @@ window.BOCharacter = function (ctx) {
       if (hit.Fire && igChance > 0) {
         const iInc = sumMod('IgniteDamage', 'Inc') + ailSpill(igChanceRaw, 'Ignite'), iMore = sumMod('IgniteDamage', 'More');
         const dur = snap(A.IgniteSeconds * (1 + ailDur / 100));
-        const dps1 = hit.Fire.avg * critFactor * A.IgniteFrac / A.IgniteSeconds * Math.max(0, 1 + iInc / 100) * iMore * Math.max(0, 1 + dotMulti / 100);
+        const dps1 = hit.Fire.avg * ailCrit('Ignite') * A.IgniteFrac / A.IgniteSeconds * Math.max(0, 1 + iInc / 100) * iMore * Math.max(0, 1 + dotMulti / 100);
         const mu = hitsPerSec * igChance / 100 * dur;
         const uptime = 1 - Math.exp(-mu);
 
@@ -18560,7 +18571,7 @@ window.BOCharacter = function (ctx) {
         for (const s of res.supports) { const d = s.ok && GD.supports[lc(s.id)] && /Bleeding[^.]*?for (\d+(?:\.\d+)?) seconds/i.exec(GD.supports[lc(s.id)].Description || ''); if (d) { baseDur = +d[1]; break; } }
         const dur = snap(baseDur * (1 + ailDur / 100));
         const coef = (A.BleedFracPerSec || 0.5) * Math.max(0, 1 + bInc / 100) * bMore * Math.max(0, 1 + dotMulti / 100);
-        const dps1 = hit.Physical.avg / ruthK * critFactor * coef; // a bleed from the average hit (Ruthless taken out: it does not raise the bleed, its text, build 85)
+        const dps1 = hit.Physical.avg / ruthK * ailCrit('Bleed') * coef; // a bleed from the average hit (Ruthless taken out: it does not raise the bleed, its text, build 85)
 
 
 
@@ -18578,10 +18589,11 @@ window.BOCharacter = function (ctx) {
 
 
         const P = hit.Physical, shares = rollShares || [1];
-        let kept = P.avg * critFactor;
+        const bPre = ailPreCrit(GD, 'Bleed'); // patch 90: no crit roll in the bleed's size
+        let kept = P.avg * ailCrit('Bleed');
         if (rollsPerSec > 0 && P.max > 0) {
           const lo = P.min > 0 ? P.min : P.avg, span = Math.max(0, (P.max || P.avg) - lo);
-          const cc = critChance / 100, cm = effectiveMulti / 100, nc = nonCritMult;
+          const cc = bPre ? 0 : critChance / 100, cm = effectiveMulti / 100, nc = bPre ? 1 : nonCritMult;
           const under = v => span > 0 ? clamp((v - lo) / span, 0, 1) : (v >= lo ? 1 : 0); // P(plain hit <= v)
           const mu = rollsPerSec * dur / shares.length;
           const top = (P.max || P.avg) * Math.max(cm, nc, 1) * Math.max(...shares), n = 400, dx = top / n;
@@ -18777,7 +18789,7 @@ window.BOCharacter = function (ctx) {
 
         if (f === 'Asc71_HoarfrostDive' && isBoss && res.freeze && !o._barProbe && is079(GD)) {
           const META = (GD.scaling && GD.scaling.Meta) || {};
-          const barPct = META.FreezeMeterPct > 0 ? META.FreezeMeterPct : 12, grow = META.FreezeMeterGrowth > 1 ? META.FreezeMeterGrowth : 1.5;
+          const barPct = META.FreezeMeterPct > 0 ? META.FreezeMeterPct : 12, grow = META.FreezeMeterGrowth > 0 ? META.FreezeMeterGrowth : 1.5; // build 90: 1 (each bar the same size), so > 0, not > 1
           const win = (META.FreezeMeterSeconds != null ? META.FreezeMeterSeconds : 1.5) + (META.BrittleSeconds != null ? META.BrittleSeconds : 4);
           const mult = rr.ColdMult > 1 ? rr.ColdMult : 1.5, at = rr.MeterAt > 0 && rr.MeterAt < 1 ? rr.MeterAt : 0.5;
           const helpers = freezeHelpers();
@@ -19255,7 +19267,7 @@ window.BOCharacter = function (ctx) {
     const hasFrostbreak = !!res.freeze && res.supports.some(x => x.ok && lc(x.id) === 'frostbreak' && !(o.off && o.off.has(x.key)));
     if (res.freeze && !o._barProbe && is079(GD) && (hasFrostbreak || (isBoss && !o._noBrittle && res.freeze.coldPerSec > 0))) { // _noBrittle: nested sheets (Cast on Crit, Conduit) skip it, which would otherwise call each other for ever
       const META = (GD.scaling && GD.scaling.Meta) || {};
-      const barPct = META.FreezeMeterPct > 0 ? META.FreezeMeterPct : 12, grow = META.FreezeMeterGrowth > 1 ? META.FreezeMeterGrowth : 1.5;
+      const barPct = META.FreezeMeterPct > 0 ? META.FreezeMeterPct : 12, grow = META.FreezeMeterGrowth > 0 ? META.FreezeMeterGrowth : 1.5; // build 90: 1 (each bar the same size), so > 0, not > 1
       const win = (META.FreezeMeterSeconds != null ? META.FreezeMeterSeconds : 1.5) + (META.BrittleSeconds != null ? META.BrittleSeconds : 4);
       const more = hasFrostbreak ? ((((GD.supports.frostbreak || {}).Mods || []).find(m => m.Stat === 'FreezeBreak103') || {}).Value) || 50 : 0;
       const brittlePct = META.BrittlePct > 0 ? META.BrittlePct : 10;
@@ -19268,7 +19280,7 @@ window.BOCharacter = function (ctx) {
         const life = o.enemyLife || guardianLifeAt(GD, guardianRL(GD, o, lvl));
         const share = dmg > 0 ? cold / dmg : 0; // can pass 1: increased freeze duration counts the cold for more (20 Nov 2026)
 
-        let bars = share > 0 ? Math.max(0, Math.floor(Math.log(1 + share * 100 * (grow - 1) / barPct) / Math.log(grow) + 1e-9)) : 0;
+        let bars = share > 0 ? Math.max(0, Math.floor((Math.abs(grow - 1) < 1e-9 ? share * 100 / barPct : Math.log(1 + share * 100 * (grow - 1) / barPct) / Math.log(grow)) + 1e-9)) : 0; // grow 1 (build 90): equal bars
 
 
         const decay = META.FreezeMeterDecaySeconds > 0 ? META.FreezeMeterDecaySeconds : 6;
@@ -20206,7 +20218,7 @@ window.BOCharacter = function (ctx) {
     {
       const A = GD.scaling.Ailments || {};
       let pChance = 0, dotMulti = 0;
-      const elig = ((hit.Poison ? hit.Poison.avg : 0) + (hit.Physical ? hit.Physical.avg : 0)) * critFactor;
+      const elig = ((hit.Poison ? hit.Poison.avg : 0) + (hit.Physical ? hit.Physical.avg : 0)) * (ailPreCrit(GD, 'Poison') ? 1 : critFactor); // patch 90: AilPreCrit114
       if (A.bEnabled && A.bMinionAilments && hit.Poison && elig > 0) {
         pChance = A.PoisonChance || 0;
         for (const m of mods) {

@@ -17132,7 +17132,8 @@ window.BOCharacter = function (ctx) {
       let tsInc = 0; for (const m of pickMods(mods, 'TotemSpeed', 'Inc')) if (applies(ctx, m)) { tsInc += m.v; use(m); }
       const baseEvery = every, spellEvery = baseEvery / Math.max(0.1, 1 + tsInc / 100);
       usesPerSec = tcount / spellEvery; useTime = 1 / usesPerSec;
-      res.totem = { count: tcount, every: spellEvery }; dropOver();
+      const tLife = /\(\d+ at a time, ([\d.]+) seconds\)/i.exec((GD.supports[shape] || {}).Description || '');
+      res.totem = { count: tcount, every: spellEvery, baseLife: tLife ? +tLife[1] : 8, shotsPerSec: 1 / spellEvery }; dropOver();
       res.notes.push('Totem: ' + tcount + ' totem' + (tcount > 1 ? 's' : '') + ', each ' + (isAttack ? 'firing' : 'casting') + ' it every ' + spellEvery.toFixed(2) + ' s' + (tsInc ? ' (' + baseEvery + ' s with ' + Math.round(tsInc) + '% increased totem speed)' : '') + '; your ' + (isAttack ? 'attack' : 'cast') + ' speed only places totems faster; assumes every totem ' + (isAttack ? 'shoots' : 'casts at') + ' this enemy.');
 
       if (is0565(GD) && tcount > 1) {
@@ -17387,6 +17388,7 @@ window.BOCharacter = function (ctx) {
 
 
 
+
       if (tt.Kind === 'Ballista' && pickMods(mods, 'BallistaVolley76', 'Flat').length) {
         pickMods(mods, 'BallistaVolley76', 'Flat').forEach(m => use(m, 'extra volleys on crit'));
         const gap = spotterGap(GD, mods);
@@ -17394,7 +17396,7 @@ window.BOCharacter = function (ctx) {
         usesPerSec += extra; useTime = 1 / usesPerSec;
         res.notes.push("Bina's Spotter's Helm: crits make each Ballista fire an extra volley (at most one every " + gap + ' s each): +' + extra.toFixed(2) + ' volleys a second.');
       }
-      res.totem = { count, every }; dropOver();
+      res.totem = { count, every, baseLife: tt.Duration || 10, shotsPerSec: usesPerSec / Math.max(1, count) }; dropOver();
 
 
 
@@ -17766,9 +17768,42 @@ window.BOCharacter = function (ctx) {
 
 
 
-    if (is081(GD) && o.spotterRamp !== false && (res.totem || totemShape) && pickMods(mods, 'BallistaVolley76', 'Flat').length && ['rare', 'boss'].includes(o.enemyRarity || 'rare')) {
-      hitFactor *= 1 + SPOTTER_RAMP_MAX / 100; res.spotterRamp = SPOTTER_RAMP_MAX;
-      res.notes.push("Bina's Spotter's Helm: shots in a row at the same enemy deal " + SPOTTER_RAMP_PER + '% more each, counted at the full ' + SPOTTER_RAMP_MAX + '% (after ' + Math.round(SPOTTER_RAMP_MAX / SPOTTER_RAMP_PER) + ' shots) on a Rare or Guardian. Packs do not get it.');
+
+
+
+
+
+
+
+
+
+
+    if (is081(GD) && o.spotterRamp !== false && res.totem && pickMods(mods, 'BallistaVolley76', 'Flat').length && ['rare', 'boss'].includes(o.enemyRarity || 'rare')) {
+      let durInc = 0, durMore = 1;
+      for (const m of pickMods(mods, 'SkillDuration', 'Inc')) if (applies(ctx, m)) { durInc += m.v; use(m); }
+      for (const m of pickMods(mods, 'SkillDuration', 'More')) if (applies(ctx, m)) { durMore *= Math.max(0, 1 + m.v / 100); use(m); }
+
+
+
+
+      const noExpire = modsOf(mods, 'Keystone').some(m => m.stat === 'Keystone' && m.mode === 'Flag' && (m.tags || []).includes('TotemNoExpire'));
+      const life = noExpire ? Infinity : res.totem.baseLife * Math.max(0, 1 + durInc / 100) * durMore, rate = res.totem.shotsPerSec || 0;
+      const capShot = SPOTTER_RAMP_MAX / SPOTTER_RAMP_PER + 1, toCap = rate > 0 ? (capShot - 1) / rate : Infinity;
+      const shots = life * rate, endless = !Number.isFinite(shots);
+      let avg;
+      if (endless) avg = rate > 0 ? SPOTTER_RAMP_MAX : 0;
+      else {
+
+
+        const n = Math.max(1, shots), whole = Math.floor(n), c = capShot;
+        const upTo = w => w <= c ? SPOTTER_RAMP_PER * w * (w - 1) / 2 : SPOTTER_RAMP_PER * c * (c - 1) / 2 + SPOTTER_RAMP_MAX * (w - c);
+        avg = (upTo(whole) + (n - whole) * Math.min(SPOTTER_RAMP_MAX, SPOTTER_RAMP_PER * whole)) / n;
+      }
+      hitFactor *= 1 + avg / 100; res.spotterRamp = avg;
+      res.spotterRampInfo = { life, shotsPerSec: rate, shots, toCap, noExpire };
+      res.notes.push("Bina's Spotter's Helm: each Ballista's shots in a row deal " + SPOTTER_RAMP_PER + '% more each (its own count, from 0 again for a new one), up to ' + SPOTTER_RAMP_MAX + '% from shot ' + capShot + '. ' + (endless
+        ? (noExpire ? 'The Unfallen Ancestor: your Ballistas never expire, so each keeps its count: ' : 'Each Ballista keeps its count: ') + SPOTTER_RAMP_MAX + '% after ' + toCap.toFixed(1) + ' s, counted in full'
+        : 'Each fires ' + rate.toFixed(2) + ' shots a second for ' + +life.toFixed(1) + ' s (' + Math.round(shots) + ' shots' + (toCap <= life ? ', ' + SPOTTER_RAMP_MAX + '% after ' + toCap.toFixed(1) + ' s' : ', never reaching ' + SPOTTER_RAMP_MAX + '%') + '): ' + avg.toFixed(1) + '% more on average over its life') + ' on a Rare or Guardian. Packs do not get it.');
     }
 
 

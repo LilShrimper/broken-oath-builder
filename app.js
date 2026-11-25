@@ -15542,7 +15542,12 @@ window.BOCharacter = function (ctx) {
       const near = Object.values(GD.blessings).find(b => b.Kind === 'Stack' && /_near$/.test(b.Id) && b.Name === sk0.Name);
       if (!near) continue;
       const key = 'companion:' + lc(id);
-      const n = tagsK.includes('Companion') ? (sk0.Minion ? (sk0.Minion.Count || 2) + (sk0.Minion.PerLevels || []).filter(l => (ch.gemLevels[id] || 1) >= l).length : 2) : 1;
+
+
+
+      const capFit = m => m.stat === 'MinionCap' && m.mode === 'Flat' && (m.tags || []).every(t => tagsK.some(x => lc(x) === lc(t)) || lc(t) === lc((sk0.Minion || {}).MonsterId || ''));
+      const capAdd = tagsK.includes('Companion') && sk0.Minion ? mods.filter(capFit).reduce((s, m) => s + (m.v || 0), 0) : 0;
+      const n = tagsK.includes('Companion') ? (sk0.Minion ? (sk0.Minion.Count || 2) + (sk0.Minion.PerLevels || []).filter(l => (ch.gemLevels[id] || 1) >= l).length + capAdd : 2) : 1;
       sources.push({ key, label: sk0.Name + (n > 1 ? ' x' + n : '') + ' (near you)', group: 'Vows & Heralds' });
       if (off.has(key)) continue;
       for (const m of near.Mods || []) add(m, (m.Value || 0) * (m.PerStack ? n : 1), m.Value2, sk0.Name + (n > 1 ? ' x' + n : '') + ' (patch 79, counted as near you)', key);

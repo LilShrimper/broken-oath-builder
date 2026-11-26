@@ -1383,6 +1383,27 @@ window.PAGE_LANGS = {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 (function (root) {
   'use strict';
 
@@ -1390,6 +1411,25 @@ window.PAGE_LANGS = {
   const MIN_GAIN = 0.001;    // a swap must gain at least 0.1% DPS
   const OWN_KEEP = 0.002;    // a taken node worth 0.2% or more is a target, not a path node
   const DRAGON_Q = 0.9;      // with the Dragonling step on, the passive search reports 0-90% and the Dragonling 90-100%
+
+  const SLACK = 1.5;         // a pick is simmed while its estimate x this could still beat the best pick simmed so far
+  const REPROBE = 12;        // the per-node estimates are measured again once the tree has moved by this many nodes
+  const REACH_TRY = 10;      // far nodes simmed with their path per round of "reach for a strong node"
+  const REACH_MOVE = 4;      // of those, how many are tried as a move (refund the weakest leaves to pay for the path)
+
+
+
+
+
+  const SHEET_STATS = { MinionDamage: 'minion', MinionKindMore: 'minion', TotemCount: 'totem', TotemSpeed: 'totem', FortifyDamage: '', FocusMain98: '', FocusOther98: '' };
+
+  function uncountedLine(S, m, on) {
+    if (m.Mode === 'Trigger') return !(S.trigCounted && S.trigCounted(m));
+    if (m.Mode === 'Flag') return true;
+    if (S.counted(m.Stat)) return false;
+    const what = SHEET_STATS[m.Stat];
+    return what === undefined || (what !== '' && !(on && on[what]));
+  }
 
   const dragonTreeOf = (GD, ch) => ((GD.dragon || {}).classes || {})[String(ch.classId).toLowerCase()] || {};
   const dragonOn = (GD, ch, cfg) => !!(cfg && cfg.dragon && ((GD.dragon || {}).tree || {}).asc2 && Object.keys(dragonTreeOf(GD, ch)).length);
@@ -1421,6 +1461,22 @@ window.PAGE_LANGS = {
 
 
     const cache = new Map(); let calcs = 0, tries = 0;
+
+
+
+
+    const seatNb = new Set(); for (const m of Object.values(GD.masteries || {})) for (const x of m.Notables || []) seatNb.add(x);
+    const sigIx = new Map(), sigMemo = Object.create(null);
+    const sigOf = id => {
+      let k = sigMemo[id];
+      if (k === undefined) {
+        const n = nodes[id];
+        if (n && (n.Kind === 'Small' || n.Kind === 'Attribute') && !n.Choice && !seatNb.has(id)) { const j = JSON.stringify(n.Mods || []); k = sigIx.get(j); if (k === undefined) sigIx.set(j, k = '#' + sigIx.size); }
+        else k = id;
+        sigMemo[id] = k;
+      }
+      return k;
+    };
     const multi = Array.isArray(skill);
     let goals = (multi ? skill : [{ id: skill, w: 1 }]).filter(g => g && g.id && g.w > 0).map(g => ({ id: g.id, w: +g.w, opt: g.opt || simOpt }));
 
@@ -1430,14 +1486,23 @@ window.PAGE_LANGS = {
 
     const dOn = dragonOn(GD, ch, cfg), dT = dragonTreeOf(GD, ch);
     const dHave0 = dOn ? (S.dragonIds ? S.dragonIds(GD, ch) : (ch.dragonNodes || []).filter(id => dT[id])) : [];
-    let dList = dHave0.slice(), dK = '', dA = ch.dragonAspect || '';
+
+    const aspect0 = S.aspectId ? S.aspectId(GD, ch.dragonAspect) : (ch.dragonAspect || '');
+    let dList = dHave0.slice(), dK = '', dA = aspect0;
     const setD = set => { dList = [...set].sort(); dK = '|d:' + dA + ':' + dList.join(','); };
     const setA = a => { dA = a || ''; setD(dList); };
     if (dOn) setD(dHave0);
-    const defence = list => cfg.defence(list, oathMap, dOn ? dList : null, dOn ? dA : null);
+
+
+
+    const simList = list => list.length ? list : [s0];
+    const defence = list => cfg.defence(simList(list), oathMap, dOn ? dList : null, dOn ? dA : null);
+
+    const stats = {}; let cat = 'tree';
+    const as = (c, f) => { const p = cat; cat = c; try { return f(); } finally { cat = p; } };
     const dpsOf = (g, list) => {
-      calcs++;
-      const r = g.r = S.calcSkill(GD, Object.assign({}, ch, { passives: list, oaths: oathMap }, dOn ? { dragonNodes: dList, dragonAspect: dA } : null), g.id, g.opt);
+      calcs++; stats[cat] = (stats[cat] || 0) + 1;
+      const r = g.r = S.calcSkill(GD, Object.assign({}, ch, { passives: simList(list), oaths: oathMap }, dOn ? { dragonNodes: dList, dragonAspect: dA } : null), g.id, g.opt);
       let v = r && r.totalDps > 0 ? r.totalDps : 0;
 
 
@@ -1455,12 +1520,14 @@ window.PAGE_LANGS = {
     for (const g of goals) g.base = dpsOf(g, haveList);
     const dropped = goals.filter(g => !(g.base > 0)).map(g => g.id);
     goals = goals.filter(g => g.base > 0);
+
+    const minionGoal = goals.some(g => g.r && g.r.minion), totemGoal = goals.some(g => g.r && g.r.totem);
     const wSum = goals.reduce((a, g) => a + g.w, 0);
 
     const defW = typeof cfg.defence === 'function' ? Math.max(0, Math.min(1, +cfg.defWeight || 0)) : 0, scored = defW > 0;
     const def0 = scored ? defence(haveList) : null;
     const V = set => {
-      const list = [...set].sort(); const key = list.join(',') + oKey + dK;
+      const list = [...set].sort(); const key = list.map(sigOf).sort().join(',') + oKey + dK;
       let v = cache.get(key);
       if (v === undefined) {
         if (goals.length === 1 && !multi && !scored) v = dpsOf(goals[0], list);
@@ -1480,8 +1547,12 @@ window.PAGE_LANGS = {
     if (!(base > 0)) return { error: 'This skill has no DPS to optimize.' };
 
 
-    const isUncounted = m => m.Mode === 'Trigger' || m.Mode === 'Flag' || !S.counted(m.Stat);
-    const dmgish = m => !isUncounted(m) && (S.damageStat(m.Stat) || ATTR.includes(m.Stat));
+
+
+
+
+    const isUncounted = m => uncountedLine(S, m, { minion: minionGoal, totem: totemGoal });
+    const dmgish = m => !isUncounted(m) && (S.damageStat(m.Stat) || ATTR.includes(m.Stat) || m.Stat in SHEET_STATS);
     const big = n => n.Kind === 'Notable' || n.Kind === 'Choice';
     const why = {};
 
@@ -1505,7 +1576,7 @@ window.PAGE_LANGS = {
       if (n.Kind === 'Keystone') why[id] = 'keystone';
       else if (n.Kind === 'Socket' && sockWant == null) why[id] = 'never refunded';
 
-      else if (mods.some(m => m.Mode === 'Trigger' || m.Mode === 'Flag') || (big(n) && mods.some(isUncounted))) why[id] = 'has lines the sim does not count';
+      else if (mods.some(m => (m.Mode === 'Trigger' || m.Mode === 'Flag') && isUncounted(m)) || (big(n) && mods.some(isUncounted))) why[id] = 'has lines the sim does not count';
       else if (cfg.keepDefence && big(n) && mods.length && !mods.some(dmgish)) why[id] = 'no damage lines';
     }
 
@@ -1523,12 +1594,19 @@ window.PAGE_LANGS = {
       return keep;
     };
 
-    const bfs = (set, avoid) => {
+
+
+    const walkOk = new Set(Object.keys(nodes).filter(walkable));
+    const bfs = (set, avoid, maxD, first) => {
       const dist = new Map(), prev = new Map(), q = [s0, ...set];
       for (const x of q) dist.set(x, 0);
       for (let i = 0; i < q.length; i++) {
         const u = q[i], d = dist.get(u);
-        for (const v of adj[u] || []) if (!dist.has(v) && walkable(v) && !(avoid && avoid(v))) { dist.set(v, d + 1); prev.set(v, u); q.push(v); }
+        if (maxD !== undefined && d >= maxD) break; // nodes come out nearest first: everything after is as far or further
+        for (const v of adj[u] || []) if (!dist.has(v) && walkOk.has(v) && !(avoid && avoid(v))) {
+          dist.set(v, d + 1); prev.set(v, u); q.push(v);
+          if (first && first.has(v)) return { dist, prev, hit: v };
+        }
       }
       return { dist, prev };
     };
@@ -1631,7 +1709,9 @@ window.PAGE_LANGS = {
     const own = {};
     let k = 0;
 
-    const qVal = cfg.addOnly ? 0.4 : 0.3;
+
+    const qVal = cfg.addOnly ? 0.4 : 0.3, qPlan = cfg.addOnly ? ((cfg.extraPoints | 0) >= 6 ? 0.8 : 1) : 0.6;
+    let reached = 0, refined = false;
     for (const id of have) {
       const s = new Set(have); s.delete(id);
       own[id] = 1 - V(s) / baseW;
@@ -1643,71 +1723,162 @@ window.PAGE_LANGS = {
 
 
 
-    const changesPlay = n => n.Kind === 'Keystone' || (n.Mods || []).some(m => m.Mode === 'Trigger' || m.Mode === 'Flag');
+
+
+
+
+
+
+    const SHAPE_GRANT = new Set(['orbit', 'skyfall', 'rain_support', 'trap_support', 'totem_support', 'arrow_totem', 'channel_conduit']); // sim.js SHAPES + the conduit
+    const plainGrant = m => m.Stat === 'GrantSupport' && !(m.Tags || []).some(x => SHAPE_GRANT.has(String(x).toLowerCase()));
+    const changesPlay = n => n.Kind === 'Keystone' || (n.Mods || []).some(m => m.Mode === 'Flag' && !plainGrant(m));
 
     const DEF_STATS = new Set(cfg.defStats || ['Life', 'EnergyShield', 'Resist']);
     const defish = m => scored && m.Mode !== 'Trigger' && m.Mode !== 'Flag' && DEF_STATS.has(m.Stat);
-    const useful = Object.keys(nodes).filter(id => walkable(id) && (nodes[id].Mods || []).some(m => dmgish(m) || defish(m)) && (cfg.allowKeystones || !changesPlay(nodes[id]) || have.has(id)));
+    const statUseful = id => (nodes[id].Mods || []).some(m => dmgish(m) || defish(m));
+
+
+    const pool = Object.keys(nodes).filter(id => walkable(id) && (cfg.allowKeystones || !changesPlay(nodes[id]) || have.has(id)) && (sockWant == null || !isSock(id) || have.has(id) || sockIds.includes(id)));
+
+
+
+
+
+
+
+
+
+
+    let pBase = new Set(have), pV = baseW, pSolo = new Map(), probes = 0;
+
+
+
+    const setProbe = (set, full) => {
+      const old = pSolo; pBase = new Set(set); pV = V(pBase); pSolo = new Map(); probes++;
+      if (!full && probes % 3) for (const [k, v] of old) if (v === 0 || (v < 1e-9 && v > -1e-9)) pSolo.set(k, 0);
+    };
+    const drift = set => { let n = 0; for (const x of set) if (!pBase.has(x)) n++; for (const x of pBase) if (!set.has(x)) n++; return n; };
+    const soloOf = id => {
+      const k = sigOf(id); let v = pSolo.get(k);
+      if (v === undefined) as('probe', () => {
+        const s = new Set(pBase);
+        if (s.has(id)) { s.delete(id); const w = V(s); v = w > 0 ? pV / w - 1 : 1e6; } // taken there: what refunding it loses
+        else { s.add(id); v = pV > 0 ? V(s) / pV - 1 : 0; }
+        pSolo.set(k, v);
+      });
+      return v;
+    };
+    const upOf = path => { let u = 1; for (const x of path) { const v = soloOf(x); if (v > 0) u *= 1 + v; } return u - 1; };
+
+    let yAt = 0; const tick = () => calcs - yAt >= 3 ? ((yAt = calcs), true) : false;
+
+    const maxMs = +cfg.maxMs > 0 ? +cfg.maxMs : Infinity; let timedOut = false;
+    const late = () => Date.now() - t0 > maxMs ? (timedOut = true) : false;
+
 
 
 
     const NOT_CLUSTER = new Set(['path', 'hub', 'waygate', 'start', 'keystone']);
     const clusterOf = id => { const n = nodes[id]; return n && n.Group && !NOT_CLUSTER.has(n.Group) ? n.Group + '|' + n.Region : null; };
     const clusters = new Map();
-    for (const id of useful) { const c = clusterOf(id); if (c && !altarOf(id)) (clusters.get(c) || clusters.set(c, []).get(c)).push(id); }
+    for (const id of pool) { const c = clusterOf(id); if (c && !altarOf(id) && (nodes[id].Mods || []).length) (clusters.get(c) || clusters.set(c, []).get(c)).push(id); }
+    const avoidAltar = set => v => !!otherAtAltar(set, v);
 
-    function* spend(start, points, steps) {
-      const tree = new Set(start); let cur = V(tree); const total = points;
+
+    function* picksFrom(tree, points, only) {
+      const stay = only ? v => !only.has(v) || !!otherAtAltar(tree, v) : avoidAltar(tree);
+      const b = bfs(tree, stay, points), out = [];
+      for (const id of pool) {
+        if (tree.has(id) || (only && !only.has(id))) continue;
+        const other = otherAtAltar(tree, id);
+        if (other) {
+
+          if (cfg.addOnly || only || kept.has(other) || !statUseful(id)) continue;
+          out.push({ id, other, ub: Infinity }); continue;
+        }
+        const d = b.dist.get(id); if (d === undefined || d > points) continue;
+        if (!only && !(soloOf(id) > 1e-6)) continue;
+        const path = pathOf(b, tree, id), u = upOf(path);
+        if (only || u > 1e-6) out.push({ id, path, cost: path.length, u, ub: u * SLACK / Math.max(path.length, 0.5) });
+        if (tick()) yield null;
+      }
+      if (cfg.clusters !== false) for (const ids of clusters.values()) {
+        const rem = new Set(ids.filter(id => !tree.has(id) && (!only || only.has(id))));
+        if (rem.size < 2 || ![...rem].some(id => { const d = b.dist.get(id); return d !== undefined && d <= points; })) continue;
+        for (const id of [...rem]) if (!(statUseful(id) || soloOf(id) > 1e-6)) rem.delete(id);
+        if (rem.size < 2 || !(upOf([...rem]) > 1e-6)) continue;
+        const set = new Set(tree), seq = []; let bb = b, n = 0;
+        while (rem.size) {
+          let pick = bb.hit || null, pd = pick ? bb.dist.get(pick) : Infinity;
+          if (!pick) for (const t of rem) { const d = bb.dist.get(t); if (d !== undefined && d < pd) { pick = t; pd = d; } }
+          if (!pick || seq.length + pd > points) break;
+          for (const x of pathOf(bb, set, pick)) { set.add(x); seq.push(x); }
+          for (const t of [...rem]) if (set.has(t)) { rem.delete(t); n++; }
+          if (n >= 2) { const u = upOf(seq); if (u > 1e-6) out.push({ list: new Set(set), path: seq.slice(), cost: seq.length, u, ub: u * SLACK / seq.length, bundle: true }); }
+          if (rem.size) bb = bfs(set, only ? v => !only.has(v) || !!otherAtAltar(set, v) : avoidAltar(set), points - seq.length, rem);
+          if (tick()) yield null;
+        }
+      }
+      return out.sort((x, y) => y.ub - x.ub || (x.cost - y.cost));
+    }
+
+
+    const simPick = (tree, cur, c, points) => {
+      let list = c.list, cost = c.cost;
+      if (c.other) {
+        const s = new Set(tree); s.delete(c.other); s.add(c.id); const cn = connected(s);
+        if (!cn.has(c.id) || [...kept].some(x => tree.has(x) && !cn.has(x))) return null;
+        list = cn; cost = cn.size - tree.size;
+      } else if (!list) { list = new Set(tree); for (const x of c.path) list.add(x); }
+      if (cost > points) return null;
+      const g = as('pick', () => V(list)) / cur - 1;
+      if (!c.other && !c.bundle && g > c.u + 1e-9) { const v = soloOf(c.id); pSolo.set(sigOf(c.id), (1 + g) * (1 + Math.max(0, v)) / (1 + c.u) - 1); }
+      return { list, cost, g, per: g / Math.max(cost, 0.5), path: c.path || [c.id], swapped: c.other || null };
+    };
+
+
+
+
+
+    function* spend(start, points, steps, only, pinned) {
+      const tree = new Set(start); let cur = V(tree); const total = Math.max(1, points); let fresh = false;
       while (points > 0) {
-        const avoidAltar = set => v => !!otherAtAltar(set, v);
-        const b = bfs(tree, avoidAltar(tree));
+        if (!pinned && drift(tree) >= REPROBE) { setProbe(tree); fresh = true; }
+        const cands = yield* picksFrom(tree, points, only);
         let best = null;
-        for (const id of useful) {
-          if (tree.has(id)) continue;
-          let list, cost, path = [id];
-          const other = otherAtAltar(tree, id);
-          if (other && cfg.addOnly) continue; // an altar swap refunds the other option
-          if (other) {
-
-            if (kept.has(other)) continue;
-            const s = new Set(tree); s.delete(other); s.add(id); const c = connected(s);
-            if (!c.has(id) || [...kept].some(x => tree.has(x) && !c.has(x))) continue;
-            list = c; cost = c.size - tree.size;
-          } else {
-            const d = b.dist.get(id); if (d === undefined || d > points) continue;
-            path = pathOf(b, tree, id); list = new Set(tree); for (const x of path) list.add(x); cost = list.size - tree.size;
-          }
-          if (cost > points) continue;
-          const g = V(list) / cur - 1; if (g <= 1e-6) continue;
-          const per = g / Math.max(cost, 0.5);
-          if (!best || per > best.per) best = { list, per, cost, g, path, swapped: other || null };
-          if (++tries % 40 === 0) yield null;
+        for (const c of cands) {
+          if (best && c.ub <= best.per) break; // nothing below can beat it, even at its ceiling
+          const r = simPick(tree, cur, c, points);
+          if (r && r.g > 1e-6 && (!best || r.per > best.per)) best = r;
+          if (tick()) yield null;
         }
+        if (!best && only) {
 
+          const c = cands.filter(x => !x.other && x.cost <= points).sort((x, y) => x.cost - y.cost)[0];
+          if (c) { const r = simPick(tree, cur, c, points); if (r) best = r; }
+        }
+        if (!best) {
 
-        if (cfg.clusters !== false) for (const ids of clusters.values()) {
-          const rem = new Set(ids.filter(id => !tree.has(id)));
-          if (rem.size < 2 || ![...rem].some(id => { const d = b.dist.get(id); return d !== undefined && d <= points; })) continue;
-          const set = new Set(tree), seq = []; let bb = b, n = 0;
-          while (rem.size) {
-            let pick = null, pd = Infinity;
-            for (const t of rem) { const d = bb.dist.get(t); if (d !== undefined && d < pd) { pick = t; pd = d; } }
-            if (!pick || seq.length + pd > points) break;
-            for (const x of pathOf(bb, set, pick)) { set.add(x); seq.push(x); }
-            for (const t of [...rem]) if (set.has(t)) { rem.delete(t); n++; }
-            if (n >= 2) {
-              const g = V(set) / cur - 1, per = g / seq.length;
-              if (g > 1e-6 && (!best || per > best.per)) best = { list: new Set(set), per, cost: seq.length, g, path: seq.slice(), swapped: null };
+          if (!fresh && drift(tree) > 0) {
+            if (!pinned) { setProbe(tree, true); fresh = true; continue; }
+
+            const keep = [pBase, pV, pSolo]; setProbe(tree, true);
+            for (const c of yield* picksFrom(tree, points, only)) {
+              if (best && c.ub <= best.per) break;
+              const r = simPick(tree, cur, c, points);
+              if (r && r.g > 1e-6 && (!best || r.per > best.per)) best = r;
+              if (tick()) yield null;
             }
-            if (rem.size) bb = bfs(set, avoidAltar(set));
-            if (++tries % 10 === 0) yield null;
+            [pBase, pV, pSolo] = keep;
           }
+          if (!best) break;
         }
-        if (!best) break;
+        fresh = false;
         for (const x of [...tree]) if (!best.list.has(x)) tree.delete(x);
         for (const x of best.list) tree.add(x);
         points -= best.cost; cur = V(tree);
-        if (steps) { steps.push({ nodes: best.path, cost: best.cost, gain: best.g, swapped: best.swapped }); yield { phase: 'Planning points', p: 1 - points / total, q: qVal + (1 - qVal) * (1 - points / total) }; }
+        if (steps) { steps.push({ nodes: best.path, cost: best.cost, gain: best.g, swapped: best.swapped }); yield { phase: 'Planning points', p: 1 - points / total, q: qVal + (qPlan - qVal) * (1 - points / total) }; }
+        else yield null;
       }
       return tree;
     }
@@ -1742,15 +1913,96 @@ window.PAGE_LANGS = {
       return s;
     };
 
+
+
+
+
+
+
+
+    function* improve(best, bestV, lock, qa, qb) {
+      const ITER = 14; let iter = 0, round = 0;
+      const span = Math.max(0, [...best].filter(id => !lock.has(id)).length);
+      for (;;) {
+        for (; iter < ITER && !late(); iter++) {
+          yield { phase: 'Trying swaps', p: iter / ITER, q: qa + (qb - qa) * iter / ITER };
+          if (drift(best) >= REPROBE) setProbe(best);
+          const cur = bestV, seen = new Set(), branches = [];
+          for (const id of best) {
+            if (lock.has(id)) continue;
+            const rem = dependents(best, id);
+            if (rem.some(x => lock.has(x))) continue;
+            const key = rem.slice().sort().join(','); if (seen.has(key)) continue; seen.add(key);
+            const s = new Set(best); for (const x of rem) s.delete(x);
+            branches.push({ rem, loss: (1 - as('branch', () => V(s)) / cur) / rem.length });
+            if (tick()) yield null;
+          }
+          branches.sort((a, b) => a.loss - b.loss);
+          const trials = branches.slice(0, 5).map(b => b.rem);
+          for (let i = 0; i < Math.min(4, branches.length); i++) for (let j = i + 1; j < Math.min(4, branches.length); j++) trials.push([...new Set([...branches[i].rem, ...branches[j].rem])]);
+          let found = null, fv = cur * (1 + MIN_GAIN);
+          for (const rem of trials) {
+            const s = new Set(best); for (const x of rem) s.delete(x);
+            const c = connected(s); if (c.size !== s.size) continue;
+            const t = yield* drain(spend(s, budget - s.size, null, null, true));
+            const v = V(t);
+            if (v > fv) { found = t; fv = v; }
+            if (late()) break;
+          }
+          if (!found) break;
+          best = found; bestV = fv;
+        }
+        if (round++ >= 2 || !span || late()) break;
+        yield { phase: 'Trying swaps', p: round / 3, q: qa + (qb - qa) * Math.min(1, (iter + 1) / ITER) };
+        if (drift(best) >= REPROBE) setProbe(best);
+        const free = budget - best.size;
+        const far = (yield* picksFrom(best, Math.min(span + free, 14), null)).filter(c => !c.other && c.cost > free).slice(0, REACH_TRY);
+        const sims = [];
+        for (const c of far) { const r = simPick(best, bestV, c, Infinity); if (r && r.g > MIN_GAIN) sims.push(r); if (tick()) yield null; }
+        sims.sort((a, b) => b.per - a.per);
+        let found = null, fv = bestV * (1 + MIN_GAIN);
+        for (const r of sims.slice(0, REACH_MOVE)) {
+          const s = new Set(r.list), path = new Set(r.path), keepsOf = new Map(); let ok = true, sv = V(s);
+          while (s.size > budget) {
+
+            let low = null, lk = -1;
+            for (const id of s) {
+              if (lock.has(id) || path.has(id) || dependents(s, id).length !== 1) continue;
+              let k = keepsOf.get(id);
+              if (k === undefined) { const t = new Set(s); t.delete(id); k = as('leaf', () => V(t)) / sv; keepsOf.set(id, k); if (tick()) yield null; }
+              if (k > lk) { lk = k; low = id; }
+            }
+            if (!low) { ok = false; break; }
+            s.delete(low); keepsOf.delete(low); sv = V(s);
+            if (sv <= fv) { ok = false; break; } // the refunds already cost more than the node gives
+          }
+          if (!ok) continue;
+          const t = s.size < budget ? yield* drain(spend(s, budget - s.size, null, null, true)) : s;
+          const v = V(t);
+          if (v > fv) { found = t; fv = v; }
+          if (late()) break;
+        }
+        if (!found) break;
+        best = found; bestV = fv; reached++;
+        if (iter >= ITER) iter = ITER - 3; // a new part of the tree: a few more swaps around it
+      }
+      return { best, bestV };
+    }
+
     yield { phase: cfg.addOnly ? 'Planning points' : 'Re-routing', p: 0, q: qVal };
     const starts = [], fits = s => !!s && s.size <= budget;
-    if (budget > have.size) { const s = withKeeps(have); if (fits(s)) starts.push(s); } // free points: spend them on the tree as it is
+
+
+
+    const haveC = connected(have), cutOff = have.size - haveC.size;
+    if (budget > haveC.size) { const s = withKeeps(haveC); if (fits(s)) starts.push(s); } // free points: spend them on the tree as it is
     if (!cfg.addOnly) {
-      const pruned = prune(have); if (pruned.size < have.size) { const s = withKeeps(pruned); if (fits(s)) starts.push(s); }
-      const rebuilt = rebuild(); if (fits(rebuilt)) starts.push(rebuilt);
+      const pruned = prune(haveC); if (pruned.size < haveC.size) { const s = withKeeps(pruned); if (fits(s)) starts.push(s); }
+
+      const rebuilt = rebuild(); if (fits(rebuilt)) { if (cutOff) starts.length = 0; starts.push(rebuilt); }
 
       if (keepIds.some(id => !have.has(id)) && !starts.length) {
-        const s = rebuilt || withKeeps(prune(have));
+        const s = rebuilt || withKeeps(prune(haveC));
         while (s && s.size > budget) {
           let low = null;
           for (const id of s) if (!kept.has(id) && dependents(s, id).length === 1 && (!low || (own[id] || 0) < (own[low] || 0))) low = id;
@@ -1762,52 +2014,41 @@ window.PAGE_LANGS = {
     }
 
     const missing0 = keepIds.some(id => !have.has(id));
-    let best = new Set(have), bestV = missing0 ? -Infinity : baseW;
+    let best = new Set(have), bestV = missing0 || cutOff ? -Infinity : baseW;
 
-    const steps = [];
+    let steps = [];
     if (cfg.addOnly) {
-      const s = withKeeps(have, steps), from = fits(s) ? s : (steps.length = 0, have);
-      best = yield* drain(spend(from, budget - from.size, steps)); bestV = V(best); starts.length = 0;
+      const s = withKeeps(haveC, steps), from = fits(s) ? s : (steps.length = 0, haveC);
+      const greedy = steps.slice(), nKeep = steps.length;
+      best = yield* drain(spend(from, budget - from.size, greedy)); bestV = V(best); starts.length = 0;
+      steps = greedy;
+
+
+
+
+      if (best.size - from.size >= 6) {
+        const lock = new Set([...kept, ...from]);
+        const r = yield* improve(best, bestV, lock, qPlan, 0.97);
+        if (r.bestV > bestV * (1 + MIN_GAIN)) {
+          const only = new Set([...r.best].filter(id => !from.has(id))), ordered = steps.slice(0, nKeep);
+          const t = yield* drain(spend(from, only.size, ordered, only));
+          if (t.size === r.best.size) { best = t; bestV = V(t); steps = ordered; refined = true; }
+        }
+      }
     }
     for (let i = 0; i < starts.length; i++) {
       const t = yield* drain(spend(starts[i], budget - starts[i].size));
       const v = V(t);
       if (v > bestV) { best = t; bestV = v; }
-      yield { phase: 'Re-routing', p: (i + 1) / starts.length, q: 0.3 + 0.3 * (i + 1) / starts.length };
+      yield { phase: 'Re-routing', p: (i + 1) / starts.length, q: qVal + (qPlan - qVal) * (i + 1) / starts.length };
     }
     if (bestV === -Infinity) { best = new Set(have); bestV = baseW; } // no tree within the points reaches them all: shown as missed
-
-
-    for (let iter = 0; iter < (cfg.addOnly ? 0 : 14); iter++) {
-      yield { phase: 'Trying swaps', p: iter / 14, q: 0.6 + 0.4 * iter / 14 };
-      const cur = bestV, seen = new Set(), branches = [];
-      for (const id of best) {
-        if (kept.has(id)) continue;
-        const rem = dependents(best, id);
-        if (rem.some(x => kept.has(x))) continue;
-        const key = rem.slice().sort().join(','); if (seen.has(key)) continue; seen.add(key);
-        const s = new Set(best); for (const x of rem) s.delete(x);
-        branches.push({ rem, loss: (1 - V(s) / cur) / rem.length });
-      }
-      branches.sort((a, b) => a.loss - b.loss);
-      const trials = branches.slice(0, 5).map(b => b.rem);
-      for (let i = 0; i < Math.min(4, branches.length); i++) for (let j = i + 1; j < Math.min(4, branches.length); j++) trials.push([...new Set([...branches[i].rem, ...branches[j].rem])]);
-      let found = null, fv = cur * (1 + MIN_GAIN);
-      for (const rem of trials) {
-        const s = new Set(best); for (const x of rem) s.delete(x);
-        const c = connected(s); if (c.size !== s.size) continue;
-        const t = yield* drain(spend(s, budget - s.size));
-        const v = V(t);
-        if (v > fv) { found = t; fv = v; }
-      }
-      if (!found) break;
-      best = found; bestV = fv;
-    }
+    if (!cfg.addOnly) { const r = yield* improve(best, bestV, kept, qPlan, 1); best = r.best; bestV = r.bestV; }
 
 
 
     function* dragonStep(pset) {
-      const R = GD.dragon.tree, aspect0 = ch.dragonAspect || '';
+      const R = GD.dragon.tree;
       const core = Object.values(dT).find(n => n.Kind === 'Core'), c0 = core ? core.Id : null;
       const dadj = {};
       for (const n of Object.values(dT)) for (const l of n.Links || []) if (dT[l]) { (dadj[n.Id] = dadj[n.Id] || []).push(l); (dadj[l] = dadj[l] || []).push(n.Id); }
@@ -1990,11 +2231,11 @@ window.PAGE_LANGS = {
       skills, dropped, multi: multi && goals.length > 1,
       scored, defWeight: defW, def: scored ? { before: def0, after: defence(finalList) } : null,
       attrs: { Str: a1.Str - a0.Str, Dex: a1.Dex - a0.Dex, Int: a1.Int - a0.Int },
-      calcs, ms: Date.now() - t0,
+      calcs, ms: Date.now() - t0, probes, reached, refined, timedOut, cutOff, stats,
     };
   }
 
-  const api = { optimize };
+  const api = { optimize, uncountedLine };
   root.BOTreeOpt = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -15839,7 +16080,7 @@ window.BOCharacter = function (ctx) {
       id: 'code:' + (hash >>> 0).toString(16), name: (j.t || j.c + ' build') + ' (code)', classId: j.c, level: j.l || 1, league: '', lastZone: '',
       items, passives: j.p.filter(id => !/^start_/.test(id)), gems: [...new Set([...Object.keys(gemLevels), ...hotbar.filter(h => h && h !== 'move')])], gemLevels,
       sockets: skills.filter(s => (s.u || []).length).map(s => ({ skill: s.k, supports: s.u.filter(x => x && !String(x).includes('@')) })),
-      hotbar, weaponId: '', dragonNodes: j.dn || [], dragonAspect: j.da || '', mainSkill: main ? main.k : '', supportGems: [],
+      hotbar, weaponId: '', dragonNodes: j.dn || [], dragonAspect: aspectId(GD, j.da), mainSkill: main ? main.k : '', supportGems: [],
       fromCode: true, codeWarnings: warnings,
     };
   }
@@ -16269,10 +16510,11 @@ window.BOCharacter = function (ctx) {
 
     const dcls = GD.dragon.classes[lc(ch.classId)] || {};
     const dIds = dragonIds(GD, ch);
+    const aspId = aspectId(GD, ch.dragonAspect); // the game data's own spelling of the Aspect ("void" in a save is Void)
     if (dIds.length || ch.dragonAspect || mods.some(m => m.stat === 'SplitAspect124')) {
-      sources.push({ key: 'dragon', label: 'Dragonling (' + (ch.dragonAspect || 'no aspect') + ', ' + dIds.length + ' nodes)', group: 'Character' });
+      sources.push({ key: 'dragon', label: 'Dragonling (' + (aspId || 'no aspect') + ', ' + dIds.length + ' nodes)', group: 'Character' });
       if (!off.has('dragon')) {
-        const asp = GD.dragon.aspects[ch.dragonAspect];
+        const asp = GD.dragon.aspects[aspId];
 
 
 
@@ -16304,7 +16546,7 @@ window.BOCharacter = function (ctx) {
           const a = ascOn && n.Ascend;
           let list = (a ? a.Mods : n.Mods) || [];
 
-          if (!a && n.AspectMods && n.AspectMods[ch.dragonAspect]) list = list.concat(n.AspectMods[ch.dragonAspect].map(m => aspK !== 1 && m.Mode !== 'Flag' ? Object.assign({}, m, { Value: (m.Value || 0) * aspK, Value2: m.Value2 != null ? m.Value2 * aspK : m.Value2 }) : m));
+          if (!a && n.AspectMods && n.AspectMods[aspId]) list = list.concat(n.AspectMods[aspId].map(m => aspK !== 1 && m.Mode !== 'Flag' ? Object.assign({}, m, { Value: (m.Value || 0) * aspK, Value2: m.Value2 != null ? m.Value2 * aspK : m.Value2 }) : m));
           const label = 'Dragonling · ' + (a ? a.Name + ' (ascended ' + n.Name + ')' : n.Name);
           const quirk = DRAGON_QUIRKS[id] || {};
           for (const m of list) {
@@ -22154,13 +22396,27 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
+
+
+
+  function aspectId(GD, a) {
+    if (!a) return '';
+    const A = (GD.dragon && GD.dragon.aspects) || {};
+    if (A[a]) return a;
+    const want = lc(a); for (const k of Object.keys(A)) if (lc(k) === want) return k;
+    return a;
+  }
   function dragonIds(GD, ch) {
     const cls = lc(ch.classId), T = (GD.dragon.classes || {})[cls] || {}, moved = ((GD.dragon.moved || {})[cls]) || {};
     const out = [];
     for (const id of ch.dragonNodes || []) { const k = T[id] ? id : moved[id]; if (k && T[k] && !out.includes(k)) out.push(k); }
     return out;
   }
-  const api = { socketedRunes, runeSeats, dragonIds, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, rampEff, late2K: (GD, id, lvl) => late2K(GD, id, lvl), vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, affixLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, trigCounted, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
+  const api = { socketedRunes, runeSeats, dragonIds, aspectId, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, rampEff, late2K: (GD, id, lvl) => late2K(GD, id, lvl), vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, affixLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, trigCounted, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
 
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -23252,6 +23508,8 @@ window.BOStartApp = function () {
 
   function selectChar(id) {
     const ch = CHARS.find(c => c.id === id) || CHARS[0];
+
+    if (ch && ch.dragonAspect) ch.dragonAspect = S.aspectId(GD, ch.dragonAspect);
     buildCopy = null;
     if (document.body.classList.contains('landing-view')) { // leaving the landing page for the Damage view under it: Build Planner is the lit tab
       document.body.classList.remove('landing-view');
@@ -24538,7 +24796,9 @@ window.BOStartApp = function () {
         allowKeystones: $('#optKeys').checked,
         conduitMargin: 0.01,
         extraPoints: free,
-        ban: [...(st.ban || [])]
+        ban: [...(st.ban || [])],
+        keep: [...(st.keep || [])], // the tree's "keep" marks hold here too (25 Nov 2026)
+        maxMs: 45000 // one part of a quick overview: the best tree found by then
       });
     }
     catch (error) {
@@ -26901,13 +27161,15 @@ window.BOStartApp = function () {
 
   const HEAT_MARK = new WeakMap();
   function heatMark(n) {
-    let m = HEAT_MARK.get(n);
+    const on = sheetOn(), key = (on.minion ? 'm' : '') + (on.totem ? 't' : '');
+    let by = HEAT_MARK.get(n); if (!by) HEAT_MARK.set(n, by = {});
+    let m = by[key];
     if (!m) {
-      const mods = n.Mods || [], tf = x => x.Mode === 'Trigger' || x.Mode === 'Flag', un = x => tf(x) || !S.counted(x.Stat);
+      const mods = n.Mods || [], un = x => BOTreeOpt.uncountedLine(S, x, on), tf = x => (x.Mode === 'Trigger' || x.Mode === 'Flag') && un(x);
       const big = n.Kind === 'Notable' || n.Kind === 'Choice' || n.Kind === 'Keystone';
       m = { unc: mods.some(tf) || (big && mods.some(un)),
         dmg: n.Kind !== 'Keystone' && n.Kind !== 'Socket' && !/^om103_/.test(n.Id) && !mods.some(un) && mods.some(x => S.damageStat(x.Stat)) };
-      HEAT_MARK.set(n, m);
+      by[key] = m;
     }
     return m;
   }
@@ -26953,7 +27215,10 @@ window.BOStartApp = function () {
 
 
 
-  function lineUncounted(m) { return m.Mode === 'Trigger' ? !S.trigCounted(m) : m.Mode === 'Flag' || !S.counted(m.Stat); }
+
+
+  const sheetOn = () => ({ minion: !!(st.last && st.last.minion), totem: !!(st.last && st.last.totem) });
+  function lineUncounted(m) { return BOTreeOpt.uncountedLine(S, m, sheetOn()); }
 
 
 
@@ -27202,6 +27467,14 @@ window.BOStartApp = function () {
   }
 
 
+  const OPT_MAX_MS = 150000;
+
+  function optRunNotes(o) {
+    return (o.cutOff ? '<p class="hint gain down">' + o.cutOff + ' of your nodes ' + (o.cutOff === 1 ? 'has' : 'have') + ' no link to the class start (a tree from before the nodes moved): ' + (o.cutOff === 1 ? 'its point was' : 'their points were') + ' spent again.</p>' : '') +
+      (o.timedOut ? '<p class="hint">Stopped after ' + Math.round(OPT_MAX_MS / 60000 * 10) / 10 + ' minutes: this is the best tree found so far.</p>' : '');
+  }
+
+
   function runOptimize(plan, all) {
     if (!st.ch || !st.skill) return;
     clearOpt();
@@ -27220,7 +27493,7 @@ window.BOStartApp = function () {
     $('#treePlan').disabled = true; $('#treePlanAll').disabled = true; $('#treeOptimize').disabled = true;
     card.hidden = false; card.innerHTML = '<p class="hint">' + (plan ? 'Planning your next ' + extra + ' point' + (extra > 1 ? 's' : '') : 'Optimizing the tree') + ' for ' + esc(skillName) + '…</p>';
 
-    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])], keep: [...(st.keep || [])], oaths: $('#optOaths').checked, dragon: optDragon(), sockets: optSockets(),
+    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])], keep: [...(st.keep || [])], oaths: $('#optOaths').checked, dragon: optDragon(), sockets: optSockets(), maxMs: OPT_MAX_MS,
       defWeight: GS.set.prio / 100, defStats: gsDefStats(), defence: (list, oaths, dragonNodes, dragonAspect) => gsDefence(Object.assign({}, st.ch, { passives: list }, oaths ? { oaths } : null, dragonNodes ? { dragonNodes } : null, dragonAspect != null ? { dragonAspect } : null)) });
 
     let phase = 'Starting', q = 0;
@@ -27282,7 +27555,7 @@ window.BOStartApp = function () {
     const o = T.opt, card = $('#treeOpt'); if (!o) { card.hidden = true; return; }
     card.hidden = false;
     if (o.addOnly) return showPlan(o, card);
-    const kept = (o.kept.length ? '<p class="hint">Left where they are: ' + o.kept.map(k => esc(GD.nodes[k.id].Name) + ' (' + esc(k.why) + ')').join(', ') + '.</p>' : '') + keepMissedHtml(o) + runeSocketHtml(o);
+    const kept = (o.kept.length ? '<p class="hint">Left where they are: ' + o.kept.map(k => esc(GD.nodes[k.id].Name) + ' (' + esc(k.why) + ')').join(', ') + '.</p>' : '') + keepMissedHtml(o) + runeSocketHtml(o) + optRunNotes(o);
     if (!(o.gain > 0.001)) {
       card.innerHTML = '<h2>Your tree already looks right for ' + esc(o.skillName) + '</h2><p class="hint">Moving the same ' + o.points + ' points around gains less than 0.1% ' + (o.scored ? 'at ' + gsPrioText(Math.round(o.defWeight * 100)) : 'DPS') + '.</p>' + kept +
         '<div class="opt-actions"><button class="btn small ghost" type="button" id="optDismiss">Close</button></div>';
@@ -27344,7 +27617,7 @@ window.BOStartApp = function () {
     const s = n => n === 1 ? '' : 's';
     let t = 'Dwarven Sockets: ' + onTree + ' on this tree';
     if (sk) t += ', ' + sk.want + ' asked for' + (onTree < sk.want ? ' (' + (sk.want - onTree) + ' not reached with these points' + (sk.reachable < sk.want ? '; the tree has ' + sk.reachable + ' you can take' : '') + ')' : '') + '.';
-    else t += ' (all kept, none added: set Dwarven Sockets to path to more or refund spares).';
+    else t += ' (all kept; one more is taken only when the rune it would hold adds enough: set Dwarven Sockets to path to more or refund spares).';
     t += ' You wear ' + runes + ' Dwarven rune' + s(runes) + (deep ? ', ' + deep + ' held by Deep-Forged gear' : '') + ', so you need ' + need + '.';
     if (onTree < need) t += ' ' + (need - onTree) + ' of your runes count for nothing until the tree has ' + (need - onTree === 1 ? 'its socket' : 'their sockets') + '.';
     return '<p class="hint' + (onTree < need || (sk && onTree < sk.want) ? ' gain down' : '') + '">' + esc(t) + ' Sockets take a rune from Rupture Level 110.</p>';
@@ -27357,7 +27630,7 @@ window.BOStartApp = function () {
     const at = Object.entries(o.attrs).filter(([, v]) => v).map(([k, v]) => k + ' ' + (v > 0 ? '+' : '−') + Math.abs(v));
     const left = o.points - o.used;
     card.innerHTML = '<h2>Next ' + (o.points - o.base0) + ' points for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.scored ? 'score' : o.multi ? 'weighted DPS' : 'DPS') + '</span>' + (o.multi || o.scored ? '' : ' <span class="hint">' + num(o.base) + ' → ' + num(o.value) + '</span>') + '</h2>' + optScoredRows(o) + optSkillRows(o) +
-      (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">No node within reach adds ' + (o.scored ? 'anything at this setting' : 'DPS to this skill') + '.</p>') + keepMissedHtml(o) + runeSocketHtml(o) +
+      (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">No node within reach adds ' + (o.scored ? 'anything at this setting' : 'DPS to this skill') + '.</p>') + keepMissedHtml(o) + runeSocketHtml(o) + optRunNotes(o) +
       (optOathCol(o) ? '<div class="opt-cols">' + optOathCol(o) + '</div><p class="hint">A row\'s gain counts the Oath sworn at a seat its notable opens.</p>' : '') + optOathNote(o) + optDragonHtml(o) +
       (left > 0 && rows ? '<p class="hint">' + left + ' point' + (left > 1 ? 's' : '') + ' left over: nothing else within reach adds DPS.</p>' : '') +
       (at.length ? '<p class="hint">Attributes from these picks: ' + esc(at.join(', ')) + '.</p>' : '') +

@@ -53,7 +53,7 @@
   var b = new URL("../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/ru.json'), langCode: 'ru' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../../style.css?v=520">
+<link rel="stylesheet" href="../../style.css?v=521">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -676,7 +676,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":520,"at":"2026-11-26T04:32:08.854Z"};
+window.SITE_VERSION = {"v":521,"at":"2026-11-26T04:44:57.147Z"};
 window.SITE_LANG = 'ru';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -690,6 +690,6 @@ window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["War
 /*__VOWS__*/
 /*__ADVANCED__*/
 </script>
-<script src="../../app.js?v=520"></script>
+<script src="../../app.js?v=521"></script>
 </body>
 </html>

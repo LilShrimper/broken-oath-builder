@@ -18809,7 +18809,10 @@ window.BOCharacter = function (ctx) {
 
 
 
-      const orbTxt = /already struck deals (\d+)% less[^(]*\([^)]*?(\d+)% less/i.exec((GD.supports.orbit || {}).Description || '');
+
+
+
+      const orbTxt = /already struck(?: this cast)? deals (\d+)% less[^(]*\([^)]*?(\d+)% less/i.exec((GD.supports.orbit || {}).Description || '');
       let orbitLess = isAttack ? (orbTxt ? +orbTxt[2] : 90) : (orbTxt ? +orbTxt[1] : 60);
       if (!isAttack && is056(GD)) orbitLess = Math.max(orbitLess, 75);
       projWeight = orbitOn ? 1 + (projOnTarget - 1) * (1 - orbitLess / 100) : projOnTarget;
@@ -19157,7 +19160,7 @@ window.BOCharacter = function (ctx) {
     let marks = 0, markPct = 0, markHeld = 0;
     for (const m of pickMods(mods, 'MarkOnHit', 'Flat')) if (applies(ctx, m)) { marks += m.v; use(m); }
     if (marks > 0) {
-      const t = /([\d.]+)% more damage for each Mark, up to (\d+)/i.exec((GD.supports.hunters_mark_support || {}).Description || '');
+      const t = markText(GD);
       const per = t ? +t[1] : 1.4; let cap = t ? +t[2] : 10;
       for (const m of pickMods(mods, 'MarkMax', 'Flat')) { cap += m.v; use(m); }
       if (isBoss && !is0568(GD)) cap *= 2; // 0.56.8: "no longer doubles on Guardians and Uniques"
@@ -19483,7 +19486,8 @@ window.BOCharacter = function (ctx) {
             staticAvg -= size;
           }
         }
-        const ls = /at most (\d+)% more damage taken/i.exec((GD.supports.living_storm || {}).Description || '');
+
+        const ls = /(?:at most|up to) (\d+)% more damage taken/i.exec((GD.supports.living_storm || {}).Description || '');
 
         const allCap = stacks > 1 ? (ls ? +ls[1] : is0564(GD) ? (A.ShockStackCap || 75) : 60) : cap;
         const dur = snap(A.ShockSeconds * (1 + ailDur / 100));
@@ -19805,7 +19809,7 @@ window.BOCharacter = function (ctx) {
       if (bleedChance > 0 && hit.Physical) {
         const bInc = sumMod('BleedDamage', 'Inc') + ailSpill(bleedChanceRaw, 'Bleed'), bMore = sumMod('BleedDamage', 'More');
         let baseDur = 4;
-        for (const s of res.supports) { const d = s.ok && GD.supports[lc(s.id)] && /Bleeding[^.]*?for (\d+(?:\.\d+)?) seconds/i.exec(GD.supports[lc(s.id)].Description || ''); if (d) { baseDur = +d[1]; break; } }
+        for (const s of res.supports) { const d = s.ok && GD.supports[lc(s.id)] && /Bleeding[^.]*?for (\d+(?:\.\d+)?) s(?:econds)?\b/i.exec(GD.supports[lc(s.id)].Description || ''); if (d) { baseDur = +d[1]; break; } }
         const dur = snap(baseDur * (1 + ailDur / 100));
         const coef = (A.BleedFracPerSec || 0.5) * Math.max(0, 1 + bInc / 100) * bMore * Math.max(0, 1 + dotMulti / 100);
         const dps1 = hit.Physical.avg / ruthK * ailCrit('Bleed') * coef; // a bleed from the average hit (Ruthless taken out: it does not raise the bleed, its text, build 85)
@@ -20485,7 +20489,8 @@ window.BOCharacter = function (ctx) {
     }
     if (lowMore || cull) {
 
-      const tm = /below (half|(\d+)%)(?: of)? their life/i.exec((GD.supports.executioner || {}).Description || '');
+
+      const tm = /below (half|(\d+)%)(?: of)?(?: their)? life/i.exec((GD.supports.executioner || {}).Description || '');
       const T = (tm ? (tm[2] ? +tm[2] : 50) : 35) / 100, C = Math.min(cull / 100, T);
 
 
@@ -22055,12 +22060,20 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
+
+
+
+  function markText(GD) { return /([\d.]+)% more damage(?: taken)? (?:for each|per) Mark, up to (\d+)/i.exec((GD.supports.hunters_mark_support || {}).Description || ''); }
   const armyMarkPct = (GD, ch) => {
     if (!(minionEngShare(GD) > 0)) return 0;
     const bar = new Set((ch.hotbar || []).filter(Boolean).map(lc));
     const on = (ch.sockets || []).some(x => x && bar.has(lc(x.skill)) && minionSummon(GD.skills[lc(x.skill)]) && (x.supports || []).some(y => lc(String(y).replace('@granted', '')) === 'hunters_mark_support'));
     if (!on) return 0;
-    const t = /([\d.]+)% more damage for each Mark, up to (\d+)/i.exec((GD.supports.hunters_mark_support || {}).Description || '');
+    const t = markText(GD);
     return t ? +t[1] * +t[2] : 0;
   };
   const MINION_ENGINE_COUNTED = new Set(['added_poison', 'honed_edge', 'deathblow', 'vicious_projectiles']);

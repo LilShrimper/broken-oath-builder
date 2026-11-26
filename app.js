@@ -17115,6 +17115,14 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+    const dexSpeed = () => (attr.Dex >= (attr.Str || 0) && attr.Dex >= (attr.Int || 0) ? per10('Dex', 'DexAttackSpeedPer10') : 0);
+
+
+
+
     const mountainAll = is056(GD);
 
 
@@ -17209,7 +17217,7 @@ window.BOCharacter = function (ctx) {
       for (const m of pickMods(mods, 'SpeedMore', 'Flat')) if (m !== speedLine) use(m, 'counted once');
       if (speedLine) {
         const atkCtx = Object.assign({}, ctx, { tags: new Set([...ctx.tags, 'attack']), isAttack: true });
-        let asInc = per10('Dex', 'DexAttackSpeedPer10');
+        let asInc = dexSpeed();
         for (const m of pickMods(mods, 'AttackSpeed', 'Inc')) if (applies(atkCtx, m)) asInc += m.v;
         use(speedLine, 'more per 10% attack speed');
         engine.push({ v: speedLine.v * Math.max(0, asInc) / 10, types: [], src: speedLine.src + ' (' + Math.round(asInc) + '% increased Attack Speed)' });
@@ -17836,7 +17844,7 @@ window.BOCharacter = function (ctx) {
       if (untaggedTreeLess(m)) { use(m, 'not applied to attacks by the game'); continue; }
       if (m.mode === 'Inc') speedInc += m.v; else if (m.mode === 'More') speedMore *= 1 + m.v / 100; use(m);
     }
-    if (isAttack) speedInc += per10('Dex', 'DexAttackSpeedPer10');
+    if (isAttack) speedInc += dexSpeed();
     let rateMult = (1 + speedInc / 100) * speedMore * (sk.ActionSpeed || 1);
     rateMult = clamp(rateMult, H.ActionRateMin || 0, H.ActionRateMax || 99);
     const speedRate = rateMult; // attack/cast speed alone, before the clip's own Rate

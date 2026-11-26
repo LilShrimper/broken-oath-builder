@@ -14008,7 +14008,8 @@ window.BOCharacter = function (ctx) {
       '<button class="btn small ghost" type="button" data-clip="copygear" title="Copies every item here (idols too), to paste on another character or plan"' + (ch.items.length ? '' : ' disabled') + '>Copy gear</button>' +
       '<button class="btn small ghost" type="button" data-clip="pastegear" title="' + esc(has ? 'Replaces the gear here with the ' + plural(clip.items.length, 'item') + ' copied from ' + clip.from : 'Use Copy gear on another character or plan first') + '"' + (has ? '' : ' disabled') + '>Paste gear</button></span></div><div class="ch-doll">' + SLOTS.map(s => slotCell(ch, s)).join('') + '</div>';
     h += barCard(ch);
-    h += '<h3>Idols <small>' + plural(L.idols.length, 'idol') + ' · ' + L.used.size + ' of ' + FCELLS.length + ' cells</small></h3>' + fossilHtml(ch, L);
+    h += '<div class="ch-idols-head"><h3>Idols <small>' + plural(L.idols.length, 'idol') + ' · ' + L.used.size + ' of ' + FCELLS.length + ' cells</small></h3>' +
+      (ctx.openIdolSim ? '<button class="btn small" type="button" data-simidols title="Finds the best idols for the main skill, in a Fossil layout that fits (the Item Simulator\'s Idol Sim)">Sim Idols</button>' : '') + '</div>' + fossilHtml(ch, L);
     return h + '</div>';
   }
 
@@ -14372,6 +14373,7 @@ window.BOCharacter = function (ctx) {
 
 
       const ss = e.target.closest && e.target.closest('[data-simsup]'); if (ss) { hide(); openSkill(ss.dataset.simsup, ss); const b = SW && swBack.querySelector('[data-sw="sim"]'); if (b) b.focus({ preventScroll: true }); return; }
+      const si = e.target.closest && e.target.closest('[data-simidols]'); if (si) { hide(); ctx.openIdolSim(si); return; }
       if (e.target.closest && e.target.closest('.ch-skill-checks')) return; // the boxes, not the skill window
       const bc = e.target.closest && e.target.closest('[data-barclear]'); if (bc) { hide(); const i = +bc.dataset.barclear; remember('bar', barName((ctx.current().hotbar || [])[i]) + ' from ' + BAR_SLOTS[i]); return setBar(i, '-'); }
       if (e.target.closest && e.target.closest('[data-testclear]')) { hide(); remember('test', barName(planner.testOf(ctx.current())) + ' from the comparison'); return setTestSlot(''); }
@@ -28876,6 +28878,41 @@ window.BOStartApp = function () {
     IDO.res = null; CMP.aEdited = false; CMP.a = null;
     IDO.msg = 'Put ' + n + ' idol' + (n === 1 ? '' : 's') + ' in the Fossil of ' + ch.name + ' in this page' + (gone.length ? (IDO.set.spare ? '; the ' + gone.length + ' you wore before went to the spare idols' : '; the ' + gone.length + ' you wore before came off') : '') + '. The Character, Build and Damage tabs use them too.' + (ch.plan ? '' : ' Your save is never changed: Reset to save on the Build tab undoes it.');
     if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {});
+    if (character && !$('#characterPane').hidden) character.render(); // Sim Idols: the Fossil behind the window
+    renderIdoWin();
+  }
+
+
+
+  let idoWin = null, idoWinFrom = null;
+  function openIdoWin(from) {
+    if (!st.ch) return;
+    idoWinFrom = from || null;
+    if (!idoWin) {
+      idoWin = document.createElement('div'); idoWin.className = 'io-back ido-back'; idoWin.setAttribute('role', 'dialog'); idoWin.setAttribute('aria-modal', 'true'); idoWin.setAttribute('aria-label', 'Sim Idols');
+      idoWin.addEventListener('mousedown', e => { if (e.target === idoWin) closeIdoWin(); });
+      idoWin.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-idw="close"]')) closeIdoWin(); });
+
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && idoWin && !idoWin.hidden && !enemyDialog.open) { e.preventDefault(); closeIdoWin(); } });
+      bindCompare(idoWin, false);
+      document.body.appendChild(idoWin);
+    }
+    const p = $('#comparePane'); if (p && p.hidden) p.innerHTML = '';
+    idoWin.hidden = false; document.body.classList.add('io-open');
+    renderIdoWin();
+    const f = idoWin.querySelector('[data-ido="run"]') || idoWin.querySelector('.io-x'); if (f) f.focus({ preventScroll: true });
+  }
+  function closeIdoWin() {
+    if (!idoWin || idoWin.hidden) return;
+    idoWin.hidden = true; idoWin.innerHTML = ''; document.body.classList.remove('io-open');
+    if (idoWinFrom && idoWinFrom.isConnected) idoWinFrom.focus({ preventScroll: true });
+  }
+  function renderIdoWin() {
+    if (!idoWin || idoWin.hidden) return;
+    const old = idoWin.querySelector('.io-body'), top = old ? old.scrollTop : 0;
+    idoWin.innerHTML = '<div class="io-win ido-win"><div class="io-head"><span class="sp-title"><b>Sim Idols</b>' + (st.ch ? ' · ' + esc(st.ch.name) : '') + '</span><button class="io-x" type="button" data-idw="close" aria-label="Close">×</button></div>' +
+      '<div class="io-body">' + (st.ch ? idoHtml() : '<div class="empty">Load a character or start a plan first.</div>') + '</div></div>';
+    const b = idoWin.querySelector('.io-body'); if (b) b.scrollTop = top;
   }
   function idoResultHtml(r) {
     const skillName = (GD.skills[lc(r.skill)] || {}).Name || r.skill, score = r.scored || r.multi;
@@ -28918,6 +28955,7 @@ window.BOStartApp = function () {
   }
   const cmpItemMode = () => cmpVisible() && CMP.mode === 'item';
   function renderCompare() {
+    renderIdoWin();
     const el = $('#comparePane'); if (!el || el.hidden) return;
     let h = cmpModesHtml() + '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Item Simulator</h2><p>' + (CMP.mode === 'gear' ? 'Find the best gear for a skill from every unique, Oathword and rare, for damage, defence or both, and see what it would do.' : CMP.mode === 'riven' ? 'See which line on your gear is worth a Rivenstone, or the best lines for all the stones you have.' : CMP.mode === 'idol' ? 'Find the best idols for a skill, with the best lines, in a Fossil layout that fits; the rest of your gear stays as it is.' : CMP.mode === 'slot' ? 'Pick one slot and see every unique, Oathword and rare that fits it, ranked by what it does for your skill with the rest of your gear as it is.' : 'Pick one of your items, then fill in the item you found or paste a screenshot of it, to see what swapping does to your damage and defence, and which one to wear.') + '</p></div>';
     if (!st.ch) { el.innerHTML = h + '<div class="empty">Load a character or start a plan first.</div>'; return; }
@@ -28987,8 +29025,8 @@ window.BOStartApp = function () {
     CMP.msg = 'Equipped ' + itemName(item) + ' on ' + ch.name + '. It is now your item; fill in or paste the next one to compare.';
     if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {});
   }
-  (function bindCompare() {
-    const el = $('#comparePane');
+
+  function bindCompare(el, first) {
     const side = t => { const s = t.closest('[data-side]'); return s && s.dataset.side; };
     el.addEventListener('change', e => {
       const t = e.target;
@@ -29078,6 +29116,8 @@ window.BOStartApp = function () {
     });
     el.addEventListener('mouseleave', hideSlotTip);
     window.addEventListener('scroll', hideSlotTip, { passive: true });
+    el.addEventListener('scroll', hideSlotTip, { passive: true, capture: true });
+    if (!first) return;
     el.addEventListener('keydown', e => { if (e.target.id === 'cmpDrop' && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); const f = $('#cmpFile'); if (f) f.click(); } });
 
     document.addEventListener('paste', e => {
@@ -29088,7 +29128,8 @@ window.BOStartApp = function () {
       const text = e.clipboardData && e.clipboardData.getData('text/plain');
       if (text && /\n/.test(text.trim()) && /\d/.test(text)) { e.preventDefault(); cmpReadText(text, false); }
     });
-  })();
+  }
+  bindCompare($('#comparePane'), true);
 
 
 
@@ -29681,6 +29722,7 @@ window.BOStartApp = function () {
   character = window.BOCharacter({ afterRender: () => fillOptimizerSlot(),
     beltCard: () => brewery ? brewery.beltCard() : '',
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, num, pct, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
+    openIdolSim: from => openIdoWin(from), // "Sim Idols" by the Fossil: the Item Simulator's Idol Sim in a window
     supportSearch: supportSearchFor, supMarks: marksFor, simSkill: () => st.skill, // the main skill: the plan's own, or the one the Damage tab sims
 
     countable: id => onBarNow(id) && (st.pickable || []).some(s => s.id === id), autoCounted: id => cocAuto(id), optWeights: () => st.optW || {}, setOptWeight: (id, w) => { setOptWeight(id, w); if (planner && !$('#buildPane').hidden) planner.render(); }, execState: sk => execState(st.ch, sk), setExecOn: (id, on) => { setExecOn(id, on); if (planner && !$('#buildPane').hidden) planner.render(); },

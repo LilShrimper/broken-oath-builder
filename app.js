@@ -3807,8 +3807,12 @@ window.BOPlanner = function (ctx) {
 
 
 
+
+
   const dEarned = ch => Math.min(dExtraMax(), ch.dragonExtra != null ? +ch.dragonExtra || 0 : dRupturesAt(ch.rupture));
-  const dExtra = ch => asc2() ? dEarned(ch) : Math.min(dExtraMax(), Math.max(ch.dragonExtra != null ? +ch.dragonExtra || 0 : 0, dUsed(ch) - dBase(ch)));
+  const dExtra = ch => asc2() ? Math.min(dExtraMax(), Math.max(dEarned(ch), dUsed(ch))) : Math.min(dExtraMax(), Math.max(ch.dragonExtra != null ? +ch.dragonExtra || 0 : 0, dUsed(ch) - dBase(ch)));
+
+  const dRoom = ch => Math.max(0, (asc2() ? dExtraMax() : dPoints(ch)) - dUsed(ch));
 
   function dLevelNeed(count) {
     if (asc2()) return 1; // Ascension 2.0: points come from Dragon Ruptures, not the hero's level
@@ -3840,7 +3844,7 @@ window.BOPlanner = function (ctx) {
     const adj = dAdj(T), core = dCore(T);
     if (![...adj[id] || []].some(v => taken.has(v) || (core && v === core.Id))) return { s: 'locked', why: 'not next to a node you hold' };
 
-    if (isCrown(n) && asc2() && dCost(n, ch) > dPoints(ch) - dUsed(ch)) return { s: 'blocked', why: 'a crown costs ' + dCost(n, ch) + ' Dragonling points: you have ' + Math.max(0, dPoints(ch) - dUsed(ch)) };
+    if (isCrown(n) && asc2() && dCost(n, ch) > dRoom(ch)) return { s: 'blocked', why: 'a crown costs ' + dCost(n, ch) + ' Dragonling points: ' + dRoom(ch) + ' left with all ' + dExtraMax() + ' Dragon Ruptures' };
     return { s: 'open' };
   }
   function dLabel(ch, n) {
@@ -3888,7 +3892,7 @@ window.BOPlanner = function (ctx) {
 
 
     let h = '<div class="card dl-card"><div class="dl-side"><h2>Dragonling <small>' + used + ' / ' + pts + ' points' + (paths.length ? ' · ' + esc(paths.join(' + ')) + (paths.length > 1 ? ' paths' : ' path') : '') + '</small></h2>';
-    h += '<div class="pl-row">' + (asc2() ? '<label class="field inline" title="' + esc('Points: one for each Dragon Rupture you have cleared, at Rupture Levels ' + (dRules().ruptures || []).join(', ') + ' (' + dExtraMax() + ' at most). Your first crown is free, each further crown costs ' + dCrownNeed() + '.') + '"><span>Dragon Ruptures</span><input'
+    h += '<div class="pl-row">' + (asc2() ? '<label class="field inline" title="' + esc('Points: one for each Dragon Rupture you have cleared, at Rupture Levels ' + (dRules().ruptures || []).join(', ') + ' (' + dExtraMax() + ' at most). This box follows the nodes you take. Your first crown is free, each further crown costs ' + dCrownNeed() + '.') + '"><span>Dragon Ruptures</span><input'
         : '<label class="field inline" title="' + esc('Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, +1 each for Gates 4 to 7' + (dSeal80() ? ', the Seal of 80' : '') + ' and the Pinnacle (' + (dBase({ level: 100 }) + dExtraMax()) + ' at most). This box follows the nodes you take.') + '"><span>Gate kills + Pinnacle</span><input') + ' type="number" min="0" max="' + dExtraMax() + '" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
       (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') + '</div>';
 
@@ -3904,8 +3908,8 @@ window.BOPlanner = function (ctx) {
     const asp = GD.dragon.aspects && GD.dragon.aspects[ch.dragonAspect];
     h += asp ? '<p class="dl-aspect"><b>' + esc(asp.Name || ch.dragonAspect) + ' Aspect:</b> ' + esc(asp.Text || '') + '</p>'
       : '<p class="hint">No Aspect chosen: each one gives its own bonuses (pick one above to see them).</p>';
-    h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? (asc2() ? 'Not a valid tree: these nodes cost ' + used + ' points but the Dragonling has ' + pts + ' (one for each Dragon Rupture cleared), so the game would not allow it. Raise Dragon Ruptures cleared, or refund ' + (used - pts) + ' point' + (used - pts === 1 ? '' : 's') + '. The damage numbers still count every node taken.' : 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.') :
-      (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + (asc2() ? 'Ascension 2.0 (patch 86): take nodes from any of your paths; your first crown is free, each further crown costs ' + dCrownNeed() + ' points.' : 'Paths can be mixed; one Keystone or Capstone at a time.')) + '</p>';
+    h += '<p class="hint' + (over ? ' bad' : '') + '">' + (over ? (asc2() ? 'Not a valid tree: these nodes cost ' + used + ' points but the Dragonling has ' + pts + ' at most (one for each Dragon Rupture cleared), so the game would not allow it. Refund ' + (used - pts) + ' point' + (used - pts === 1 ? '' : 's') + '. The damage numbers still count every node taken.' : 'This uses ' + used + ' points but the Dragonling has ' + pts + ' at level ' + ch.level + ': raise the level or Gate kills, or refund some.') :
+      (asc2() && pts > dEarned(ch) ? 'Dragon Ruptures raised from ' + dEarned(ch) + ' to ' + pts + ' to hold these nodes. ' : '') + (edit ? 'Click a node next to one you hold to take it, click again to refund. ' : '') + (asc2() ? 'Ascension 2.0 (patch 86): take nodes from any of your paths; your first crown is free, each further crown costs ' + dCrownNeed() + ' points.' : 'Paths can be mixed; one Keystone or Capstone at a time.')) + '</p>';
 
     h += '<div class="dl-best" data-dl-best hidden></div>';
     if (list) h += '<h3 class="dl-list-h">Taken</h3><ul class="dl-list">' + list + '</ul>';
@@ -4897,8 +4901,8 @@ window.BOPlanner = function (ctx) {
     if (st.s === 'locked') {
       const p = dPlan(ch, id); if (!p) return { msg: dLabel(ch, n).name + ': no path to it from the nodes you hold.' };
       if (isCrown(n) && asc2()) {
-        const c = dCost(n, ch), free = dPoints(ch) - dUsed(ch) - (p.n - 1);
-        if (c > free) return { msg: dLabel(ch, n).name + ': a crown costs ' + c + ' Dragonling points: you have ' + Math.max(0, free) + ' after its path.' };
+        const c = dCost(n, ch), free = dRoom(ch) - (p.n - 1);
+        if (c > free) return { msg: dLabel(ch, n).name + ': a crown costs ' + c + ' Dragonling points: ' + Math.max(0, free) + ' left after its path with all ' + dExtraMax() + ' Dragon Ruptures.' };
       }
       return { nodes: p.nodes };
     }
@@ -11093,7 +11097,7 @@ window.BOPatches = function (ctx) {
     if (!LOG || !LOG.builds.length) return null;
     const cur = LOG.builds[LOG.builds.length - 1], n = /(\d+)\s*$/.exec(cur.label || '');
     const ids = new Map(LOG.changes.filter(c => c.b === cur.b && c.sec === sec && c.kind !== 'removed').map(c => [c.id, c.kind]));
-    return { label: n ? 'Patch ' + n[1] : cur.label, ids };
+    return { label: /^Patch /.test(cur.label || '') ? cur.label : n ? 'Patch ' + n[1] : cur.label, ids };
   }
   return { render, load, historyHtml, openHistory, countOf, latestIn, ready: () => !!LOG };
 };

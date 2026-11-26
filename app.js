@@ -2926,7 +2926,14 @@ window.PAGE_LANGS = {
     let done = 0;
     const apply = (slot, r, tag) => { if (r.item !== at(items, slot)) items = put(items, slot, r.item); };
 
-    for (let pass = 0; pass < PASSES; pass++) {
+
+
+    if (cfg.onlyIdols && idolN) {
+      curPhase = 'Idols'; curP = 0; yield prog();
+      const r = yield* bestIdols(items);
+      items = r.items; idolLayout = r.layout; idolCells = r.cells;
+    }
+    for (let pass = 0; pass < (cfg.onlyIdols ? 0 : PASSES); pass++) {
       const K = pass === 0 ? 5 : 3, before = V(items);
       if (pass > 0 && late()) break;
       if (Date.now() - t0 > (deadline - t0) * 0.55) rush = true;
@@ -2986,7 +2993,7 @@ window.PAGE_LANGS = {
     const dpsEnd = scored ? dpsV(items) : 0;
     const dpsGainOf = alt => { if (!scored || !(dpsEnd > 0)) return null; const d = dpsV(alt); return d > 0 ? dpsEnd / d - 1 : null; };
     const out = [];
-    for (const slot of ['MainHand', 'OffHand', ...SLOTS]) {
+    for (const slot of cfg.onlyIdols ? [] : ['MainHand', 'OffHand', ...SLOTS]) {
       const it = at(items, slot), was = at(ch.items || [], slot);
       if (!it && !was) continue;
       const worth = it ? 1 - V(put(items, slot, null)) / value : 0;
@@ -6851,7 +6858,13 @@ window.BOBrewery = function (ctx) {
       if (u) for (const l of u.Lines || []) if (l.Effect === 'Stat' && l.Stat) out.mods.push(Object.assign({}, l.Stat));
     }
     for (const x of picks) if (x.m.Effect === 'Charge') out.notes.push('Gives ' + x.t.Value + ' ' + cap(x.m.Charge) + ' when drunk: set it under Fury, Insight, Resolve in Damage Analysis.');
-    if (byEffect('SpendFury')) out.notes.push('Fury Unbottled is not in the damage sim (it depends on how much Fury you spend).');
+
+
+    const spendF = byEffect('SpendFury');
+    if (spendF) {
+      out.mods.push({ Stat: 'PotionSpendFury', Mode: 'Flat', Tags: [], Value: spendF.t.Value });
+      out.notes.push('Fury Unbottled: the sim spends the Fury it counts as held (set under Fury in Damage Analysis, or kept up by Gather Fury / Defiant Roar) for ' + spendF.t.Value + '% more damage each, and takes those charges off while it lasts. Fury won back inside the 6 s is not counted (not checked in game).');
+    }
     if (byEffect('Bloodlust')) out.notes.push('Bloodlust from drinking: set your stacks under Bloodlust in Damage Analysis.');
     return out;
   }
@@ -13904,6 +13917,19 @@ window.BOCharacter = function (ctx) {
   }
 
 
+
+  function idolGridHtml(list, label) {
+    let h = '<div class="fo-grid ch-fossil ido-grid" role="group" aria-label="' + esc(label || 'Idols in the Dwarven Fossil') + '">';
+    for (const [x, y] of FCELLS) h += '<span class="fo-cell" aria-hidden="true" style="grid-column:' + (x + 1) + ';grid-row:' + (y + 1) + '"><span>' + fRune(x, y) + '</span></span>';
+    for (const e of list) {
+      const n = itemName(e.it, 'Idol'), [w, hh] = idolDims(e.it), a = itemArt(e.it);
+      h += '<div class="ch-slot ch-idol ' + n.cls + (w * hh === 1 ? ' tiny' : '') + withArt(a) + (e.mark ? ' ' + e.mark : '') + '" data-ido-tip="' + esc(e.tip) + '" tabindex="0" aria-label="' + esc(n.name + ', ' + w + 'x' + hh + ', column ' + (e.x + 1) + ', row ' + (e.y + 1)) + '"' +
+        ' style="grid-column:' + (e.x + 1) + ' / span ' + w + ';grid-row:' + (e.y + 1) + ' / span ' + hh + '">' + a + '<b class="ch-item-name">' + esc(n.name) + '</b>' + (n.name === n.base ? '' : '<span class="ch-item-base">' + esc(n.base) + '</span>') + '</div>';
+    }
+    return h + '</div>';
+  }
+
+
   let DR = null, dragJust = false;
   const dragGrid = () => document.querySelector('#characterPane .ch-fossil');
   function dragDown(e) {
@@ -14482,6 +14508,24 @@ window.BOCharacter = function (ctx) {
     if (!spot) return false;
     pinIdols(ch, L); item.gx = spot[0]; item.gy = spot[1];
     if (old) ch.items[M.idx] = item; else { ch.items.push(item); M.idx = ch.items.length - 1; }
+    return true;
+  }
+
+
+
+  function placeIdol(ch, item, oi, want) {
+    const L = idolLayout(ch), [w, h] = idolDims(item), skip = oi >= 0 ? oi : -1;
+    let spot = (oi >= 0 && idolSpot(L, w, h, L.at.get(oi), skip)) || (want && L.fits(want[0], want[1], w, h, skip) ? want : null) || idolSpot(L, w, h, null, skip);
+    if (spot) {
+      pinIdols(ch, L); item.gx = spot[0]; item.gy = spot[1];
+      if (oi >= 0) ch.items[oi] = item; else ch.items.push(item);
+      return true;
+    }
+    const items = ch.items.slice(), c = Object.assign({}, ch, { items: items.map(x => { if (x.slot !== 'Idol') return x; const y = Object.assign({}, x); delete y.gx; delete y.gy; return y; }) });
+    const it2 = Object.assign({}, item); delete it2.gx; delete it2.gy;
+    if (oi >= 0) c.items[oi] = it2; else c.items.push(it2);
+    const L2 = idolLayout(c); if (L2.out.length) return false;
+    pinIdols(c, L2); ch.items = c.items;
     return true;
   }
   const noRoom = item => { const [w, h] = idolDims(item); return 'No room in the Fossil for the ' + itemName(item, 'Idol').base + ' (' + w + 'x' + h + '). Move or remove an idol first.'; };
@@ -15390,7 +15434,7 @@ window.BOCharacter = function (ctx) {
     }
   }
 
-  return { render, hide, openItemFor: (host, o) => openItem(document.body, host, o), close: () => { if (M) closeItem(); if (SP) { SP.back = false; closeSup(); } if (SW) closeSkill(); } };
+  return { render, hide, idolGridHtml, placeIdol, openItemFor: (host, o) => openItem(document.body, host, o), close: () => { if (M) closeItem(); if (SP) { SP.back = false; closeSup(); } if (SW) closeSkill(); } };
 };
 
 ;
@@ -15446,7 +15490,8 @@ window.BOCharacter = function (ctx) {
     'BloodMagic', 'LifeLeech', 'Dragonling', 'ShockSpreadOnKill', 'IgniteSpreadOnKill', // IgniteSpreadOnKill: Kindling Rod (build 85), a pack effect like the Shock spread
 
 
-    'FortifyMax', 'FortifyEffect', 'CryFury', 'CryLinger', 'BannerStartValour', 'BannerKeepValour', 'VowReserveLess',
+
+    'FortifyMax', 'FortifyEffect', 'CryFury', 'PotionSpendFury', 'CryLinger', 'BannerStartValour', 'BannerKeepValour', 'VowReserveLess',
     'AuraDrainLess', 'PoisonSpreadOnKill', 'HeraldKillRadius',
 
     'TrapChainRadius', 'OrbitMax',
@@ -17151,6 +17196,31 @@ window.BOCharacter = function (ctx) {
         const n = FURY_MAX - furyHeldN; furyHeldN = FURY_MAX;
         for (const m of fb.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: (m.Value || 0) * (m.PerStack ? n : 1), v2: m.Value2 || 0, local: false, src: 'Fury x' + n + ' (Defiant Roar on ' + GD.skills[lc(cry.skill)].Name + ')', key: 'charge:fury' });
         if (!o._gfHeld) res.notes.push('Defiant Roar on ' + GD.skills[lc(cry.skill)].Name + ': counted as ' + FURY_MAX + ' Fury charges held (one per roar, game log 23 Nov 2026).');
+      }
+    }
+
+
+
+
+
+
+
+
+
+
+    {
+      const spend = modsOf(mods, 'PotionSpendFury').filter(m => m.stat === 'PotionSpendFury' && m.v > 0);
+      const fb = GD.blessings.fury;
+      if (spend.length && fb) {
+        const n = Math.min(fb.Max || 5, furyHeldN), per = spend[0].v;
+        if (n > 0) {
+          for (const m of fb.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: -(m.Value || 0) * (m.PerStack ? n : 1), v2: 0, local: false, src: 'Fury x' + n + ' spent (' + spend[0].src + ')', key: spend[0].key });
+          mods.push({ stat: 'Damage', mode: 'More', tags: [], v: per * n, v2: 0, local: false, src: 'Fury Unbottled: ' + per + '% more x ' + n + ' Fury spent (' + spend[0].src + ')', key: spend[0].key });
+          furyHeldN = 0;
+        }
+        if (!o._gfHeld) res.notes.push(n > 0
+          ? 'Fury Unbottled: counted while the potion is up: ' + n + ' Fury spent on the drink for ' + +(per * n).toFixed(1) + '% more damage for 6 s, and those charges\' own lines are gone meanwhile. Fury won back inside the 6 s is not counted (not checked in game).'
+          : 'Fury Unbottled: no Fury held to spend (set Fury under Vows, Heralds & charges, or link Gather Fury / Defiant Roar), so it adds nothing.');
       }
     }
 
@@ -19615,11 +19685,16 @@ window.BOCharacter = function (ctx) {
 
 
 
-      const chill = Math.min(50, (cMin + (cMax - cMin) * Math.min(1, coldPctLife / cFull)) * Math.max(0, 1 + ce / 100));
+      const chillRaw = (cMin + (cMax - cMin) * Math.min(1, coldPctLife / cFull)) * Math.max(0, 1 + ce / 100);
+      const chill = Math.min(50, chillRaw);
+
+
+
+
       const coldRate = hitsPerSec * perHitFactor * hitFactor;
       const up = 1 - Math.exp(-coldRate * 2);
       const chillF = 1 + ruleNum(GD, 'r103.AILMENTS.ChillTakenPer103', 0.5) * chill * up / 100;
-      ail.chill = { size: chill, uptime: up, taken: (chillF - 1) * 100, coldPctLife, life: cLife };
+      ail.chill = { size: chill, uptime: up, taken: (chillF - 1) * 100, coldPctLife, life: cLife, chillEffect: ce, capped: chillRaw >= 50 };
 
 
 
@@ -19633,7 +19708,7 @@ window.BOCharacter = function (ctx) {
         ail.chill.counted = true; ail.chill.addedTo = (shockF - 1) * 100;
         for (const d of Object.keys(byType)) byType[d] *= k;
         hitDpsVs *= k; res.hitDps = hitDpsVs; shockF += chillPct / 100;
-        res.notes.push('Chill: ' + Math.round(chill) + '% chill makes the enemy take ' + (chillPct / Math.max(up, 1e-9)).toFixed(1) + '% more damage from hits (' + ruleNum(GD, 'r103.AILMENTS.ChillTakenPer103', 0.5) + '% per 1% chill), on ' + Math.round(up * 100) + '% of the time, added to your shock (shock, chill and Brittle add together: developer stacking table, game tooltips). Poison, ignite and bleed ticks do not take it. Chill is ' + cMin + '% for a small cold hit up to ' + cMax + '% at a hit worth ' + cFull + '% of the enemy\'s life (game log 19 Nov 2026), chill effect raises it up to 50%; yours is about ' + (coldPctLife < 0.1 ? 'under 0.1' : coldPctLife.toFixed(1)) + '% of its ~' + Math.round(cLife).toLocaleString('en-US') + ' life' + (isBoss || o.enemyLife ? '.' : ' (a typical rare of this level: an estimate).'));
+        res.notes.push('Chill: ' + Math.round(chill) + '% chill makes the enemy take ' + (chillPct / Math.max(up, 1e-9)).toFixed(1) + '% more damage from hits (' + ruleNum(GD, 'r103.AILMENTS.ChillTakenPer103', 0.5) + '% per 1% chill), on ' + Math.round(up * 100) + '% of the time, added to your shock (shock, chill and Brittle add together: developer stacking table, game tooltips). Poison, ignite and bleed ticks do not take it. Chill is ' + cMin + '% for a small cold hit up to ' + cMax + '% at a hit worth ' + cFull + '% of the enemy\'s life (game log 19 Nov 2026), chill effect raises it up to 50%; yours is about ' + (coldPctLife < 0.1 ? 'under 0.1' : coldPctLife.toFixed(1)) + '% of its ~' + Math.round(cLife).toLocaleString('en-US') + ' life' + (isBoss || o.enemyLife ? '.' : ' (a typical rare of this level: an estimate).') + (chillRaw >= 50 && ce > 0 ? ' Your +' + Math.round(ce) + '% chill effect would make it ' + Math.round(chillRaw) + '%: it is at the 50% cap, so more chill effect (Oath of the Long Winter, Heartscale, ...) adds nothing here.' : ''));
       }
       let fd = 0; for (const m of pickMods(mods, 'FreezeDuration', 'Inc')) if (applies(ctx, m)) { fd += m.v; use(m, 'Crack'); }
       const crackK = Math.max(0, 1 + dotMulti / 100) * Math.max(0, 1 + fd / 100);
@@ -23557,9 +23632,7 @@ window.BOStartApp = function () {
     if (vowsTab && !$('#vowsPane').hidden) setTimeout(() => vowsTab.render(), 0); // after the skill and curse ticks are set
     if (brewery && !$('#breweryPane').hidden) brewery.render(); // the Brewery shows this character's potions
     if (lootFilter && !$('#lootFilterPane').hidden) setTimeout(() => lootFilter.render(), 0); // its preset fits the character (after the skill is picked)
-    st.curses = {};
-    for (const c of Object.values(GD.curses)) st.curses[c.Id] = { on: curseOnBar(ch, c), dread: 0 };
-    st.enemyLevel = null; $('#enemyLevel').value = ''; $('#enemyLevel').placeholder = ch.level;
+    loadFight(ch); // this character's enemy level, curse ticks, Vow / shock / charge settings: as last left in this browser, else the build's own
 
 
     st.ban = new Set(store.get('ban:' + ch.id, []) || []);
@@ -23635,9 +23708,105 @@ window.BOStartApp = function () {
     const now = new Set(Object.values(GD.curses).filter(c => curseOnBar(st.ch, c)).map(c => c.Id));
     if (st.curseBar && st.curseBarCh === st.ch.id) for (const c of Object.values(GD.curses)) {
       const was = st.curseBar.has(c.Id), is = now.has(c.Id);
-      if (was !== is) st.curses[c.Id] = Object.assign({ dread: 0 }, st.curses[c.Id] || {}, { on: is });
+      if (was !== is) st.curses[c.Id] = Object.assign({ dread: 0 }, st.curses[c.Id] || {}, { on: is }, is ? { dread: defaultDread(st.ch, c) } : {});
     }
     st.curseBar = now; st.curseBarCh = st.ch.id;
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  let fightSaved = '', enemySaved = '';
+  const ENEMY_KEYS = ['rarity', 'gElem', 'gWho', 'gStrong', 'gWeak', 'res', 'extraTaken', 'enemyLife', 'leechUptime', 'projOnTarget'];
+  const ENEMY_DEF = { rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, extraTaken: 0, enemyLife: null, leechUptime: null, projOnTarget: null };
+  const FIGHT_OFF = /^(vow|potion|barshock|barfreeze|charge|companion):/; // st.off keys that are fight settings (not supports, items or granted gems)
+  const FIGHT_DEF = () => ({ enemyLevel: null, vowbreak: [], tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0, gatherFury: 2 }, enemyHallowedGround: null, hallowCG: false, graveCall: null, otherBleed: '', flashfire: false, windburstMoves: null, corpseKind: '', corpsesPerSec: null });
+
+  function defaultDread(ch, c) {
+    if (!ch || !c || c.Kind !== 'Banner' || !c.Dread || !curseOnBar(ch, c)) return 0;
+    let mods; try { mods = S.collectMods(GD, ch, { off: st.off }).mods; } catch (e) { mods = undefined; }
+    return Math.max(c.Dread.Cap || 0, c.Dread.BossCap || 0) + S.bannerValourMax(GD, ch, c, mods);
+  }
+  function loadEnemy() {
+    const e = store.get('enemy', null) || {};
+    for (const k of ENEMY_KEYS) st[k] = JSON.parse(JSON.stringify(e[k] !== undefined ? e[k] : ENEMY_DEF[k]));
+    if (!['normal', 'magic', 'rare', 'boss'].includes(st.rarity)) st.rarity = 'boss';
+    if (!st.res || typeof st.res !== 'object') st.res = {};
+    const now = {}; for (const k of ENEMY_KEYS) now[k] = st[k]; enemySaved = JSON.stringify(now);
+  }
+  function loadFight(ch) {
+    const f = Object.assign(FIGHT_DEF(), store.get('fight:' + ch.id, null) || {});
+    const bar = new Set((ch.hotbar || []).filter(Boolean).map(h => String(h).toLowerCase()));
+    st.enemyLevel = +f.enemyLevel > 0 ? +f.enemyLevel : null;
+    st.curses = {};
+    for (const c of Object.values(GD.curses)) {
+      const onBar = curseOnBar(ch, c), kept = (f.curses || {})[c.Id];
+      st.curses[c.Id] = kept && kept.bar === onBar ? { on: !!kept.on, dread: Math.max(0, +kept.dread || 0) } : { on: onBar, dread: onBar ? defaultDread(ch, c) : 0 };
+    }
+    st.curseBar = null; // syncCurseBar starts again from this character's bar
+
+    for (const k of [...st.off]) if (FIGHT_OFF.test(k)) st.off.delete(k);
+    for (const k of f.off || []) {
+      if (!FIGHT_OFF.test(k)) continue;
+      const m = /^(barshock|barfreeze):(.+)$/.exec(k);
+      if (m && !bar.has(m[2]) && !/golem/.test(m[2])) continue;
+      st.off.add(k);
+    }
+    st.vowbreak = new Set(f.vowbreak || []);
+    st.tryHeralds = Object.assign({}, f.tryHeralds || {});
+    st.charges = Object.assign(FIGHT_DEF().charges, f.charges || {});
+    for (const k of ['enemyHallowedGround', 'hallowCG', 'graveCall', 'otherBleed', 'flashfire', 'windburstMoves', 'corpseKind', 'corpsesPerSec']) st[k] = f[k];
+    fightSaved = JSON.stringify(fightNow(ch));
+    fillEnemyInputs(ch);
+  }
+  function fightNow(ch) {
+    const f = { enemyLevel: st.enemyLevel || null, curses: {}, off: [...st.off].filter(k => FIGHT_OFF.test(k)).sort(), vowbreak: [...st.vowbreak].sort(), tryHeralds: st.tryHeralds, charges: st.charges };
+    for (const c of Object.values(GD.curses)) {
+      const cs = st.curses[c.Id] || { on: false, dread: 0 }, onBar = curseOnBar(ch, c);
+      if (!!cs.on !== onBar || (+cs.dread || 0) !== (onBar ? defaultDread(ch, c) : 0)) f.curses[c.Id] = { on: !!cs.on, dread: +cs.dread || 0, bar: onBar };
+    }
+    for (const k of ['enemyHallowedGround', 'hallowCG', 'graveCall', 'otherBleed', 'flashfire', 'windburstMoves', 'corpseKind', 'corpsesPerSec']) f[k] = st[k];
+    return f;
+  }
+
+  function keepFight() {
+    const e = {}; for (const k of ENEMY_KEYS) e[k] = st[k];
+    const es = JSON.stringify(e); if (es !== enemySaved) { enemySaved = es; store.set('enemy', e); }
+    const ch = st.chOrig || st.ch; if (!ch || !ch.id) return;
+    const fs = JSON.stringify(fightNow(st.ch)); if (fs === fightSaved) return;
+    fightSaved = fs;
+    store.set('fight:' + ch.id, JSON.parse(fs));
+  }
+
+  function fillEnemyInputs(ch) {
+    $('#enemyLevel').value = st.enemyLevel || ''; if (ch) $('#enemyLevel').placeholder = ch.level;
+    $('#enemyRarity').value = st.rarity;
+    $('#extraTaken').value = st.extraTaken == null ? 0 : st.extraTaken;
+    $('#enemyLife').value = st.enemyLife == null ? '' : st.enemyLife;
+    $('#leechUptime').value = st.leechUptime == null ? '' : st.leechUptime;
+    $('#projOnTarget').value = st.projOnTarget == null ? '' : st.projOnTarget;
+    $('#windburstMoves').value = st.windburstMoves == null ? '' : st.windburstMoves;
+    $('#corpseKind').value = st.corpseKind || '';
+    $('#corpsesPerSec').value = st.corpsesPerSec == null ? '' : st.corpsesPerSec;
+    $('#flashfire').checked = !!st.flashfire;
+    resGrid.querySelectorAll('[data-res]').forEach(i => { const v = st.res[i.dataset.res]; i.value = v == null ? '' : v; });
+    document.querySelectorAll('[data-charge]').forEach(i => { const v = st.charges[i.dataset.charge]; i.value = v == null ? 0 : v; });
+  }
+
+  function resetFight() {
+    store.set('enemy', null); loadEnemy();
+    const ch = st.chOrig || st.ch;
+    if (ch && ch.id) { store.set('fight:' + ch.id, null); loadFight(st.ch); }
+    render();
   }
   function opts(extra) {
     syncCurseBar();
@@ -24124,7 +24293,7 @@ window.BOStartApp = function () {
   $('#supportChips').addEventListener('mouseleave', () => { st.supMsg = ''; if (st.last) renderSupportPicker(st.last); });
 
 
-  function render() { if (advancedTab && !$('#advancedPane').hidden) advancedTab.render(); renderSupportSkillSelect(); renderMain(); renderSupportSearchResults(); treeAfterRender(); renderCompare(); renderBuildStats(); syncUnsaved(); if (!$('#characterPane').hidden) fillOptimizerSlot(); }
+  function render() { keepFight(); if (advancedTab && !$('#advancedPane').hidden) advancedTab.render(); renderSupportSkillSelect(); renderMain(); renderSupportSearchResults(); treeAfterRender(); renderCompare(); renderBuildStats(); syncUnsaved(); if (!$('#characterPane').hidden) fillOptimizerSlot(); }
 
 
 
@@ -25720,6 +25889,7 @@ window.BOStartApp = function () {
   }
   enemyDialog.addEventListener('click', e => { if (e.target === enemyDialog) enemyDialog.close(); }); // a click on the backdrop
   $('#enemyDialogClose').addEventListener('click', () => enemyDialog.close());
+  $('#enemyReset').addEventListener('click', resetFight);
   document.addEventListener('click', e => { if (e.target.closest && e.target.closest('[data-enemy-cfg]')) openEnemyDialog(); });
 
 
@@ -26548,13 +26718,13 @@ window.BOStartApp = function () {
 
 
 
-  const DV = { key: '', nodes: new Map(), asp: new Map(), job: 0, base: 0 };
+  const DV = { key: '', nodes: new Map(), asp: new Map(), job: 0, base: 0, shape: '' };
   const dragonKey = () => JSON.stringify([st.skill, st.ch && st.ch.classId, st.ch, opts(), GD.steamBuild, GD.apiBuild, GD.apiHash, GD.filesAt]);
   function dragonScore() {
     if ($('#dragonPanel').hidden || !st.ch || !st.skill) { DV.key = ''; DV.nodes = new Map(); DV.asp = new Map(); paintDragonHeat(); return; }
     const key = dragonKey(); if (key === DV.key) { paintDragonHeat(); return; }
     DV.key = key; DV.nodes = new Map(); DV.asp = new Map(); const job = ++DV.job, ch = st.ch, skill = st.skill, o = opts();
-    DV.base = S.calcSkill(GD, ch, skill, o).totalDps;
+    { const r0 = S.calcSkill(GD, ch, skill, o); DV.base = r0.totalDps; DV.shape = r0.shape || ''; }
     if (!(DV.base > 0)) { paintDragonHeat(); return; }
     const dps = c => S.calcSkill(GD, Object.assign({}, ch, c), skill, o).totalDps / DV.base - 1;
     const ids = planner.dragon.ids(ch), asps = ['-'].concat(Object.keys(GD.dragon.aspects || {})), now = ch.dragonAspect || '-';
@@ -26575,21 +26745,33 @@ window.BOStartApp = function () {
     if (DV.nodes.has(id)) return DV.nodes.get(id);
     if (!st.ch || !st.skill || !DV.key || !(DV.base > 0)) return null;
     const p = planner.dragon.plan(st.ch, id), refund = planner.dragon.info(st.ch, id).state === 'taken';
-    const out = p ? { d: (dps || (c => S.calcSkill(GD, Object.assign({}, st.ch, c), st.skill, opts()).totalDps / DV.base - 1))({ dragonNodes: p.nodes }), cost: p.cost, n: p.n, refund } : null;
+    const f = dps || (c => S.calcSkill(GD, Object.assign({}, st.ch, c), st.skill, opts()).totalDps / DV.base - 1);
+    const out = p ? { d: f({ dragonNodes: p.nodes }), cost: p.cost, n: p.n, refund } : null;
+
+
+
+
+
+
+    if (out && !refund && p.n > 1) out.own = out.d - f({ dragonNodes: p.nodes.filter(x => x !== id) });
     DV.nodes.set(id, out); return out;
   }
 
   const dPerPt = v => v.d / Math.max(1, v.cost);
+
+
+  const dCarried = v => !!v && !v.refund && v.own != null && v.d > 0.0005 && v.own <= 0.0015;
+  const dGain = v => !!v && !v.refund && v.d > 0.0005 && !dCarried(v);
   function paintDragonHeat() {
     const body = $('#dragonBody'), svg = body.querySelector('.dl-tree'); if (!svg) return;
     const heat = T.heat !== false;
     const tipEl = $('#dragonTip'); if (!tipEl.hidden && /^asp:/.test(tipEl.dataset.id || '')) tipEl.innerHTML = aspectTipHtml(tipEl.dataset.id.slice(4)); // its value may have just come in
-    const vals = []; for (const v of DV.nodes.values()) if (v && !v.refund && v.d > 0.0005) vals.push(dPerPt(v));
+    const vals = []; for (const v of DV.nodes.values()) if (dGain(v)) vals.push(dPerPt(v));
     vals.sort((x, y) => x - y);
     const rank = v => { let lo = 0, hi = vals.length; while (lo < hi) { const m = (lo + hi) >> 1; if (vals[m] <= v + 1e-12) lo = m + 1; else hi = m; } return vals.length > 1 ? Math.max(0, lo - 1) / (vals.length - 1) : 1; };
     for (const g of svg.querySelectorAll('[data-dn]')) {
       const v = DV.nodes.get(g.dataset.dn), c = g.querySelector('circle:not(.dl-find)'); if (!c) continue;
-      const gain = heat && v && !v.refund && v.d > 0.0005, loss = heat && v && !v.refund && v.d < -0.0005;
+      const gain = heat && dGain(v), loss = heat && v && !v.refund && v.d < -0.0005;
       c.style.fill = gain ? heatFill(rank(dPerPt(v))) : ''; c.style.fillOpacity = gain && g.classList.contains('dl-ic') ? '0.45' : '';
       g.classList.toggle('loss', !!loss);
     }
@@ -26601,7 +26783,7 @@ window.BOStartApp = function () {
       s.className = 'dl-asp-g notranslate' + (v > 0.0005 ? ' up' : v < -0.0005 ? ' down' : '');
     }
     const best = body.querySelector('[data-dl-best]'); if (!best) return;
-    const rows = [...DV.nodes].filter(([, v]) => v && !v.refund && v.d > 0.0005).sort((a, b) => dPerPt(b[1]) - dPerPt(a[1])).slice(0, 6);
+    const rows = [...DV.nodes].filter(([, v]) => dGain(v)).sort((a, b) => dPerPt(b[1]) - dPerPt(a[1])).slice(0, 6);
     const skillName = (GD.skills[String(st.skill).toLowerCase()] || {}).Name || st.skill;
     const h = rows.length ? '<h3 class="dl-list-h">Best next picks <span class="notranslate">·</span> ' + esc(skillName) + ' DPS</h3><ul class="best-list dl-best-list">' + rows.map(([id, v]) => {
       const d = planner.dragon.info(st.ch, id);
@@ -26686,6 +26868,11 @@ window.BOStartApp = function () {
       const g = v.d, cls = g > 0.0005 ? 'up' : g < -0.0005 ? 'down' : '';
       if (verb === 'Refund') h += '<div class="gain ' + cls + '">Refund: ' + pct(g) + ' ' + esc(skillName) + ' DPS' + (v.n > 1 ? ' (' + (v.n - 1) + ' more node' + (v.n > 2 ? 's go' : ' goes') + ' with it)' : '') + '</div>';
       else h += '<div class="gain ' + cls + '">Take: ' + (v.cost > 1 ? pct(dPerPt(v)) + ' ' + esc(skillName) + ' DPS per point · ' + v.cost + ' points (' + pct(g) + ' total)' : pct(g) + ' ' + esc(skillName) + ' DPS · ' + (v.cost === 1 ? '1 point' : 'uses no points')) + (v.n > 1 ? ' · path of ' + v.n + ' nodes' : '') + '</div>';
+    }
+    if (dCarried(v)) {
+
+      const notTot = /\(not totems\)|shot yourself|with your own skill/i.test(d.text || '') && /totem/i.test(DV.shape || '');
+      h += '<div class="gain down">This node itself adds ' + (Math.abs(v.own) > 0.0005 ? (v.own > 0 ? 'only ' : '') + pct(v.own) : 'nothing') + ' to ' + esc(skillName) + ' DPS' + (notTot ? ': your own hits only, and a totem fires this skill' : '') + '. The gain above is the path to it.</div>';
     }
     if (d.state === 'locked' && v) h += '<div class="tk" style="margin-top:5px">Click to take it with its path</div>';
     else if (d.why) h += '<div class="gain down">' + esc(d.why.replace(/^./, c => c.toUpperCase())) + '</div>';
@@ -27946,7 +28133,8 @@ window.BOStartApp = function () {
   };
 
 
-  const gsTopHtml = (off, gear) => {
+
+  const gsTopHtml = (off, gear, idols) => {
     const S_ = GS.set, dis = off ? ' disabled' : '';
     const chk = (f, label, tip, forced) => '<label class="check-row" title="' + esc(tip) + '"><input type="checkbox" data-gs-set="' + f + '"' + (S_[f] || forced ? ' checked' : '') + (off || forced ? ' disabled' : '') + '><span>' + label + '</span></label>';
     return '<div class="gs-top">' + gsTierHtml(off) + '<div class="gs-opts"><div class="gs-controls">' +
@@ -27956,13 +28144,13 @@ window.BOStartApp = function () {
       (+S_.maxRiven === 0 && S_.maxRiven !== '' ? '<p class="gs-attn-note">Riven mods are off (0). Raise this number to let the search use them, or clear the box for no limit.</p>' : '') +
       '<div class="gs-checks">' +
       chk('ignoreLevel', 'Ignore level requirements', 'Off: only bases, uniques and runes your character\'s level can use') +
-      chk('ignoreAttr', 'Ignore attribute requirements', 'Off: every item must fit your Strength, Dexterity and Intelligence with the gear found') +
+      (idols ? '' : chk('ignoreAttr', 'Ignore attribute requirements', 'Off: every item must fit your Strength, Dexterity and Intelligence with the gear found')) +
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
       chk('vows', 'Vows on uniques', 'A red item takes up to 11 lines from rares at the cube; the best ones are added') +
-      chk('basicOnly', 'Basic items only', 'Plain bases only: the search skips Core Touched, Ashen and Gnome-made bases' + (gear ? ', and one you wear now is not kept either' : '')) +
+      (idols ? '' : chk('basicOnly', 'Basic items only', 'Plain bases only: the search skips Core Touched, Ashen and Gnome-made bases' + (gear ? ', and one you wear now is not kept either' : '')) +
       chk('noCore', 'No Core Touched items', S_.basicOnly ? 'Already covered by Basic items only' : gear ? 'The search skips Core Touched bases, and a Core Touched item you wear now is not kept either' : 'Skip Core Touched bases', S_.basicOnly) +
       chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') +
-      chk('oathsworn', 'Oathsworn rares', 'Each rare the search makes also gets its Oathsworn line (the Cube: a rare, a Tier V or better rune and 3 Core Embers): a 7th line from the item\'s own pool at the best tier its item level allows. The line is not graded, so it never makes a rare Great or Flawless. Rares you wear now are kept as they are') + '</div></div></div>';
+      chk('oathsworn', 'Oathsworn rares', 'Each rare the search makes also gets its Oathsworn line (the Cube: a rare, a Tier V or better rune and 3 Core Embers): a 7th line from the item\'s own pool at the best tier its item level allows. The line is not graded, so it never makes a rare Great or Flawless. Rares you wear now are kept as they are')) + '</div></div></div>';
   };
   GS.set.layers = Object.assign({ life: true, es: true, armour: true, evasion: true, block: true }, GS.set.layers || {});
 
@@ -28149,7 +28337,7 @@ window.BOStartApp = function () {
   }
   const gsPrioText = p => p <= 0 ? 'DPS only' : p >= 100 ? 'Defence only' : (100 - p) + '% DPS · ' + p + '% defence';
   const cmpModesHtml = () => '<div class="cmp-modes" role="tablist" aria-label="Item Simulator tools">' +
-    [['item', 'Item Compare', 'M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4'], ['gear', 'Gear Set Sim', 'M12 3 4 6v6c0 4.5 3.4 7.8 8 9 4.6-1.2 8-4.5 8-9V6z'], ['slot', 'Sim by Slot', 'M4 6h10M4 12h16M4 18h7M17 4v4M14 18h6'], ['riven', 'Best Rivenstone', 'M12 3 5 9l7 12 7-12zM5 9h14M9.5 9 12 21l2.5-12']].map(([k, n, d]) => '<button type="button" class="cmp-mode' + (CMP.mode === k ? ' on' : '') + '" role="tab" aria-selected="' + (CMP.mode === k) + '" data-cmpmode="' + k + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '"/></svg><span>' + n + '</span></button>').join('') + '</div>';
+    [['item', 'Item Compare', 'M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4'], ['gear', 'Gear Set Sim', 'M12 3 4 6v6c0 4.5 3.4 7.8 8 9 4.6-1.2 8-4.5 8-9V6z'], ['slot', 'Sim by Slot', 'M4 6h10M4 12h16M4 18h7M17 4v4M14 18h6'], ['riven', 'Best Rivenstone', 'M12 3 5 9l7 12 7-12zM5 9h14M9.5 9 12 21l2.5-12'], ['idol', 'Idol Sim', 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z']].map(([k, n, d]) => '<button type="button" class="cmp-mode' + (CMP.mode === k ? ' on' : '') + '" role="tab" aria-selected="' + (CMP.mode === k) + '" data-cmpmode="' + k + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '"/></svg><span>' + n + '</span></button>').join('') + '</div>';
 
   function gsKey() {
     if (!st.ch) return '';
@@ -28227,8 +28415,10 @@ window.BOStartApp = function () {
 
 
 
+
   function gsEquipOne(i) {
-    const r = GS.res, s = r && r.slots[i]; if (!s || !s.changed || !s.item || s.slot === 'Idol' || s.needsMain || !st.ch || r.key !== gsKey()) return;
+    const r = GS.res, s = r && r.slots[i]; if (!s || !s.changed || !s.item || s.needsMain || !st.ch || r.key !== gsKey()) return;
+    if (s.slot === 'Idol') return gsEquipIdol(r, s);
     const ch = buildEditable(), item = Object.assign(JSON.parse(JSON.stringify(s.item)), { slot: s.slot });
     const nth = r.slots.filter((x, k) => k < i && x.slot === s.slot).length; // the second ring row is the second Ring item
     const same = ch.items.filter(x => x.slot === s.slot);
@@ -28241,6 +28431,17 @@ window.BOStartApp = function () {
     if (s.slot === 'MainHand') for (const x of r.slots) if (x.slot === 'OffHand') x.needsMain = false;
     r.rekey = true; CMP.aEdited = false; CMP.a = null; CMP.b = null; CMP.read = null;
     GS.msg = 'Equipped ' + itemName(item) + ' on ' + ch.name + ' in this page' + (s.dropsOff ? ' (the off hand came off: it cannot be held with that weapon)' : '') + '; the Build and Damage tabs use it too. The list below still shows the numbers found with the whole set on.' + (ch.plan ? '' : ' Your save is never changed: Reset to save on the Build tab undoes it.');
+    if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {});
+  }
+  function gsEquipIdol(r, s) {
+    const ch = buildEditable(), item = JSON.parse(JSON.stringify(s.item)), bare = x => { const c = Object.assign({}, x); delete c.gx; delete c.gy; return JSON.stringify(c); };
+    const want = Number.isInteger(item.gx) && Number.isInteger(item.gy) ? [item.gx, item.gy] : null;
+    delete item.gx; delete item.gy; item.slot = 'Idol';
+    const oi = s.was ? ch.items.findIndex(x => x.slot === 'Idol' && bare(x) === bare(s.was)) : -1;
+    if (!character || !character.placeIdol(ch, item, oi, want)) { GS.msg = 'No room in the Fossil for ' + itemName(s.item) + ' with your other idols. Equip the best set to put every idol of the set on.'; return renderCompare(); }
+    s.was = s.item; s.changed = false; s.equipped = true;
+    r.rekey = true; CMP.aEdited = false; CMP.a = null; CMP.b = null; CMP.read = null;
+    GS.msg = 'Equipped ' + itemName(item) + ' on ' + ch.name + ' in this page' + (oi >= 0 ? ' in place of the idol on its row' : '') + '; the Build and Damage tabs use it too. The list below still shows the numbers found with the whole set on.' + (ch.plan ? '' : ' Your save is never changed: Reset to save on the Build tab undoes it.');
     if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {});
   }
 
@@ -28280,7 +28481,7 @@ window.BOStartApp = function () {
         const sh = s.needs;
         const req = sh ? '<div class="hint bad gs-req">Needs ' + sh.need + ' ' + ATTR_NAME[sh.attr] + ': you have ' + sh.have + ' now, ' + sh.withSet + ' with the rest of this set on. Equip the other new items first.</div>' : '';
         const shown = s.changed || s.equipped;
-        const act = s.equipped ? '<span class="meta">equipped</span>' : !s.changed || !s.item ? '' : s.slot === 'Idol' ? '<span class="meta" title="Idols are placed together in the Fossil: equip them with the whole set">with the set</span>' :
+        const act = s.equipped ? '<span class="meta">equipped</span>' : !s.changed || !s.item ? '' :
           '<button class="btn small" type="button" data-gs-one="' + si + '"' + (s.needsMain ? ' disabled title="Your main hand cannot hold this off hand: equip the new main hand first"' : s.dropsOff ? ' title="Your off hand comes off: it cannot be held with this weapon"' : '') + '>Equip</button>';
         return '<tr class="' + (s.changed ? 'gs-changed' : '') + '"><td>' + esc(s.label || gsSlotName(s.slot)) + '</td><td' + (s.was ? ' class="gs-hov" data-gs-tip="was:' + si + '"' : '') + '>' + gsItemLabel(s.was) + '</td><td' + (s.item ? ' class="gs-hov" data-gs-tip="item:' + si + '"' : '') + '>' + (s.changed ? '' : '<span class="meta">' + (s.equipped ? 'equipped: ' : 'kept: ') + '</span>') + gsItemLabel(s.item, s.changed) + tip + req + '</td><td>' +
           (shown ? '<span class="' + (s.gain >= 0 ? 'up' : 'down') + '">' + pct(s.gain) + '</span>' : '<span class="meta">–</span>') + '</td>' +
@@ -28580,14 +28781,150 @@ window.BOStartApp = function () {
     if (RV.res) h += rvResultHtml(RV.res);
     return h;
   }
+
+
+
+
+
+
+
+  const IDO = { job: 0, running: false, phase: '', p: 0, t0: 0, res: null, key: '', msg: '', set: Object.assign({ n: 4, spare: true }, store.get('idolSim', {})) };
+  const IDO_N = 5, idoIn = (x, y) => x >= 0 && y >= 0 && x < IDO_N && y < IDO_N && !((x === 0 || x === IDO_N - 1) && (y === 0 || y === IDO_N - 1));
+  const IDO_CELLS = []; for (let y = 0; y < IDO_N; y++) for (let x = 0; x < IDO_N; x++) if (idoIn(x, y)) IDO_CELLS.push([x, y]);
+  const idoDims = it => { const b = GD.bases[lc(it.base)]; return [(b && b.Width) || 1, (b && b.Height) || 1]; };
+  const idoKey = () => gsKey() + '|' + IDO.set.n;
+
+
+
+  function idoPlace(list) {
+    const area = list.reduce((n, s) => n + s.w * s.h, 0); if (area > IDO_CELLS.length) return null;
+    const run = usePins => {
+      const used = new Set(), at = new Array(list.length), cells = (x, y, w, h) => { const o = []; for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) o.push((x + dx) + ',' + (y + dy)); return o; };
+      const fits = (x, y, w, h) => { for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) if (!idoIn(x + dx, y + dy) || used.has((x + dx) + ',' + (y + dy))) return false; return true; };
+      const free = [];
+      list.forEach((s, i) => { if (usePins && s.pin && fits(s.pin[0], s.pin[1], s.w, s.h)) { at[i] = s.pin; cells(s.pin[0], s.pin[1], s.w, s.h).forEach(c => used.add(c)); } else free.push(i); });
+      free.sort((a, b) => list[b].w * list[b].h - list[a].w * list[a].h || list[b].w - list[a].w);
+      let steps = 0;
+      const go = k => {
+        if (k === free.length) return true;
+        const s = list[free[k]];
+        for (const [x, y] of IDO_CELLS) {
+          if (++steps > 200000) return false;
+          if (!fits(x, y, s.w, s.h)) continue;
+          const c = cells(x, y, s.w, s.h); c.forEach(q => used.add(q)); at[free[k]] = [x, y];
+          if (go(k + 1)) return true;
+          c.forEach(q => used.delete(q));
+        }
+        return false;
+      };
+      return go(0) ? at : null;
+    };
+    return run(true) || (list.some(s => s.pin) ? run(false) : null);
+  }
+
+
+  function idoLaid(idols) {
+    const used = new Set(); let ok = true;
+    for (const it of idols) {
+      const [w, h] = idoDims(it);
+      if (!Number.isInteger(it.gx) || !Number.isInteger(it.gy)) { ok = false; break; }
+      for (let dy = 0; dy < h && ok; dy++) for (let dx = 0; dx < w && ok; dx++) { const x = it.gx + dx, y = it.gy + dy, k = x + ',' + y; if (!idoIn(x, y) || used.has(k)) ok = false; else used.add(k); }
+      if (!ok) break;
+    }
+    if (ok) return idols.map(it => ({ it, x: it.gx, y: it.gy }));
+    const at = idoPlace(idols.map(it => { const [w, h] = idoDims(it); return { w, h, pin: Number.isInteger(it.gx) && Number.isInteger(it.gy) ? [it.gx, it.gy] : null }; }));
+    return at ? idols.map((it, i) => ({ it, x: at[i][0], y: at[i][1] })) : null;
+  }
+  function idoRun() {
+    if (!st.ch || !st.skill || IDO.running || !window.BOGearOpt) return;
+    const job = ++IDO.job, key = idoKey();
+    Object.assign(IDO, { running: true, res: null, msg: '', phase: 'Starting', p: 0, t0: performance.now(), key });
+    const o = opts({ off: new Set([...st.off].filter(k => !/^item:/.test(k))) });
+    const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
+    const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
+    const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: 100 + (more.length ? 40 : 0) + (GS.set.prio > 0 ? 20 : 0) }, GS.set, { onlyIdols: true, idolAffixes: IDO.set.n, maxRes: false, defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget() }));
+    renderCompare();
+    const step = () => {
+      if (job !== IDO.job) return;
+      const t = performance.now(); let r;
+      try { do { r = gen.next(); if (r.value && r.value.phase) { IDO.phase = 'Making idols'; IDO.p = Math.min(0.95, (performance.now() - IDO.t0) / 100000); } } while (!r.done && performance.now() - t < 30); }
+      catch (err) { IDO.running = false; IDO.msg = 'The search failed: ' + err.message; return renderCompare(); }
+      if (!r.done) { gsProgress(IDO); soon(step); return; }
+      IDO.running = false;
+      if (r.value.error) IDO.msg = r.value.error;
+      else {
+        const was = st.ch.items.filter(i => i.slot === 'Idol'), now = r.value.items.filter(i => i.slot === 'Idol');
+        const laid = idoLaid(now);
+        if (!laid) IDO.msg = 'The search found idols that do not fit the Fossil; nothing to show. Please send a report.';
+        else IDO.res = Object.assign(r.value, { key, skill: st.skill, n: IDO.set.n, was, wasLaid: idoLaid(was), laid, ch: st.ch });
+      }
+      renderCompare();
+    };
+    soon(step);
+  }
+  function idoCancel() { IDO.job++; IDO.running = false; IDO.msg = 'Search stopped.'; renderCompare(); }
+
+
+  function idoEquip() {
+    const r = IDO.res; if (!r || !st.ch || r.key !== idoKey()) return;
+    const ch = buildEditable(), keep = new Set(r.laid.map(e => JSON.stringify(Object.assign({}, e.it, { gx: undefined, gy: undefined }))));
+    const sig = it => JSON.stringify(Object.assign({}, it, { gx: undefined, gy: undefined }));
+    const gone = ch.items.filter(i => i.slot === 'Idol' && !keep.has(sig(i)));
+    ch.items = ch.items.filter(i => i.slot !== 'Idol').concat(r.laid.map(e => Object.assign(JSON.parse(JSON.stringify(e.it)), { slot: 'Idol', gx: e.x, gy: e.y })));
+    if (IDO.set.spare && gone.length) ch.idolShelf = (Array.isArray(ch.idolShelf) ? ch.idolShelf : []).concat(gone.map(i => { const c = JSON.parse(JSON.stringify(i)); delete c.gx; delete c.gy; return c; }));
+    const n = r.laid.length;
+    IDO.res = null; CMP.aEdited = false; CMP.a = null;
+    IDO.msg = 'Put ' + n + ' idol' + (n === 1 ? '' : 's') + ' in the Fossil of ' + ch.name + ' in this page' + (gone.length ? (IDO.set.spare ? '; the ' + gone.length + ' you wore before went to the spare idols' : '; the ' + gone.length + ' you wore before came off') : '') + '. The Character, Build and Damage tabs use them too.' + (ch.plan ? '' : ' Your save is never changed: Reset to save on the Build tab undoes it.');
+    if (ch.plan) planChanged(ch, {}); else buildEdited(ch, {});
+  }
+  function idoResultHtml(r) {
+    const skillName = (GD.skills[lc(r.skill)] || {}).Name || r.skill, score = r.scored || r.multi;
+    const sp = x => '<span class="' + (x >= 0.00005 ? 'up' : x <= -0.00005 ? 'down' : 'meta') + '">' + pct(x) + '</span>';
+    const cellsOf = list => list.reduce((n, e) => { const [w, h] = idoDims(e.it || e); return n + w * h; }, 0);
+    const dps0 = r.skills && r.skills[0] ? r.skills[0].base : 0, dps1 = r.skills && r.skills[0] ? r.skills[0].value : 0;
+    const wornSig = new Set(r.was.map(i => JSON.stringify(Object.assign({}, i, { gx: undefined, gy: undefined }))));
+    const isKept = it => wornSig.has(JSON.stringify(Object.assign({}, it, { gx: undefined, gy: undefined })));
+    let h = '<div class="card cmp-result"><h2>Best idols <span class="hint">' + esc(skillName) + ', vs the configured enemy · up to ' + r.n + ' line' + (r.n === 1 ? '' : 's') + ' per idol</span></h2>';
+    h += '<div class="headline small">' + stat('Your idols now', num(dps0), '', '', esc(skillName) + ', total DPS') +
+      stat('With these idols', num(dps1), '<div class="delta ' + (r.gain >= 0 ? 'up' : 'down') + '">' + pct(r.gain) + (score ? ' score' : '') + '</div>', 'main', 'found in ' + (r.ms / 1000).toFixed(1) + ' s' + (r.timedOut ? ' (stopped at the time limit)' : '')) +
+      stat('Fossil cells used', cellsOf(r.laid) + ' of ' + IDO_CELLS.length, '', '', r.laid.length + ' idol' + (r.laid.length === 1 ? '' : 's') + ' · now ' + cellsOf(r.was)) + '</div>';
+    const grid = (list, tag, label, mark) => character ? character.idolGridHtml(list.map((e, j) => ({ it: e.it, x: e.x, y: e.y, mark: mark && !isKept(e.it) ? 'ido-new' : '', tip: tag + ':' + j })), label) : '';
+    h += '<div class="ido-grids">' + (r.wasLaid ? '<div class="ido-col"><h3>Now</h3>' + grid(r.wasLaid, 'n', 'Your idols now', false) + '</div>' : '') +
+      '<div class="ido-col"><h3>With these idols</h3>' + grid(r.laid, 'p', 'The idols found, in the Fossil', true) + '<div class="ido-legend"><span class="ido-key ido-new"></span>new idol</div></div></div>';
+    h += '<div class="cmp-actions"><button class="btn" type="button" data-ido="equip">Equip these idols</button><label class="check-row"><input type="checkbox" data-ido-spare' + (IDO.set.spare ? ' checked' : '') + '><span>Keep my idols as spares</span></label><span class="hint">In this page only, in the cells shown.' + (r.ch.plan ? '' : ' Your save is never changed.') + '</span></div>';
+    h += '<div class="table-wrap"><table class="tbl gs-table ido-table"><thead><tr><th>Idol</th><th>Size</th><th>Cells</th><th title="' + (score ? 'Score' : 'DPS') + ' lost if this idol were taken out">Worth</th></tr></thead><tbody>' +
+      r.laid.map((e, j) => { const [w, hh] = idoDims(e.it); return '<tr class="' + (isKept(e.it) ? '' : 'gs-changed') + '"><td class="gs-hov" data-ido-tip="p:' + j + '">' + gsItemLabel(e.it) + (isKept(e.it) ? ' <span class="meta">· worn now</span>' : '') +
+        '<details class="gs-lines"><summary>Lines</summary><div class="cmp-tip pl-tip">' + planner.gear.tip(e.it, 'Idol') + '</div></details></td><td>' + w + 'x' + hh + '</td><td>column ' + (e.x + 1) + ', row ' + (e.y + 1) + '</td><td>' + sp((r.slots.find(s => s.slot === 'Idol' && s.item === e.it) || {}).worth || 0) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    h += '<p class="hint">' + gsLevelNote(r) + ' Each idol carries the lines that add the most, rolled like the rares\' lines for its size: 1 or 2 lines make a magic idol (1 prefix, 1 suffix), 3 to 6 a rare one (up to 3 and 3). Red idols are tried too' + (r.vowMax < 1 ? ', without Vows' : '') + '; red idols you wear stay in their cells. The set always fits the Dwarven Fossil: 5 by 5 without its corners (21 cells), idols never turn or overlap. Your gear, the tree and the supports stay as they are.' +
+      (r.scored ? ' ' + gsDefNote() : '') + '</p>';
+    return h + '</div>';
+  }
+  function idoHtml() {
+    const key = idoKey();
+    if (IDO.running && IDO.key !== key) { IDO.job++; IDO.running = false; IDO.msg = 'The character or a setting changed, so the search was stopped.'; }
+    if (IDO.res && IDO.res.key !== key) IDO.res = null;
+    const off = IDO.running, dis = off ? ' disabled' : '';
+    let h = '<div class="card gs-card"><div class="cmp-pick-head"><div class="gs-head-text"><h2>Idol Sim</h2><p class="hint">Finds the best idols for the selected skill, like the Gear Set Sim but for the Fossil only: every idol base and red idol, with the best lines, in a layout that fits. Your gear, tree and supports stay as they are. The settings below are the Gear Set Sim\'s.</p></div><span class="cmp-skill-group"><label class="field inline cmp-skill"><span>Skill</span><select id="cmpSkill"' + dis + '>' + cmpSkillOptions() + '</select></label>' + (off ? '' : cmpMultiHtml() + enemyBtn()) + '</span></div>' +
+      bareItemsNote() + gsTopHtml(off, false, true) +
+      '<div class="gs-controls"><div class="gs-tier"><span class="meta">Lines per idol</span><div class="cmp-modes gs-tiers ido-lines" role="radiogroup" aria-label="Lines per idol">' + [1, 2, 3, 4, 5, 6].map(n => '<button type="button" class="cmp-mode' + (n === IDO.set.n ? ' on' : '') + '" role="radio" aria-checked="' + (n === IDO.set.n) + '" data-ido-n="' + n + '"' + dis + ' title="' + (n <= 2 ? 'Magic idols' : 'Rare idols') + '"><span>' + n + '</span></button>').join('') + '</div></div></div>' +
+      '<div class="gs-controls gs-goal">' + gsPrioHtml(off) + gsLayersHtml(off) + '</div>' +
+      '<div class="cmp-actions">' + (off ? '<button class="btn ghost" type="button" data-ido="cancel">Stop</button>' :
+        '<button class="btn" type="button" data-ido="run"' + (st.skill ? '' : ' disabled') + '>Find the best idols</button>') +
+      '<span class="hint">' + (st.skill ? 'Takes a minute or two; the page stays usable.' : 'This plan has no damage skill yet: add one on the Build tab.') + '</span></div>' +
+      (off ? '<div class="gs-prog" role="progressbar" aria-label="Search progress"><div class="gs-bar"><div id="gsBar" style="width:' + Math.max(2, Math.round(IDO.p * 100)) + '%"></div></div><div class="hint" id="gsPhase">' + esc(IDO.phase) + '</div></div>' : '') +
+      (IDO.msg ? '<p class="hint pl-status">' + esc(IDO.msg) + '</p>' : '') + '</div>';
+    if (IDO.res) h += idoResultHtml(IDO.res);
+    return h;
+  }
   const cmpItemMode = () => cmpVisible() && CMP.mode === 'item';
   function renderCompare() {
     const el = $('#comparePane'); if (!el || el.hidden) return;
-    let h = cmpModesHtml() + '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Item Simulator</h2><p>' + (CMP.mode === 'gear' ? 'Find the best gear for a skill from every unique, Oathword and rare, for damage, defence or both, and see what it would do.' : CMP.mode === 'riven' ? 'See which line on your gear is worth a Rivenstone, or the best lines for all the stones you have.' : CMP.mode === 'slot' ? 'Pick one slot and see every unique, Oathword and rare that fits it, ranked by what it does for your skill with the rest of your gear as it is.' : 'Pick one of your items, then fill in the item you found or paste a screenshot of it, to see what swapping does to your damage and defence, and which one to wear.') + '</p></div>';
+    let h = cmpModesHtml() + '<div class="cmp-intro"><div class="eyebrow">BUILD TOOLS</div><h2>Item Simulator</h2><p>' + (CMP.mode === 'gear' ? 'Find the best gear for a skill from every unique, Oathword and rare, for damage, defence or both, and see what it would do.' : CMP.mode === 'riven' ? 'See which line on your gear is worth a Rivenstone, or the best lines for all the stones you have.' : CMP.mode === 'idol' ? 'Find the best idols for a skill, with the best lines, in a Fossil layout that fits; the rest of your gear stays as it is.' : CMP.mode === 'slot' ? 'Pick one slot and see every unique, Oathword and rare that fits it, ranked by what it does for your skill with the rest of your gear as it is.' : 'Pick one of your items, then fill in the item you found or paste a screenshot of it, to see what swapping does to your damage and defence, and which one to wear.') + '</p></div>';
     if (!st.ch) { el.innerHTML = h + '<div class="empty">Load a character or start a plan first.</div>'; return; }
     if (CMP.mode === 'gear') { el.innerHTML = h + gsHtml(); return; }
     if (CMP.mode === 'slot') { el.innerHTML = h + sbsHtml(); return; }
     if (CMP.mode === 'riven') { el.innerHTML = h + rvHtml(); return; }
+    if (CMP.mode === 'idol') { el.innerHTML = h + idoHtml(); return; }
     cmpSync();
     const g = planner.gear, slot = cmpSlot(), ia = CMP.a.items[0] || null, ib = CMP.b.items[0] || null;
     h += '<div class="card cmp-pick"><div class="cmp-pick-head"><h2>Item slot</h2>' +
@@ -28684,6 +29021,12 @@ window.BOStartApp = function () {
       if (g1) { gsEquipOne(+g1.dataset.gsOne); return; }
       const rvb = e.target.closest('[data-rv],[data-rv-roll]');
       if (rvb) { const d = rvb.dataset; if (d.rv === 'run') rvRun(); else if (d.rv === 'cancel') rvCancel(); else if (d.rv === 'apply') rvApply(); else if (d.rvRoll && !RV.running && d.rvRoll !== RV.set.roll) { RV.set.roll = d.rvRoll; store.set('rivenSim', RV.set); RV.msg = ''; renderCompare(); } return; }
+      const idb = e.target.closest('[data-ido]');
+      if (idb) { const a = idb.dataset.ido; if (a === 'run') idoRun(); else if (a === 'cancel') idoCancel(); else if (a === 'equip') idoEquip(); return; }
+      const idn = e.target.closest('[data-ido-n]');
+      if (idn) { const n = +idn.dataset.idoN; if (!IDO.running && n !== IDO.set.n) { IDO.set.n = n; store.set('idolSim', IDO.set); IDO.msg = ''; renderCompare(); } return; }
+      const ids = e.target.closest('[data-ido-spare]');
+      if (ids) { IDO.set.spare = ids.checked; store.set('idolSim', IDO.set); return; }
       const sbb = e.target.closest('[data-sbs],[data-sbs-equip],[data-sbs-cmp]');
       if (sbb) { const d = sbb.dataset; if (d.sbs === 'run') sbsRun(); else if (d.sbs === 'cancel') sbsCancel(); else if (d.sbsEquip != null) sbsEquip(+d.sbsEquip); else if (d.sbsCmp != null) sbsCompare(+d.sbsCmp); return; }
       if (e.target.closest('.pl-item > summary')) { e.preventDefault(); return; } // the editors stay open here
@@ -28721,6 +29064,9 @@ window.BOStartApp = function () {
       }
       else if ((sb = e.target.closest && e.target.closest('[data-rv-tip]')) && RV.res) { // Best Rivenstone: the item a line is on
         key = 'rv:' + sb.dataset.rvTip; it = RV.res.ch.items[+sb.dataset.rvTip];
+      }
+      else if ((sb = e.target.closest && e.target.closest('[data-ido-tip]')) && IDO.res) { // Idol Layout: an idol in a grid or a row
+        key = 'ido:' + sb.dataset.idoTip; const [g, j] = sb.dataset.idoTip.split(':'), e2 = (g === 'n' ? IDO.res.wasLaid || [] : IDO.res.laid)[+j]; it = e2 && e2.it;
       }
       if (!it) return hideSlotTip();
       if (!tip) { tip = document.createElement('div'); tip.className = 'pl-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
@@ -29530,6 +29876,7 @@ window.BOStartApp = function () {
   } catch (e) { /* storage off or damaged */ }
   { const hid = store.get('hiddenChars', []) || []; if (hid.length) CHARS = CHARS.filter(c => !(c.file && hid.includes(c.id))); } // removed from the character list (built into the local page)
   if (CHARS.some(c => c.from === 'folder')) $('#saveDirLabel').textContent = 'Reload saves';
+  loadEnemy(); fillEnemyInputs(null); // the enemy as last left in this browser
   const startId = store.get('char', null);
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();

@@ -53,7 +53,7 @@
   var b = new URL("../../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/de.json'), langCode: 'de' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=522">
+<link rel="stylesheet" href="../../../style.css?v=523">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -509,7 +509,7 @@
       <h2 id="enemyDialogTitle">Configure Enemy</h2>
       <button class="btn ghost" id="enemyDialogClose" type="button">Close</button>
     </div>
-    <p class="hint">The same enemy on every page: Damage Analysis, Passive tree, Skills, Character, Item Simulator and Support Gem Simulator.</p>
+    <p class="hint enemy-kept">The same enemy on every page: Damage Analysis, Passive tree, Skills, Character, Item Simulator and Support Gem Simulator. Kept in this browser: the enemy for every character, the curses, Vows and charges for each one. <button class="btn ghost small" id="enemyReset" type="button" title="Back to what your build has on its bar: its curses, Vows and shocks counted, a Guardian at your character's level, charges at 0">Reset to build defaults</button></p>
     <div id="enemyDialogBody">
     <section class="card">
       <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9.5 11.5h.01M14.5 11.5h.01M10 19v2M14 19v2"/></svg></span>Enemy</h2>
@@ -676,7 +676,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":522,"at":"2026-11-26T05:17:44.689Z"};
+window.SITE_VERSION = {"v":523,"at":"2026-11-26T05:55:23.093Z"};
 window.SITE_LANG = 'de';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -690,6 +690,6 @@ window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["War
 /*__VOWS__*/
 /*__ADVANCED__*/
 </script>
-<script src="../../../app.js?v=522"></script>
+<script src="../../../app.js?v=523"></script>
 </body>
 </html>

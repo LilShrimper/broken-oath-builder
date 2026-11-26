@@ -53,7 +53,7 @@
   var b = new URL("../../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/ja.json'), langCode: 'ja' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=537">
+<link rel="stylesheet" href="../../../style.css?v=538">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -589,6 +589,7 @@
         <label class="field"><span>Resolve</span><input type="number" min="0" max="10" value="0" data-charge="resolve"></label>
       </div>
       <label class="field" title="0.5% increased melee damage, 0.2% melee attack speed a stack (0.6% more damage before patch 0.56.8), at most 50 + your maximum Bloodlust lines. Gained on kills (and boss crits with The Wolf's Due), each lasting 5 seconds."><span>Bloodlust stacks <span class="meta">0.5% increased melee damage each, up to 50 + gear and tree</span></span><input type="number" min="0" max="200" value="0" data-charge="bloodlust"></label>
+      <label class="field" title="Melee hits you land give Fortified stacks: 2% increased melee damage and 1% less damage taken from hits each. The sim counts your maximum Fortified lines from gear and the tree as full stacks; the game adds a base we cannot read, so if the game shows more, type your stacks here. 0 = your lines."><span>Fortified stacks <span class="meta">0 = your maximum Fortified lines; type more if the game shows more</span></span><input type="number" min="0" max="200" value="0" data-charge="fortifyStacks"></label>
       <label class="field" title="Kindling support (patch 0.56.8): each kill with the linked spell gives a stack, 0.5% increased spell damage and 0.2% cast speed each, up to 50, each lasting 5 seconds."><span>Kindling stacks <span class="meta">0.5% increased spell damage and 0.2% cast speed each, up to 50</span></span><input type="number" min="0" max="50" value="0" data-charge="kindling"></label>
       <label class="field" title="Gather Fury support: kills with the linked skill grant Fury charges (on a Guardian, every 4% of its life counts as a kill). While the gem is linked to a skill on your bar, the sim counts this many Fury charges as held. If the Fury box above is higher, that number counts instead. How many you really hold is not checked in game."><span>Fury from Gather Fury <span class="meta">charges held while the gem is linked</span></span><input type="number" min="0" max="10" value="2" data-charge="gatherFury"></label>
     </section>
@@ -678,7 +679,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":537,"at":"2026-11-26T21:48:17.100Z"};
+window.SITE_VERSION = {"v":538,"at":"2026-11-26T21:59:47.503Z"};
 window.SITE_LANG = 'ja';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -692,6 +693,6 @@ window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["War
 /*__VOWS__*/
 /*__ADVANCED__*/
 </script>
-<script src="../../../app.js?v=537"></script>
+<script src="../../../app.js?v=538"></script>
 </body>
 </html>

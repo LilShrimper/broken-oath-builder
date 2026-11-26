@@ -1487,7 +1487,7 @@ window.PAGE_LANGS = {
       return k;
     };
     const multi = Array.isArray(skill);
-    let goals = (multi ? skill : [{ id: skill, w: 1 }]).filter(g => g && g.id && g.w > 0).map(g => ({ id: g.id, w: +g.w, opt: g.opt || simOpt }));
+    let goals = (multi ? skill : [{ id: skill, w: 1 }]).filter(g => g && g.id && g.w > 0).map(g => ({ id: g.id, w: +g.w, withMain: !!g.withMain, opt: g.opt || simOpt }));
 
     const oaths0 = Object.assign({}, ch.oaths || {});
     let oathMap = oaths0, oKey = '';
@@ -1531,7 +1531,22 @@ window.PAGE_LANGS = {
     goals = goals.filter(g => g.base > 0);
 
     const minionGoal = goals.some(g => g.r && g.r.minion), totemGoal = goals.some(g => g.r && g.r.totem);
-    const wSum = goals.reduce((a, g) => a + g.w, 0);
+
+
+
+
+    const mixOf = (d, lost) => {
+      const m = goals.findIndex(g => !g.withMain && g.base > 0);
+      let ws = 0, v = 0, na = 0, nb = 0;
+      goals.forEach((g, i) => {
+        if (!(g.base > 0)) return;
+        const x = lost[i] ? 0 : d[i];
+        if (i === m || (g.withMain && m >= 0)) { na += g.base; nb += x; return; }
+        ws += g.w; v += g.w * x / g.base;
+      });
+      if (m >= 0) { ws += goals[m].w; v += goals[m].w * nb / na; }
+      return ws ? v / ws : 0;
+    };
 
     const defW = typeof cfg.defence === 'function' ? Math.max(0, Math.min(1, +cfg.defWeight || 0)) : 0, scored = defW > 0;
     const def0 = scored ? defence(haveList) : null;
@@ -1543,7 +1558,7 @@ window.PAGE_LANGS = {
         else {
 
           const d = goals.map(g => dpsOf(g, list)), lost = S.oneKindLost ? S.oneKindLost(goals.map(g => g.r)) : [];
-          v = 0; goals.forEach((g, i) => { if (!lost[i]) v += g.w * d[i] / g.base; }); v /= wSum;
+          v = mixOf(d, lost);
         }
 
         if (scored && v > 0) v = Math.pow(v, 1 - defW) * Math.pow(Math.max(1, defence(list).ehp) / Math.max(1, def0.ehp), defW);
@@ -2430,7 +2445,7 @@ window.PAGE_LANGS = {
 
 
     const multi = Array.isArray(skill);
-    let goals = (multi ? skill : [{ id: skill, w: 1 }]).filter(x => x && x.id && x.w > 0).map(x => ({ id: x.id, w: +x.w, opt: x.opt || simOpt }));
+    let goals = (multi ? skill : [{ id: skill, w: 1 }]).filter(x => x && x.id && x.w > 0).map(x => ({ id: x.id, w: +x.w, withMain: !!x.withMain, opt: x.opt || simOpt }));
     const mainSkill = (goals[0] || {}).id;
     const dpsOf = (gl, items) => {
       calcs++;
@@ -2440,7 +2455,22 @@ window.PAGE_LANGS = {
     for (const gl of goals) gl.base = dpsOf(gl, ch.items || []);
     const dropped = goals.filter(gl => !(gl.base > 0) && gl.id !== mainSkill).map(gl => gl.id);
     goals = goals.filter(gl => gl.base > 0 || gl.id === mainSkill);
-    const wSum = goals.reduce((a, gl) => a + gl.w, 0);
+
+
+
+
+    const mixOf = (d, lost) => {
+      const m = goals.findIndex(g => !g.withMain && g.base > 0);
+      let ws = 0, v = 0, na = 0, nb = 0;
+      goals.forEach((g, i) => {
+        if (!(g.base > 0)) return;
+        const x = lost[i] ? 0 : d[i];
+        if (i === m || (g.withMain && m >= 0)) { na += g.base; nb += x; return; }
+        ws += g.w; v += g.w * x / g.base;
+      });
+      if (m >= 0) { ws += goals[m].w; v += goals[m].w * nb / na; }
+      return ws ? v / ws : 0;
+    };
 
 
 
@@ -2464,8 +2494,7 @@ window.PAGE_LANGS = {
 
       const d = goals.map(gl => gl.base > 0 ? dpsOf(gl, items) : 0), lost = S.oneKindLost ? S.oneKindLost(goals.map(gl => gl.base > 0 ? gl.r : null)) : [];
       if (!reqOk(items, (goals.find(gl => gl.base > 0) || {}).r)) return 0;
-      let v = 0; goals.forEach((gl, i) => { if (gl.base > 0 && !lost[i]) v += gl.w * d[i] / gl.base; });
-      return v / wSum;
+      return mixOf(d, lost);
     };
 
     const defW = typeof cfg.defence === 'function' ? Math.max(0, Math.min(1, +cfg.defWeight || 0)) : 0;
@@ -16977,15 +17006,20 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
     if (is070(GD)) {
-      const fortMax = modsOf(mods, 'FortifyMax').filter(m => m.stat === 'FortifyMax' && m.mode === 'Flat').reduce((s, m) => s + m.v, 0);
+      const fortLines = modsOf(mods, 'FortifyMax').filter(m => m.stat === 'FortifyMax' && m.mode === 'Flat').reduce((s, m) => s + m.v, 0);
+      const fortSet = Math.max(0, Math.round(+(o.charges || {}).fortifyStacks || 0)), fortMax = fortSet || fortLines;
       if (fortMax > 0) {
-        sources.push({ key: 'fortify', label: 'Fortified x' + fortMax + ' (full stacks, melee)', group: 'Vows & Heralds' });
+        sources.push({ key: 'fortify', label: 'Fortified x' + fortMax + (fortSet ? ' (set by hand, melee)' : ' (full stacks, melee)'), group: 'Vows & Heralds' });
         if (!off.has('fortify')) {
           const perMore = modsOf(mods, 'FortifyDamage').filter(m => m.stat === 'FortifyDamage' && m.mode === 'Flat').reduce((s, m) => s + m.v, 0);
           add({ Stat: 'Damage', Mode: 'Inc', Tags: ['Melee'] }, 2 * fortMax, 0, 'Fortified x' + fortMax, 'fortify');
           if (perMore) add({ Stat: 'Damage', Mode: 'More', Tags: ['Melee'] }, perMore * fortMax, 0, 'Fortified x' + fortMax + ' (' + perMore + '% more a stack)', 'fortify');
-          notes.push('Fortified: ' + fortMax + ' stacks (your "maximum Fortified" lines; any base the game adds is not in its data), ' + (2 * fortMax) + '% increased melee damage' + (perMore ? ' and ' + +(perMore * fortMax).toFixed(1) + '% more' : '') + ' (patch 70).');
+          notes.push('Fortified: ' + fortMax + ' stacks (' + (fortSet ? 'set by hand' : 'your "maximum Fortified" lines; the base the game adds is not in its data: set your stacks by hand in the Damage settings') + '), ' + (2 * fortMax) + '% increased melee damage' + (perMore ? ' and ' + +(perMore * fortMax).toFixed(1) + '% more' : '') + ' (patch 70).');
         }
       }
     }
@@ -24616,11 +24650,29 @@ window.BOStartApp = function () {
     for (const s of st.pickable || []) if (!out.some(g => g.id === s.id) && cocAuto(s.id)) out.push({ id: s.id, w: 1, auto: true });
     return out;
   };
+
+
+
+
+
+
+  const mixRatio = parts => {
+    const m = parts.findIndex(p => !p.withMain && p.a > 0);
+    let ws = 0, v = 0, na = 0, nb = 0;
+    parts.forEach((p, i) => {
+      if (!(p.a > 0)) return;
+      if (i === m || (p.withMain && m >= 0)) { na += p.a; nb += p.b || 0; return; }
+      ws += p.w; v += p.w * (p.b || 0) / p.a;
+    });
+    if (m >= 0) { ws += parts[m].w; v += parts[m].w * nb / na; }
+    return ws ? v / ws : 1;
+  };
   const sName = id => (GD.skills[String(id).toLowerCase()] || {}).Name || id;
+  const extraGoals = o => optExtra().map(g => ({ id: g.id, w: g.w, withMain: !!g.auto, opt: o }));
   function optGoals(extra) {
     const more = optExtra();
     if (!more.length) return st.skill;
-    return [{ id: st.skill, w: 1, opt: opts(extra) }].concat(more.map(g => ({ id: g.id, w: g.w, opt: comboOpts(extra) })));
+    return [{ id: st.skill, w: 1, opt: opts(extra) }].concat(extraGoals(comboOpts(extra)));
   }
   const optLabel = () => { const more = optExtra(); return more.length ? [st.skill, ...more.map(g => g.id)].map(sName).join(' + ') : sName(st.skill); };
 
@@ -24630,7 +24682,7 @@ window.BOStartApp = function () {
     const w = st.optW || {}, list = optMultiList();
     const main = (st.pickable || []).find(s => s.id === st.skill);
     return (main ? '<div class="opt-multi-row main" title="The main skill always counts, at weight 1. Change it in the ' + boxName + ' box."><label class="check-row"><input type="checkbox" checked disabled><span>' + skillDot(main.id) + esc(main.name) + ' <span class="c">main</span></span></label><input type="number" value="1" disabled title="Weight"></div>' : '') + list.map(s => { const on = w[s.id] > 0;
-      if (!on && cocAuto(s.id)) return '<div class="opt-multi-row" title="Cast on Crit: fires by itself on crits, so it always counts while on the bar"><label class="check-row"><input type="checkbox" checked disabled><span>' + skillDot(s.id) + esc(s.name) + ' <span class="c">Cast on Crit</span></span></label><input type="number" value="1" disabled title="Weight"></div>';
+      if (!on && cocAuto(s.id)) return '<div class="opt-multi-row" title="Cast on Crit: fires by itself on crits, so it always counts while on the bar. Its DPS is added to the main skill\'s before the % change"><label class="check-row"><input type="checkbox" checked disabled><span>' + skillDot(s.id) + esc(s.name) + ' <span class="c">Cast on Crit</span></span></label><input type="number" value="1" disabled title="Weight"></div>';
       return '<div class="opt-multi-row"><label class="check-row"><input type="checkbox" data-ow="' + esc(s.id) + '"' + (on ? ' checked' : '') + '><span>' + skillDot(s.id) + esc(s.name) + '</span></label>' +
         '<input type="number" min="0.05" max="10" step="0.05" data-oww="' + esc(s.id) + '" value="' + (on ? w[s.id] : 1) + '" title="Weight"' + (on ? '' : ' disabled') + '></div>'; }).join('');
   }
@@ -25188,6 +25240,8 @@ window.BOStartApp = function () {
 
 
 
+
+    const fortSet = Math.max(0, Math.round(+(st.charges || {}).fortifyStacks || 0)); if (fortSet) fortMax = fortSet;
     return { maxRes, less, physAsEle: Math.min(100, Math.max(0, physAsEle)), fortify: melee && fortMax > 0 ? { stacks: fortMax, pct: Math.min(90, fortMax * (1 + fortEff / 100)) } : null };
   }
   function defenceCore(ch, mods, attr) {
@@ -28337,17 +28391,14 @@ window.BOStartApp = function () {
     };
     if (base.error || base.unsupported || !(base.totalDps > 0)) { $('#treeStatus').textContent = 'Node DPS values need a damage skill: pick one in the Skill box.'; paintTree(); bestList(); return; }
 
-    const co = comboOpts(), more = optExtra().map(g => ({ id: g.id, w: g.w, b: S.calcSkill(GD, st.ch, g.id, co).totalDps })).filter(g => g.b > 0);
-    const wSum = 1 + more.reduce((a, g) => a + g.w, 0);
+    const co = comboOpts(), more = optExtra().map(g => ({ id: g.id, w: g.w, withMain: !!g.auto, b: S.calcSkill(GD, st.ch, g.id, co).totalDps })).filter(g => g.b > 0);
     const b = base.totalDps, have = allocSet();
 
     const relDps = c => {
       const r0 = S.calcSkill(GD, c, st.skill, o);
       if (!more.length) return r0.totalDps / b - 1;
       const rs = [r0].concat(more.map(g => S.calcSkill(GD, c, g.id, co))), lost = S.oneKindLost(rs);
-      let v = lost[0] ? 0 : r0.totalDps / b;
-      more.forEach((g, i) => { if (!lost[i + 1]) v += g.w * rs[i + 1].totalDps / g.b; });
-      return v / wSum - 1;
+      return mixRatio([{ w: 1, a: b, b: lost[0] ? 0 : r0.totalDps }].concat(more.map((g, i) => ({ w: g.w, withMain: g.withMain, a: g.b, b: lost[i + 1] ? 0 : rs[i + 1].totalDps })))) - 1;
     };
 
 
@@ -28822,19 +28873,20 @@ window.BOStartApp = function () {
 
   function cmpCombined(rows) {
     const more = optExtra(); if (!more.length) return null;
-    const W = { [st.skill]: 1 }; for (const g of more) W[g.id] = g.w;
-    const use = rows.filter(x => W[x.id] && (x.a != null || x.b != null));
+    const W = { [st.skill]: 1 }, auto = {}; for (const g of more) { W[g.id] = g.w; auto[g.id] = !!g.auto; }
+
+    const use = rows.filter(x => W[x.id] && (x.a != null || x.b != null)).sort((x, y) => (y.id === st.skill) - (x.id === st.skill));
     if (use.length < 2) return null;
 
     const lostA = S.oneKindLost(use.map(x => x.ra)), lostB = S.oneKindLost(use.map(x => x.rb));
-    let a = 0, b = 0, ws = 0, wg = 0;
-    use.forEach((x, i) => {
+    let a = 0, b = 0;
+    const parts = use.map((x, i) => {
       const xa = lostA[i] ? 0 : x.a, xb = lostB[i] ? 0 : x.b;
       a += xa || 0; b += xb || 0;
-      if (xa > 0 && xb != null) { ws += W[x.id]; wg += W[x.id] * (xb / xa - 1); }
+      return { w: W[x.id], withMain: auto[x.id], a: xb != null ? xa : 0, b: xb };
     });
     const oneKind = lostA.some(Boolean) || lostB.some(Boolean);
-    return { a, b, gain: ws ? wg / ws : 0, names: use.filter((x, i) => !(lostA[i] && lostB[i])).map(x => x.name), W, oneKind };
+    return { a, b, gain: mixRatio(parts) - 1, names: use.filter((x, i) => !(lostA[i] && lostB[i])).map(x => x.name), W, oneKind };
   }
   function cmpResults(ia, ib, rows, verdict) {
     const r0 = rows[0], both = r0.a != null && r0.b != null, cb = cmpCombined(rows);
@@ -28846,7 +28898,7 @@ window.BOStartApp = function () {
       h += '<div class="headline small">' +
         stat('With your item', num(cb.a), '', '', label + ', total DPS added up') +
         stat(ib ? 'With the new item' : 'With the slot empty', num(cb.b), '', ib ? 'main' : '', label + ', total DPS added up' + (ib ? '' : ': what your item is worth')) +
-        stat('Change', (cb.b >= cb.a ? '+' : '') + num(cb.b - cb.a) + ' DPS', '<div class="delta ' + (cb.gain >= 0 ? 'up' : 'down') + '">' + pct(cb.gain) + ' weighted</div>', '', 'Each skill\'s own % change, by its weight under Also count (as the tree optimizer counts it). The added-up DPS changes ' + pct(cb.a ? cb.b / cb.a - 1 : 0) + '.') +
+        stat('Change', (cb.b >= cb.a ? '+' : '') + num(cb.b - cb.a) + ' DPS', '<div class="delta ' + (cb.gain >= 0 ? 'up' : 'down') + '">' + pct(cb.gain) + ' weighted</div>', '', 'Each skill\'s own % change, by its weight under Also count (as the tree optimizer counts it; a Cast on Crit skill counts with the main skill\'s DPS). The added-up DPS changes ' + pct(cb.a ? cb.b / cb.a - 1 : 0) + '.') +
         '</div>';
     } else
     h += '<div class="headline small">' +
@@ -29200,7 +29252,7 @@ window.BOStartApp = function () {
     const o = opts({ off: new Set([...st.off].filter(k => !/^item:/.test(k))) });
 
     const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
-    const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
+    const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(extraGoals(co)) : st.skill;
 
 
     const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: (more.length ? 80 + 40 * Math.min(3, more.length) : 80) + (GS.set.prio > 0 || GS.set.maxRes ? 40 : 0) + (GS.set.idolAffixes ? 60 : 0) }, GS.set, { vowLines: planner.gear.vowAffixes, defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget() }));
@@ -29358,7 +29410,7 @@ window.BOStartApp = function () {
     Object.assign(SBS, { running: true, res: null, msg: '', phase: 'Starting', p: 0, t0: performance.now(), key });
     const o = opts({ off: new Set([...st.off].filter(k => !/^item:/.test(k))) });
     const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
-    const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
+    const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(extraGoals(co)) : st.skill;
     const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: 60 + (more.length ? 30 : 0) }, GS.set, { idolAffixes: '', maxRes: false, vowLines: planner.gear.vowAffixes, defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget(), onlySlot: slot, slotK: 8, slotRows: 40 }));
     renderCompare();
     const step = () => {
@@ -29486,7 +29538,7 @@ window.BOStartApp = function () {
   function* rvSearch(ch0, set) {
     const o = opts({ off: new Set([...st.off].filter(k => !/^item:/.test(k))) });
     const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
-    const goals = [{ id: st.skill, w: 1, opt: o }].concat(optExtra().map(g => ({ id: g.id, w: g.w, opt: co })));
+    const goals = [{ id: st.skill, w: 1, opt: o }].concat(extraGoals(co));
     const w = GS.set.prio / 100, t0 = performance.now();
     const sheets = ch => goals.map(g => { const r = S.calcSkill(GD, ch, g.id, g.opt); return r && !r.error && !r.unsupported && isFinite(r.totalDps) ? r : null; });
     const rs0 = sheets(ch0), lost = S.oneKindLost(rs0);
@@ -29495,9 +29547,8 @@ window.BOStartApp = function () {
     const base = { rs: rs0, ehp: w > 0 ? gsDefence(ch0).ehp : 0, dps: sum(rs0) };
 
     const ev = (ch, ref) => {
-      const rs = sheets(ch); let ws = 0, wg = 0;
-      goals.forEach((g, i) => { const a = ref.rs[i], b = rs[i]; if (!lost[i] && a && a.totalDps > 0 && b) { ws += g.w; wg += g.w * (b.totalDps / a.totalDps - 1); } });
-      const dr = ws ? 1 + wg / ws : 1, ehp = w > 0 ? gsDefence(ch).ehp : 0, er = w > 0 && ref.ehp > 0 ? ehp / ref.ehp : 1;
+      const rs = sheets(ch);
+      const dr = mixRatio(goals.map((g, i) => { const a = ref.rs[i], b = rs[i]; return { w: g.w, withMain: g.withMain, a: !lost[i] && a && b ? a.totalDps : 0, b: b ? b.totalDps : 0 }; })), ehp = w > 0 ? gsDefence(ch).ehp : 0, er = w > 0 && ref.ehp > 0 ? ehp / ref.ehp : 1;
       return { rs, ehp, dps: sum(rs), dr, er, score: w >= 1 ? er : w <= 0 ? dr : Math.pow(Math.max(dr, 0), 1 - w) * Math.pow(Math.max(er, 0), w) };
     };
     const { list, no } = rvCands(ch0), n = Math.max(1, Math.min(set.n, list.length));
@@ -29664,7 +29715,7 @@ window.BOStartApp = function () {
     Object.assign(IDO, { running: true, res: null, msg: '', phase: 'Starting', p: 0, t0: performance.now(), key });
     const o = opts({ off: new Set([...st.off].filter(k => !/^item:/.test(k))) });
     const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
-    const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
+    const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(extraGoals(co)) : st.skill;
     const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: 100 + (more.length ? 40 : 0) + (GS.set.prio > 0 ? 20 : 0) }, GS.set, { onlyIdols: true, idolAffixes: IDO.set.n, maxRes: false, vowLines: planner.gear.vowAffixes, defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget() }));
     renderCompare();
     const step = () => {
@@ -30600,7 +30651,7 @@ window.BOStartApp = function () {
         if (!ch || !st.skill || !window.BOGearOpt) return resolve({ error: st.skill ? 'The search is not available in this page.' : 'This plan has no damage skill yet: add one on the Build tab.' });
         const o = opts({ off: new Set([...st.off].filter(k => !/^item:/.test(k))) });
         const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
-        const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
+        const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(extraGoals(co)) : st.skill;
         const gen = BOGearOpt.optimize(GD, S, ch, goal, o, Object.assign({ seconds: 40 }, GS.set, { idolAffixes: '', maxRes: false, defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget(),
           onlyItem: { key }, maxVows: vows, vows: true, ilvl: vows ? +GS.set.ilvl || 84 : ilvl || ch.level || 84, maxRiven: more0 && more0.riven ? '' : 0, lineRoll: 1, topLines: '', rareLines: '', vowLines: planner.gear.vowAffixes }));
         const t0 = performance.now();

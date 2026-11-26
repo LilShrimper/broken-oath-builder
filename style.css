@@ -721,6 +721,15 @@ tr.cmp-counted td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .sup.blocked .sup-name { text-decoration: line-through; }
 .sup-more summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
 .sup-info { min-height: 2.8em; margin: 4px 0 0; }
+/* Support search (26 Nov 2026): the box over each picker, hidden chips and groups, the "cannot go into" lines */
+.sup-picker [hidden], .sup-tools [hidden] { display: none !important; }
+.sup-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.sup-find { width: 100%; max-width: 280px; min-width: 0; flex: 1 1 180px; box-sizing: border-box; height: 32px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 13px; }
+.sup-find::placeholder { color: var(--faint); }
+.sup-find:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pl-sups > .sup-find { align-self: flex-start; flex: 0 0 auto; } /* the picker is a column: no flex-basis height */
+.sup-miss, .sup-none { margin: 0; }
+.pl-simbest { gap: 8px; }
 .sup-info.bad { color: var(--bad); }
 #curseList .off-bar { color: var(--accent); }
 /* Dragonling tree (Build tab) */
@@ -2937,7 +2946,7 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 .sw-acts { display: flex; gap: 8px; margin-bottom: 8px; }
 .sw-win .io-body { padding: 18px 24px 22px; }
 .sw-editor .pl-skill { padding: 12px 16px 14px; }
-.sw-editor .pl-simbest { display: none; }
+.sw-editor .pl-simbest:not(:has([data-act="suppreset"])), .sw-editor [data-act="simbest"] { display: none; } /* the window has its own Sim Supports; the preset button stays */
 .sw-hist, .is-hist { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; padding: 0 14px; background: var(--panel); }
 .sw-hist > summary, .is-hist > summary { cursor: pointer; padding: 10px 0; list-style-position: inside; }
 .sw-hist > summary small { color: var(--faint); font-weight: 400; margin-left: 4px; }

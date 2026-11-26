@@ -264,7 +264,7 @@ window.PAGE_LANGS = {
     const SKILL_KEYS = ['Id', 'Name', 'Kind', 'Attribute', 'Description', 'Tags', 'Delivery', 'DamageType', 'Family', 'Effectiveness',
       'EffectivenessLate', 'EffectivenessLateFrom', 'EffectivenessLateAt', 'EffectivenessEarly', 'EffectivenessEarlyHold', 'EffectivenessEarlyFull',
       'SpellMin', 'SpellMax', 'SpellGrowth', 'CastTime', 'ActionSpeed', 'ManaCost', 'Cooldown', 'CooldownLate', 'CooldownLateAt', 'MinCooldown',
-      'WeaponKinds', 'Projectiles', 'ProjectilesAtLevels', 'Chains', 'Pierce', 'Strikes', 'WaveCount', 'ConvertShare', 'LifeAsBase', 'bBothHands', 'bReturnFlight', 'Requires', 'AcceptsSupports'];
+      'WeaponKinds', 'Projectiles', 'ProjectilesAtLevels', 'Chains', 'ChainScale', 'Pierce', 'Strikes', 'WaveCount', 'ConvertShare', 'LifeAsBase', 'bBothHands', 'bReturnFlight', 'Requires', 'AcceptsSupports'];
     const skills = {};
     for (const s of skillsArr) {
       const o = pick(s, SKILL_KEYS);
@@ -274,7 +274,11 @@ window.PAGE_LANGS = {
       if (s.Ground) o.Ground = pick(s.Ground, ['Duration', 'Tick', 'TickScale', 'Radius', 'HallowedTakenPct', 'HallowedCrit']); // Hallowed*: the ground's damage taken and crit (Consecrated Ground, Hallowed Slam)
       if (s.Totem) o.Totem = typeof s.Totem === 'object' ? Object.assign({ on: true }, pick(s.Totem, ['Kind', 'Interval', 'Duration', 'Max', 'PerLevels', 'Effectiveness'])) : true;
       if (s.Rain) o.Rain = pick(s.Rain, ['Delay', 'Waves', 'Interval', 'Arrows']);
-      if (s.Brand) { o.Brand = true; if (typeof s.Brand === 'object') { o.BrandDuration = s.Brand.Duration; o.BrandMax = s.Brand.Max; o.BrandChains = s.Brand.Chains; } } // duration and max: the tooltip of Venom/Rime/Ember shows {BrandLife}, not a number; BrandChains fills {BrandChains} in the gem text (display only, the sim does not read it)
+      if (s.Brand) { o.Brand = true; if (typeof s.Brand === 'object') { o.BrandDuration = s.Brand.Duration; o.BrandMax = s.Brand.Max; o.BrandChains = s.Brand.Chains; o.BrandInterval = s.Brand.Interval; } } // duration and max: the tooltip of Venom/Rime/Ember shows {BrandLife}, not a number; BrandChains fills {BrandChains} in the gem text (display only, the sim does not read it). BrandInterval: the strike clock; game data 90 cut "Every 0.5 seconds ... it strikes" from the texts (26 Nov 2026), the sim read it there
+
+      if (s.Dash && typeof s.Dash === 'object' && s.Dash.SheatheScale != null) o.SheatheScale = s.Dash.SheatheScale;
+
+      if (s.Dash && typeof s.Dash === 'object' && s.Dash.OnLandArrows > 0) { o.OnLandArrows = s.Dash.OnLandArrows; o.OnLandScale = s.Dash.OnLandScale; }
 
       if (s.Mirage) o.Mirage = pick(s.Mirage, ['Hops', 'Interval', 'HopTime', 'FinalScale']);
       if (s.Orbit) o.Orbit = typeof s.Orbit === 'object' ? pick(s.Orbit, ['Count', 'CountPerLevels', 'Max', 'AngularSpeed', 'SweepPeriod', 'HitInterval', 'RingSplitAt', 'EmpowerSpeed', 'EmpowerMore', 'EmpowerExtra']) : true; // Empower*: Hammerstorm (sim.js orbit ring)
@@ -710,6 +714,9 @@ window.PAGE_LANGS = {
     const late2 = {};
     try { for (const [id, x] of Object.entries((J('Gameplay/late2_98.json') || {}).skills || {})) if (x && x.Mult > 0) late2[id.toLowerCase()] = { From: +x.From, At: +x.At, Mult: +x.Mult }; } catch (e) { /* older data: none */ }
     try { for (const x of (J('Gameplay/new_gems85.json') || {}).gems || []) if (x && x.Id && x.PoisonChance > 0) gemPoison[x.Id.toLowerCase()] = +x.PoisonChance; } catch (e) { /* older game data: none */ }
+
+
+    try { for (const x of (J('Gameplay/new_gems85.json') || {}).gems || []) if (x && x.Id && Array.isArray(x.CountsAs) && x.CountsAs.length && skills[x.Id.toLowerCase()]) skills[x.Id.toLowerCase()].CountsAs = x.CountsAs.slice(); } catch (e) { /* older game data: none */ }
 
 
 
@@ -3616,7 +3623,8 @@ window.BOPlanner = function (ctx) {
 
   const bonusWarn = ch => (ch.bonusPoints || 0) > MAX_BONUS ? '<p class="pl-over">' + ch.bonusPoints + ' bonus points is more than this patch gives: ' + MAX_BONUS + ' at most (7 from Gates, ' + (MAX_BONUS - 7) + ' from Rupture milestones up to Rupture Level 145). The extra ' + (ch.bonusPoints - MAX_BONUS) + ' cannot be earned in the game.</p>' : '';
   function blankPlan(classId, level) {
-    return { id: newId(), name: classId + ' plan', classId, level, league: '', lastZone: '', items: [], passives: [], bonusPoints: MAX_BONUS, gems: [], gemLevels: {}, sockets: [], hotbar: [],
+
+    return { id: newId(), name: classId + ' plan', classId, level, league: '', lastZone: '', items: [], passives: [], bonusPoints: MAX_BONUS, dragonExtra: dExtraMax(), gems: [], gemLevels: {}, sockets: [], hotbar: [],
       weaponId: '', dragonNodes: [], dragonAspect: '', mainSkill: '', supportGems: [], plan: true, savedAt: new Date().toISOString() };
   }
   function planFrom(ch) {
@@ -3644,7 +3652,7 @@ window.BOPlanner = function (ctx) {
     if (old) { ch.hotbar = stripTest(ch); if (ch.testNew && old !== id) removeSkill(ch, old); }
     delete ch.testSkill; delete ch.testNew;
     if (!id || ch.hotbar.slice(0, BAR).includes(id)) return;
-    if (!rows(ch).some(r => r.skill === id)) { ensureSocket(ch, id); if (!ch.gemLevels[id]) ch.gemLevels[id] = Math.max(1, ...Object.values(ch.gemLevels).filter(x => x > 0), 1); ch.testNew = true; }
+    if (!rows(ch).some(r => r.skill === id)) { newSkillSetup(ch, id); ch.testNew = true; }
     while (ch.hotbar.length < BAR) ch.hotbar.push('');
     ch.hotbar = ch.hotbar.filter((h, i) => i < BAR || h !== id).concat([id]);
     ch.testSkill = id;
@@ -3754,6 +3762,7 @@ window.BOPlanner = function (ctx) {
     h += fold ? '</details>' + (status ? '<p class="hint pl-status">' + esc(status) + '</p>' : '') : '</div>';
     if (ch) h += skillsCard(ch, edit, dis); // the Dragonling tree is on the Skill tree tab (dragon button)
     el.innerHTML = h;
+    supFilterIn(el);
   }
   let codeDraft = '', importing = false, setupOpen = false; // setupOpen: the folded Plan setup on the Skills tab
   async function importCodeBox() {
@@ -3769,7 +3778,7 @@ window.BOPlanner = function (ctx) {
     if (ctx.leave && !await ctx.leave()) return false; // the open build's unsaved changes: save or discard first
     const current = ctx.current();
     const defaultClass = current && current.classId || Object.values(GD.classes)[0].Id;
-    const defaultLevel = current && current.level || 60;
+    const defaultLevel = 100; // a new build starts at max, lowered by hand (owner, 26 Nov 2026; was the open character's level or 60)
     const p = blankPlan(classId || defaultClass, Math.max(1, Math.min(100, +(level || defaultLevel) || 1)));
     status = 'Empty plan started: add a skill, then gear, then spend points on the Skill tree tab.';
     ctx.add(p);
@@ -3937,6 +3946,82 @@ window.BOPlanner = function (ctx) {
 
   const PIN = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M9.8 1.2l5 5-1.6.4-2.6 2.6.4 3.5-1.4 1.4-2.9-2.9L3.2 15l-1.1-.3-.1-1.1 3.8-3.8L2.9 6.9l1.4-1.4 3.5.4 2.6-2.6z"/></svg>';
   const BLOCK = '<svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.8 12.2l8.4-8.4" stroke="currentColor" stroke-width="1.8"/></svg>';
+
+
+
+
+  const PRESETS = [
+    ['Herald', ['ruinous_herald', 'lone_herald', 'wide_burst', 'economical_vow']],
+    ['Vow', ['economical_vow', 'fervent_vow']],
+    ['Woe', ['deepened_woe', 'lingering_woe']],
+    ['Cry', ['defiant_roar']],
+    ['Sentence', ['pass_sentence']],
+    ['Movement', ['swift_step', 'faster_casting', 'faster_attacks']],
+  ];
+  function presetFor(ch, skill, conduit) {
+    const sk = GD.skills[lc(skill)]; if (!sk) return [];
+    const p = PRESETS.find(x => (sk.Tags || []).includes(x[0])); if (!p) return [];
+    let fit; try { fit = new Set(S.supportChoices(GD, ch, skill, { conduit }).filter(c => !c.notInGame).map(c => c.id)); } catch (e) { return []; }
+    return p[1].filter(id => fit.has(id)).slice(0, S.socketsFor(GD, ch, skill, ch.gemLevels[skill] || 1));
+  }
+
+
+  const GEM_NEW = 20;
+  const newGemLevel = ch => Math.max(ch.plan ? GEM_NEW : 1, ...Object.values(ch.gemLevels || {}).filter(x => x > 0), 1);
+
+  function newSkillSetup(ch, skill) {
+    const s = ensureSocket(ch, skill);
+    if (!ch.gemLevels[skill]) ch.gemLevels[skill] = newGemLevel(ch);
+    if (!s.supports.length && ch.mainSkill !== skill) s.supports = presetFor(ch, skill, s.conduit).map(id => (GD.supports[id] || {}).Id || id);
+    return s;
+  }
+
+
+
+  function supMissWhy(skill, id, host) {
+    const sp = GD.supports[lc(id)], sk = GD.skills[lc(skill)]; if (!sp || !sk) return '';
+    const base = host && GD.skills[lc(host.skill)] || sk, tags = new Set((base.Tags || []).map(lc));
+    const req = sp.RequiresAnyTag || [], ex = (sp.ExcludeTags || []).filter(t => tags.has(lc(t)));
+    const why = S.noFitWhy(sp, base) || (req.length && !req.some(t => tags.has(lc(t))) ? 'it needs ' + (/^[AEIOU]/.test(req[0]) ? 'an ' : 'a ') + req.join(' or ') + ' skill' : ex.length ? 'it does not go into ' + ex.join(' or ') + ' skills' : 'it does not fit');
+    return sp.Name + ' cannot go into ' + base.Name + ': ' + why + '.' + (base !== sk ? ' ' + sk.Name + ' is cast by ' + base.Name + ', so it uses ' + base.Name + '\'s sockets and supports.' : '');
+  }
+
+
+  function supFilter(root, q) {
+    if (!root) return;
+    q = String(q || '').trim().toLowerCase();
+    let hits = 0, misses = 0;
+    root.querySelectorAll('.sup[data-find]').forEach(el => { const on = !q || el.dataset.find.includes(q); el.hidden = !on; if (on && q) hits++; });
+    root.querySelectorAll('.sup-miss').forEach(el => { const on = !!q && el.dataset.find.includes(q); el.hidden = !on; if (on) misses++; });
+    root.querySelectorAll('details.sup-more').forEach(d => { const want = q ? !!d.querySelector('.sup[data-find]:not([hidden])') : d.dataset.open === '1'; if (d.open !== want) d.open = want; d.hidden = !!q && !want; });
+    root.querySelectorAll('.sup-row').forEach(row => { if (!row.closest('details')) row.hidden = !!q && !row.querySelector('.sup:not([hidden])'); });
+    const none = root.querySelector('.sup-none'); if (none) none.hidden = !q || hits > 0 || misses > 0;
+  }
+
+  function hostOf(ch, skill, conduit) { try { return S.conduitHost(GD, ch, skill, S.collectMods(GD, ch, {}).mods, conduit); } catch (e) { return null; } }
+  const supWhy = (ch, skill, id, conduit) => supMissWhy(skill, id, hostOf(ch, skill, conduit));
+
+  function supMissHtml(ch, skill, choices, conduit) {
+    const known = new Set(choices.map(c => c.id));
+    const host = hostOf(ch, skill, conduit);
+    return Object.values(GD.supports).filter(sp => !known.has(lc(sp.Id)) && !sp.NotInGame).map(sp => '<p class="hint sup-miss" hidden data-find="' + esc(lc(sp.Name)) + '">' + esc(supMissWhy(skill, sp.Id, host)) + '</p>').join('') +
+      '<p class="hint sup-none" hidden>No support matches.</p>';
+  }
+  const supFind = {}; // the Build tab pickers' search text, per skill
+
+  function supFilterIn(root) { root.querySelectorAll('.pl-sups[data-supskill]').forEach(p => { const q = supFind[p.dataset.supskill]; if (q) supFilter(p, q); }); }
+
+  document.addEventListener('input', e => {
+    const t = e.target; if (!t.matches || !t.matches('input.sup-find[data-supfind]')) return;
+    supFind[t.dataset.supfind] = t.value; supFilter(t.closest('.pl-sups'), t.value);
+  });
+  document.addEventListener('toggle', e => {
+    const d = e.target; if (!d.matches || !d.matches('.pl-sups details.sup-more[data-grp]')) return;
+    const p = d.closest('.pl-sups'), f = p && p.querySelector('input.sup-find'); if (f && f.value.trim()) return; // opened by the search, not by hand
+    if (d.open) supOpen.add(d.dataset.grp); else supOpen.delete(d.dataset.grp);
+    p.querySelectorAll('details.sup-more[data-grp="' + d.dataset.grp + '"]').forEach(x => { x.dataset.open = d.open ? '1' : ''; });
+  }, true);
+  const supOpen = new Set(); // folded groups the player opened ("more", "idle", "later"): stay open across re-renders (owner, 26 Nov 2026)
   function supChips(ch, r, sups, slots, lvl, edit) {
     const inSet = new Set(sups.map(lc));
     const marks = edit && ctx.supMarks ? ctx.supMarks(r.skill) : null, canSim = marks && GD.skills[lc(r.skill)] && !S.dealsNoHits(GD.skills[lc(r.skill)]);
@@ -3946,7 +4031,7 @@ window.BOPlanner = function (ctx) {
     const strays = [...inSet].filter(id => !known.has(id)).map(id => ({ id, name: (GD.supports[id] || { Name: id }).Name }));
     const tag = c => {
       const on = inSet.has(c.id), kept = canSim && on && marks.pin.has(c.id), blk = canSim && !on && marks.block.has(c.id);
-      return '<span class="sup' + (on ? ' on' : '') + (blk ? ' blocked' : '') + '"><button type="button" class="sup-name"' + (edit ? ' data-act="togsup"' : ' disabled') + ' data-sup="' + esc(c.id) + '" aria-pressed="' + on + '">' + ctx.gemDot(c.id) + esc(c.name) + '</button>' +
+      return '<span class="sup' + (on ? ' on' : '') + (blk ? ' blocked' : '') + '" data-find="' + esc(lc(c.name + ' ' + (c.desc || ''))) + '"><button type="button" class="sup-name"' + (edit ? ' data-act="togsup"' : ' disabled') + ' data-sup="' + esc(c.id) + '" aria-pressed="' + on + '">' + ctx.gemDot(c.id) + esc(c.name) + '</button>' +
         (canSim && on ? '<button type="button" class="sup-pin' + (kept ? ' kept' : '') + '" data-act="suppin" data-sup="' + esc(c.id) + '" aria-pressed="' + kept + '" aria-label="' + (kept ? 'Unpin ' : 'Pin ') + esc(c.name) + '" title="' + (kept ? 'Pinned: every setup Sim Supports tries keeps it' : 'Pin: keep it in every setup Sim Supports tries') + '">' + PIN + '</button>' : '') +
         (canSim && !on ? '<button type="button" class="sup-block' + (blk ? ' kept' : '') + '" data-act="supblock" data-sup="' + esc(c.id) + '" aria-pressed="' + blk + '" aria-label="' + (blk ? 'Unblock ' : 'Block ') + esc(c.name) + '" title="' + (blk ? 'Blocked: Sim Supports never picks it. Click to allow it again' : 'Block: Sim Supports never picks it') + '">' + BLOCK + '</button>' : '') + '</span>';
     };
@@ -3954,15 +4039,18 @@ window.BOPlanner = function (ctx) {
     const later = choices.filter(c => c.notInGame), now = choices.filter(c => !c.notInGame);
     const main = now.filter(c => !c.packOnly && !c.inert), more = now.filter(c => c.packOnly), idle = now.filter(c => c.inert && !c.packOnly);
     const moreOn = more.some(c => inSet.has(c.id));
-    return '<div class="sup-picker pl-sups">' +
+    const grp = (key, open) => ' data-grp="' + key + '"' + (open || supOpen.has(key) ? ' open data-open="1"' : '');
+    return '<div class="sup-picker pl-sups" data-supskill="' + esc(r.skill) + '">' +
+      '<input type="search" class="sup-find" data-supfind="' + esc(r.skill) + '" placeholder="Search supports" aria-label="Search supports" autocomplete="off" value="' + esc(supFind[r.skill] || '') + '">' +
       '<span class="meta' + (sups.length > slots ? ' bad' : '') + '">' + sups.length + ' / ' + slots + ' support sockets at gem level ' + lvl + (edit ? ' · click a support to socket it or take it out' : '') + '</span>' +
 
       (nPin || nBlk ? ' <span class="meta">' + [nPin ? nPin + ' pinned' : '', nBlk ? nBlk + ' blocked' : ''].filter(Boolean).join(' · ') + '</span>' : '') +
       (canSim ? ' <span class="meta">Pin one to keep it in every setup Sim Supports tries, or block one so it never picks it.</span>' : '') +
       '<div class="sup-row">' + strays.concat(main).map(tag).join('') + '</div>' +
-      (more.length ? '<details class="sup-more"' + (moreOn ? ' open' : '') + '><summary>Packs and extras <span class="meta">(' + more.length + ', no damage against one enemy)</span></summary><div class="sup-row">' + more.map(tag).join('') + '</div></details>' : '') +
-      (idle.length ? '<details class="sup-more"><summary>No effect in the sim <span class="meta">(' + idle.length + ', can be socketed)</span></summary><div class="sup-row">' + idle.map(tag).join('') + '</div></details>' : '') +
-      (later.length ? '<details class="sup-more"' + (later.some(c => inSet.has(c.id)) ? ' open' : '') + '><summary>Not in the game yet <span class="meta">(' + later.length + ', in the game data but not dropping; Sim Supports leaves them out)</span></summary><div class="sup-row">' + later.map(tag).join('') + '</div></details>' : '') +
+      (more.length ? '<details class="sup-more"' + grp('more', moreOn) + '><summary>Packs and extras <span class="meta">(' + more.length + ', no damage against one enemy)</span></summary><div class="sup-row">' + more.map(tag).join('') + '</div></details>' : '') +
+      (idle.length ? '<details class="sup-more"' + grp('idle') + '><summary>No effect in the sim <span class="meta">(' + idle.length + ', can be socketed)</span></summary><div class="sup-row">' + idle.map(tag).join('') + '</div></details>' : '') +
+      (later.length ? '<details class="sup-more"' + grp('later', later.some(c => inSet.has(c.id))) + '><summary>Not in the game yet <span class="meta">(' + later.length + ', in the game data but not dropping; Sim Supports leaves them out)</span></summary><div class="sup-row">' + later.map(tag).join('') + '</div></details>' : '') +
+      (GD.skills[lc(r.skill)] ? supMissHtml(ch, r.skill, choices, r.sock && r.sock.conduit) : '') +
       '</div>';
   }
 
@@ -4006,8 +4094,17 @@ window.BOPlanner = function (ctx) {
         countBox(r.skill) +
         (edit ? '<button class="x" type="button" aria-label="Remove this skill" data-act="rmskill">×</button>' : '') + '</div>' +
         (sk ? '' : '<p class="hint bad">Unknown skill ' + esc(r.skill) + '</p>') +
+
+
+        (() => { const h = sk ? hostOf(ch, r.skill, r.sock && r.sock.conduit) : null; return h ? '<p class="hint pl-host">' + esc(sk.Name) + ' is cast by ' + esc(h.name) + '\'s Channel Conduit: as in the game it uses ' + esc(h.name) + '\'s supports, so only supports that fit ' + esc(h.name) + ' are listed.' + (edit && h.linked ? ' <button type="button" class="linkish" data-act="unlinkconduit" data-host="' + esc(h.skill) + '">Cast ' + esc(sk.Name) + ' by hand</button>' : '') + '</p>' : ''; })() +
         supChips(ch, r, sups, slots, lvl, edit) +
-        (edit && sk && !S.dealsNoHits(sk) ? '<div class="pl-row pl-simbest"><button class="btn small" type="button" data-act="simbest" title="Tries the support combinations for this skill at its gem level, against the enemy set on the Damage tab, and sockets the best one">Sim best supports</button></div>' : '') +
+        (() => {
+          if (!edit || !sk) return '';
+          const pre = presetFor(ch, r.skill, r.sock && r.sock.conduit), have = new Set(sups.map(lc));
+          const preBtn = pre.length && pre.some(id => !have.has(id)) ? '<button class="btn small ghost" type="button" data-act="suppreset" title="' + esc('Socket ' + pre.map(id => (GD.supports[id] || { Name: id }).Name).join(', ') + ': the usual buffs for this kind of skill (our advice, not a sim result)') + '">Socket preset supports</button>' : '';
+          const simBtn = !S.dealsNoHits(sk) ? '<button class="btn small" type="button" data-act="simbest" title="Tries the support combinations for this skill at its gem level, against the enemy set on the Damage tab, and sockets the best one">Sim best supports</button>' : '';
+          return simBtn || preBtn ? '<div class="pl-row pl-simbest">' + simBtn + preBtn + '</div>' : '';
+        })() +
         (link ? '<label class="field inline"><span>Linked spell <span class="meta">Cast on Crit in an attack, or a Channel Conduit, casts this</span></span><select data-f="conduit"' + dis + '>' + opt('', 'None (Cast on Crit casts the spell it sits in)', !linked) +
           rs.filter(x => x.skill !== r.skill && GD.skills[lc(x.skill)] && (GD.skills[lc(x.skill)].Tags || []).includes('Spell')).map(x => opt(x.skill, GD.skills[lc(x.skill)].Name, lc(x.skill) === lc(linked))).join('') + '</select></label>' : '') +
         '</div>';
@@ -4596,10 +4693,10 @@ window.BOPlanner = function (ctx) {
       case 'dextra': ch.dragonExtra = Math.max(0, Math.min(dExtraMax(), +v || 0)); return done();
       case 'addskill': {
         if (!v || rows(ch).some(r => r.skill === v)) return render();
-        ensureSocket(ch, v); if (!ch.gemLevels[v]) ch.gemLevels[v] = Math.max(1, ...Object.values(ch.gemLevels).filter(x => x > 0), 1);
-        if (onBar(ch).length < BAR) ch.hotbar.push(v);
 
         const first = !ch.mainSkill; if (first) ch.mainSkill = v;
+        newSkillSetup(ch, v);
+        if (onBar(ch).length < BAR) ch.hotbar.push(v);
         return done(first ? { skills: true, select: v } : { skills: true });
       }
       case 'skill': {
@@ -4760,6 +4857,22 @@ window.BOPlanner = function (ctx) {
       status = 'Best supports for ' + name + ': ' + (sup.map(id => (GD.supports[lc(id)] || { Name: id }).Name).join(', ') || 'none') + '.';
       return done({ skills: true });
     }
+    if (act === 'unlinkconduit' && skill) {
+
+      const hs = ch.sockets.find(x => x.skill === b.dataset.host); if (hs && lc(hs.conduit) === lc(skill)) hs.conduit = '';
+      status = ((GD.skills[lc(skill)] || {}).Name || skill) + ' is now cast by hand with its own supports.';
+      return done({ skills: true });
+    }
+    if (act === 'suppreset' && skill) {
+
+      const s = ensureSocket(ch, skill), pre = presetFor(ch, skill, s.conduit);
+      const slots = S.socketsFor(GD, ch, skill, ch.gemLevels[skill] || 1);
+      const next = pre.map(id => (GD.supports[id] || {}).Id || id).concat(s.supports.filter(x => !pre.includes(lc(x)))).slice(0, slots);
+      const out = s.supports.filter(x => !next.includes(x));
+      s.supports = next;
+      status = 'Preset supports for ' + ((GD.skills[lc(skill)] || {}).Name || skill) + ': ' + pre.map(id => (GD.supports[id] || { Name: id }).Name).join(', ') + (out.length ? ' (took out ' + out.map(id => (GD.supports[lc(id)] || { Name: id }).Name).join(', ') + ': no sockets left)' : '') + '.';
+      return done({ skills: true });
+    }
     if (act === 'code' && ch.plan) {
       const code = await toCode(ctx.withTabs(ch));
       try { await navigator.clipboard.writeText(code); status = 'Plan code copied (' + code.length + ' characters). Paste it into the code box at the top to open it here or in another browser.'; }
@@ -4781,7 +4894,7 @@ window.BOPlanner = function (ctx) {
       if (m) m.block.delete(id); // socketing a blocked support by hand allows it again
       const swap = s.supports.find(x => S.shapesClash(id, lc(x))) || null; // shapes that clash (Trap may sit next to a totem: S.shapesClash)
       const slots = S.socketsFor(GD, ch, skill, ch.gemLevels[skill] || 1);
-      if (GD.skills[lc(skill)] && !S.supportChoices(GD, ch, skill, { conduit: s.conduit }).some(c => c.id === id)) { status = (sd.Name || id) + ' cannot go into ' + (GD.skills[lc(skill)].Name) + (S.noFitWhy(sd, GD.skills[lc(skill)]) ? ': ' + S.noFitWhy(sd, GD.skills[lc(skill)]) + '.' : '.'); return render(); }
+      if (GD.skills[lc(skill)] && !S.supportChoices(GD, ch, skill, { conduit: s.conduit }).some(c => c.id === id)) { status = supWhy(ch, skill, id, s.conduit); return render(); }
       if (swap) { s.supports = s.supports.filter(x => x !== swap); status = (sd.Name || id) + ' replaces ' + (GD.supports[lc(swap)] || { Name: swap }).Name + ': only one shape support counts.'; }
       else if (s.supports.length >= slots) { status = 'All ' + slots + ' sockets are used: take a support out first (a higher gem level opens more).'; return render(); }
       else status = '';
@@ -5004,9 +5117,9 @@ window.BOPlanner = function (ctx) {
 
   function addSkill(ch, v) {
     if (!v || rows(ch).some(r => r.skill === v)) return false;
-    ensureSocket(ch, v); if (!ch.gemLevels[v]) ch.gemLevels[v] = Math.max(1, ...Object.values(ch.gemLevels).filter(x => x > 0), 1);
-    if (onBar(ch).length < BAR) ch.hotbar.push(v);
     if (!ch.mainSkill) ch.mainSkill = v;
+    newSkillSetup(ch, v);
+    if (onBar(ch).length < BAR) ch.hotbar.push(v);
     return true;
   }
 
@@ -5023,7 +5136,7 @@ window.BOPlanner = function (ctx) {
     return status;
   }
   const classIds = () => Object.values(GD.classes).map(c => c.Id);
-  return { setPlanField, classIds, MAX_BONUS, bonusWarn, skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, testOf, setTest, stripTest, openPicker, skillOpts, itemTip, skillTip, convRule, supTip, oathwordForItem, wordRunes, slotName: SLOT_NAME, rows, render, fromCode, toCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
+  return { supWhy, presetFor, supFilter, supFilterIn, supMissHtml, setPlanField, classIds, MAX_BONUS, bonusWarn, skillEditor, skillChange: onChange, skillClick: onClick, status: () => status, BAR, skillDesc, addSkill, removeSkill, testOf, setTest, stripTest, openPicker, skillOpts, itemTip, skillTip, convRule, supTip, oathwordForItem, wordRunes, slotName: SLOT_NAME, rows, render, fromCode, toCode, isPlanCode, shareCode, startNewPlan, planFrom, dragon, gear, readDrop, subTab: () => subTab, setSubTab: () => {}, clearStatus: () => { status = ''; }, setStatus: s => { status = s; render(); } };
 };
 
 ;
@@ -14287,6 +14400,7 @@ window.BOCharacter = function (ctx) {
       h += '<p><button class="btn small ghost" type="button" data-sw="history">Full history on the Recent Patch tab</button></p>';
     } else h += '<p class="hint">Loading the patch history…</p>';
     swBack.innerHTML = h + '</details></div></div>';
+    if (planner.supFilterIn) planner.supFilterIn(swBack); // the support search box keeps its text across redraws
     swBack.querySelectorAll('details[data-swk]').forEach(d => d.addEventListener('toggle', () => { if (SW) { if (d.open) SW.open.add(d.dataset.swk); else SW.open.delete(d.dataset.swk); } }));
   }
 
@@ -16329,26 +16443,23 @@ window.BOCharacter = function (ctx) {
 
   const UNIQUE_LINE_SCALE = {
     wyrmblade_of_the_black_oath: { 0: 1.5, 4: 1.5 }, kingbreaker: { 0: 0.6, 1: 0.6, 3: 1.5 }, gravesong: { 0: 1.5, 1: 1.5, 2: 1.5 },
-    gravecleaver: { 1: 1.5, 2: 2 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff: { 0: 1.5, 1: 0.35, 3: 2 },
-    cinderwick: { 1: 2, 2: 3, 3: 1.5, 5: 3 }, dawnforge_maul: { 0: 1.25, 1: 1.25, 2: 1.25, 4: 1.25 }, glass_soul: { 0: 0.5, 1: 0.5 },
-    the_unyielding_vow: { 0: 0.25 }, the_patient_bastion: { 0: 0.25 }, the_heartwood_girdle: { 0: 0.25 },
-    crown_of_the_quiet_ward: { 0: 0.1875 }, windwrit_treads: { 0: 0.125 }, the_oathkeepers_stand: { 0: 0.25 },
-    mouth_of_the_mire: { 0: 0.5, 1: 0.5, 2: 0.5 }, drune_grave_rot: { 1: 0.5 }, cinderwick_primal: { 1: 2, 2: 3, 3: 1.5, 7: 3 },
-    starcallers_staff: { 1: 2, 3: 1.5 }, wintercall_orb: { 1: 2 }, orrery_of_the_long_night: { 2: 0.4 },
-    dawnwardens_verdict: { 0: 1.5, 1: 2.5, 2: 3 }, halo_of_the_restless_saint: { 2: 2, 3: 0.4 }, lightsworn_reliquary: { 2: 2 },
-    hollowhorn: { 2: 1.25, 4: 1.3 }, crown_of_the_bone_king: { 2: 2 }, charnel_bell: { 2: 0.4 },
-    wand_of_the_ash_march: { 0: 2, 3: 1.5 }, skyrend: { 2: 2, 3: 3 }, weeping_talons: { 3: 2 },
-    twinscar: { 0: 0.7, 3: 2, 6: 0.7, 7: 0.3334 }, thornwake: { 2: 0.5, 3: 2 }, ravenmaw: { 2: 2 },
-    jarlsbane: { 2: 2, 3: 3 }, hoarfall: { 2: 2 }, cinderknuckle: { 2: 2 },
-    the_fissure_edge: { 2: 2, 3: 2 }, the_bellwarden: { 3: 1.5 }, the_oathsplit_fang: { 2: 2, 3: 2 },
-    the_last_harvest: { 3: 2, 4: 3 }, gravetithe: { 2: 2, 3: 2.5 }, nightglass: { 2: 2 },
-    the_last_petal: { 1: 2 }, rimewrit: { 0: 4, 2: 2 }, templars_troth: { 0: 2, 1: 2 },
-    the_gate_that_answers: { 0: 1.5 }, overclock_coil: { 1: 1.5 }, hexbinders_censer: { 1: 2 },
-    the_thousand_sparks: { 0: 0.667, 2: 0.5 }, kingbreaker_primal: { 0: 0.6, 1: 0.6, 3: 1.5 }, gravesong_primal: { 0: 1.5, 1: 1.5, 2: 1.5 },
-    gravecleaver_primal: { 1: 1.5, 2: 2 }, stormfang_primal: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff_primal: { 0: 1.5, 1: 0.35, 3: 2 },
-    heart_of_the_white_silence: { 4: 0.25 }, wintercall_orb_primal: { 1: 2 }, orrery_of_the_long_night_primal: { 2: 0.4 },
-    charnel_bell_primal: { 2: 0.4 }, the_thousand_sparks_primal: { 0: 0.667, 2: 0.5 }, community_sleepy_cats_coil: { 0: 0.8 },
-    stormstring: { 0: 0.45, 4: 0.75, 6: 0.75 }, veinwrit_grips: { 0: 0.8 } };
+    gravecleaver: { 1: 1.5, 2: 2 }, stormfang: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff: { 0: 1.5, 1: 0.35 },
+    dawnforge_maul: { 0: 1.25, 1: 1.25, 2: 1.25, 4: 1.25 }, glass_soul: { 0: 0.5, 1: 0.5 }, the_unyielding_vow: { 0: 0.25 },
+    the_patient_bastion: { 0: 0.25 }, the_heartwood_girdle: { 0: 0.25 }, crown_of_the_quiet_ward: { 0: 0.1875 },
+    windwrit_treads: { 0: 0.125 }, the_oathkeepers_stand: { 0: 0.25 }, mouth_of_the_mire: { 0: 0.5, 1: 0.5, 2: 0.5 },
+    drune_grave_rot: { 1: 0.5 }, cinderwick: { 5: 0.6 }, cinderwick_primal: { 7: 0.6 },
+    starcallers_staff: { 1: 2, 3: 1.5 }, wintercall_orb: { 1: 2 }, dawnwardens_verdict: { 0: 1.5, 1: 1.5, 2: 1.5 },
+    halo_of_the_restless_saint: { 3: 0.4, 5: 0.39 }, lightsworn_reliquary: { 2: 2 }, hollowhorn: { 2: 1.25, 4: 1.3 },
+    charnel_bell: { 2: 0.4 }, wand_of_the_ash_march: { 0: 2, 3: 1.5 }, skyrend: { 2: 2, 3: 3 },
+    thornwake: { 2: 0.5, 3: 2 }, ravenmaw: { 2: 2 }, hoarfall: { 2: 2 },
+    the_bellwarden: { 3: 1.5 }, the_oathsplit_fang: { 2: 2, 3: 2 }, the_last_harvest: { 3: 2, 4: 3 },
+    gravetithe: { 2: 2, 3: 2.5 }, the_last_petal: { 1: 2 }, rimewrit: { 0: 4, 2: 2 },
+    templars_troth: { 0: 2, 1: 2 }, the_gate_that_answers: { 0: 1.5 }, overclock_coil: { 1: 1.5 },
+    kingbreaker_primal: { 0: 0.3, 1: 0.3, 3: 1.5 }, gravesong_primal: { 0: 1.5, 1: 1.5, 2: 1.5 }, gravecleaver_primal: { 1: 1.5, 2: 2 },
+    stormfang_primal: { 0: 1.75, 1: 1.75, 2: 1.75, 4: 1.75 }, rimecrown_staff_primal: { 0: 1.5, 1: 0.35 }, heart_of_the_white_silence: { 4: 0.25 },
+    wintercall_orb_primal: { 1: 2 }, charnel_bell_primal: { 2: 0.4 }, the_thousand_sparks_primal: { 0: 0.667 },
+    twinscar: { 0: 0.7, 6: 0.7, 7: 0.3334 }, community_sleepy_cats_coil: { 0: 0.8 }, stormstring: { 0: 0.34, 4: 0.6, 6: 0.6 },
+    veinwrit_grips: { 0: 0.8 }, reliquary_of_the_second_dawn: { 5: 1.15 } };
 
 
 
@@ -17108,7 +17219,12 @@ window.BOCharacter = function (ctx) {
     const sk = GD.skills[lc(skillId)];
     if (!sk || !(sk.Tags || []).includes('Spell') || (sk.Tags || []).includes('Attack')) return null;
     const granted = modsOf(mods || NO_MODS, 'GrantSupport').some(m => m.stat === 'GrantSupport' && (m.tags || []).some(t => lc(t) === 'channel_conduit'));
-    const hosts = ch.sockets.filter(s => { const hs = GD.skills[lc(s.skill)]; return hs && hs.Channel && lc(s.skill) !== lc(skillId) && (granted || s.supports.some(x => lc(x) === 'channel_conduit')); });
+
+
+
+
+    const bar = (ch.hotbar || []).filter(Boolean).map(lc), onBar = id => !bar.length || bar.includes(lc(id));
+    const hosts = ch.sockets.filter(s => { const hs = GD.skills[lc(s.skill)]; return hs && hs.Channel && lc(s.skill) !== lc(skillId) && onBar(s.skill) && (granted || s.supports.some(x => lc(x) === 'channel_conduit')); });
     const linked = hosts.find(s => s.conduit && lc(s.conduit) === lc(skillId));
     const s = linked || (force === true ? hosts[0] : null);
     if (!s) return null;
@@ -17479,7 +17595,10 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const spellDamageAttack = isAttack && /spell damage modifiers (also )?apply/i.test(sk.Description || '');
+
+
+
+    const spellDamageAttack = isAttack && (/spell damage modifiers (also )?apply/i.test(sk.Description || '') || (sk.CountsAs || []).includes('Spell'));
     if (spellDamageAttack) res.notes.push(sk.Name + ': spell damage modifiers apply to it (patch 0.56), as with Spellblade.');
     const spellblade = isAttack && (spellDamageAttack || modsOf(mods, 'Keystone').some(m => m.stat === 'Keystone' && (m.tags || []).includes('Spellblade')));
 
@@ -18707,7 +18826,8 @@ window.BOCharacter = function (ctx) {
 
 
 
-      if (!re && /re-arms about a second/i.test(d) && is0565(GD)) { rearm *= 0.9; } // scales the same before or after the re-arm speed division
+
+      if (!re && /re-arms (?:after )?about a second/i.test(d) && is0565(GD)) { rearm *= 0.9; } // scales the same before or after the re-arm speed division
       const trapLock = !re && is0565(GD) ? 0.15 : 0;
       usesPerSec = traps / (rearm + trapLock); useTime = 1 / usesPerSec;
       res.notes.push('Trap: ' + traps + ' traps each striking every ' + Math.round((rearm + trapLock) * 1000) / 1000 + ' s once laid (re-arm ' + Math.round(rearm * 1000) / 1000 + ' s + ' + trapLock + ' s lock); assumes the boss stands on them.');
@@ -18769,7 +18889,11 @@ window.BOCharacter = function (ctx) {
 
 
 
-      const ev = /Every ([\d.]+) seconds?(?: \([^)]*\))? it strikes/i.exec(desc);
+
+
+
+
+      const ev = /Every ([\d.]+) seconds?(?: \([^)]*\))? it strikes/i.exec(desc) || (sk.BrandInterval > 0 ? [0, sk.BrandInterval] : null);
       if (ev) {
         const lasts = /Lasts ([\d.]+) seconds/i.exec(desc) || (sk.BrandDuration ? [0, sk.BrandDuration] : null), capM = /up to (\d+) sparks/i.exec(desc) || (sk.BrandMax ? [0, sk.BrandMax] : null);
 
@@ -19258,7 +19382,11 @@ window.BOCharacter = function (ctx) {
 
 
     let xh = null;
-    const mSheathe = /sheathe cut (\d+)% of it/i.exec(desc), mVault = /loosing (two|three|four) arrows[\s\S]*?each landing arrow deals (\d+)% of it and the gust (\d+)%/i.exec(desc);
+
+
+
+    const WORDN = { two: 'two', three: 'three', four: 'four' }, vaultN = { 2: 'two', 3: 'three', 4: 'four' }[sk.OnLandArrows];
+    const mSheathe = /sheathe cut (\d+)% of it/i.exec(desc) || (sk.SheatheScale > 0 ? [0, Math.round(sk.SheatheScale * 100)] : null), mVault = /loosing (two|three|four) arrows[\s\S]*?each landing arrow deals (\d+)% of it and the gust (\d+)%/i.exec(desc) || (vaultN && sk.OnLandScale > 0 && WORDN[vaultN] ? [0, vaultN, Math.round(sk.OnLandScale * 100), 15] : null);
     if (sk.Channel && sk.Channel.bStrike && sk.Channel.StrikeScale > 0) xh = { n: 2, w: 1 + sk.Channel.StrikeScale, t: 'every turn also strikes one enemy for ' + Math.round(sk.Channel.StrikeScale * 100) + '% of the hit' };
     else if (mSheathe) xh = { n: 2, w: 1 + mSheathe[1] / 100, t: 'the sheathe cut lands again for ' + mSheathe[1] + '% of the hit' };
     else if (/cut again for half the damage/i.test(desc)) xh = { n: 2, w: 1.5, t: 'the sheathe cuts the enemy again for half the hit' };
@@ -19270,12 +19398,21 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const mLone = /come back into that enemy as one extra strike, so a lone boss takes about (\d+)% more/i.exec(desc);
+    let mLone = /come back into that enemy as one extra strike, so a lone boss takes about (\d+)% more/i.exec(desc);
+
+
+
+
+    if (!mLone && ruleNum(GD, 'r100.META.bChainBack100', 0) && String(ruleNum(GD, 'r100.META.ChainBackSkills100', '') || (GD.rules || {})['r100.META.ChainBackSkills100'] || '').split(',').map(s => lc(s.trim())).includes(lc(skillId)) && sk.ChainScale > 0) {
+      let leaps = sk.Chains || 0; for (const m of pickMods(mods, 'Chains', 'Flat')) if (applies(ctx, m)) leaps += m.v;
+      const per = sk.ChainScale * ruleNum(GD, 'r100.META.fChainBack100', 0);
+      if (leaps > 0 && per > 0) mLone = [0, +(leaps * per * 100).toFixed(1)];
+    }
     if (!xh && mLone) xh = { n: 2, w: 1 + mLone[1] / 100, panelOff: true, t: 'with no other enemy in reach its leaps come back into this one as an extra strike of about ' + mLone[1] + '% of the hit' };
     if (xh && !(o.hitsPerSecOverride > 0)) {
       hitsPerUse *= xh.n; perHitFactor *= xh.w / xh.n; res.extraHits = { hits: xh.n, weight: xh.w };
       if (xh.panelOff) res.notes.push('The game\'s own skill panel does not count ' + sk.Name + '\'s extra strike, so its DPS reads about ' + Math.round((1 - 1 / xh.w) * 100) + '% lower than this sheet (tooltip, 11 Nov 2026).');
-      res.notes.push(sk.Name + ': ' + xh.t + ' (' + xh.w.toFixed(2) + ' full hits per use). From the game\'s skill ' + (sk.Channel && sk.Channel.bStrike ? 'data' : 'text') + '; not checked in a fight.');
+      res.notes.push(sk.Name + ': ' + xh.t + ' (' + xh.w.toFixed(2) + ' full hits per use). From the game\'s skill ' + (sk.Channel && sk.Channel.bStrike || !/sheathe cut|each landing arrow|cut again for half|come back into that enemy/i.test(desc) ? 'data' : 'text') + '; not checked in a fight.');
     }
     if (ownClock && repeats > 0) res.notes.push('Repeats add no hits here: ' + sk.Name + ' strikes on its own clock.');
     if (echoTrap) res.notes.push('Spell Echo on a Trap: the repeat throws another trap, but your traps stand under one cap, so it adds no strikes (Training Post, 11 Nov 2026).');
@@ -23327,8 +23464,9 @@ if (typeof require !== 'undefined' && require.main === module) {
   for (const b of p.skills) {
 
 
-    const own = new Set(((ch.sockets || []).find(s => s.skill === b.id) || {}).supports || []);
-    const sups = b.supports.concat(b.granted.filter(g => own.has(g))).filter(s => GD.supports[s]);
+
+    const own = new Set((((ch.sockets || []).find(s => s.skill === b.id) || {}).supports || []).map(low));
+    const sups = b.supports.concat(b.granted.filter(g => own.has(low(g)))).filter(s => GD.supports[s]);
     let r; try { r = S.calcSkill(GD, ch, b.id, { supportsOverride: sups }); } catch (e) { r = { error: e.message }; }
     if (!GD.skills[b.id] || r.error || r.unsupported) { console.log('\n' + b.id + ': ' + (!GD.skills[b.id] ? 'not a skill the sim knows' : b.f.dps_shown === 0 ? 'no damage of its own (game and sim)' : r.error || r.unsupported)); continue; }
     if (mana == null && r.mana && r.mana.max != null) mana = r.mana.max;
@@ -24065,7 +24203,7 @@ window.BOStartApp = function () {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0, gatherFury: 2 }, // gatherFury: Fury charges counted while Gather Fury is linked (owner, 19 Nov 2026: default 2)
     enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: null, hallowCG: false, enemyLife: null, graveCall: null, flashfire: false, otherBleed: '', windburstMoves: null, corpseKind: '', corpsesPerSec: null, legionKind: '', leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
     penFloor: false, potionsOn: store.get('potionsOn', true) !== false, opt: null, optJob: null, last: null,
-    keepSup: new Set(), blockSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
+    keepSup: new Set(), blockSup: new Set(), supOpen: new Set(), supFind: '', supMsg: '', // support picker: pinned for the search, folded groups opened by hand, search text, last message
   };
   let upgradeOptimizer = { status: 'idle', results: [], key: '', run: 0 };
 
@@ -24884,7 +25022,7 @@ window.BOStartApp = function () {
     }
     const tag = c => {
       const on = inSet.has(c.id), s = status[c.id], bad = on && s && !s.ok, kept = on && st.keepSup.has(c.id), blk = st.blockSup.has(c.id);
-      return '<span class="sup' + (on ? ' on' : '') + (bad ? ' bad' : '') + (blk ? ' blocked' : '') + '"><button type="button" class="sup-name" data-sup="' + esc(c.id) + '" aria-pressed="' + on + '">' + gemDot(c.id) + esc(c.name) + '</button>' +
+      return '<span class="sup' + (on ? ' on' : '') + (bad ? ' bad' : '') + (blk ? ' blocked' : '') + '" data-find="' + esc((c.name + ' ' + (c.desc || '')).toLowerCase()) + '"><button type="button" class="sup-name" data-sup="' + esc(c.id) + '" aria-pressed="' + on + '">' + gemDot(c.id) + esc(c.name) + '</button>' +
         (on && !bad ? '<button type="button" class="sup-pin' + (kept ? ' kept' : '') + '" data-pin="' + esc(c.id) + '" aria-pressed="' + kept + '" aria-label="' + (kept ? 'Unpin ' : 'Pin ') + esc(c.name) + '" title="' + (kept ? 'Pinned: every setup the search tries keeps it' : 'Pin: keep it in every setup the search tries') + '">' + PIN + '</button>' : '') +
         (!on ? '<button type="button" class="sup-block' + (blk ? ' kept' : '') + '" data-block="' + esc(c.id) + '" aria-pressed="' + blk + '" aria-label="' + (blk ? 'Unblock ' : 'Block ') + esc(c.name) + '" title="' + (blk ? 'Blocked: the search never picks it. Click to allow it again' : 'Block: the search never picks it') + '">' + BLOCK + '</button>' : '') + '</span>';
     };
@@ -24895,11 +25033,24 @@ window.BOStartApp = function () {
     const later = choices.filter(c => c.notInGame), now = choices.filter(c => !c.notInGame);
     const main = now.filter(c => !c.packOnly && !c.inert), more = now.filter(c => c.packOnly), idle = now.filter(c => c.inert && !c.packOnly);
     const moreOn = more.filter(c => inSet.has(c.id)).length;
+
+
+    const grp = (key, open) => ' data-grp="' + key + '"' + (open || st.supOpen.has(key) ? ' open data-open="1"' : '');
     box.innerHTML = '<div class="sup-row">' + strays.concat(main).map(tag).join('') + '</div>' +
       (granted.length ? '<div class="sup-row granted"><span class="meta">From your tree or gear:</span>' + granted.map(s => '<span class="sup granted' + (st.off.has(s.key) ? '' : ' on') + '"><button type="button" class="sup-name" data-granted="' + esc(s.key) + '" aria-pressed="' + !st.off.has(s.key) + '" title="Granted: click to see the skill without it">' + esc(s.name.replace(' (granted)', '')) + '</button></span>').join('') + '</div>' : '') +
-      (more.length ? '<details class="sup-more"' + (st.supMore || moreOn ? ' open' : '') + '><summary>' + (r.minion ? 'No effect on minion damage' : 'Packs and extras') + ' <span class="meta">(' + more.length + (r.minion ? ')' : ', no damage against one enemy)') + '</span></summary><div class="sup-row">' + more.map(tag).join('') + '</div></details>' : '') +
-      (idle.length ? '<details class="sup-more" data-idle="1"' + (st.supIdle ? ' open' : '') + '><summary>No effect in the sim <span class="meta">(' + idle.length + ', can be socketed)</span></summary><div class="sup-row">' + idle.map(tag).join('') + '</div></details>' : '') +
-      (later.length ? '<details class="sup-more"' + (later.some(c => inSet.has(c.id)) ? ' open' : '') + '><summary>Not in the game yet <span class="meta">(' + later.length + ', in the game data but not dropping; the search leaves them out)</span></summary><div class="sup-row">' + later.map(tag).join('') + '</div></details>' : '');
+      (more.length ? '<details class="sup-more"' + grp('more', moreOn) + '><summary>' + (r.minion ? 'No effect on minion damage' : 'Packs and extras') + ' <span class="meta">(' + more.length + (r.minion ? ')' : ', no damage against one enemy)') + '</span></summary><div class="sup-row">' + more.map(tag).join('') + '</div></details>' : '') +
+      (idle.length ? '<details class="sup-more"' + grp('idle') + '><summary>No effect in the sim <span class="meta">(' + idle.length + ', can be socketed)</span></summary><div class="sup-row">' + idle.map(tag).join('') + '</div></details>' : '') +
+      (later.length ? '<details class="sup-more"' + grp('later', later.some(c => inSet.has(c.id))) + '><summary>Not in the game yet <span class="meta">(' + later.length + ', in the game data but not dropping; the search leaves them out)</span></summary><div class="sup-row">' + later.map(tag).join('') + '</div></details>' : '') +
+      planner.supMissHtml(st.ch, st.skill, choices, st.conduit);
+    planner.supFilter(box, st.supFind);
+
+    const pb = $('#supportPreset');
+    if (pb) {
+      let pre = []; try { pre = planner.presetFor(st.ch, st.skill, st.conduit); } catch (e) { pre = []; }
+      pb.hidden = !pre.length || pre.every(id => inSet.has(id));
+      pb.dataset.ids = pre.join(',');
+      pb.title = pre.length ? 'Socket ' + pre.map(supName).join(', ') + ': the usual buffs for this kind of skill (our advice, not a sim result)' : '';
+    }
     $('#supportInfo').textContent = st.supMsg || SUP_HINT;
     $('#supportInfo').classList.toggle('bad', !!st.supMsg && /^All |cannot/.test(st.supMsg));
   }
@@ -24910,7 +25061,7 @@ window.BOStartApp = function () {
     if (inSet.includes(id)) {
       st.supports = st.supports.filter(s => s.toLowerCase() !== id); st.keepSup.delete(id); st.off.delete('support:' + id);
     } else {
-      if (!S.supportChoices(GD, st.ch, st.skill, opts()).some(c => c.id === id)) { const sk = GD.skills[st.skill] || {}; st.supMsg = (sd.Name || id) + ' cannot go into ' + (sk.Name || 'this skill') + (S.noFitWhy(sd, sk) ? ': ' + S.noFitWhy(sd, sk) + '.' : '.'); renderSupportPicker(st.last || S.calcSkill(GD, st.ch, st.skill, opts())); return; }
+      if (!S.supportChoices(GD, st.ch, st.skill, opts()).some(c => c.id === id)) { st.supMsg = planner.supWhy(st.ch, st.skill, id, st.conduit) || (sd.Name || id) + ' cannot go into this skill.'; renderSupportPicker(st.last || S.calcSkill(GD, st.ch, st.skill, opts())); return; }
       const swap = st.supports.find(s => S.shapesClash(id, s.toLowerCase())) || null; // shapes that clash (Trap may sit next to a totem: S.shapesClash)
       if (swap) { st.supports = st.supports.filter(s => s !== swap); st.keepSup.delete(swap.toLowerCase()); st.supMsg = sd.Name + ' replaces ' + (GD.supports[swap.toLowerCase()] || { Name: swap }).Name + ': only one shape support counts.'; }
       else if (inSet.length >= supSockets()) { st.supMsg = 'All ' + supSockets() + ' sockets are used: take a support out first (a higher gem level opens more).'; renderSupportPicker(st.last || S.calcSkill(GD, st.ch, st.skill, opts())); return; }
@@ -24925,7 +25076,20 @@ window.BOStartApp = function () {
     else if (b.dataset.block) { const id = b.dataset.block; if (st.blockSup.has(id)) st.blockSup.delete(id); else { st.blockSup.add(id); st.keepSup.delete(id); } if (st.opt) { stopSearch(); st.opt = null; render(); } else renderSupportPicker(st.last); }
     else if (b.dataset.granted) { const k = b.dataset.granted; if (st.off.has(k)) st.off.delete(k); else st.off.add(k); render(); }
   });
-  $('#supportChips').addEventListener('toggle', e => { if (e.target.matches && e.target.matches('details.sup-more')) { if (e.target.dataset.idle) st.supIdle = e.target.open; else st.supMore = e.target.open; } }, true);
+  $('#supportChips').addEventListener('toggle', e => {
+    const d = e.target; if (!d.matches || !d.matches('details.sup-more[data-grp]') || st.supFind.trim()) return; // the search opens groups itself
+    if (d.open) st.supOpen.add(d.dataset.grp); else st.supOpen.delete(d.dataset.grp);
+    d.dataset.open = d.open ? '1' : '';
+  }, true);
+
+  $('#supportFind').addEventListener('input', e => { st.supFind = e.target.value; planner.supFilter($('#supportChips'), st.supFind); });
+  $('#supportPreset').addEventListener('click', () => {
+    const pre = ($('#supportPreset').dataset.ids || '').split(',').filter(Boolean); if (!pre.length) return;
+    const n = supSockets(), cur = (st.supports || []).filter(s => !pre.includes(s.toLowerCase()));
+    const next = pre.map(id => (GD.supports[id] || {}).Id || id).concat(cur).slice(0, n), out = cur.filter(s => !next.includes(s));
+    st.supMsg = 'Preset supports: ' + pre.map(supName).join(', ') + (out.length ? ' (took out ' + out.map(supName).join(', ') + ': no sockets left)' : '') + '.';
+    applySupportSetup(next);
+  });
 
   const supInfo = e => { const b = e.target.closest && e.target.closest('[data-sup]'); if (!b) return; const sd = GD.supports[b.dataset.sup] || {}; const s = (st.last && st.last.supports || []).find(x => x.id.toLowerCase() === b.dataset.sup); $('#supportInfo').classList.toggle('bad', !!(s && !s.ok)); $('#supportInfo').textContent = (sd.Name ? sd.Name + ': ' : '') + (s && !s.ok ? s.why : sd.Description || ''); };
   $('#supportChips').addEventListener('mouseover', supInfo);

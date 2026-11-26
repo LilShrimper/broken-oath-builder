@@ -3602,10 +3602,12 @@ window.BOPlanner = function (ctx) {
 
 
 
-  const MAX_BONUS = 24;
 
 
-  const bonusWarn = ch => (ch.bonusPoints || 0) > MAX_BONUS ? '<p class="pl-over">' + ch.bonusPoints + ' bonus points is more than this patch gives: ' + MAX_BONUS + ' at most (7 from Gates, ' + (MAX_BONUS - 7) + ' from Rupture milestones up to Rupture Level 98). The extra ' + (ch.bonusPoints - MAX_BONUS) + ' cannot be earned in the game.</p>' : '';
+  const MAX_BONUS = 29;
+
+
+  const bonusWarn = ch => (ch.bonusPoints || 0) > MAX_BONUS ? '<p class="pl-over">' + ch.bonusPoints + ' bonus points is more than this patch gives: ' + MAX_BONUS + ' at most (7 from Gates, ' + (MAX_BONUS - 7) + ' from Rupture milestones up to Rupture Level 145). The extra ' + (ch.bonusPoints - MAX_BONUS) + ' cannot be earned in the game.</p>' : '';
   function blankPlan(classId, level) {
     return { id: newId(), name: classId + ' plan', classId, level, league: '', lastZone: '', items: [], passives: [], bonusPoints: MAX_BONUS, gems: [], gemLevels: {}, sockets: [], hotbar: [],
       weaponId: '', dragonNodes: [], dragonAspect: '', mainSkill: '', supportGems: [], plan: true, savedAt: new Date().toISOString() };
@@ -15842,7 +15844,12 @@ window.BOCharacter = function (ctx) {
 
 
 
-  const SPOTTER_RAMP_PER = 2, SPOTTER_RAMP_MAX = 25;
+
+
+
+
+  const SPOTTER_RAMP_PER = 2, SPOTTER_RAMP_MAX_91 = 25;
+  const spotterRampMax = GD => Math.min(SPOTTER_RAMP_MAX_91, ruleNum(GD, 'r76.UNIQUES.RampMax106', SPOTTER_RAMP_MAX_91));
   const spotterGap = (GD, mods) => {
     for (const m of pickMods(mods, 'BallistaVolley76', 'Flat')) { const t = /once every (\d+(?:\.\d+)?) seconds?/i.exec(m.text || m.Text || ''); if (t) return +t[1]; }
     const u = (GD.uniques || {}).community_binas_spotters_helm, line = u && (u.Mods || []).find(x => x.Mod && x.Mod.Stat === 'BallistaVolley76');
@@ -18427,6 +18434,17 @@ window.BOCharacter = function (ctx) {
 
 
     let speedInc = 0, speedMore = 1;
+
+
+
+
+    if (isAttack && ctx.gear.has('dualwielding') && apiBuildAtLeast(GD, 92, '2026-11-26T13')) {
+      const dw = +((GD.scaling || {}).Hero || {}).DualWieldAttackSpeedMore || 0;
+      if (dw > 0) {
+        mods.push({ stat: 'AttackSpeed', mode: 'More', tags: ['Attack'], v: dw, v2: 0, local: false, src: 'Dual wielding', key: 'dualwield' });
+        res.notes.push('Dual wielding: ' + dw + '% more attack speed (game data 92; not checked in game).');
+      }
+    }
     const speedStat = isAttack ? 'AttackSpeed' : 'CastSpeed';
 
 
@@ -19319,6 +19337,7 @@ window.BOCharacter = function (ctx) {
         durMore *= 1 + (Number.isFinite(longer) ? longer : 60) / 100;
       }
       const life = noExpire || eyrie ? Infinity : res.totem.baseLife * Math.max(0, 1 + durInc / 100) * durMore, rate = res.totem.shotsPerSec || 0;
+      const SPOTTER_RAMP_MAX = spotterRampMax(GD);
       const capShot = SPOTTER_RAMP_MAX / SPOTTER_RAMP_PER + 1, toCap = rate > 0 ? (capShot - 1) / rate : Infinity;
       const shots = life * rate, endless = !Number.isFinite(shots);
       let avg;
@@ -19512,7 +19531,7 @@ window.BOCharacter = function (ctx) {
       markHeld = held;
       markPct = held * per * (1 + eff / 100);
     }
-    if (!markPct) { const am = armyMarkPct(GD, ch); if (am > 0) { markPct = am; markHeld = 10; res.notes.push('Hunter\'s Marks from your minions (Hunter\'s Mark Support on a summon gem): the enemy takes ' + +am.toFixed(1) + '% more damage at 10 Marks (Guardian debuff in the game, 23 Nov 2026).'); } }
+    if (!markPct) { const am = armyMarkPct(GD, ch); if (am > 0) { markPct = am; markHeld = 10; res.notes.push('Hunter\'s Marks from your minions (Hunter\'s Mark Support on a summon gem): the enemy takes ' + +am.toFixed(1) + '% more damage at 10 Marks' + (bSwitch(GD, 'r113.META.bMinionMark234', false) ? ' (a minion-laid Mark counts half since game data 92; not checked in game).' : ' (Guardian debuff in the game, 23 Nov 2026).')); } }
     res.marks = markPct ? { pct: markPct } : null;
 
 
@@ -19788,9 +19807,12 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
     const ailSpill = (raw, what) => {
-      const x = is086(GD) && bSwitch(GD, 'r113.META.bAilSpill113', true) ? Math.max(0, raw - 100) : 0;
-      if (x > 0) res.notes.push(what + ' chance ' + Math.round(raw) + '%: the ' + Math.round(x) + '% past 100 counts as ' + Math.round(x) + '% increased ' + what.toLowerCase() + ' damage (patch 86 notes).');
+      const over = is086(GD) && bSwitch(GD, 'r113.META.bAilSpill113', true) ? Math.max(0, raw - 100) : 0;
+      const x = over * ruleNum(GD, 'r113.META.AilSpillPer113', 1);
+      if (x > 0) res.notes.push(what + ' chance ' + Math.round(raw) + '%: the ' + Math.round(over) + '% past 100 counts as ' + +x.toFixed(1) + '% increased ' + what.toLowerCase() + ' damage (patch 86 notes; ' + (x < over ? 'half as much since game data 92' : '1 for 1') + ').');
       return x;
     };
 
@@ -20625,16 +20647,34 @@ window.BOCharacter = function (ctx) {
           const channel = !!(sk.Channel && sk.Channel.Tick), sown = sumMod('Gravesown', 'Flat') > 0;
           const husks = sown ? (channel ? 1 / 0.7 : 0.10 * hitsPerSec) : 0;
           const have = noCorpse ? 0 : supply > 0 ? supply : husks, kind = supply > 0 ? kindSet : 'husk';
-          const band = KINDLED_BANDS.find(b => rl < b[0])[1] * kp / KINDLED_BASE;
+
+
+
+
+
+
+
+
+          const kTxt = /(([d.]+)% below Rupture Level (d+), ([d.]+)% at d+-(d+), ([d.]+)% from d+)/i.exec((GD.supports.kindled_remains || {}).Description || '');
+          const grown = !!kTxt && /grown by the skill/i.test(GD.supports.kindled_remains.Description);
+          const bands = kTxt ? [[+kTxt[2], +kTxt[1]], [+kTxt[4] + 1, +kTxt[3]], [Infinity, +kTxt[5]]] : KINDLED_BANDS;
+          let band = bands.find(b => rl < b[0])[1] * kp / KINDLED_BASE, grow = 1, corpseInc = 0;
+          if (grown) {
+            const dK = mitig[sk.DamageType] ? sk.DamageType : 'Physical';
+            const si = (res.scaleInfo || {})[dK] || Object.values(res.scaleInfo || {}).sort((a, b) => (b.scaledAvg || 0) - (a.scaledAvg || 0))[0];
+            for (const m of pickMods(mods, 'Damage', 'Inc')) if ((m.tags || []).some(t => lc(t) === 'corpse')) { corpseInc += m.v; use(m, 'corpse bursts'); }
+            if (si) grow = Math.max(0, 1 + ((si.inc || 0) + corpseInc) / 100) * (si.more || 1) / (heroDamage(GD) || 1);
+            band *= grow;
+          }
           if (!(have > 0)) res.notes.push('Kindled Remains: bursts a fresh corpse next to you or the enemy for ' + +band.toFixed(1) + '% of its life (at this Rupture Level). No corpses are counted in this fight: set "Fresh corpses a second" in Configure Enemy, or link Gravesown for Husks.');
           else {
-            const rate = Math.min(4, channel ? usesPerSec : hitsPerSec, have);
+            const rate = Math.min(4, (kTxt ? 3 : 1) * (channel ? usesPerSec : hitsPerSec), have);
             const d = mitig[sk.DamageType] ? sk.DamageType : 'Physical';
             const c = corpseLifeAt(GD, rl, kind, isBoss), size = c.life * band / 100, dps = vs(size, d) * rate;
             byType[d] = (byType[d] || 0) + dps; hitDpsVs += dps; res.hitDps = hitDpsVs;
             res.kindled = { kind, life: c.life, rl: c.rl, pct: band, perSec: rate, perBurst: size, dps };
             (res.triggers = res.triggers || []).push({ src: 'Support · Kindled Remains', when: channel ? 'Use' : 'Hit', nth: 1, pct: band, count: 1, element: d, perSec: rate, dps });
-            res.notes.push('Kindled Remains: ' + rate.toFixed(2) + ' corpse bursts a second (at most 4; ' + (supply > 0 ? supply + ' fresh corpses a second, your setting' : 'Gravesown\'s Husks, ' + husks.toFixed(2) + ' a second' + (channel ? ', one every 0.7 s taken' : '')) + '), each ' + +band.toFixed(1) + '% of the life of ' + kindName[kind] + ' at ' + where(c) + ' (' + fmt(c.life) + ') as ' + d + ' = ' + fmt(size) + ' before resistance, +' + Math.round(hitDpsNow > 0 ? dps / hitDpsNow * 100 : 0) + '% hit damage. Corpse life is from the game log (22 Nov 2026); the burst is taken as not raised by your damage lines (not checked in a fight yet).');
+            res.notes.push('Kindled Remains: ' + rate.toFixed(2) + ' corpse bursts a second (at most 4; ' + (supply > 0 ? supply + ' fresh corpses a second, your setting' : 'Gravesown\'s Husks, ' + husks.toFixed(2) + ' a second' + (channel ? ', one every 0.7 s taken' : '')) + '), each ' + +band.toFixed(1) + '% of the life of ' + kindName[kind] + ' at ' + where(c) + ' (' + fmt(c.life) + ') as ' + d + ' = ' + fmt(size) + ' before resistance, +' + Math.round(hitDpsNow > 0 ? dps / hitDpsNow * 100 : 0) + '% hit damage. Corpse life is from the game log (22 Nov 2026); ' + (grown ? 'the share in the support text is ' + +(band / grow).toFixed(1) + '% grown x' + grow.toFixed(2) + ' by the increased and more damage of this skill' + (corpseInc ? ' (' + corpseInc + '% increased Corpse damage included)' : '') + ', our reading of its text since patch 91 (not checked in a fight yet).' : 'the burst is taken as not raised by your damage lines (not checked in a fight yet).'));
           }
         }
       }
@@ -21242,14 +21282,21 @@ window.BOCharacter = function (ctx) {
 
       let minionHeld = 0;
       if (ruleNum(GD, 'r95.META.bMinionReserve95', 1)) {
-        const seen = new Set();
+
+
+
+
+        const seen = new Set(), holds = [];
         for (const h of ch.hotbar) {
           const ms = GD.skills[lc(h)], mi = ms && ms.Minion;
           if (!mi || !mi.ReservePct || seen.has(lc(h)) || !isSummon(ms) || (o.off && o.off.has('minion:' + lc(h)))) continue;
           seen.add(lc(h));
           const home = mi.ReserveHomeClass && lc(mi.ReserveHomeClass) === lc(ch.classId || '');
-          minionHeld += Math.round(max * mi.ReservePct / 100 * (home ? (mi.ReserveHomeMult || 1) : 1) * 0.8);
+          holds.push(max * mi.ReservePct / 100 * (home ? (mi.ReserveHomeMult || 1) : 1) * 0.8);
         }
+        const breadth = bSwitch(GD, 'r113.META.bArmyBreadth244', false) ? 1 + ruleNum(GD, 'r113.META.fArmyBreadth244', 0.25) * Math.max(0, holds.length - 2) : 1;
+        for (const v of holds) minionHeld += Math.round(v * breadth);
+        if (breadth > 1 && !o._barProbe) res.notes.push('Minion mana: ' + holds.length + ' kinds of minion on your bar, so each holds x' + +breadth.toFixed(2) + ' mana (25% more for each kind past the second; patch 91, not checked in game).');
         minionHeld = Math.round(Math.min(minionHeld, Math.max(0, max - reserved - max * 0.1)));
       }
       reserved += minionHeld;
@@ -21684,6 +21731,17 @@ window.BOCharacter = function (ctx) {
     for (const m of mods) if (m.stat === 'Damage' && m.mode === 'Inc' && !m.local && (fromSupport(m) || splitTags(m.tags).conds.some(c => lc(c) === 'minion'))) {
       const t = fit(m); if (t && !t.length) { specInc += m.v; use(m, 'minion, the summon skill increased'); }
     }
+
+
+
+
+    if (bSwitch(GD, 'r113.META.bHolyMinion251', false) && (sk.Tags || []).includes('Holy')) {
+      for (const m of pickMods(mods, 'Damage', 'Inc')) {
+        if (!(m.key === 'passives' || m.key === 'oaths' || m.key === 'dragon' || /^item:/.test(String(m.key || '')))) continue;
+        if ((m.tags || []).length !== 1 || lc(m.tags[0]) !== 'holy') continue;
+        specInc += m.v; use(m, 'minion (Holy lines reach Holy minions, game data 92)');
+      }
+    }
     { const k2 = late2K(GD, sk.Id, minionGem); if (k2 !== 1) res.notes.push(sk.Name + ': x' + k2.toFixed(3) + ' late gem-level damage (patch 83, at gem level ' + minionGem + ').'); }
 
 
@@ -21933,7 +21991,7 @@ window.BOCharacter = function (ctx) {
       if (rent > 0) { gExtra.push(rent); res.notes.push('Soul Rend (on your bar): the Rent enemy takes ' + rent + '% more damage from your minions' + (rm.length ? ' (Gravetithe, instead of 10%)' : '') + ', counted as kept up. Best guess from the gem and item texts; not checked in game.'); }
     }
     const aMark = armyMarkPct(GD, ch);
-    if (aMark > 0) { gExtra.push({ k: 'mark', v: aMark }); res.notes.push('Hunter\'s Marks from your minions: the enemy takes ' + +aMark.toFixed(1) + '% more damage at 10 Marks (the Marks kind; Guardian debuff in the game, 23 Nov 2026).'); }
+    if (aMark > 0) { gExtra.push({ k: 'mark', v: aMark }); res.notes.push('Hunter\'s Marks from your minions: the enemy takes ' + +aMark.toFixed(1) + '% more damage at 10 Marks (the Marks kind' + (bSwitch(GD, 'r113.META.bMinionMark234', false) ? '; a minion-laid Mark counts half since game data 92, not checked in game).' : '; Guardian debuff in the game, 23 Nov 2026).')); }
     let curseK = 1;
     if ((activeCurses.length || gExtra.length) && avg > 0) {
 
@@ -22686,7 +22744,11 @@ window.BOCharacter = function (ctx) {
     const on = (ch.sockets || []).some(x => x && bar.has(lc(x.skill)) && minionSummon(GD.skills[lc(x.skill)]) && (x.supports || []).some(y => lc(String(y).replace('@granted', '')) === 'hunters_mark_support'));
     if (!on) return 0;
     const t = markText(GD);
-    return t ? +t[1] * +t[2] : 0;
+
+
+
+    const share = bSwitch(GD, 'r113.META.bMinionMark234', false) ? minionEngShare(GD) : 1;
+    return t ? +t[1] * +t[2] * share : 0;
   };
   const MINION_ENGINE_COUNTED = new Set(['added_poison', 'honed_edge', 'deathblow', 'vicious_projectiles']);
   const minionEngShare = GD => {
@@ -27051,7 +27113,9 @@ window.BOStartApp = function () {
 
 
 
-  const QUARTZ = 24;
+
+
+  const QUARTZ = 29;
   const pointsPer = () => (GD.scaling.Hero || {}).PassivePointsPerLevel || 1;
   const pointsCap = () => Math.round((100 - 1) * pointsPer() + QUARTZ);
   const pointsIn = list => (list || []).filter(x => !/^(start_|om103_)/.test(x)).length; // Oath seats cost no point (patch notes 17 Nov 2026)
@@ -27749,7 +27813,7 @@ window.BOStartApp = function () {
     const nHave = [...have].filter(x => !/^om103_/.test(x)).length; // Oath seats cost no point (patch notes 17 Nov 2026)
     const cap = pointsCap(), over = nHave - cap, ov = $('#treeOver');
     ov.hidden = over <= 0;
-    if (over > 0) ov.textContent = 'You have ' + nHave + '/' + cap + ' passive points (' + cap + ' is the most at level 100, the ' + QUARTZ + ' quartz points included): refund ' + over + ' point' + (over > 1 ? 's' : '') + '.';
+    if (over > 0) ov.textContent = 'You have ' + nHave + '/' + cap + ' passive points (' + cap + ' is the most at level 100, the ' + QUARTZ + ' bonus points from Gates and Rupture milestones included): refund ' + over + ' point' + (over > 1 ? 's' : '') + '.';
     $('#treePoints').innerHTML = '<span class="tp-n' + (over > 0 ? ' over' : '') + '">' + nHave + ' / ' + cap + '</span> points taken' + (nHave !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level + (free ? ' · ' + free + ' free' : '') + (sw.size ? ' · ' + sw.size + ' Oath' + (sw.size > 1 ? 's' : '') + ' sworn' : '');
     const pp = $('#planPoints'), who = (st.chOrig || st.ch).id + '|' + (st.chOrig || st.ch).level;
     pp.max = Math.max(1, cap - pointsIn([...have]));
@@ -29205,6 +29269,13 @@ window.BOStartApp = function () {
     });
     return { list, no };
   }
+
+
+
+  function rvCost(c) {
+    const w = +((c.tw.Tiers || [])[0] || {}).Weight, on = String(((GD.rules || {})['r113.META.bRivenCost252'] ?? '')).toLowerCase() === 'true';
+    return on && w > 0 && w < 1000 ? Math.max(1, Math.round(1000 / w)) : 1;
+  }
   function rvLine(c, roll) {
     const t = c.tw.Tiers[0], mid = (a, b) => { const m = (a + b) / 2; return Number.isInteger(a) && Number.isInteger(b) ? Math.round(m) : Math.round(m * 10) / 10; };
     const pick = (a, b) => a == null ? 0 : roll === 'lo' ? a : roll === 'hi' ? b : mid(a, b);
@@ -29247,18 +29318,20 @@ window.BOStartApp = function () {
     }
     rows.sort((a, b) => b.gain - a.gain);
 
-    const picks = [], left = rows.map(x => x.c); let cur = base, taken = [];
-    for (let k = 0; k < set.n && left.length; k++) {
+
+    const picks = [], left = rows.map(x => x.c); let cur = base, taken = [], stones = set.n;
+    for (let k = 0; stones > 0 && left.length; k++) {
       let best = null;
       for (const c of left) {
+        if (rvCost(c) > stones) continue;
         const e = k === 0 ? rows.find(x => x.c === c).e[set.roll] : ev(rvWith(ch0, taken.concat(c), set.roll), cur);
         if (k > 0) { done++; yield tick('Stone ' + (k + 1) + ' of ' + set.n); }
-        if (!best || e.score > best.e.score) best = { c, e };
+        if (!best || (e.score - 1) / rvCost(c) > (best.e.score - 1) / rvCost(best.c)) best = { c, e };
       }
       if (!best || best.e.score - 1 < 0.00005) break; // nothing left that helps
-      taken = taken.concat(best.c); left.splice(left.indexOf(best.c), 1);
+      taken = taken.concat(best.c); left.splice(left.indexOf(best.c), 1); stones -= rvCost(best.c);
       const tot = ev(rvWith(ch0, taken, set.roll), base); cur = { rs: tot.rs, ehp: tot.ehp, dps: tot.dps };
-      picks.push({ c: best.c, step: best.e.score - 1, total: tot.score - 1, dps: tot.dps, dr: tot.dr, er: tot.er });
+      picks.push({ c: best.c, cost: rvCost(best.c), step: best.e.score - 1, total: tot.score - 1, dps: tot.dps, dr: tot.dr, er: tot.er });
     }
     return { rows, picks, no, base, n: set.n, roll: set.roll, w, multi: goals.length > 1, lostAny: lost.some(Boolean), ms: performance.now() - t0, ch: ch0 };
   }
@@ -29297,26 +29370,26 @@ window.BOStartApp = function () {
     const itemCell = c => '<span class="gs-hov" data-rv-tip="' + c.ii + '"><span class="meta">' + esc(gsSlotName(c.slot)) + '</span><br>' + gsItemLabel(r.ch.items[c.ii]) + '</span>';
     const nowCell = c => { const it = r.ch.items[c.ii], a = it.affixes[c.ai], af = GD.affixes[lc(a.id)]; return esc(modLine(Object.assign({}, af.Mod, { Value: a.v, Value2: a.v2 || 0 }))) + (it.rarity === 'Unique' ? ' <span class="meta">Vow</span>' : ''); };
     const rng = (a, b) => a === b ? num(a) : num(a) + '–' + num(b);
-    const rivenCell = c => { const t = c.tw.Tiers[0]; return '<b>' + rng(t.Min, t.Max) + (t.Min2 != null && t.Max2 ? ' / ' + rng(t.Min2, t.Max2) : '') + '</b>'; };
+    const rivenCell = c => { const t = c.tw.Tiers[0]; return '<b>' + rng(t.Min, t.Max) + (t.Min2 != null && t.Max2 ? ' / ' + rng(t.Min2, t.Max2) : '') + '</b>' + (rvCost(c) > 1 ? ' <span class="meta">costs ' + rvCost(c) + ' Rivenstones</span>' : ''); };
     const no = r.no, why = [[no.tier, 'not at T1'], [no.none, 'with no Riven version'], [no.crafted, 'crafted'], [no.oath, 'Oathsworn or Scarred'], [no.riven, 'Riven already'], [no.vow, 'Vows on uniques (the Forge offers no Rivenstone on a unique)']].filter(x => x[0]).map(x => x[0] + ' ' + x[1]).join(', ');
     if (!r.rows.length) return '<div class="card cmp-result"><h2>No line can take a Rivenstone</h2><p class="hint">A Rivenstone takes a T1 line that dropped on the item and has a Riven version. Crafted, Oathsworn and Scarred lines and Vows on uniques cannot take it.' + (why ? ' Your lines: ' + why + '.' : '') + '</p></div>';
-    const last = r.picks[r.picks.length - 1], many = r.n > 1, np = r.picks.length;
+    const last = r.picks[r.picks.length - 1], many = r.n > 1, np = r.picks.length, used = r.picks.reduce((a, p) => a + (p.cost || 1), 0);
     let h = '<div class="card cmp-result"><h2>' + (many ? 'Your ' + r.n + ' Rivenstones' : 'Your Rivenstone') + ' <span class="hint">' + esc(skillName) + ', vs the configured enemy · ' + RV_ROLLS[r.roll].toLowerCase() + '</span></h2>';
     if (!np) h += '<p class="hint">None of the ' + r.rows.length + ' lines that can take a Rivenstone raises ' + what + ' of this skill.' + (r.w > 0 ? '' : ' Lines like life and resistances only count with the slider moved towards Defence.') + '</p>';
     else {
       h += '<div class="headline small">' + stat('Now', num(r.base.dps), '', '', esc(skillName) + (r.multi ? ' and the skills under Also count' : '') + ', total DPS') +
-        stat('With ' + np + ' Rivenstone' + (np > 1 ? 's' : ''), num(last.dps), '<div class="delta ' + (last.total >= 0 ? 'up' : 'down') + '">' + pct(last.total) + (score ? ' score' : '') + '</div>', 'main', r.w > 0 ? 'DPS ' + pct(last.dr - 1) + ', defence ' + pct(last.er - 1) : 'found in ' + (r.ms / 1000).toFixed(1) + ' s') +
+        stat('With ' + used + ' Rivenstone' + (used > 1 ? 's' : ''), num(last.dps), '<div class="delta ' + (last.total >= 0 ? 'up' : 'down') + '">' + pct(last.total) + (score ? ' score' : '') + '</div>', 'main', r.w > 0 ? 'DPS ' + pct(last.dr - 1) + ', defence ' + pct(last.er - 1) : 'found in ' + (r.ms / 1000).toFixed(1) + ' s') +
         stat('Lines that can take one', String(r.rows.length), '', '', 'T1, dropped on the item, with a Riven version') + '</div>';
       h += '<div class="table-wrap"><table class="tbl gs-table rv-table"><thead><tr><th>' + (many ? 'Stone' : '#') + '</th><th>Item</th><th>Line now</th><th>As Riven</th><th title="What this stone adds on top of the ones above it">This stone</th>' + (many ? '<th title="All stones down to this row, against your gear now">Total</th>' : '') + '</tr></thead><tbody>' +
         r.picks.map((p, i) => '<tr><td>' + (i + 1) + '</td><td>' + itemCell(p.c) + '</td><td>' + nowCell(p.c) + '</td><td>' + rivenCell(p.c) + '</td><td>' + sp(p.step) + '</td>' + (many ? '<td>' + sp(p.total) + '</td>' : '') + '</tr>').join('') + '</tbody></table></div>';
-      if (np < r.n) h += '<p class="hint">' + (np < r.rows.length ? 'Only ' + np + ' of your ' + r.n + ' stones help: no other line that can take one raises ' + what + '.' + (r.w > 0 ? '' : ' Lines like life and resistances only count with the slider moved towards Defence.') : 'Your gear has only ' + r.rows.length + ' line' + (r.rows.length > 1 ? 's' : '') + ' that can take a Rivenstone.') + '</p>';
+      if (used < r.n) h += '<p class="hint">' + (np < r.rows.length ? 'Only ' + used + ' of your ' + r.n + ' stones help: no other line that can take one raises ' + what + '.' + (r.w > 0 ? '' : ' Lines like life and resistances only count with the slider moved towards Defence.') : 'Your gear has only ' + r.rows.length + ' line' + (r.rows.length > 1 ? 's' : '') + ' that can take a Rivenstone.') + '</p>';
       h += '<div class="cmp-actions"><button class="btn" type="button" data-rv="apply">Make ' + (np > 1 ? 'these lines' : 'this line') + ' Riven on the build</button><span class="hint">In this page only, at the ' + RV_ROLLS[r.roll].toLowerCase() + '; the Build and Damage tabs use it too.' + (r.ch.plan ? '' : ' Your save is never changed.') + '</span></div>';
     }
     h += '</div><div class="card cmp-result"><h2>Every line that can take a Rivenstone <span class="hint">one stone each, on your gear as it is</span></h2>' +
       '<div class="table-wrap"><table class="tbl gs-table rv-table"><thead><tr><th>#</th><th>Item</th><th>Line now</th><th>As Riven</th><th title="' + (score ? 'Score (DPS and defence as the slider weighs them' + (r.multi ? ', over the skills under Also count' : '') + ')' : 'DPS') + ' at the ' + RV_ROLLS[r.roll].toLowerCase() + '">Change</th><th title="At the lowest and at the highest roll of the Riven line">Lowest to highest roll</th></tr></thead><tbody>' +
       r.rows.map((x, i) => '<tr><td>' + (i + 1) + '</td><td>' + itemCell(x.c) + '</td><td>' + nowCell(x.c) + '</td><td>' + rivenCell(x.c) + '</td><td>' + sp(x.gain) + '</td><td>' + sp(x.lo) + ' to ' + sp(x.hi) + '</td></tr>').join('') + '</tbody></table></div>';
     h += '<p class="hint">A Rivenstone turns one T1 line that dropped on the item into its Riven version, with a new roll in the range shown (the game: "the T1 top ×1.05 to ×1.20"). The game counts most Riven damage lines a little under the number on the item; the sim does the same.' +
-      (many ? ' With several stones each next line is picked on top of the ones before.' : '') + (why ? ' Lines that cannot take one here: ' + why + '.' : '') +
+      (many ? ' With several stones each next line is picked on top of the ones before.' : '') + (r.rows.some(x => rvCost(x.c) > 1) ? ' Gem level lines cost 4 Rivenstones since patch 92: one is picked only when you have that many left, and it is weighed by its gain per stone.' : '') + (why ? ' Lines that cannot take one here: ' + why + '.' : '') +
       (r.lostAny ? ' Legion of One: only ' + legionKept() + ' counts.' : '') + (r.w > 0 ? ' ' + gsDefNote() : '') + '</p>';
     return h + '</div>';
   }

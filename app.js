@@ -698,7 +698,7 @@ window.PAGE_LANGS = {
 
 
 
-    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK|CRAFT|CURSE|TRUST|TOTEMPOOL)$/; // TOTEMPOOL: fOverflow107, bow engines past the limit (23 Nov 2026)
+    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK|CRAFT|CURSE|TRUST|TOTEMPOOL|SPARKPOOL)$/; // TOTEMPOOL: fOverflow107, bow engines past the limit (23 Nov 2026); SPARKPOOL: r125 bOn / Kinds, the Spark kinds that share one max (26 Nov 2026)
     try { for (const s of (J('Gameplay/switches.json') || {}).switches || []) if (RULE_SECTIONS.test(s.section)) gameRules[s.section + '.' + s.key] = ruleVal(s.value); } catch (e) { /* not served */ }
     try { for (const [k, v] of Object.entries((J('Gameplay/rules.json') || {}).values || {})) gameRules[k] = ruleVal(v && v.value); } catch (e) { /* older game data */ }
     let trapPrice = {};
@@ -1112,14 +1112,18 @@ window.PAGE_LANGS = {
 
 
 
+
+
+
+
 (function (root) {
   'use strict';
   const TS = /^\[(\d{4})\.(\d\d)\.(\d\d)-(\d\d)\.(\d\d)\.(\d\d):(\d{3})\]/;
   const time = l => { const m = TS.exec(l); return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6], +m[7]).getTime() : null; };
 
   function parseLog(text) {
-    const out = { heroes: [], guardians: [], casts: {}, skyfall: { falls: 0, hits: 0, blocked: 0 }, gems: {}, start: null, end: null, panel: {}, poisonCheck: null };
-    let hero = null, cur = null, ail = null;
+    const out = { heroes: [], guardians: [], casts: {}, skyfall: { falls: 0, hits: 0, blocked: 0 }, gems: {}, start: null, end: null, panel: {}, poisonCheck: null, post: [] };
+    let hero = null, cur = null, ail = null, done = null; // done: the Guardian fight just closed, for the lines the game writes after its model line
     const rupture = {}, element = {}, ward = {}, hitMult = {}, intros = {};
     const releases = {};
     let blessings = {};
@@ -1238,9 +1242,20 @@ window.PAGE_LANGS = {
           if (cur.hitMult == null && hitMult[m[1]] != null) cur.hitMult = hitMult[m[1]];
           if (cur.ail0 && ail) cur.ailments = Object.fromEntries(ailKeys.map(k => [k, Math.max(0, ail[k] - cur.ail0[k])]));
           delete cur.ail0;
-          out.guardians.push(cur);
+          out.guardians.push(cur); done = cur;
         }
         cur = null;
+      } else if ((m = /SheetTel96: guardian_fight (\w+) sheet (\S+)/.exec(l))) {
+
+        if (done && done.name === m[1] && t - done.t1 < 2000) {
+          done.sheet = {};
+          for (const part of m[2].split(',')) { const i = part.lastIndexOf(':'), v = +part.slice(i + 1); if (i > 0 && isFinite(v)) done.sheet[part.slice(0, i)] = v; }
+        }
+      } else if ((m = /DummyRead113: (\d+) hits, critical strikes ([\d.]+)% \| (.+)/.exec(l))) {
+
+        const types = {}; let total = 0;
+        for (const p of m[3].matchAll(/([A-Za-z]+) (\d+)/g)) { types[p[1]] = +p[2]; total += +p[2]; }
+        out.post.push({ t, hits: +m[1], crit: +m[2], types, total, hero });
       } else if ((m = /Gem: (\w+) reached level (\d+)/.exec(l))) {
         out.gems[m[1]] = +m[2];
       }
@@ -19107,13 +19122,27 @@ window.BOCharacter = function (ctx) {
 
 
         const allAtOnce = is0565(GD);
-        const sparksFor = rate => !(cap && dur) ? 1 : allAtOnce ? cap * Math.min(1, dur * rate) : Math.max(1, Math.min(cap, dur * rate));
+
+
+
+
+
+
+
+
+
+
+
+        const poolKinds = ruleNum(GD, 'r125.SPARKPOOL.bOn', 0) ? String((GD.rules || {})['r125.SPARKPOOL.Kinds'] || '').split(',').map(s => lc(s.trim())).filter(Boolean) : [];
+        const poolK = o._noSparkPool || !poolKinds.includes(lc(skillId)) ? 1 : o.sparkSkills > 0 ? Math.min(Math.floor(o.sparkSkills), poolKinds.length) : new Set((ch.hotbar || []).map(lc).filter(id => poolKinds.includes(id)).concat(lc(skillId))).size;
+        const sparksFor = rate => (!(cap && dur) ? 1 : allAtOnce ? cap * Math.min(1, dur * rate) : Math.max(1, Math.min(cap, dur * rate))) / poolK;
         const sparks = sparksFor(throwsPerSec);
         usesPerSec = strikeRate(sparks); useTime = 1 / usesPerSec;
-        res.brand = { sparks, every: strikeEvery, duration: dur, cap: cap || 1, rate: strikeRate, sparksFor, allAtOnce, castsPerSec: throwsPerSec };
+        res.brand = { sparks, every: strikeEvery, duration: dur, cap: cap || 1, rate: strikeRate, sparksFor, allAtOnce, castsPerSec: throwsPerSec, pool: poolK > 1 ? { kinds: poolK, share: 1 / poolK } : null };
         ownRate = casts => strikeRate(sparksFor(casts));
         if (allAtOnce && cap > 1) res.notes.push('One cast throws all ' + cap + ' Sparks (patch 0.56.5).' + (sparkRate ? ' Sparks strike ' + Math.round(sparkRate) + '% faster.' : ''));
-        res.notes.push('Spark: ' + (sparks % 1 ? sparks.toFixed(1) : sparks) + ' on the target' + (cap ? ' (up to ' + cap + ', each lasting ' + dur.toFixed(1) + ' s, thrown ' + throwsPerSec.toFixed(2) + ' times a second)' : '') + ', each striking every ' + (gather ? strikeEvery.toFixed(2) : ev[1]) + ' s' + (gather ? ', every 3 gathered into one body (x0.85 per spark)' : '') + '. Different Spark skills stack on the same enemy.');
+        res.notes.push('Spark: ' + (sparks % 1 ? sparks.toFixed(1) : sparks) + ' on the target' + (cap ? ' (up to ' + cap + ', each lasting ' + dur.toFixed(1) + ' s, thrown ' + throwsPerSec.toFixed(2) + ' times a second)' : '') + ', each striking every ' + (gather ? strikeEvery.toFixed(2) : ev[1]) + ' s' + (gather ? ', every 3 gathered into one body (x0.85 per spark)' : '') + (poolKinds.includes(lc(skillId)) ? '.' : '. Different Spark skills stack on the same enemy.'));
+        if (poolK > 1) res.notes.push('Shared Spark maximum: you have ' + poolK + ' Spark skills on your bar, and from build 92 they share one maximum (a cast fades the oldest Spark of any kind). Counted as cast in turn, so ' + (sk.Name || skillId) + ' holds 1/' + poolK + ' of its ' + cap + '. If you only cast this one on the enemy, it holds them all.');
 
 
 
@@ -19537,7 +19566,7 @@ window.BOCharacter = function (ctx) {
 
 
     if (sk.Delivery === 'Brand' && res.brand && res.brand.rate && repeats > 0 && !(o.hitsPerSecOverride > 0)) {
-      const sp = Math.min(ruleNum(GD, 'r80.CAPS.Sparks', 27), res.brand.sparks + 3 * repeats);
+      const sp = Math.min(ruleNum(GD, 'r80.CAPS.Sparks', 27), res.brand.sparks + 3 * repeats * (res.brand.pool ? res.brand.pool.share : 1)); // the Echo body is part of this kind's max, so the shared pool splits it too
       usesPerSec = res.brand.rate(sp); useTime = 1 / usesPerSec; hitsPerUse = projOnTarget * strikes * falls;
       res.brand.sparks = sp;
       res.notes.push('Spell Echo adds ' + repeats + ' more body of 3 Sparks: ' + sp + ' Sparks in all (the cast is not repeated).');
@@ -21640,7 +21669,7 @@ window.BOCharacter = function (ctx) {
 
 
     if (res.coc && !o._panelPass) {
-      const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { coc: false, _col: col, _panelPass: true, barShock: false, convergence: false }));
+      const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { coc: false, _col: col, _panelPass: true, barShock: false, convergence: false, _noSparkPool: true }));
       if (p && isFinite(p.panelDps)) { res.cocPanel = { triggered: res.panelDps }; res.panelDps = p.panelDps; }
     }
 
@@ -21650,6 +21679,12 @@ window.BOCharacter = function (ctx) {
     else if (res.convergence && !o._panelPass && o.convergence !== false) {
       const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { _col: col, _panelPass: true, convergence: false }));
       if (p && isFinite(p.panelDps)) res.panelDps = p.panelDps;
+    }
+
+
+    else if (res.brand && res.brand.pool && !o._panelPass) {
+      const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { _col: col, _panelPass: true, _noSparkPool: true }));
+      if (p && isFinite(p.panelDps)) { res.panelDps = p.panelDps; res.sheetHitDps = p.sheetHitDps; res.brand.panelSparks = p.brand ? p.brand.sparks : null; }
     }
 
 

@@ -8159,6 +8159,8 @@ window.BOLootFilter = function (ctx) {
     ST = sampleStats();
     let h = '<div class="cmp-intro"><div class="eyebrow">LOOT</div><h2>Loot Filter</h2><p>Make a loot filter and paste its code into the game\'s filter panel. The game takes up to ' + lf.maxRules +
       ' rules. The top rule an item matches decides what happens to it; an item no rule matches is shown.</p></div>';
+
+    if (ctx.copyGearLink) h += '<div class="lf-row lf-oath"><button class="btn small" type="button" data-lf="gear" title="Copies a link with the worn gear of the character on screen (bases, item levels, lines and tiers) for Oathfilter">Export for Oathfilter</button><span class="hint lf-oath-out" aria-live="polite"></span></div>';
     h += '<div class="lf-wrap">';
 
     h += '<div class="card lf-rules-card"><h2>Rules <span class="hint">' + n + ' / ' + lf.maxRules + '</span><span class="cmp-side-acts">' +
@@ -8249,6 +8251,7 @@ window.BOLootFilter = function (ctx) {
         }
         case 'copy': copy(encode(F), 'Code copied.'); return;
         case 'link': copy(link(), 'Link copied.'); return;
+        case 'gear': ctx.copyGearLink(el.querySelector('.lf-oath-out')); return;
       }
     });
     el.addEventListener('change', e => {
@@ -14056,6 +14059,8 @@ window.BOCharacter = function (ctx) {
     let h = '<div class="card ch-gear"><div class="ch-skills-head"><h2>Gear</h2><span class="ch-acts">' +
       '<button class="btn small ghost" type="button" data-clip="copygear" title="Copies every item here (idols too), to paste on another character or plan"' + (ch.items.length ? '' : ' disabled') + '>Copy gear</button>' +
       '<button class="btn small ghost" type="button" data-clip="pastegear" title="' + esc(has ? 'Replaces the gear here with the ' + plural(clip.items.length, 'item') + ' copied from ' + clip.from : 'Use Copy gear on another character or plan first') + '"' + (has ? '' : ' disabled') + '>Paste gear</button></span></div><div class="ch-doll">' + SLOTS.map(s => s === 'DwarvenRune' ? runeCells(ch) : slotCell(ch, s)).join('') + '</div>';
+
+    if (ctx.copyGearLink) h += '<div class="ch-oath"><button class="btn small ghost" type="button" data-oathexport title="Copies a link with the worn gear here (bases, item levels, lines and tiers) for Oathfilter"' + (ch.items.some(it => it.slot !== 'Idol' && it.slot !== 'DwarvenRune') ? '' : ' disabled') + '>Export for Oathfilter</button><span class="hint ch-oath-out" aria-live="polite"></span></div>';
     h += barCard(ch);
     h += '<div class="ch-idols-head"><h3>Idols <small>' + plural(L.idols.length, 'idol') + ' · ' + L.used.size + ' of ' + FCELLS.length + ' cells</small></h3>' +
       (ctx.openIdolSim ? '<button class="btn small" type="button" data-simidols title="Finds the best idols for the main skill, in a Fossil layout that fits (the Item Simulator\'s Idol Sim)">Sim Idols</button>' : '') + '</div>' + fossilHtml(ch, L);
@@ -14423,6 +14428,7 @@ window.BOCharacter = function (ctx) {
 
       const ss = e.target.closest && e.target.closest('[data-simsup]'); if (ss) { hide(); openSkill(ss.dataset.simsup, ss); const b = SW && swBack.querySelector('[data-sw="sim"]'); if (b) b.focus({ preventScroll: true }); return; }
       const si = e.target.closest && e.target.closest('[data-simidols]'); if (si) { hide(); ctx.openIdolSim(si); return; }
+      if (e.target.closest && e.target.closest('[data-oathexport]')) { ctx.copyGearLink(e.target.closest('.ch-oath').querySelector('.ch-oath-out')); return; }
       if (e.target.closest && e.target.closest('.ch-skill-checks')) return; // the boxes, not the skill window
       const bc = e.target.closest && e.target.closest('[data-barclear]'); if (bc) { hide(); const i = +bc.dataset.barclear; remember('bar', barName((ctx.current().hotbar || [])[i]) + ' from ' + BAR_SLOTS[i]); return setBar(i, '-'); }
       if (e.target.closest && e.target.closest('[data-testclear]')) { hide(); remember('test', barName(planner.testOf(ctx.current())) + ' from the comparison'); return setTestSlot(''); }
@@ -30178,6 +30184,34 @@ window.BOStartApp = function () {
 
   fossil = window.BOFossil({ $, esc, gd: () => GD, chars: () => CHARS });
 
+
+
+  function oathGear() {
+    const ch = st.ch; if (!ch) return null;
+    const aid = id => { if (GD.affixes[id]) return id; const k = Object.keys(GD.affixes).find(x => x.toLowerCase() === String(id).toLowerCase()); return k || id; };
+    const items = (ch.items || []).filter(it => it.base && it.slot !== 'Idol' && it.slot !== 'DwarvenRune').map(it => {
+      const o = { slot: it.slot, rarity: it.rarity, base: it.base, item_level: it.level };
+      if (it.rarity === 'Unique' && it.unique && it.unique !== 'None') o.unique = it.unique;
+      o.affixes = (it.affixes || []).filter(a => !/^unique:/.test(a.id)).map(a => ({ id: aid(a.id), tier: (a.tier || 0) + 1 }));
+      return o;
+    });
+    return { v: 1, name: ch.name, level: ch.level, items };
+  }
+
+
+  async function gearLink() {
+    const g = oathGear(); if (!g || !g.items.length) return null;
+    const z = new Uint8Array(await new Response(new Blob([JSON.stringify(g)]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
+    let s = ''; for (let i = 0; i < z.length; i += 0x8000) s += String.fromCharCode.apply(null, z.subarray(i, i + 0x8000));
+    return SITE_URL + 'lootfilter/#buildz=' + btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  async function copyGearLink(out) {
+    const u = await gearLink();
+    if (!u) { if (out) out.textContent = 'This character wears no gear.'; return; }
+    try { await navigator.clipboard.writeText(u); if (out) out.textContent = 'Link copied. Paste it into Oathfilter.'; } catch (e) { window.prompt('Copy this:', u); }
+  }
+
   lootFilter = window.BOLootFilter({ $, esc, gd: () => GD, siteUrl: SITE_URL,
 
 
@@ -30190,7 +30224,8 @@ window.BOStartApp = function () {
       let res = null;
       try { res = Object.fromEntries(heroDefence(ch).resParts.map(x => [x[0], +x[1]])); } catch (e) { /* no res */ }
       return { id: ch.id, name: ch.name, level: ch.level, main, bar: (ch.hotbar || []).map(sk).filter(Boolean), crit, res, cap: (GD.scaling.Hero || {}).ResistCap || 75 };
-    } });
+    },
+    gear: () => oathGear(), copyGearLink });
 
 
 
@@ -30370,7 +30405,7 @@ window.BOStartApp = function () {
   vowsTab = window.BOVows({ $, esc, num, planner, gd: () => GD, current: () => st.ch, skillDot, sim: vowSim });
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, atlas, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '',
     skillTip: id => planner.skillTip(null, id, false, true), supTip: id => planner.supTip(id) }); // Gem Levels tiles: the Build tab's tooltips
-  character = window.BOCharacter({ afterRender: () => fillOptimizerSlot(),
+  character = window.BOCharacter({ afterRender: () => fillOptimizerSlot(), copyGearLink,
     beltCard: () => brewery ? brewery.beltCard() : '',
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, num, pct, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
     openIdolSim: from => openIdoWin(from), // "Sim Idols" by the Fossil: the Item Simulator's Idol Sim in a window

@@ -12130,7 +12130,7 @@ window.BOFaq = function (ctx) {
   const GROUPS = [
     ['Game mechanics', [['ailments', 'Ailments'], ['multipliers', 'Damage Multipliers'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
       ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep'], ['atlas', 'Riven Atlas'], ['tundra', 'Tundra Desert'], ['items', 'Item Quality, Riven & Mythic'], ['attrs', 'Attributes'], ['forge', 'Forge & Crafting'], ['cube', 'Cube, Vows & Runes'], ['drops', 'Drop Chances'], ['leagues', 'Custom Leagues']]],
-    ['About this site', [['tips', 'Tips for the site'], ['sim', 'Sim vs the Game Panel'], ['data', 'Game Data & Patches'], ['privacy', 'Privacy']]],
+    ['About this site', [['tips', 'Tips for the site'], ['sim', 'Sim vs the Game Panel'], ['data', 'Game Data & Patches'], ['history', 'Site Change History'], ['privacy', 'Privacy']]],
   ];
   const ALL = GROUPS.flatMap(g => g[1]);
   let section = 'ailments';
@@ -13132,13 +13132,45 @@ window.BOFaq = function (ctx) {
 
 
   const atlas = () => ctx.atlas ? ctx.atlas.faqHtml({ intro, card, list, table, hint }) : intro('Riven Atlas', 'Not loaded.');
-  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, atlas, tundra, items, attrs, forge, cube, drops, leagues, tips, sim, data, privacy };
+
+
+
+
+  let hist = Array.isArray(window.SITE_CHANGES) ? window.SITE_CHANGES : null, histErr = false, histLoading = false, histShown = 30, histQ = '';
+  function loadHistory() {
+    if (hist || histLoading) return;
+    histLoading = true;
+    fetch((window.SITE_BASE || '') + 'site-changes.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).then(d => { hist = Array.isArray(d) ? d : []; if (!d) histErr = true; })
+      .catch(() => { hist = []; histErr = true; }).then(() => { histLoading = false; if (section === 'history' && !$('#faqPane').hidden) show(); });
+  }
+  function history() {
+    let h = intro('Site Change History', 'What changed on this site, newest first: the same lists the "This page is out of date" pop-up shows. Game patches are in the Recent Patch tab.');
+    if (!hist) { loadHistory(); return h + '<div class="card"><p class="hint">Loading…</p></div>'; }
+    if (!hist.length) return h + '<div class="card"><p class="hint">' + (histErr ? 'The change list could not be loaded. Try again later.' : 'No changes listed yet.') + '</p></div>';
+    const q = lc(histQ).trim(), rows = q ? hist.map(c => ({ ...c, lines: c.lines.filter(l => lc(l).includes(q)) })).filter(c => c.lines.length) : hist;
+    const SV = window.SITE_VERSION || {};
+    h += '<div class="card faq-card"><input type="search" class="faq-hist-q" id="faqHistQ" placeholder="Search the changes" aria-label="Search the changes" value="' + esc(histQ) + '">' +
+      '<p class="hint">' + (q ? rows.length + ' version' + (rows.length === 1 ? '' : 's') + ' with a match.' : hist.length + ' versions.') + (SV.v ? ' You have version ' + SV.v + '.' : '') + '</p></div>';
+    h += rows.slice(0, histShown).map(c => '<div class="card faq-card faq-hist"><h2>' + (c.v ? 'Version ' + c.v : 'Not on the site yet') + (c.date ? ' <small>' + esc(c.date) + '</small>' : '') + '</h2>' +
+      list(c.lines.map(esc)) + '</div>').join('');
+    if (rows.length > histShown) h += '<div class="faq-hist-more"><button type="button" class="btn" data-hist-more>Show older (' + (rows.length - histShown) + ' more)</button></div>';
+    return h;
+  }
+  function wireHistory(pane) {
+    const box = pane.querySelector('#faqHistQ');
+    if (box) box.oninput = () => { histQ = box.value; histShown = 30; const at = box.selectionStart; show(); const b = $('#faqHistQ'); if (b) { b.focus(); try { b.setSelectionRange(at, at); } catch (e) { /* not a text box */ } } };
+    const more = pane.querySelector('[data-hist-more]');
+    if (more) more.onclick = () => { histShown += 50; show(); };
+  }
+
+  const RENDER = { minions, ailments, multipliers, defences, monsters, affixes, guardians, curses, xp, deep, atlas, tundra, items, attrs, forge, cube, drops, leagues, tips, sim, data, history, privacy };
   function show() {
     const nav = $('#faqNav'), GD = ctx.gd() || {};
     nav.innerHTML = GROUPS.map(g => '<div class="faq-group"><span class="faq-group-label">' + g[0] + '</span><div class="sc-chips">' +
       g[1].map(s => '<button type="button" class="chip sc-chip' + (section === s[0] ? ' active' : '') + '" data-s="' + s[0] + '" aria-pressed="' + (section === s[0]) + '">' + s[1] + '</button>').join('') + '</div></div>').join('');
     const pane = $('#affixPane'); pane.hidden = false; // the template ships it hidden; nothing else unhides it
     fill(pane, RENDER[section](GD));
+    if (section === 'history') wireHistory(pane);
   }
 
   function fill(pane, html) {
@@ -13414,7 +13446,7 @@ window.BOFaq = function (ctx) {
     show();
   }
 
-  const sections = () => ALL.map(([id, label]) => { let html = ''; try { html = RENDER[id](ctx.gd() || {}); } catch (e) { /* a section that needs the page */ } return { id, label, html }; });
+  const sections = () => ALL.filter(x => x[0] !== 'history').map(([id, label]) => { let html = ''; try { html = RENDER[id](ctx.gd() || {}); } catch (e) { /* a section that needs the page */ } return { id, label, html }; });
   return { render, renderMinions, renderGemLevels, sections };
 };
 

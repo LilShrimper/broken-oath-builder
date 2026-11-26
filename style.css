@@ -1868,6 +1868,9 @@ body.lootfilter-page #buildSummary { display: none !important; } /* the characte
 .faq-sec[hidden] { display: none; }
 .faq-card h2 small { color: var(--faint); font-weight: 500; font-size: 12px; margin-left: 6px; }
 .faq-list { margin: 8px 0 10px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+/* Site Change History (FAQ) */
+.faq-hist-q { width: 100%; max-width: 460px; box-sizing: border-box; height: 40px; padding: 8px 12px; border: 1px solid var(--dashboard-gold); border-radius: 9px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 15px; }
+.faq-hist-more { display: flex; justify-content: center; margin: 6px 0 14px; }
 .faq-tbl td, .faq-tbl th { vertical-align: top; text-align: left; }
 /* Room for a wordy 4th column, only on the tables that have one (20 Nov 2026: on every table it pushed the number tables apart). */
 .faq-tbl.faq-wide4 td:nth-child(4) { min-width: 260px; }

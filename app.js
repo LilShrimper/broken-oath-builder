@@ -16991,7 +16991,12 @@ window.BOCharacter = function (ctx) {
     const isSpell = ctx.isSpell && !isAttack;
 
 
-    if (/^Needs a mace or hammer/i.test(sk.Description || '') && lc(ch.classId || '') !== 'paladin' && !(mainBase && (mainBase.Tags || []).some(t => /^(Mace|Hammer)$/i.test(t)))) {
+
+
+
+
+    const NEEDS_MACE = new Set(['orbiting_hammers', 'hammerstorm']);
+    if ((/^Needs a mace or hammer/i.test(sk.Description || '') || NEEDS_MACE.has(lc(skillId))) && lc(ch.classId || '') !== 'paladin' && !(mainBase && (mainBase.Tags || []).some(t => /^(Mace|Hammer)$/i.test(t)))) {
       res.notes.push(sk.Name + ' needs a mace or hammer in your hand unless you are a Paladin (patch 82), and your main hand holds ' + (mainBase ? mainBase.Name : 'nothing') + ': in the game it will not work.');
     }
 
@@ -18315,7 +18320,9 @@ window.BOCharacter = function (ctx) {
 
       const d = GD.supports.trap_support.Description; const n = /up to (\d+)/i.exec(d), re = /re-arms ([\d.]+) seconds/i.exec(d);
 
-      let rearm = re ? +re[1] : /re-arms about a second/i.test(d) ? 1 : 2.5; let traps = n ? +n[1] : 3;
+
+
+      let rearm = re ? +re[1] : /re-arms (?:after )?about a second/i.test(d) ? 1 : 2.5; let traps = n ? +n[1] : 3;
 
       if (is0565(GD)) for (const m of pickMods(mods, 'TrapCount', 'Flat')) if (applies(ctx, m)) { traps += m.v; use(m); }
 
@@ -18707,7 +18714,10 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const noEcho = ['Aura', 'Vow', 'Woe', 'Toll', 'Sentence', 'Blink', 'Dash'].includes(sk.Delivery) || ctx.tags.has('aura') || /press again to turn it off/i.test(sk.Description || '');
+
+
+
+    const noEcho = ['Aura', 'Vow', 'Woe', 'Toll', 'Sentence', 'Blink', 'Dash'].includes(sk.Delivery) || ctx.tags.has('aura') || /press again to (?:turn it off|stop)/i.test(sk.Description || '');
 
 
 
@@ -19234,13 +19244,21 @@ window.BOCharacter = function (ctx) {
     const takenOf = (d, phys, dot, nohit) => {
 
       const onHit = !dot && !nohit;
-      const extras = [o.extraTakenPct || 0, markPct]; if (phys) extras.push(maimPct);
+
+
+
+
+
+
+
+      const markV = dot ? 0 : markPct;
+      const extras = [o.extraTakenPct || 0, markV]; if (phys) extras.push(maimPct);
       if (onHit && unravel[d]) extras.push(unravel[d]);
 
       if (rule === 'kinds') {
 
         const vuln = [o.extraTakenPct || 0].concat(phys ? [maimPct] : [], golemTaken - 1 ? [(golemTaken - 1) * 100] : [], onHit && groundPct ? [groundPct] : []);
-        return curseTakenK(activeCurses, d, dot, 'kinds', [{ k: 'mark', v: markPct }, { k: 'curse', v: onHit && unravel[d] ? unravel[d] : 0 }].concat(vuln));
+        return curseTakenK(activeCurses, d, dot, 'kinds', [{ k: 'mark', v: markV }, { k: 'curse', v: onHit && unravel[d] ? unravel[d] : 0 }].concat(vuln));
       }
       if (rule === 'add') return curseTakenK(activeCurses, d, dot, 'add',extras.concat(golemTaken - 1 ? [(golemTaken - 1) * 100] : [], onHit && groundPct ? [groundPct] : []));
 

@@ -15931,6 +15931,23 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+  function stackRow(c, dread, dreadCap, mods) {
+    if (c.Kind === 'Mark') {
+      const n = dread > 0 ? Math.min(dread, dreadCap) : dreadCap;
+      let inc = 0; for (const m of mods || []) if (m.stat === 'MarkEffect' && m.mode === 'Inc') inc += m.v;
+      return { n, base: (c.TakenPct || 0) * n, inc };
+    }
+    if (c.Kind === 'Banner') { const n = Math.min(dread, dreadCap); return { n, base: (c.TakenPct || 0) + n * ((c.Dread || {}).EffectPct || 0) }; }
+    return null;
+  }
+
+
+
+
+
+
   function cursesWithBanner(GD, ch, mods, o, res) {
     const cur = o.curses || {};
     if (o.plantedBanner === false) return cur;
@@ -16129,6 +16146,8 @@ window.BOCharacter = function (ctx) {
 
 
   const curseTakenK = (rows, d, dot, one, extras) => {
+
+    if (dot && rows.some(r => r.kind === 'Mark')) rows = rows.filter(r => r.kind !== 'Mark');
     const typedOf = r => (d ? r.elem[d] || 0 : 0) + (dot ? r.dot || 0 : 0);
     if (one === 'kinds') {
 
@@ -17305,7 +17324,24 @@ window.BOCharacter = function (ctx) {
   function cocSource(GD, ch, skillId, selfSupports, o) {
     o = o || {};
     const isCoc = x => lc(String(x).replace('@granted', '')) === 'cast_on_crit';
-    const atk = id => { const s = GD.skills[lc(id)]; return !!s && (s.Tags || []).includes('Attack') && !(s.Tags || []).includes('Movement') && !isSummon(s); };
+
+
+
+    const atk = id => { const s = GD.skills[lc(id)]; return !!s && (s.Tags || []).includes('Attack') && !isSummon(s); };
+
+
+
+
+    const barOrder = () => { const b = (ch.hotbar || []).filter(Boolean); return b.length ? b : ch.sockets.map(x => x.skill).filter(Boolean); };
+    let pickWhy = 'only';
+    const firstAtk = skip => {
+      const cands = [...new Set(barOrder().filter(id => atk(id) && (!skip || lc(id) !== lc(skip))))];
+      if (!cands.length) return null;
+      const main = [ch.mainSkill, o.mainSkill].find(id => id && cands.some(c => lc(c) === lc(id)));
+      if (main) { pickWhy = 'main'; return cands.find(c => lc(c) === lc(main)); }
+      if (cands.length === 1) return cands[0];
+      pickWhy = 'strongest'; return cocStrongest(GD, ch, cands, o);
+    };
 
 
     const hits = id => { const s = GD.skills[lc(id)]; return !!s && !isSummon(s) && ((s.Tags || []).includes('Attack') || s.SpellMin > 0); };
@@ -17322,18 +17358,16 @@ window.BOCharacter = function (ctx) {
     const atkSelf = id => { const s = GD.skills[lc(id)]; return !!s && (s.Tags || []).includes('Attack') && !isSummon(s); };
     if (atkSelf(skillId)) {
       if (!(selfSupports || []).some(isCoc)) return null;
-      const order = [...(ch.hotbar || []), ...ch.sockets.map(s => s.skill)].filter(Boolean);
-      const src2 = o.cocSource || order.find(id => atk(id) && lc(id) !== lc(skillId)) || null;
+      const src2 = o.cocSource || firstAtk(skillId);
       const unlinked = s => s.supports.some(isCoc) && !(s.conduit && lc(s.conduit) !== lc(s.skill)) && atkSelf(s.skill);
       const shared = Math.max(1, new Set(ch.sockets.filter(unlinked).map(s => lc(s.skill)).concat(lc(skillId))).size);
-      return { skill: src2, name: src2 ? (GD.skills[lc(src2)] || {}).Name || src2 : null, mode: o.cocSource ? 'chosen' : 'self', attack: true, shared,
+      return { skill: src2, name: src2 ? (GD.skills[lc(src2)] || {}).Name || src2 : null, mode: o.cocSource ? 'chosen' : 'self', why: pickWhy, attack: true, shared,
         counted: !!src2 && atk(src2) && lc(src2) !== lc(skillId) };
     }
     if (o.cocSource) { src = o.cocSource; mode = 'chosen'; }
     else if (linkS) { src = linkS.skill; mode = 'link'; }
     else if ((selfSupports || []).some(isCoc)) {
-      const order = [...(ch.hotbar || []), ...ch.sockets.map(s => s.skill)].filter(Boolean);
-      src = order.find(atk) || null; mode = 'self';
+      src = firstAtk(null); mode = 'self';
     }
     if (!mode) return null;
 
@@ -17341,7 +17375,25 @@ window.BOCharacter = function (ctx) {
     const cocSockets = ch.sockets.filter(s => s.supports.some(isCoc));
     const selfSpells = Math.max(1, new Set(cocSockets.filter(s => !atkSelf(s.skill) && !(s.conduit && lc(s.conduit) !== lc(s.skill))).map(s => lc(s.skill)).concat(mode === 'self' ? [lc(skillId)] : [])).size);
     const users = Math.max(1, new Set(cocSockets.map(s => lc(s.skill))).size);
-    return { skill: src, name: src ? (GD.skills[lc(src)] || {}).Name || src : null, mode, counted: !!src && (mode === 'self' ? atk(src) : hits(src)), selfSpells, users };
+    return { skill: src, name: src ? (GD.skills[lc(src)] || {}).Name || src : null, mode, why: pickWhy, counted: !!src && (mode === 'self' ? atk(src) : hits(src)), selfSpells, users };
+  }
+
+
+  const cocRank = new WeakMap();
+  const cocWhy = c => c.why === 'main' ? 'your main skill' : c.why === 'strongest' ? 'your attack on the bar with the most hit damage; pick another in the Cast on Crit box' : 'the only attack on your bar';
+  function cocStrongest(GD, ch, cands, o) {
+    const key = JSON.stringify([cands, o.off ? [...o.off].sort() : [], o.enemyLevel, o.enemyRarity, o.enemyRes, o.curses, o.ruptureLevel, o.enemyLife,
+      (ch.passives || []).length, (ch.items || []).length, (ch.sockets || []).map(x => x.skill + ':' + (x.supports || []).join(',')), ch.gemLevels]);
+    let m = cocRank.get(ch); if (!m) cocRank.set(ch, m = new Map());
+    if (m.has(key)) return m.get(key);
+    let best = cands[0], top = -1;
+    for (const id of cands) {
+      let r; try { r = calcSkill(GD, ch, id, { _barProbe: true, off: o.off, coc: false, conduit: false, barShock: false, _noBrittle: true, enemyLevel: o.enemyLevel, enemyRarity: o.enemyRarity, enemyRes: o.enemyRes, curses: o.curses, ruptureLevel: o.ruptureLevel, enemyLife: o.enemyLife }); } catch (e) { continue; }
+      const d = r && !r.error && r.crit && r.crit.chance > 0 ? +r.hitDps || 0 : 0;
+      if (d > top) { top = d; best = id; }
+    }
+    if (m.size > 50) m.clear();
+    m.set(key, best); return best;
   }
 
 
@@ -17349,7 +17401,7 @@ window.BOCharacter = function (ctx) {
     const seen = new Set(skillId ? [lc(skillId)] : []), out = [];
     for (const id of [...(ch.hotbar || []), ...ch.sockets.map(s => s.skill)]) {
       const s = id && GD.skills[lc(id)];
-      if (!s || seen.has(lc(id)) || isSummon(s) || (s.Tags || []).includes('Movement') || !((s.Tags || []).includes('Attack') || s.SpellMin > 0)) continue;
+      if (!s || seen.has(lc(id)) || isSummon(s) || ((s.Tags || []).includes('Movement') && !(s.Tags || []).includes('Attack')) || !((s.Tags || []).includes('Attack') || s.SpellMin > 0)) continue; // Movement attacks too (see cocSource), not dash spells
       seen.add(lc(id)); out.push({ id, name: s.Name, spell: !(s.Tags || []).includes('Attack') });
     }
     return out;
@@ -19257,9 +19309,9 @@ window.BOCharacter = function (ctx) {
             b.sparks = sparks; usesPerSec = b.rate(sparks); useTime = 1 / usesPerSec;
           }
           res.coc = { source: coc.skill, sourceName: coc.name, mode: coc.mode, attack: !!coc.attack, shared: coc.shared || 1, crit: hr.crit.chance, perVolley: per, volleysPerSec: volleys, pVolley: p, rate, tau, cooldown };
-          if (coc.attack) res.notes.push('Cast on Crit with nothing linked: this attack strikes by itself when ' + coc.name + (coc.mode === 'self' ? ' (the first other attack on your bar)' : ' (picked on the page)') + ' crits: ' + volleys.toFixed(2) + ' volleys a second at ' + hr.crit.chance.toFixed(1) + '% crit, at most one strike per ' + tau + ' s' + (coc.shared > 1 ? ' shared by your ' + coc.shared + ' attacks with it (split evenly)' : '') + ' = ' + rate.toFixed(2) + ' strikes a second, each 25% and a further 44% less (patch notes 5 Nov). Using it by hand is not counted.' + (sk.Delivery === 'Rain' ? ' A triggered Rain drops one wave.' : ''));
+          if (coc.attack) res.notes.push('Cast on Crit with nothing linked: this attack strikes by itself when ' + coc.name + (coc.mode === 'self' ? ' (' + cocWhy(coc) + ')' : ' (picked on the page)') + ' crits: ' + volleys.toFixed(2) + ' volleys a second at ' + hr.crit.chance.toFixed(1) + '% crit, at most one strike per ' + tau + ' s' + (coc.shared > 1 ? ' shared by your ' + coc.shared + ' attacks with it (split evenly)' : '') + ' = ' + rate.toFixed(2) + ' strikes a second, each 25% and a further 44% less (patch notes 5 Nov). Using it by hand is not counted.' + (sk.Delivery === 'Rain' ? ' A triggered Rain drops one wave.' : ''));
           else
-          res.notes.push('Cast on Crit from ' + coc.name + (coc.mode === 'self' ? ' (the first attack on your bar)' : coc.mode === 'chosen' ? ' (picked on the page)' : ' (its link)') + ': ' + volleys.toFixed(2) + ' volleys a second at ' + hr.crit.chance.toFixed(1) + '% crit (one roll per volley, so ' + Math.round(p * 100) + '% of volleys crit); at most one cast per ' + tau + ' s' + (cooldown > 0 ? ' (the spell\'s ' + cooldown.toFixed(2) + ' s cooldown does not apply to triggered casts)' : '') + ' = ' + rate.toFixed(2) + ' casts a second' + (res.conduit ? ' on top of the Conduit casts' : '') + '. Each triggered cast deals 25% less. Rate matched the 1 Nov log (Ember Bolt from Split Shot).');
+          res.notes.push('Cast on Crit from ' + coc.name + (coc.mode === 'self' ? ' (' + cocWhy(coc) + ')' : coc.mode === 'chosen' ? ' (picked on the page)' : ' (its link)') + ': ' + volleys.toFixed(2) + ' volleys a second at ' + hr.crit.chance.toFixed(1) + '% crit (one roll per volley, so ' + Math.round(p * 100) + '% of volleys crit); at most one cast per ' + tau + ' s' + (cooldown > 0 ? ' (the spell\'s ' + cooldown.toFixed(2) + ' s cooldown does not apply to triggered casts)' : '') + ' = ' + rate.toFixed(2) + ' casts a second' + (res.conduit ? ' on top of the Conduit casts' : '') + '. Each triggered cast deals 25% less. Rate matched the 1 Nov log (Ember Bolt from Split Shot).');
         }
       }
     }
@@ -19707,8 +19759,9 @@ window.BOCharacter = function (ctx) {
 
 
 
-      const dreadCap = (isBoss ? Math.max(c.Dread ? c.Dread.BossCap || c.Dread.Cap || 0 : 0, tough) : c.Dread ? c.Dread.Cap : 0) + (c.Dread ? bannerValourMax(GD, ch, c, mods) : 0);
-      const dreadPct = c.Dread && dread ? Math.min(dread, dreadCap) * c.Dread.EffectPct : 0;
+      const dreadCap = (isBoss ? Math.max(c.Dread ? c.Dread.BossCap || c.Dread.Cap || 0 : 0, tough) : c.Dread ? c.Dread.Cap : 0) + (c.Dread ? bannerValourMax(GD, ch, c, mods) : 0) + (c.Kind === 'Mark' ? pickMods(mods, 'MarkMax', 'Flat').reduce((a, m) => a + m.v, 0) : 0);
+      const stack = stackRow(c, dread, dreadCap, mods);
+      const dreadPct = !stack && c.Dread && dread ? Math.min(dread, dreadCap) * c.Dread.EffectPct : 0;
 
 
 
@@ -19716,10 +19769,10 @@ window.BOCharacter = function (ctx) {
       const woeSups = c.Skill && lc(c.Skill) === lc(skillId) && o.supportsOverride ? o.supportsOverride : ((ch.sockets || []).find(s => c.Skill && lc(s.skill) === lc(c.Skill)) || {}).supports || [];
       let curseMore = 0;
       for (const sid of woeSups) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'CurseMore' && m.Mode === 'Flat') curseMore += m.Value;
-      const eff = curseEffK(GD, curseEffInc + bannerEffectInc(c, mods), dreadPct) * (1 + curseMore / 100) * (c.Kind === 'Woe' ? woeMinK : 1) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
+      const eff = stack && c.Kind === 'Mark' ? 1 + stack.inc / 100 : curseEffK(GD, curseEffInc + bannerEffectInc(c, mods), dreadPct) * (1 + curseMore / 100) * (c.Kind === 'Woe' ? woeMinK : 1) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
 
 
-      const row = { id, kind: c.Kind || '', name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, dot: (c.DotTakenPct || 0) * eff };
+      const row = { id, kind: c.Kind || '', name: c.Name, taken: (stack ? stack.base : c.TakenPct || 0) * eff, elem: {}, eff, dread: stack ? stack.n : dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, dot: (c.DotTakenPct || 0) * eff };
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
 
       if (c.ChaosTakenPct) row.elem.Chaos = c.ChaosTakenPct * eff;
@@ -19739,7 +19792,10 @@ window.BOCharacter = function (ctx) {
 
 
     const laysDot = !!hit.Poison || ['PoisonChance', 'BleedChance', 'IgniteChance'].some(st => mods.some(m => m.stat === st && m.v > 0)) || (A.IgniteChance > 0 && !!hit.Fire);
-    const worth = r => Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTotal * (r.taken + (r.elem[d] || 0) + (r.resDown[d] || 0)), 0) + (laysDot ? (r.dot || 0) / 2 : 0);
+
+
+    const laysPoison = !!hit.Poison || mods.some(m => m.stat === 'PoisonChance' && m.v > 0);
+    const worth = r => Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTotal * (r.taken + (r.elem[d] || 0) + (r.resDown[d] || 0)), 0) + (laysDot ? (r.dot || 0) / 2 : 0) + (laysPoison ? (r.elem.Poison || 0) / 2 : 0);
     const kindOf = r => (GD.curses[r.id] || {}).Kind || '';
     let activeCurses = [];
     for (const kind of new Set(curseRows.map(kindOf))) {
@@ -19765,6 +19821,12 @@ window.BOCharacter = function (ctx) {
       markPct = held * per * (1 + eff / 100);
     }
     if (!markPct) { const am = armyMarkPct(GD, ch); if (am > 0) { markPct = am; markHeld = 10; res.notes.push('Hunter\'s Marks from your minions (Hunter\'s Mark Support on a summon gem): the enemy takes ' + +am.toFixed(1) + '% more damage at 10 Marks' + (bSwitch(GD, 'r113.META.bMinionMark234', false) ? ' (a minion-laid Mark counts half since game data 92; not checked in game).' : ' (Guardian debuff in the game, 23 Nov 2026).')); } }
+
+
+    const markRow = activeCurses.find(r => r.kind === 'Mark');
+    if (markRow && markPct > 0) {
+      if (markRow.taken >= markPct) { markPct = 0; markHeld = markRow.dread; } else activeCurses = activeCurses.filter(r => r !== markRow);
+    } else if (markRow) markHeld = markRow.dread;
     res.marks = markPct ? { pct: markPct } : null;
 
 
@@ -20031,7 +20093,12 @@ window.BOCharacter = function (ctx) {
 
 
     let dotShockF = 1;
-    const dotTakenFor = d => (o.dotElementTaken && (rule === 'add' || rule === 'kinds') ? takenOf(d, false, true) : o.dotElementTaken ? mitig[d].taken * takenOf(undefined, false, true) / takenOf(undefined, false) : takenOf(undefined, false, true)) * dotShockF;
+
+
+
+
+    const dteOn = o.dotElementTaken !== false;
+    const dotTakenFor = d => (dteOn && (rule === 'add' || rule === 'kinds') ? takenOf(d, false, true) : dteOn ? mitig[d].taken * takenOf(undefined, false, true) / takenOf(undefined, false) : takenOf(undefined, false, true)) * dotShockF;
     let dotMulti = 0;
     for (const m of pickMods(mods, 'DotMulti', 'Flat')) { dotMulti += m.v; use(m); }
     const sumMod = (stat, mode) => { let s = mode === 'More' ? 1 : 0; for (const m of pickMods(mods, stat, mode)) if (applies(ctx, m)) { s = mode === 'More' ? s * (1 + m.v / 100) : s + m.v; use(m); } return s; };
@@ -20162,7 +20229,16 @@ window.BOCharacter = function (ctx) {
         const s = r && !r.error && !r.unsupported && r.ailments && r.ailments.shock;
         if (!s || !(s.rate > 0)) continue;
         const key = 'barshock:' + lid;
-        res.barShock.push({ id, key, name: k.Name || id, size: Math.min(s.cap, s.size + (s.staticBuild || 0)), uptime: 1 - Math.exp(-s.rate * s.duration), coc: !!r.coc, on: !(o.off && o.off.has(key)) });
+
+
+
+
+
+
+        const uptime = 1 - Math.exp(-s.rate * s.duration);
+        const one = Math.min(s.cap, s.size + (s.staticBuild || 0));
+        const stacked = s.stacks > 1 && uptime > 0 ? Math.min(s.allCap || 75, s.pct / uptime) : 0;
+        res.barShock.push({ id, key, name: k.Name || id, size: Math.max(one, stacked), stacks: stacked > one ? s.stacks : 1, uptime, coc: !!r.coc, on: !(o.off && o.off.has(key)) });
       }
 
 
@@ -22188,13 +22264,14 @@ window.BOCharacter = function (ctx) {
 
 
 
-      const dreadCap = (isBoss ? Math.max(c.Dread ? c.Dread.BossCap || c.Dread.Cap || 0 : 0, tough) : c.Dread ? c.Dread.Cap : 0) + (c.Dread ? bannerValourMax(GD, ch, c, mods) : 0);
-      const dreadPct = c.Dread && dread ? Math.min(dread, dreadCap) * c.Dread.EffectPct : 0;
+      const dreadCap = (isBoss ? Math.max(c.Dread ? c.Dread.BossCap || c.Dread.Cap || 0 : 0, tough) : c.Dread ? c.Dread.Cap : 0) + (c.Dread ? bannerValourMax(GD, ch, c, mods) : 0) + (c.Kind === 'Mark' ? pickMods(mods, 'MarkMax', 'Flat').reduce((a, m) => a + m.v, 0) : 0);
+      const stack = stackRow(c, dread, dreadCap, mods);
+      const dreadPct = !stack && c.Dread && dread ? Math.min(dread, dreadCap) * c.Dread.EffectPct : 0;
       const woeSups = c.Skill && lc(c.Skill) === lc(sk.Id) && o.supportsOverride ? o.supportsOverride : ((ch.sockets || []).find(s => c.Skill && lc(s.skill) === lc(c.Skill)) || {}).supports || [];
       let curseMore = 0;
       for (const sid of woeSups) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'CurseMore' && m.Mode === 'Flat') curseMore += m.Value;
-      const eff = curseEffK(GD, curseInc + bannerEffectInc(c, mods), dreadPct) * (1 + curseMore / 100) * (c.Kind === 'Woe' ? woeMinK : 1) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
-      const row = { id, kind: c.Kind || '', name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, resDown: {} };
+      const eff = stack && c.Kind === 'Mark' ? 1 + stack.inc / 100 : curseEffK(GD, curseInc + bannerEffectInc(c, mods), dreadPct) * (1 + curseMore / 100) * (c.Kind === 'Woe' ? woeMinK : 1) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
+      const row = { id, kind: c.Kind || '', name: c.Name, taken: (stack ? stack.base : c.TakenPct || 0) * eff, elem: {}, eff, dread: stack ? stack.n : dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, resDown: {} };
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
       curseRows.push(row);
     }
@@ -24964,7 +25041,7 @@ window.BOStartApp = function () {
     const bsh = r.barShock || [];
     $('#barShockBox').hidden = !bsh.length;
     $('#barShockList').innerHTML = bsh.map(b => '<li><label><input type="checkbox" data-src="' + esc(b.key) + '"' + (b.on ? ' checked' : '') + '><span class="name">' + skillDot(b.id) + esc(b.name) +
-      '<span class="meta">' + num(b.size, 1) + '% shock, up ' + Math.round(b.uptime * 100) + '% of the time' + (b.coc ? ' (Cast on Crit)' : '') + '</span></span></label></li>').join('');   // figures under the name: beside it, the 2-column pop-up squeezed the name to a letter a line (19 Nov 2026)
+      '<span class="meta">' + num(b.size, 1) + '% shock' + (b.stacks > 1 ? ' (up to ' + b.stacks + ' stacked)' : '') + ', up ' + Math.round(b.uptime * 100) + '% of the time' + (b.coc ? ' (Cast on Crit)' : '') + '</span></span></label></li>').join('');   // figures under the name: beside it, the 2-column pop-up squeezed the name to a letter a line (19 Nov 2026)
 
 
     const bfr = (r.freeze && r.freeze.helpers) || [];
@@ -25016,10 +25093,21 @@ window.BOStartApp = function () {
       const parts = row ? [].concat(row.taken ? ['+' + num(row.taken, 1) + '% taken'] : [],
         Object.entries(row.elem).map(([d, v]) => '+' + num(v, 1) + '% ' + d + ' taken'),
         Object.entries(row.resDown || {}).map(([d, v]) => '-' + num(v, 1) + '% ' + d + ' resistance')) : [];
-      const effect = row ? (parts.length ? 'now: ' + parts.join(', ') : 'does not change your damage')
+
+
+      const half = row && isBoss && c.BossEffect != null && c.BossEffect !== 1 ? ' (x' + c.BossEffect + ' on a Guardian)' : '';
+      const effect = row ? (parts.length ? 'now: ' + parts.join(', ') + half : 'does not change your damage')
         : (c.Text || '').replace('{0}', c.TakenPct || 0).replace('{1}', Object.values(c.ElementTakenPct || {})[0] || '').replace('{3}', Object.values(c.ResistDown || {})[0] || '').replace(/[;,]? ?[^;]*\{[24]\}[^;]*/g, '').trim() || 'does not change your damage';
-      return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + '<span class="meta">' + esc(effect) + (cs.on && !onBar && curseSkill(c) ? ' · <span class="off-bar">not on your skill bar, counted anyway</span>' : '') + (cs.on && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · not counted: an enemy holds ' + (c.Kind === 'Woe' ? 'two Woes' : 'one ' + c.Kind) + ' at a time' : '') + '</span></span></label>' +
-        (c.Dread && c.Dread.Cap && cs.on ? '<input class="mini" type="number" min="0" max="' + (row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c)) + '" value="' + (cs.dread || 0) + '" title="' + (c.Kind === 'Banner' ? 'Valour' : 'Dread') + ' on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + (row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c)) + (c.Kind === 'Banner' ? '' : ', bosses ' + c.Dread.BossCap) + ')" data-dread="' + esc(c.Id) + '">' : '') + '</li>';
+      return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + '<span class="meta">' + esc(effect) + (cs.on && !onBar && curseSkill(c) ? ' · <span class="off-bar">not on your skill bar, counted anyway</span>' : '') + (cs.on && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · not counted: ' + (c.Kind === 'Mark' ? 'your Hunter\'s Mark support lays more (one pool of Marks)' : 'an enemy holds ' + (c.Kind === 'Woe' ? 'two Woes' : 'one ' + c.Kind) + ' at a time') : '') + '</span></span></label>' +
+        (c.Dread && c.Dread.Cap && cs.on ? (() => {
+          const max = row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c);
+
+          const tip = c.Kind === 'Mark' ? 'Hunter\'s Marks on the enemy (' + c.TakenPct + '% more damage taken each, max ' + max + '; blank = full). Hits only, not ailment ticks'
+            : c.Kind === 'Banner' ? 'Valour on the banner (+' + c.Dread.EffectPct + '% more damage taken each, on top of its ' + c.TakenPct + '%; max ' + max + ')'
+            : 'Dread on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + max + ', bosses ' + c.Dread.BossCap + ')';
+          const val = c.Kind === 'Mark' ? (cs.dread || '') : (cs.dread || 0);
+          return '<input class="mini" type="number" min="0" max="' + max + '" value="' + val + '"' + (c.Kind === 'Mark' ? ' placeholder="' + max + '"' : '') + ' title="' + esc(tip) + '" data-dread="' + esc(c.Id) + '">';
+        })() : '') + '</li>';
     }).join('') + hallowedItem(r, ch);
   }
 

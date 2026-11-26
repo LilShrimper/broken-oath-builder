@@ -5276,7 +5276,16 @@ window.BOCreator = function (ctx) {
       const lost = (ch.passives || []).length - nodes.length;
       setArr(rec, 'PassiveNodeIds', nodes);
       setMap(rec, 'PassiveFp', Object.fromEntries(nodes.map(n => [n, GD.nodes[n].Fp || ''])));
-      setV(rec, 'BonusPassivePoints', ch.bonusPoints || 0);
+
+
+
+
+      const per = ((GD.scaling || {}).Hero || {}).PassivePointsPerLevel || 1;
+      const lvlNow = val(sumP(), 'Level', 0) || S.Level || 1;
+      const needBonus = Math.max(0, nodes.filter(n => !/^(start_|om103_)/.test(n)).length - Math.round((lvlNow - 1) * per));
+      const bonus = Math.max(ch.bonusPoints || 0, needBonus);
+      setV(rec, 'BonusPassivePoints', bonus);
+      if (bonus > (ch.bonusPoints || 0)) done.push(bonus + ' bonus passive points (what the tree needs at level ' + lvlNow + ')');
 
 
 

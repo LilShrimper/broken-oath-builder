@@ -12321,7 +12321,7 @@ window.BOFaq = function (ctx) {
           '<b>Implosion:</b> about 3 s later everything laid on the enemy implodes at once as Chaos damage (Hastened Ruin 1.5 s, Gathering Dark 6 s). It ignores Armour and elemental resistance. On an enemy that lives through it, the delay does not change your damage.',
           '<b>Not a hit:</b> the implosion never crits and is not a hit, so lines that work on hits only (hallowed ground, Unravel) do not raise it. A crit does lay crit-sized Entropy: in the game log crit lays were ×2.01 the size of the others (23 Nov 2026).',
           '<b>Entropy Multiplier</b> lines add together, like a Damage over Time Multiplier. Entropy <b>"more"</b> lines each multiply. A Woe that makes the enemy take more Chaos damage (Woe of Entropy) counts too.',
-          cr ? '<b>Chaos resistance:</b> monsters have ' + cr + '% per Rupture Level (' + r1(cr * 100) + '% at Rupture 100, ' + r1(cr * 160) + '% at 160). "Implosions ignore X% Chaos Resistance" lines take it off.' : '',
+          cr ? '<b>Chaos resistance:</b> monsters have ' + cr + '% per Rupture Level (' + r1(cr * 100) + '% at Rupture 100, ' + r1(cr * 160) + '% at 160, ' + r1(cr * 200) + '% at 200, the highest Rupture Level). Riven Tier maps stay Rupture Level 200, so we count ' + r1(cr * 200) + '% at every Riven Tier too (not checked in game). "Implosions ignore X% Chaos Resistance" lines take it off.' : '',
           '<b>Your hero damage rule</b> (every hero hit deals ×0.8) cuts only the struck part. The laid share comes from the hit before it: the lays in the game log were exactly 40% of the uncut hit (23 Nov 2026).',
           '<b>Keystones that implode it at once, for more:</b> Blood Ledger on a Slam (+20%), Quiet Ruin by Sheathe (+30%; Iaido Thrust implodes it too; with neither on your bar the Entropy only fades), Entropic Overload by a spell crit (+20%), Ruin Fletching at 10 Hunter\'s Marks (+25%).',
           '<b>Minions:</b> Grave Debt lays 25% of your minions\' hit damage as your Entropy, by the same rules.',
@@ -15429,7 +15429,10 @@ window.BOCharacter = function (ctx) {
 
 
 
-  const SPOTTER_RAMP_PER = 2, SPOTTER_RAMP_MAX = 50;
+
+
+
+  const SPOTTER_RAMP_PER = 2, SPOTTER_RAMP_MAX = 25;
   const spotterGap = (GD, mods) => {
     for (const m of pickMods(mods, 'BallistaVolley76', 'Flat')) { const t = /once every (\d+(?:\.\d+)?) seconds?/i.exec(m.text || m.Text || ''); if (t) return +t[1]; }
     const u = (GD.uniques || {}).community_binas_spotters_helm, line = u && (u.Mods || []).find(x => x.Mod && x.Mod.Stat === 'BallistaVolley76');
@@ -16866,7 +16869,15 @@ window.BOCharacter = function (ctx) {
 
 
     if (shapeId) ctx.tags.add(SHAPE_TAG[shapeId]);
-    if (shapeId && TRAP_HOSTS.includes(shapeId) && shapeIds.includes('trap_support')) ctx.tags.add('trap');
+
+
+
+
+
+
+
+
+    if (shapeId && TRAP_HOSTS.includes(shapeId) && shapeId !== 'arrow_totem' && shapeIds.includes('trap_support')) ctx.tags.add('trap');
 
 
     if (ctx.tags.has('chain')) ctx.tags.add('firsttarget');
@@ -17462,6 +17473,12 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
+
+
     let ownRule = null;
     if (isAttack && sk.DamageType && sk.DamageType !== 'Physical' && DT.includes(sk.DamageType)) {
       const share = sk.ConvertShare != null ? (sk.ConvertShare > 1 ? sk.ConvertShare / 100 : sk.ConvertShare) : 1;
@@ -17483,13 +17500,20 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+      const fromTree = /^Passive/.test(m.src);
       if (rest.length) from = t => 1;
-      else if (fromSupport) from = t => 1;
+      else if (fromSupport || fromTree) from = t => 1;
       else from = t => (t === 'Physical' ? 1 : 0);
       convRules.push({ to, pct: m.v, from, src: m.src }); use(m, 'conversion');
     }
     if (ownRule) convRules.unshift(ownRule);
-    if (convRules.length) {
+
+    const convPasses = ownRule ? [[ownRule], convRules.slice(1)] : [convRules];
+    for (const passRules of convPasses) if (passRules.length) {
+      const convRules = passRules;
       const out = [];
       for (const p of pieces) {
         const shares = convRules.map(r => {
@@ -18542,7 +18566,10 @@ window.BOCharacter = function (ctx) {
 
     if (shape === 'totem_support' && repeats > 0 && !(o.hitsPerSecOverride > 0)) {
       perHitFactor *= (1 + ruleNum(GD, 'r81.SKILLBUGS.fTotemEchoScale', TOTEM_ECHO) * repeats) / (1 + repeats);
-      res.notes.push('Spell Echo on a Spell Totem: the totem\'s casts are echoed, each echo at ' + Math.round(ruleNum(GD, 'r81.SKILLBUGS.fTotemEchoScale', TOTEM_ECHO) * 100) + '% of the cast (patch notes 4 Nov; the echoes fire in a fight, log 9 Nov). The game\'s own skill panel does not count them, so its DPS reads about ' + (1 + ruleNum(GD, 'r81.SKILLBUGS.fTotemEchoScale', TOTEM_ECHO) * repeats).toFixed(1) + 'x lower than this sheet.');
+      res.notes.push('Spell Echo on a Spell Totem: the totem\'s casts are echoed, each echo at ' + Math.round(ruleNum(GD, 'r81.SKILLBUGS.fTotemEchoScale', TOTEM_ECHO) * 100) + '% of the cast (patch notes 4 Nov; the echoes fire in a fight, log 9 Nov). The game\'s skill panel counts them too.');
+
+
+
     }
 
 
@@ -19249,9 +19276,14 @@ window.BOCharacter = function (ctx) {
         hitDpsVs *= k; res.hitDps = hitDpsVs; shockF += chillPct / 100;
         res.notes.push('Chill: ' + Math.round(chill) + '% chill makes the enemy take ' + (chillPct / Math.max(up, 1e-9)).toFixed(1) + '% more damage from hits (' + ruleNum(GD, 'r103.AILMENTS.ChillTakenPer103', 0.5) + '% per 1% chill), on ' + Math.round(up * 100) + '% of the time, added to your shock (shock, chill and Brittle add together: developer stacking table, game tooltips). Poison, ignite and bleed ticks do not take it. Chill is ' + cMin + '% for a small cold hit up to ' + cMax + '% at a hit worth ' + cFull + '% of the enemy\'s life (game log 19 Nov 2026), chill effect raises it up to 50%; yours is about ' + (coldPctLife < 0.1 ? 'under 0.1' : coldPctLife.toFixed(1)) + '% of its ~' + Math.round(cLife).toLocaleString('en-US') + ' life' + (isBoss || o.enemyLife ? '.' : ' (a typical rare of this level: an estimate).'));
       }
+      let fd = 0; for (const m of pickMods(mods, 'FreezeDuration', 'Inc')) if (applies(ctx, m)) { fd += m.v; use(m, 'Crack'); }
+      const crackK = Math.max(0, 1 + dotMulti / 100) * Math.max(0, 1 + fd / 100);
+
+
+
+
+      res.crackPanel = p80(GD, 'r103.AILMENTS.CrackPct103', 25) / 100 * crackK;
       if (rarity === 'rare' || rarity === 'unique' || isBoss) { // text: "a rare, unique or Guardian stores 25% of the cold damage it takes"
-        let fd = 0; for (const m of pickMods(mods, 'FreezeDuration', 'Inc')) if (applies(ctx, m)) { fd += m.v; use(m, 'Crack'); }
-        const crackK = Math.max(0, 1 + dotMulti / 100) * Math.max(0, 1 + fd / 100);
         const crack = byType.Cold * p80(GD, 'r103.AILMENTS.CrackPct103', 25) / 100 * crackK;
         byType.Cold += crack; hitDpsVs += crack; res.hitDps = hitDpsVs;
         ail.crack = { dps: crack, freezeInc: fd };
@@ -19964,7 +19996,12 @@ window.BOCharacter = function (ctx) {
       const orbitStill = sumOf88('OrbitStillMore');
       if (orbitStill && ctx.tags.has('orbit')) { k88 *= 1 + orbitStill / 100; why88.push('Orbit skill ' + orbitStill + '% more, counted standing still'); }
       const fuseEcho = sumOf88('FuseEcho');
-      if (fuseEcho && lc(skillId) === 'fuse_arrow') { k88 *= 1 + fuseEcho / 100; why88.push('Fuse Arrow bursts again for ' + fuseEcho + '%'); }
+
+
+
+
+
+      if (fuseEcho && lc(skillId) === 'fuse_arrow') { k88 *= 1 + fuseEcho / 100; why88.push('Fuse Arrow bursts again for ' + fuseEcho + '%'); res.sheetHitDps *= 1 + fuseEcho / 100; }
       if (k88 !== 1 && isFinite(k88)) {
         for (const d of Object.keys(byType)) byType[d] *= k88;
         hitDpsVs *= k88; res.hitDps = hitDpsVs;
@@ -20056,7 +20093,9 @@ window.BOCharacter = function (ctx) {
 
 
     const igPanelCrit = ail.ignite ? critFactor / ailCrit('Ignite') : 1;
-    res.panelDps = panelHitDps + panelAil * ((ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * igPanelCrit * ail.ignite.panelBurning : 0) + (ail.bleed ? ail.bleed.dps1 * ail.bleed.uptime : 0));
+
+    const panelCrack = res.crackPanel > 0 && hit.Cold ? panelHitDps * (hit.Cold.avg / (hitAvg || 1)) * res.crackPanel : 0;
+    res.panelDps = panelHitDps + panelCrack + panelAil * ((ail.poison ? ail.poison.perStack * ail.poison.panelStacks : 0) + (ail.ignite ? ail.ignite.dps1 * igPanelCrit * ail.ignite.panelBurning : 0) + (ail.bleed ? ail.bleed.dps1 * ail.bleed.uptime : 0));
 
 
 

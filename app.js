@@ -2500,6 +2500,12 @@ window.PAGE_LANGS = {
       const tags = new Set((base && base.Tags) || []);
       return Object.values(GD.affixes).filter(a => (a.BaseTags || []).some(t => tags.has(t)) && !(a.ExcludeTags || []).some(t => tags.has(t)) && (a.Tiers || []).length);
     };
+
+
+
+
+    const COUNT_STATS = new Set(['Chains', 'TotemCount', 'OrbitCount', 'MinionCap', 'WaveCount', 'Projectiles', 'Afterimages', 'TrapCount', 'BrandCount']);
+    const idolCountLine = a => !!(a && a.Mod && a.Mod.Mode === 'Flat' && COUNT_STATS.has(a.Mod.Stat) && (a.BaseTags || []).some(t => /^Idol/.test(t)));
     const tierFor = af => af.Tiers.findIndex(t => t.ILvl <= ilvl); // tiers run best first; -1: too low an item level for any
     const runeSlots = base => {
       const R = GD.runeSockets || {}, tags = base.Tags || [], keys = Object.keys(R).filter(k => tags.includes(k) || base.Slot === k);
@@ -2548,7 +2554,8 @@ window.PAGE_LANGS = {
 
       const held = new Set(vow ? ((GD.uniques[lc(it.unique || '')] || {}).Mods || []).filter(m => m.Mod).map(m => m.Mod.Stat + '|' + (m.Mod.Tags || []).slice().sort().join(',')) : []);
       const lines = (vow && typeof cfg.vowLines === 'function' ? cfg.vowLines(realSlot(slot), base, it) : affixesFor(base))
-        .filter(af => !held.has(af.Mod ? af.Mod.Stat + '|' + (af.Mod.Tags || []).slice().sort().join(',') : ''));
+        .filter(af => !held.has(af.Mod ? af.Mod.Stat + '|' + (af.Mod.Tags || []).slice().sort().join(',') : ''))
+        .filter(af => (!vow && cfg.idolCount) || !idolCountLine(af)); // a Vow never takes one (game rule, planner.js vowAffixes)
 
       const entry = (af, ti, top) => {
         const t = af.Tiers[ti], a = { id: af.Id, tier: ti, v: rollAt(t.Min, t.Max, lineRoll), v2: t.Max2 != null ? rollAt(t.Min2, t.Max2, lineRoll) : 0 };
@@ -28781,6 +28788,7 @@ window.BOStartApp = function () {
       (idols ? '' : chk('ignoreAttr', 'Ignore attribute requirements', 'Off: every item must fit your Strength, Dexterity and Intelligence with the gear found')) +
       chk('limited', 'Include Oathborn, Pinnacle and Deep-forged uniques', 'Uniques from the hardest content') +
       chk('vows', 'Vows on uniques', 'A red item takes up to 11 lines from rares at the cube; the best ones are added') +
+      (idols || S_.idolAffixes ? chk('idolCount', 'Allow +1 count lines on idols', 'Grand Idol lines such as +1 Ballista, +1 Spark or +1 Chain. They are very rare drops (under 2 in 100 Grand Idol lines; +1 Ballista far rarer), so the search leaves them out unless this is ticked') : '') +
       (idols ? '' : chk('basicOnly', 'Basic items only', 'Plain bases only: the search skips Core Touched, Ashen and Gnome-made bases' + (gear ? ', and one you wear now is not kept either' : '')) +
       chk('noCore', 'No Core Touched items', S_.basicOnly ? 'Already covered by Basic items only' : gear ? 'The search skips Core Touched bases, and a Core Touched item you wear now is not kept either' : 'Skip Core Touched bases', S_.basicOnly) +
       chk('runes', 'Runes in rares', 'Fill the sockets of rare items with the best runes') +
@@ -29023,7 +29031,9 @@ window.BOStartApp = function () {
 
     const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
     const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
-    const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: (more.length ? 80 + 40 * Math.min(3, more.length) : 80) + (GS.set.prio > 0 || GS.set.maxRes ? 40 : 0) + (GS.set.idolAffixes ? 60 : 0) }, GS.set, { defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget() }));
+
+
+    const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: (more.length ? 80 + 40 * Math.min(3, more.length) : 80) + (GS.set.prio > 0 || GS.set.maxRes ? 40 : 0) + (GS.set.idolAffixes ? 60 : 0) }, GS.set, { vowLines: planner.gear.vowAffixes, defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget() }));
     renderCompare();
     const step = () => {
       if (job !== GS.job) return;
@@ -29179,7 +29189,7 @@ window.BOStartApp = function () {
     const o = opts({ off: new Set([...st.off].filter(k => !/^item:/.test(k))) });
     const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
     const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
-    const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: 60 + (more.length ? 30 : 0) }, GS.set, { idolAffixes: '', maxRes: false, defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget(), onlySlot: slot, slotK: 8, slotRows: 40 }));
+    const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: 60 + (more.length ? 30 : 0) }, GS.set, { idolAffixes: '', maxRes: false, vowLines: planner.gear.vowAffixes, defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget(), onlySlot: slot, slotK: 8, slotRows: 40 }));
     renderCompare();
     const step = () => {
       if (job !== SBS.job) return;
@@ -29485,7 +29495,7 @@ window.BOStartApp = function () {
     const o = opts({ off: new Set([...st.off].filter(k => !/^item:/.test(k))) });
     const co = comboOpts(); co.off = new Set([...co.off].filter(k => !/^item:/.test(k)));
     const more = optExtra(), goal = more.length ? [{ id: st.skill, w: 1, opt: o }].concat(more.map(g => ({ id: g.id, w: g.w, opt: co }))) : st.skill;
-    const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: 100 + (more.length ? 40 : 0) + (GS.set.prio > 0 ? 20 : 0) }, GS.set, { onlyIdols: true, idolAffixes: IDO.set.n, maxRes: false, defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget() }));
+    const gen = BOGearOpt.optimize(GD, S, st.ch, goal, o, Object.assign({ seconds: 100 + (more.length ? 40 : 0) + (GS.set.prio > 0 ? 20 : 0) }, GS.set, { onlyIdols: true, idolAffixes: IDO.set.n, maxRes: false, vowLines: planner.gear.vowAffixes, defence: gsDefence, defWeight: GS.set.prio / 100, resTarget: gsResTarget() }));
     renderCompare();
     const step = () => {
       if (job !== IDO.job) return;

@@ -1382,6 +1382,7 @@ window.PAGE_LANGS = {
 
 
 
+
 (function (root) {
   'use strict';
 
@@ -1483,18 +1484,34 @@ window.PAGE_LANGS = {
     const dmgish = m => !isUncounted(m) && (S.damageStat(m.Stat) || ATTR.includes(m.Stat));
     const big = n => n.Kind === 'Notable' || n.Kind === 'Choice';
     const why = {};
+
+
+
+    const sockWant = cfg.sockets == null || cfg.sockets === '' || !(+cfg.sockets >= 0) ? null : Math.floor(+cfg.sockets);
+    const isSock = id => (nodes[id] || {}).Kind === 'Socket';
+    const sockIds = [];
+    if (sockWant != null) {
+      const held = [...have].filter(isSock).sort();
+      for (const id of held.slice(0, sockWant)) { why[id] = 'Dwarven Sockets ' + sockWant; sockIds.push(id); }
+      if (held.length < sockWant) {
+        const dist = new Map(), q = [s0, ...have]; for (const x of q) dist.set(x, 0);
+        for (let i = 0; i < q.length; i++) for (const v of adj[q[i]] || []) if (!dist.has(v) && walkable(v)) { dist.set(v, dist.get(q[i]) + 1); q.push(v); }
+        const near = Object.keys(nodes).filter(id => isSock(id) && !have.has(id) && dist.has(id)).sort((a, b) => dist.get(a) - dist.get(b) || (a < b ? -1 : 1));
+        sockIds.push(...near.slice(0, sockWant - held.length));
+      }
+    }
     for (const id of have) {
       const n = nodes[id], mods = n.Mods || [];
       if (n.Kind === 'Keystone') why[id] = 'keystone';
-      else if (n.Kind === 'Socket') why[id] = 'jewel socket';
+      else if (n.Kind === 'Socket' && sockWant == null) why[id] = 'never refunded';
 
       else if (mods.some(m => m.Mode === 'Trigger' || m.Mode === 'Flag') || (big(n) && mods.some(isUncounted))) why[id] = 'has lines the sim does not count';
       else if (cfg.keepDefence && big(n) && mods.length && !mods.some(dmgish)) why[id] = 'no damage lines';
     }
 
 
-    const keepIds = [...new Set((cfg.keep || []).map(realId))].filter(id => walkable(id));
-    for (const id of keepIds) if (have.has(id)) why[id] = 'you marked it keep';
+    const keepIds = [...new Set((cfg.keep || []).map(realId).concat(sockIds))].filter(id => walkable(id));
+    for (const id of keepIds) if (have.has(id) && !why[id]) why[id] = 'you marked it keep';
     const kept = new Set(Object.keys(why));
     for (const id of keepIds) kept.add(id);
 
@@ -1968,7 +1985,8 @@ window.PAGE_LANGS = {
       add: add.map(id => ({ id, d: worth(finalSet, id) })).sort((a, b) => b.d - a.d),
       remove: remove.map(id => ({ id, d: own[id] })).sort((a, b) => b.d - a.d),
       kept: [...kept].filter(id => why[id]).map(id => ({ id, why: why[id] })), steps, addOnly: !!cfg.addOnly,
-      keepMissed: keepIds.filter(id => !finalSet.has(id)),
+      keepMissed: keepIds.filter(id => !finalSet.has(id) && !sockIds.includes(id)),
+      sockets: sockWant == null ? null : { want: sockWant, got: [...finalSet].filter(isSock).length, reachable: Object.keys(nodes).filter(id => isSock(id) && walkable(id)).length },
       skills, dropped, multi: multi && goals.length > 1,
       scored, defWeight: defW, def: scored ? { before: def0, after: defence(finalList) } : null,
       attrs: { Str: a1.Str - a0.Str, Dex: a1.Dex - a0.Dex, Int: a1.Int - a0.Int },
@@ -13465,8 +13483,11 @@ window.BOCharacter = function (ctx) {
     if (!it) return '<div class="ch-slot ch-slot-' + slot + ' empty" data-open="1" data-slot="' + slot + '" data-idx="-1" tabindex="0" role="button" aria-label="Pick an item for ' + esc(label) + '"><span class="ch-slot-label">' + esc(label) + '</span><span class="meta">empty · click to add</span></div>';
     const n = itemName(it, slot), a = itemArt(it, BIG_SLOTS[slot]);
     return '<div class="ch-slot ch-slot-' + slot + ' ' + n.cls + withArt(a) + '"' + (a ? artScale(it, slot) : '') + ' data-open="1" data-tip="item" data-slot="' + slot + '" data-idx="' + idx + '" tabindex="0" role="button">' + rmItemBtn(idx, n.name) + '<span class="ch-slot-label">' + esc(label) + '</span>' + a + '<b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + (it.level ? ' · ilvl ' + it.level : '') + '</span>' +
-      (it.runes && it.runes.length ? '<span class="ch-item-base">' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') + '</span>' : '') + '</div>';
+      (it.runes && it.runes.length ? '<span class="ch-item-base">' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') + '</span>' : '') +
+      (slot === 'DwarvenRune' && unsocketed(ch).length ? '<span class="ch-item-base ch-unsocketed" title="Take a Dwarven Rune Socket on the passive tree for it to count">' + (ch.items.filter(i => i.slot === slot).length > 1 ? unsocketed(ch).length + ' without a socket: not counted' : 'No socket on the tree: not counted') + '</span>' : '') + '</div>';
   }
+
+  const unsocketed = ch => { const S = window.BOSim; return S && S.socketedRunes ? (S.socketedRunes(ctx.gd(), ch).runesUnsocketed || []) : []; };
 
 
 
@@ -15710,7 +15731,9 @@ window.BOCharacter = function (ctx) {
     return {
       id: S.ID, name: S.Name, classId: S.ClassId, level: S.Level, league: S.League, lastZone: S.LastZone,
 
-      items: (R.Items || []).filter(i => i.EquippedSlot && i.EquippedSlot !== 'None').map(i => Object.assign(i.EquippedSlot === 'Idol' && Number.isInteger(i.GridX) && Number.isInteger(i.GridY) ? { gx: i.GridX, gy: i.GridY } : {}, {
+
+
+      items: (R.Items || []).filter(i => i.EquippedSlot && i.EquippedSlot !== 'None').map(i => Object.assign(i.EquippedSlot === 'Idol' && Number.isInteger(i.GridX) && Number.isInteger(i.GridY) ? { gx: i.GridX, gy: i.GridY } : i.EquippedSlot === 'DwarvenRune' && Number.isInteger(i.GridX) && i.GridX >= 0 ? { socket: 'r60_socket_' + i.GridX } : {}, {
         slot: i.EquippedSlot, base: i.BaseID, rarity: i.Rarity, unique: i.UniqueID, name: i.Name, level: i.ItemLevel, quality: i.Quality || 0, grade: i.BaseGrade95 || 0,
         affixes: (i.Affixes || []).map(a => ({ id: a.AffixId, tier: a.Tier, v: a.Value, v2: a.Value2, crafted: !!a.bCrafted, oath: !!a.bOath83, scar: !!a.bScar93 })), runes: i.Runes || [], // scar: the line Unswearing added (not boosted on a Great / Flawless Rare, see collectMods)
       })),
@@ -16036,9 +16059,36 @@ window.BOCharacter = function (ctx) {
   }
 
 
+
+
+
+
+
+
+
+  function runeSeats(GD, ch) {
+    const items = (ch && ch.items) || [], runes = items.filter(i => i.slot === 'DwarvenRune');
+    const sockets = []; for (const id of (ch && ch.passives) || []) { const rid = GD.nodes[id] ? id : (GD.moved || {})[id]; const n = GD.nodes[rid]; if (n && n.Kind === 'Socket' && !sockets.includes(rid)) sockets.push(rid); }
+    sockets.sort();
+    let deepRoom = 0; for (const it of items) if (it.slot !== 'DwarvenRune' && it.rarity === 'Unique') deepRoom += (GD.uniques[lc(it.unique)] || {}).DwarvenSockets || 0;
+    const seat = new Map(), rest = [], deep = [], out = [];
+    for (const r of runes) if (r.socket && sockets.includes(r.socket) && !seat.has(r.socket)) seat.set(r.socket, r); else rest.push(r);
+    for (const r of rest) { const free = sockets.find(id => !seat.has(id)); if (free) seat.set(free, r); else if (deep.length < deepRoom) deep.push(r); else out.push(r); }
+    return { seat, deep, out, sockets };
+  }
+  function socketedRunes(GD, ch) {
+    if (!ch || !Array.isArray(ch.items) || !Array.isArray(ch.passives) || !ch.passives.length) return ch;
+    if (!ch.items.some(i => i.slot === 'DwarvenRune')) return ch;
+    const out = runeSeats(GD, ch).out; if (!out.length) return ch;
+    return Object.assign({}, ch, { items: ch.items.filter(i => !out.includes(i)), runesUnsocketed: (ch.runesUnsocketed || []).concat(out) });
+  }
+
+
   function collectMods(GD, ch, o) {
+    ch = socketedRunes(GD, ch);
     const off = o.off || new Set();
     const mods = []; const notes = []; const sources = [];
+    for (const it of ch.runesUnsocketed || []) notes.push('Dwarven rune not counted: ' + itemLabel(GD, it) + ' has no Dwarven Rune Socket (take a socket node on the tree, or wear a Deep-Forged item).');
     const add = (m, v, v2, src, key, extra) => {
       if (!m || !m.Stat) return;
       mods.push(Object.assign({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: v != null ? v : (m.Value || 0), v2: v2 != null ? v2 : (m.Value2 || 0), local: !!m.bLocal, src, key }, extra || {}));
@@ -16196,6 +16246,9 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
         const aspInc = mods.filter(m => m.stat === 'AspectEffect124').reduce((x, m) => x + (+m.v || 0), 0);
 
 
@@ -16218,7 +16271,8 @@ window.BOCharacter = function (ctx) {
           const n = dcls[id]; if (!n) { notes.push('Dragonling node not found: ' + id); continue; }
           const a = ascOn && n.Ascend;
           let list = (a ? a.Mods : n.Mods) || [];
-          if (!a && n.AspectMods && n.AspectMods[ch.dragonAspect]) list = list.concat(n.AspectMods[ch.dragonAspect]);
+
+          if (!a && n.AspectMods && n.AspectMods[ch.dragonAspect]) list = list.concat(n.AspectMods[ch.dragonAspect].map(m => aspK !== 1 && m.Mode !== 'Flag' ? Object.assign({}, m, { Value: (m.Value || 0) * aspK, Value2: m.Value2 != null ? m.Value2 * aspK : m.Value2 }) : m));
           const label = 'Dragonling · ' + (a ? a.Name + ' (ascended ' + n.Name + ')' : n.Name);
           const quirk = DRAGON_QUIRKS[id] || {};
           for (const m of list) {
@@ -16644,6 +16698,7 @@ window.BOCharacter = function (ctx) {
 
   function calcSkill(GD, ch, skillId, o) {
     o = o || {};
+    ch = socketedRunes(GD, ch); // worn Dwarven runes without a socket give nothing (see socketedRunes)
     const H = GD.scaling.Hero, G = GD.scaling.Gem, A = GD.scaling.Ailments, M = GD.scaling.Monster;
     const sk = GD.skills[lc(skillId)];
     const res = { skillId, notes: [], used: new Map() };
@@ -22065,7 +22120,7 @@ window.BOCharacter = function (ctx) {
     for (const id of ch.dragonNodes || []) { const k = T[id] ? id : moved[id]; if (k && T[k] && !out.includes(k)) out.push(k); }
     return out;
   }
-  const api = { dragonIds, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, rampEff, late2K: (GD, id, lvl) => late2K(GD, id, lvl), vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, affixLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, trigCounted, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
+  const api = { socketedRunes, runeSeats, dragonIds, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, rampEff, late2K: (GD, id, lvl) => late2K(GD, id, lvl), vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, affixLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, trigCounted, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
 
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -26357,8 +26412,19 @@ window.BOStartApp = function () {
     const R = { Start: 70, Keystone: 62, Notable: 44, Choice: 36, Socket: 34, Small: 26, Attribute: 18 };
     T.icons = new Map(); T.labels = [];
     const I = window.TREE_ICONS;
+    T.glyphs = new Map();
     for (const n of nodes) {
-      const r = R[n.Kind] || 22, key = treeIconKey(n);
+      const r = R[n.Kind] || 22, key = n.Kind === 'Socket' ? null : treeIconKey(n);
+
+
+      if (n.Kind === 'Socket') {
+        const g = document.createElementNS(NS, 'g'); g.setAttribute('class', 'tsock');
+        const d = document.createElementNS(NS, 'circle'); d.setAttribute('cx', n.X); d.setAttribute('cy', n.Y); d.setAttribute('r', r); d.setAttribute('class', 'tsock-disc');
+        const p = document.createElementNS(NS, 'path'), k = r / 34, P = (x, y) => (n.X + x * k).toFixed(1) + ' ' + (n.Y + y * k).toFixed(1);
+        p.setAttribute('d', 'M' + P(0, -20) + 'L' + P(0, 21) + 'M' + P(0, -4) + 'L' + P(-12, -17) + 'M' + P(0, -4) + 'L' + P(12, -17) + 'M' + P(0, 6) + 'L' + P(11, 17));
+        p.setAttribute('class', 'tsock-rune'); p.style.strokeWidth = (5 * k).toFixed(1);
+        g.append(d, p); gN.appendChild(g); T.glyphs.set(n.Id, g);
+      }
       if (key) { // the icon sits under its circle, which becomes a ring (hover and clicks still land on the circle)
         const s = document.createElementNS(NS, 'svg');
         s.setAttribute('x', n.X - r); s.setAttribute('y', n.Y - r); s.setAttribute('width', 2 * r); s.setAttribute('height', 2 * r);
@@ -26370,7 +26436,7 @@ window.BOStartApp = function () {
       }
       const c = document.createElementNS(NS, 'circle');
       c.setAttribute('cx', n.X); c.setAttribute('cy', n.Y); c.setAttribute('r', r);
-      c.setAttribute('class', 'tn k-' + n.Kind + (key ? ' ic' : '')); c.dataset.id = n.Id;
+      c.setAttribute('class', 'tn k-' + n.Kind + (key || n.Kind === 'Socket' ? ' ic' : '')); c.dataset.id = n.Id;
       gN.appendChild(c);
       if (HIST_KINDS.includes(n.Kind)) { // pick-order badge, filled in by paintTree
         const b = document.createElementNS(NS, 'text');
@@ -26492,6 +26558,7 @@ window.BOStartApp = function () {
   function paintTree() {
     if (!T.built) return;
     const have = allocSet(), s0 = startNode(), adj = treeAdj();
+    const seats = st.ch ? S.runeSeats(GD, st.ch) : null; // which Dwarven rune sits in which socket (sim.js runeSeats)
     const next = new Set(); for (const id of [s0, ...have]) for (const v of adj[id] || []) if (!have.has(v) && !blocked(v) && !banned(v)) next.add(v);
     const q = ($('#treeSearch').value || '').trim().toLowerCase();
     const heat = T.heat !== false, foundIds = new Set();
@@ -26512,6 +26579,8 @@ window.BOStartApp = function () {
       c.classList.toggle('alloc', on); c.classList.toggle('next', !on && next.has(id)); c.classList.toggle('ban', banned(id)); c.classList.toggle('keep', keepMarked(id));
       const ic = T.icons && T.icons.get(id);
       if (ic) { const want = on || oa.has(id) ? ic.key : dimKey(ic.key); if (ic.cur !== want) { ic.el.setAttribute('viewBox', iconBox(want)); ic.cur = want; } }
+      const gl = T.glyphs && T.glyphs.get(id);
+      if (gl) { gl.classList.toggle('on', on || oa.has(id)); gl.classList.toggle('has', on && !!seats && seats.seat.has(id)); }
       c.classList.toggle('opt-add', oa.has(id)); c.classList.toggle('opt-rem', orm.has(id));
       let found = false;
       if (q) { const txt = (n.Name + ' ' + (n.Text || '') + ' ' + (n.Mods || []).map(modLine).join(' ')).toLowerCase(); found = txt.includes(q); }
@@ -26617,8 +26686,10 @@ window.BOStartApp = function () {
     $('#treePoints').innerHTML = '<span class="tp-n' + (over > 0 ? ' over' : '') + '">' + nHave + ' / ' + cap + '</span> points taken' + (nHave !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level + (free ? ' · ' + free + ' free' : '') + (sw.size ? ' · ' + sw.size + ' Oath' + (sw.size > 1 ? 's' : '') + ' sworn' : '');
     const pp = $('#planPoints'), who = (st.chOrig || st.ch).id + '|' + (st.chOrig || st.ch).level;
     pp.max = Math.max(1, cap - pointsIn([...have]));
+    $('#optSockets').placeholder = runeNeed().need;
     if (pp.dataset.for !== who) {
       pp.dataset.for = who; pp.value = free > 0 ? free : 5;
+      $('#optSockets').value = ''; // a new character starts with "keep the sockets you have"
 
       $('#optKeys').checked = (st.chOrig.passives || []).some(id => GD.nodes[id] && GD.nodes[id].Kind === 'Keystone');
     }
@@ -26630,6 +26701,34 @@ window.BOStartApp = function () {
 
 
 
+
+
+
+  function socketRuneHtml(id, on) {
+    const r = S.runeSeats(GD, st.ch), it = r.seat.get(id);
+    if (!on) return '<div class="tk">Take this socket to set a Dwarven rune in it.</div>';
+    return (it ? '<div class="gain up">Holds ' + esc((it.rarity === 'Unique' && (GD.uniques[lc(it.unique || '')] || {}).Name) || it.name || (GD.bases[lc(it.base || '')] || {}).Name || 'a Dwarven rune') + '</div>'
+      : '<div class="tk">Empty' + (r.out.length ? ': ' + r.out.length + ' worn rune' + (r.out.length > 1 ? 's have' : ' has') + ' no socket' : '') + '.</div>') +
+      '<div class="tk">Click to ' + (it ? 'change' : 'set') + ' its rune · Shift-click refunds the socket. On touch: Set rune in the panel.</div>';
+  }
+  function setSocketRune(sid, it) {
+    const ed = buildEditable(); if (!ed) return;
+    const old = S.runeSeats(GD, ed).seat.get(sid);
+    ed.items = ed.items.filter(i => i !== old && !(i.slot === 'DwarvenRune' && i.socket === sid));
+    if (it) ed.items.push(Object.assign(it, { slot: 'DwarvenRune', socket: sid }));
+    if (ed.plan) planChanged(ed, {}); else buildEdited(ed, {});
+    planner.render(); paintTree(); if (T.sel === sid) showSheet(sid);
+    $('#treeStatus').textContent = it ? 'Dwarven rune set in ' + GD.nodes[sid].Name + '.' : 'Dwarven rune taken out of ' + GD.nodes[sid].Name + '.';
+  }
+  function openSocketRune(sid) {
+    if (!character || !st.ch) return;
+    const cur = S.runeSeats(GD, st.ch).seat.get(sid) || null;
+    const view = Object.assign({}, st.ch, { items: st.ch.items.filter(i => i.slot !== 'DwarvenRune').concat(cur ? [JSON.parse(JSON.stringify(cur))] : []) });
+    character.openItemFor({ current: () => view, editable: () => view,
+      commit: (ch, it) => { setSocketRune(sid, it ? JSON.parse(JSON.stringify(it)) : null); return ''; },
+      close: () => { paintTree(); }, foot: 'The rune goes into ' + GD.nodes[sid].Name + ' on this character. Your save file is never changed.' },
+      { slot: 'DwarvenRune', idx: cur ? view.items.length - 1 : -1 });
+  }
   function showSheet(id) {
     const n = GD.nodes[id];
     if (!n) return hideSheet();
@@ -26642,6 +26741,9 @@ window.BOStartApp = function () {
     const bb = $('#treeSheetBan'); bb.hidden = n.Kind === 'Start'; bb.textContent = banned(id) ? 'Allow again' : 'Never take';
     const kb = $('#treeSheetKeep'); kb.hidden = n.Kind === 'Start'; kb.textContent = keepMarked(id) ? 'Unkeep' : on ? 'Keep' : 'Must take';
     $('#treeSheet').classList.remove('oaths');
+    const rb = $('#treeSheetRune'), seated = n.Kind === 'Socket' && on ? S.runeSeats(GD, st.ch).seat.get(id) : null;
+    rb.hidden = !(n.Kind === 'Socket' && on); rb.textContent = seated ? 'Change rune' : 'Set rune';
+    const ro = $('#treeSheetRuneOut'); ro.hidden = !seated;
     const act = $('#treeSheetAct');
     act.hidden = !on && !pl;
     act.textContent = on ? 'Refund' : s && s.swapped ? 'Swap' : cost > 1 ? 'Take (' + cost + ' points)' : 'Take';
@@ -26721,7 +26823,7 @@ window.BOStartApp = function () {
     if (T.sel) hideSheet();
     T.selM = mid;
     $('#treeSheetBody').innerHTML = masteryHtml(mid, true);
-    $('#treeSheetAct').hidden = true; $('#treeSheetKeep').hidden = true; $('#treeSheetBan').hidden = true;
+    $('#treeSheetAct').hidden = true; $('#treeSheetKeep').hidden = true; $('#treeSheetBan').hidden = true; $('#treeSheetRune').hidden = true; $('#treeSheetRuneOut').hidden = true;
     const sh = $('#treeSheet'); sh.hidden = false;
 
     sh.classList.add('oaths'); sh.style.setProperty('--view-h', $('#treeView').clientHeight + 'px');
@@ -26839,6 +26941,7 @@ window.BOStartApp = function () {
     if (lines.length) h += '<ul>' + lines.map(l => '<li>' + esc(l) + '</li>').join('') + '</ul>';
     if (n.Text && (n.Kind === 'Keystone' || n.Kind === 'Notable' || n.Kind === 'Socket') && n.Text !== lines.join(' ')) h += '<div>' + esc(n.Text) + '</div>';
     if (n.Price) h += '<div class="gain down">' + esc(n.Price) + '</div>';
+    if (n.Kind === 'Socket' && st.ch) h += socketRuneHtml(id, on);
     if (n.Kind === 'Start') return h;
     if (banned(id) && !on) return h + '<div class="gain down">Marked never take: Optimize, Plan and the node values skip it.</div><div class="tk tk-ban">' + markHint(id) + '</div>';
     if (keepMarked(id)) h += '<div class="gain keep' + (on ? '' : ' want') + '">' + (on ? 'Marked keep: Optimize never refunds it.' : 'Marked must take: Optimize and Plan route to it first.') + '</div>';
@@ -27048,7 +27151,7 @@ window.BOStartApp = function () {
     const o = T.opt, a = o && o.dAddSet || new Set(), r = o && o.dRemSet || new Set();
     document.querySelectorAll('#dragonBody [data-dn]').forEach(g => { g.classList.toggle('dl-opt-add', a.has(g.dataset.dn)); g.classList.toggle('dl-opt-rem', r.has(g.dataset.dn)); });
   }
-  const optKey = () => GS.set.prio + JSON.stringify(GS.set.layers) + '|' + ($('#optOaths').checked ? JSON.stringify(st.ch.oaths || {}) : '') + '|' + optDragonKey() + '|' + st.skill + '|' + JSON.stringify(optExtra()) + '|' + [...allocSet()].sort().join(',') + '|' + [...(st.ban || [])].sort().join(',') + '|' + [...(st.keep || [])].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
+  const optKey = () => GS.set.prio + JSON.stringify(GS.set.layers) + '|' + ($('#optOaths').checked ? JSON.stringify(st.ch.oaths || {}) : '') + '|' + optDragonKey() + '|s' + optSockets() + '|' + st.skill + '|' + JSON.stringify(optExtra()) + '|' + [...allocSet()].sort().join(',') + '|' + [...(st.ban || [])].sort().join(',') + '|' + [...(st.keep || [])].sort().join(',') + '|' + JSON.stringify(opts(), (k, v) => v instanceof Set ? [...v].sort() : v);
   function clearOpt() {
     T.optJob = (T.optJob || 0) + 1; T.opt = null; $('#treeOpt').hidden = true;
     const b = $('#treeOptimize'); b.disabled = false; b.textContent = 'Optimize tree';
@@ -27077,7 +27180,7 @@ window.BOStartApp = function () {
     $('#treePlan').disabled = true; $('#treePlanAll').disabled = true; $('#treeOptimize').disabled = true;
     card.hidden = false; card.innerHTML = '<p class="hint">' + (plan ? 'Planning your next ' + extra + ' point' + (extra > 1 ? 's' : '') : 'Optimizing the tree') + ' for ' + esc(skillName) + '…</p>';
 
-    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])], keep: [...(st.keep || [])], oaths: $('#optOaths').checked, dragon: optDragon(),
+    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { keepDefence: $('#optKeepDef').checked, allowKeystones: $('#optKeys').checked, conduitMargin: 0.01, addOnly: !!plan, extraPoints: extra, ban: [...(st.ban || [])], keep: [...(st.keep || [])], oaths: $('#optOaths').checked, dragon: optDragon(), sockets: optSockets(),
       defWeight: GS.set.prio / 100, defStats: gsDefStats(), defence: (list, oaths, dragonNodes, dragonAspect) => gsDefence(Object.assign({}, st.ch, { passives: list }, oaths ? { oaths } : null, dragonNodes ? { dragonNodes } : null, dragonAspect != null ? { dragonAspect } : null)) });
 
     let phase = 'Starting', q = 0;
@@ -27139,7 +27242,7 @@ window.BOStartApp = function () {
     const o = T.opt, card = $('#treeOpt'); if (!o) { card.hidden = true; return; }
     card.hidden = false;
     if (o.addOnly) return showPlan(o, card);
-    const kept = (o.kept.length ? '<p class="hint">Left where they are: ' + o.kept.map(k => esc(GD.nodes[k.id].Name) + ' (' + esc(k.why) + ')').join(', ') + '.</p>' : '') + keepMissedHtml(o);
+    const kept = (o.kept.length ? '<p class="hint">Left where they are: ' + o.kept.map(k => esc(GD.nodes[k.id].Name) + ' (' + esc(k.why) + ')').join(', ') + '.</p>' : '') + keepMissedHtml(o) + runeSocketHtml(o);
     if (!(o.gain > 0.001)) {
       card.innerHTML = '<h2>Your tree already looks right for ' + esc(o.skillName) + '</h2><p class="hint">Moving the same ' + o.points + ' points around gains less than 0.1% ' + (o.scored ? 'at ' + gsPrioText(Math.round(o.defWeight * 100)) : 'DPS') + '.</p>' + kept +
         '<div class="opt-actions"><button class="btn small ghost" type="button" id="optDismiss">Close</button></div>';
@@ -27182,6 +27285,30 @@ window.BOStartApp = function () {
     const m = (o.keepMissed || []).filter(id => GD.nodes[id]);
     return m.length ? '<p class="hint gain down">Not reached with these points (marked must take): ' + m.map(id => esc(GD.nodes[id].Name)).join(', ') + '.</p>' : '';
   }
+
+
+
+
+
+
+  function runeNeed() {
+    const items = (st.ch && st.ch.items) || [], runes = items.filter(i => i.slot === 'DwarvenRune').length;
+    const deep = items.reduce((n, i) => n + ((i.rarity === 'Unique' && (GD.uniques[lc(i.unique || '')] || {}).DwarvenSockets) || 0), 0);
+    return { runes, deep: Math.min(deep, runes), need: Math.max(0, runes - deep) };
+  }
+  const optSockets = () => { const v = $('#optSockets').value.trim(); return v === '' || !(+v >= 0) ? '' : Math.min(9, Math.floor(+v)); };
+  function runeSocketHtml(o) {
+    const { runes, deep, need } = runeNeed(), sk = o.sockets;
+    const onTree = (o.list || []).filter(id => GD.nodes[id] && GD.nodes[id].Kind === 'Socket').length;
+    if (!sk && !runes && !onTree) return '';
+    const s = n => n === 1 ? '' : 's';
+    let t = 'Dwarven Sockets: ' + onTree + ' on this tree';
+    if (sk) t += ', ' + sk.want + ' asked for' + (onTree < sk.want ? ' (' + (sk.want - onTree) + ' not reached with these points' + (sk.reachable < sk.want ? '; the tree has ' + sk.reachable + ' you can take' : '') + ')' : '') + '.';
+    else t += ' (all kept, none added: set Dwarven Sockets to path to more or refund spares).';
+    t += ' You wear ' + runes + ' Dwarven rune' + s(runes) + (deep ? ', ' + deep + ' held by Deep-Forged gear' : '') + ', so you need ' + need + '.';
+    if (onTree < need) t += ' ' + (need - onTree) + ' of your runes count for nothing until the tree has ' + (need - onTree === 1 ? 'its socket' : 'their sockets') + '.';
+    return '<p class="hint' + (onTree < need || (sk && onTree < sk.want) ? ' gain down' : '') + '">' + esc(t) + ' Sockets take a rune from Rupture Level 110.</p>';
+  }
   function showPlan(o, card) {
     const tip = id => GD.nodes[id].Kind === 'Notable' || GD.nodes[id].Kind === 'Choice' || GD.nodes[id].Kind === 'Socket' ? '<b>' + esc(GD.nodes[id].Name) + '</b>' : esc(GD.nodes[id].Name);
     let n = 0;
@@ -27190,7 +27317,7 @@ window.BOStartApp = function () {
     const at = Object.entries(o.attrs).filter(([, v]) => v).map(([k, v]) => k + ' ' + (v > 0 ? '+' : '−') + Math.abs(v));
     const left = o.points - o.used;
     card.innerHTML = '<h2>Next ' + (o.points - o.base0) + ' points for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.scored ? 'score' : o.multi ? 'weighted DPS' : 'DPS') + '</span>' + (o.multi || o.scored ? '' : ' <span class="hint">' + num(o.base) + ' → ' + num(o.value) + '</span>') + '</h2>' + optScoredRows(o) + optSkillRows(o) +
-      (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">No node within reach adds ' + (o.scored ? 'anything at this setting' : 'DPS to this skill') + '.</p>') + keepMissedHtml(o) +
+      (rows ? '<ul class="best-list plan-list">' + rows + '</ul>' : '<p class="hint">No node within reach adds ' + (o.scored ? 'anything at this setting' : 'DPS to this skill') + '.</p>') + keepMissedHtml(o) + runeSocketHtml(o) +
       (optOathCol(o) ? '<div class="opt-cols">' + optOathCol(o) + '</div><p class="hint">A row\'s gain counts the Oath sworn at a seat its notable opens.</p>' : '') + optOathNote(o) + optDragonHtml(o) +
       (left > 0 && rows ? '<p class="hint">' + left + ' point' + (left > 1 ? 's' : '') + ' left over: nothing else within reach adds DPS.</p>' : '') +
       (at.length ? '<p class="hint">Attributes from these picks: ' + esc(at.join(', ')) + '.</p>' : '') +
@@ -27207,6 +27334,7 @@ window.BOStartApp = function () {
     $('#treeView').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
   $('#optOaths').onchange = () => { if (T.opt) { clearOpt(); paintTree(); } };
+  $('#optSockets').oninput = () => { if (T.opt) { clearOpt(); paintTree(); } };
   $('#optDragon').onchange = () => { if (T.opt) { clearOpt(); paintTree(); renderDragon(); } };
   $('#treeOptimize').onclick = () => runOptimize(false);
   $('#treePlan').onclick = () => runOptimize(true);
@@ -28445,7 +28573,7 @@ window.BOStartApp = function () {
       return;
     }
     if (pts.size > 2) return;
-    T.drag = { x: e.clientX, y: e.clientY, vb: T.vb.slice(), moved: false, touch: e.pointerType !== 'mouse', id: e.target.dataset && e.target.dataset.id, mid: e.target.dataset && e.target.dataset.mid };
+    T.drag = { x: e.clientX, y: e.clientY, vb: T.vb.slice(), moved: false, touch: e.pointerType !== 'mouse', shift: e.shiftKey, id: e.target.dataset && e.target.dataset.id, mid: e.target.dataset && e.target.dataset.mid };
   });
   view.addEventListener('pointermove', e => {
     if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -28494,6 +28622,8 @@ window.BOStartApp = function () {
       const c = $('#treeSvg').querySelector('circle.tn[data-id="' + d.id + '"]'); if (c) c.classList.add('sel');
       return;
     }
+
+    if (d.id && (GD.nodes[d.id] || {}).Kind === 'Socket' && allocSet().has(d.id) && !d.shift) { openSocketRune(d.id); tip.hidden = true; lastTap = null; return; }
     if (d.id) { clickNode(d.id); tip.hidden = true; lastTap = null; return; }
     if (d.touch) {
       if (T.sel) { hideSheet(); lastTap = null; return; } // first tap off a node just closes the panel
@@ -28532,6 +28662,8 @@ window.BOStartApp = function () {
   $('#treeSheetClose').onclick = hideSheet;
   $('#treeSheetBan').onclick = () => { if (T.sel) toggleBan(T.sel); };
   $('#treeSheetKeep').onclick = () => { if (T.sel) toggleKeep(T.sel); };
+  $('#treeSheetRune').onclick = () => { if (T.sel) openSocketRune(T.sel); };
+  $('#treeSheetRuneOut').onclick = () => { if (T.sel) setSocketRune(T.sel, null); };
   view.addEventListener('contextmenu', e => { const id = e.target.dataset && e.target.dataset.id; if (!id || inDragon(e) || !GD.nodes[id]) return; e.preventDefault(); tip.hidden = true; cycleMark(id); });
   $('#treeKeepClear').onclick = () => { if (!st.keep || !st.keep.size) return; st.keep = new Set(); store.set(keepStoreKey(), []); clearOpt(); paintTree(); $('#treeStatus').textContent = 'No node is marked keep any more.'; };
   $('#treeBanClear').onclick = () => { if (!st.ban || !st.ban.size) return; st.ban = new Set(); store.set(banStoreKey(), []); clearOpt(); T.scores = new Map(); paintTree(); scoreSoon(); $('#treeStatus').textContent = 'Every node can be taken again.'; };

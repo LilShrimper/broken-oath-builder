@@ -566,6 +566,9 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 /* Tree optimizer */
 .opt-bar { padding: 6px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
 .opt-bar .field.inline { flex-direction: row; align-items: center; gap: 6px; }
+.opt-bar .opt-socks input { width: 64px; }
+.ch-slot .ch-unsocketed { color: var(--bad); white-space: normal; }
+.opt-bar .opt-socks span { font-size: 13px; white-space: nowrap; }
 .opt-bar select { max-width: 200px; }
 .opt-card h2 .g { color: var(--good); }
 .opt-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 8px 0; }
@@ -784,6 +787,12 @@ tr.cmp-counted td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .ti { pointer-events: none; overflow: hidden; }
 .tn.ic { fill: var(--panel-2); fill-opacity: 0; }
 .tn.ic.alloc { fill-opacity: 0; stroke: var(--accent); }
+/* Dwarven Rune Socket: the game's pale disc with a gold rune; dim while untaken, a brighter disc while a rune sits in it. */
+.tsock { pointer-events: none; opacity: .45; }
+.tsock.on { opacity: 1; }
+.tsock-disc { fill: #4a443d; }
+.tsock.has .tsock-disc { fill: #6b6258; }
+.tsock-rune { fill: none; stroke: #e9b552; stroke-linecap: round; stroke-linejoin: round; }
 .tn.ic.opt-add { fill: var(--good); fill-opacity: .35; }
 .tn.ic.opt-rem { fill: var(--bad); fill-opacity: .35; }
 .tn.ic.k-Small, .tn.ic.k-Notable, .tn.ic.k-Choice, .tn.ic.k-Socket { stroke-width: 4; }

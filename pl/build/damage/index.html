@@ -53,7 +53,7 @@
   var b = new URL("../../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/pl.json'), langCode: 'pl' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../../../style.css?v=524">
+<link rel="stylesheet" href="../../../style.css?v=525">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -551,6 +551,7 @@
         <label class="field" id="rowWindburst" title="Windburst: every third movement skill bursts for 200% of your last Bow hit. How many movement skills you use a second in the fight (0.5 = one every 2 s). Blank = not counted." hidden><span>Movement skills a second</span><input type="number" id="windburstMoves" min="0" step="0.1" placeholder="0"></label>
         <label class="field" id="rowCorpseKind" title="Which corpse Pyre Burst and Kindled Remains burn. Their extra damage is a share of the corpse's life at this Rupture Level (counted up to 150). A Husk (Gravesown) has 60% of a normal monster's life." hidden><span>Corpse</span><select id="corpseKind"><option value="">Normal monster</option><option value="magic">Magic monster</option><option value="rare">Rare monster</option><option value="husk">Husk (Gravesown)</option><option value="none">None</option></select></label>
         <label class="field" id="rowCorpses" title="Kindled Remains: how many fresh corpses a second lie next to you or the enemy (it bursts at most 4 a second). Blank = only Gravesown's Husks, if it is linked." hidden><span>Fresh corpses a second</span><input type="number" id="corpsesPerSec" min="0" step="0.1" placeholder="auto"></label>
+        <label class="field" id="rowLegionKind" title="Legion of One: you command only one kind of minion. The kind set here stands, doubled in number and dealing 30% less; your other summons are dismissed and count as 0 in every number. Strongest: each summon is counted as if it stood, and totals keep the strongest." hidden><span>Legion of One kind</span><select id="legionKind"></select></label>
         <label class="field" id="rowOtherBleed" title="Haemorrhage: 40% more damage to an enemy Bleeding from another of your skills (its own bleeds do not count). Auto counts it when another skill on your bar can bleed. Yes: something the sim cannot see keeps it bleeding (another player, a skill off your bar). No: leave it out." hidden><span>Enemy bleeding from another skill</span><select id="otherBleed"><option value="">Auto</option><option value="yes">Yes</option><option value="no">No</option></select></label>
         <p class="hint enemy-life-note">Enemy life sets the size of Shock: lower life means a bigger Shock. Blank = the sim's estimate.</p>
       </div>
@@ -676,7 +677,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":524,"at":"2026-11-26T06:04:59.485Z"};
+window.SITE_VERSION = {"v":525,"at":"2026-11-26T06:21:45.874Z"};
 window.SITE_LANG = 'pl';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -690,6 +691,6 @@ window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["War
 /*__VOWS__*/
 /*__ADVANCED__*/
 </script>
-<script src="../../../app.js?v=524"></script>
+<script src="../../../app.js?v=525"></script>
 </body>
 </html>

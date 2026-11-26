@@ -12149,10 +12149,11 @@ window.BOAdvanced = function (ctx) {
     const b = r.base, w = b.weapon;
     let h = '';
     if (b.kind === 'attack' && w) h += row('Weapon', esc(w.name || 'Unarmed'));
-    else if (b.min != null) h += row('Spell base', num(b.min, 0) + '–' + num(b.max, 0));
+    else if (b.min != null) h += row(r.minion ? 'Gem base' : 'Spell base', num(b.min, 0) + '–' + num(b.max, 0));
     if (b.effectiveness) h += row('Skill effectiveness', times(b.effectiveness, 2), { tip: textTip('Skill effectiveness', 'How much of added damage the skill deals ("of added damage" in the game\'s tooltip), at the level the gem plays at.') });
     for (const d of types) {
-      const si = r.scaleInfo[d] || {}, p = r.convertedParts[d] || [0, 0];
+
+      const si = (r.scaleInfo || {})[d] || {}, p = (r.convertedParts || {})[d];
       const H = ctx.gd().scaling.Hero || {}, str = d === 'Physical' && (r.skill.Tags || []).includes('Melee') && H.StrMeleePhysPer10 ? (r.attr.Str || 0) / 10 * H.StrMeleePhysPer10 : 0;
 
 
@@ -12161,7 +12162,7 @@ window.BOAdvanced = function (ctx) {
       const inc = used.filter(m => m.stat === 'Damage' && m.mode === 'Inc' && !m.local && forType(m, d)).concat(str ? [{ src: 'Strength ' + r.attr.Str + ' (melee physical)', v: str }] : [], spellInc ? [{ src: (spellAttr === 'Str' ? 'Strength ' : 'Intelligence ') + r.attr[spellAttr] + ' (spells, ' + H.IntSpellDamagePer10 + '% per 10)', v: spellInc }] : []);
       const more = used.filter(m => m.stat === 'Damage' && m.mode === 'More' && forType(m, d)).concat(heroF !== 1 && !r.minion ? [{ src: 'Hero damage factor (game rule)', v: (heroF - 1) * 100 }] : []);
       h += '<div class="adv-sub" style="--c:' + ctx.typeColor(d) + '">' + d + '</div>' +
-        row('Base after conversion', num(p[0], 0) + '–' + num(p[1], 0)) +
+        (p ? row('Base after conversion', num(p[0], 0) + '–' + num(p[1], 0)) : '') +
         (si.inc != null ? row('Increased', pct(si.inc, 0), { tip: srcTip('Increased ' + d + ' damage', inc, { shown: si.inc }) }) : '') +
         (si.more != null ? row('More', times(si.more, 3), { tip: srcTip('More ' + d + ' damage', more, { more: true, shown: si.more, leftLabel: 'Other rules of the sim (young-character boost, lines of the damage type it converted from)', explain: MORE_DMG_EXPLAIN }) }) : '') +
         (types.length > 1 ? row('Average hit', num(r.hit[d].avg), { color: ctx.typeColor(d) }) : '');
@@ -12174,19 +12175,20 @@ window.BOAdvanced = function (ctx) {
   }
 
   function enemyCard(r, used) {
-    const e = r.enemy, types = TYPES.filter(d => r.hit[d] && r.hit[d].avg > 0);
+
+    const e = r.enemy || {}, mit = r.mitig || {}, types = e.resist ? TYPES.filter(d => r.hit[d] && r.hit[d].avg > 0) : [];
     let h = '';
     for (const d of types) {
-      const m = r.mitig[d] || {}, pen = e.pen[d] || 0;
+      const m = mit[d] || {}, pen = (e.pen || {})[d] || 0;
       h += row('Enemy ' + d.toLowerCase() + ' resistance', num(e.resist[d], 0) + '%' + (pen ? ' − ' + num(pen, 0) + '% pen = ' + num(m.effRes, 0) + '%' : ''),
         { color: ctx.typeColor(d), tip: pen ? srcTip(d + ' penetration', used.filter(x => x.stat === 'Penetration' && forType(x, d)), { shown: pen, note: 'Taken off the enemy\'s resistance' }) : '' });
     }
-    if (r.mitig.armourReduction) h += row('Enemy armour stops', num(r.mitig.armourReduction * 100, 1) + '% of physical', { tip: textTip('Enemy armour', 'The enemy has ' + num(e.armour) + ' armour against your physical hit.') });
-    const tk = types.map(d => (r.mitig[d] || {}).taken).filter(x => x && x !== 1);
+    if (mit.armourReduction) h += row('Enemy armour stops', num(r.mitig.armourReduction * 100, 1) + '% of physical', { tip: textTip('Enemy armour', 'The enemy has ' + num(e.armour) + ' armour against your physical hit.') });
+    const tk = types.map(d => (mit[d] || {}).taken).filter(x => x && x !== 1);
     if (tk.length) h += row('Enemy takes more damage', times(Math.max(...tk), 2), { tip: textTip('Damage taken', 'Curses, Marks, shock and other "takes more damage" sources on the enemy, as the sim stacks them for this enemy.') });
     const curses = (e.activeCurses || e.curses || []).map(c => c.name).filter(Boolean);
     if (curses.length) h += row('Curses on it', esc(curses.join(', ')));
-    if (r.ailments.shock) h += row('Shock', '+' + num(r.ailments.shock.pct, 1) + '% damage taken');
+    if ((r.ailments || {}).shock) h += row('Shock', '+' + num(r.ailments.shock.pct, 1) + '% damage taken');
     h += row('Tooltip DPS', num(r.panelDps), { tip: textTip('Tooltip DPS', 'What the skill\'s panel in the game shows: no enemy resistances or curses.') }) +
       row('Hit DPS', num(r.hitDps)) +
       (r.poisonDps ? row('Poison DPS', num(r.poisonDps)) : '') + (r.igniteDps ? row('Ignite DPS', num(r.igniteDps)) : '') + (r.bleedDps ? row('Bleeding DPS', num(r.bleedDps)) : '') +
@@ -17769,7 +17771,13 @@ window.BOCharacter = function (ctx) {
         for (const [t, S] of Object.entries(byType)) mods.push({ stat: 'Damage', mode: 'More', tags: [t], v: ((1 + (U + S) / 100) / (1 + U / 100) - 1) * 100, v2: 0, local: false, src: 'Damage engine, ' + t + ' only', key: 'engine' });
         res.notes.push('Damage engine on minions: ' + dEng.map(e => e.src.replace(/^[^·]*·\s*/, '') + ' +' + e.v.toFixed(1) + '%').join(', ') + (dEng.some(e => e.def) ? ' (defence lines: game panel and log, 11 Nov 2026' + (dShare < 1 ? '; half for minions from patch 78, proven by game tooltips 25 Nov 2026' : '') + ')' : '') + (dEng.some(e => e.intEng) ? ' (Boundless Mind: half for minions, game tooltips 25 Nov 2026)' : '') + (dEng.some(e => e.half && !e.intEng) ? ' (other engine lines: half for minions by the same rule, not checked in game)' : '') + '.');
       }
-      return minionSheet(GD, ch, sk, res, mods, use, attr, L, o);
+      const r = minionSheet(GD, ch, sk, res, mods, use, attr, L, o);
+
+      if (r && r.minion && r.minion.dismissed) {
+        for (const k of Object.keys(r)) if (/Dps$/.test(k) && typeof r[k] === 'number') r[k] = 0;
+        r.notes = r.notes.filter(n => /^Legion of One: you set /.test(n));
+      }
+      return r;
     }
     if (sk.Minion) res.notes.push(sk.Name + ': enemies it kills rise as minions that fight for you; they are not counted here (only this skill\'s own hits).');
 
@@ -21215,6 +21223,11 @@ window.BOCharacter = function (ctx) {
     if (oneKind) { minionMore *= 0.7; legion.forEach(m => use(m, 'minion, one kind: 30% less, twice as many')); }
 
 
+
+    const legionPick = oneKind && o.legionKind && !o._risen ? lc(o.legionKind) : '';
+    const dismissed = !!legionPick && legionPick !== lc(sk.Id);
+
+
     const kinds = oneKind ? 1 : Math.max(1, Math.min(4, o.minionKinds || new Set(ch.hotbar.filter(id => { const k = GD.skills[lc(id)]; return isSummon(k) && k.Minion && k.Minion.MonsterId; })).size));
     let kind = 1;
     for (const m of pickMods(mods, 'MinionKindMore', 'Flat')) { kind *= 1 + m.v / 100 * kinds; use(m, 'minion, ' + kinds + ' kinds'); }
@@ -21344,14 +21357,14 @@ window.BOCharacter = function (ctx) {
     else for (const m of pickMods(mods, 'MinionCap', 'Flat')) if (fit(m) || ((m.tags || []).length && (m.tags || []).every(t => lc(t) === lc(mi.MonsterId || '')))) { alive += m.v; use(m, 'minion'); }
 
     const aliveBefore = alive;
-    if (oneKind) alive = Math.max(alive * 2, alive + 2);
+    if (oneKind) alive = dismissed ? 0 : Math.max(alive * 2, alive + 2);
 
 
 
 
 
 
-    const army = o.armyProbe ? null : oneKind ? { total: alive, parts: [{ name: sk.Name, n: alive }] } : armyCount(GD, ch, sk, alive, o);
+    const army = o.armyProbe || dismissed ? null : oneKind ? { total: alive, parts: [{ name: sk.Name, n: alive }] } : armyCount(GD, ch, sk, alive, o);
     let armyK = 1;
     const AR = armyRule(GD);
     if (army) {
@@ -21546,9 +21559,10 @@ window.BOCharacter = function (ctx) {
       res.notes.push(m.src + ': each of the ' + alive + ' ' + sk.Name.replace(/^(Summon|Raise) /, '') + ' minions pulses about every ' + every.toFixed(2) + ' s for ' + t.pct + '% of its own hit' + (el ? ' as ' + el : '') + ' (' + Math.round(size).toLocaleString('en-US') + ' each), +' + Math.round(pDps).toLocaleString('en-US') + ' DPS on one enemy. Counted in the vs-enemy DPS only: the game\'s panel leaves it out. The timing is from the game log (14 Nov 2026), the size from the item\'s text; the damage itself is not measured yet.');
     }
 
-    res.minion = { specAvg: DT.reduce((a, d) => a + (scaled[d][0] + scaled[d][1]) / 2, 0) * (1 + specInc / 100), specInc, soloK, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.more > 0 ? 1 + golem.more / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth, oneKind };
+    res.minion = { specAvg: DT.reduce((a, d) => a + (scaled[d][0] + scaled[d][1]) / 2, 0) * (1 + specInc / 100), specInc, soloK, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.more > 0 ? 1 + golem.more / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth, oneKind, chosen: !!legionPick && !dismissed, dismissed };
     res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + (skelFit ? '; Skeletons: 0.592 s / speed + 0.050 s, fitted to the game log' : '') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
-    if (oneKind) res.notes.push('Legion of One: only one kind of minion stands, counted here as ' + sk.Name + ' alone: ' + alive + ' at once (' + aliveBefore + ' doubled, at least +2), dealing 30% less. Your other summons are dismissed when you raise these' + (mi.GolemAuras ? '' : ', the Grave Golem and its blessing with them') + ' (game log, 12 Nov 2026).');
+    if (dismissed) res.notes.push('Legion of One: you set ' + ((GD.skills[legionPick] || {}).Name || legionPick) + ' as the one kind of minion that stands, so ' + sk.Name + ' is dismissed and counted as 0. Change it under Legion of One in the Damage settings.');
+    else if (oneKind) res.notes.push('Legion of One: only one kind of minion stands, counted here as ' + sk.Name + ' alone' + (legionPick ? ' (the kind you set)' : '') + ': ' + alive + ' at once (' + aliveBefore + ' doubled, at least +2), dealing 30% less. Your other summons are dismissed when you raise these' + (mi.GolemAuras ? '' : ', the Grave Golem and its blessing with them') + ' (game log, 12 Nov 2026).');
     if (near > 1) res.notes.push('Counted at your side: minions deal ' + MINION_NEAR + '% more within 7 m of you (fading to none at 12 m), as the game\'s panel counts it.');
     if (mi.LevelDamage) res.notes.push(sk.Name + ' also grows with the level of the zone it fights in (the Monster level box): x' + lvlK.toFixed(3) + ' at level ' + zoneLevel + ' with the gem at level ' + minionGem + '. It makes up for the gap between the monsters there (taken halfway to your own level) and the gem, so a higher gem level gets less of it. Set the Monster level box to the Rupture you run: the game shows this number for where you stand (in the hub, your own level). The game\'s own rule (developer\'s formulas file), checked against the game log in the hub and Ruptures 31 to 69 (11 Nov 2026).');
     if (specInc) res.notes.push('Increased damage of the summon skill itself: ' + Math.round(specInc) + '% (its supports and lines that name Minion skills). It multiplies the increased Minion Damage (game log, 11 Nov 2026).');
@@ -22480,10 +22494,12 @@ window.BOCharacter = function (ctx) {
 
 
 
+
   function oneKindLost(results) {
     const idx = []; results.forEach((r, i) => { if (r && r.minion && r.minion.oneKind) idx.push(i); });
-    let keep = idx[0]; for (const i of idx) if ((results[i].totalDps || 0) > (results[keep].totalDps || 0)) keep = i;
-    return results.map((r, i) => idx.length > 1 && idx.includes(i) && i !== keep);
+    let keep = idx.find(i => results[i].minion.chosen);
+    if (keep === undefined) { keep = idx[0]; for (const i of idx) if ((results[i].totalDps || 0) > (results[keep].totalDps || 0)) keep = i; }
+    return results.map((r, i) => idx.includes(i) && i !== keep && (idx.length > 1 || !!r.minion.dismissed));
   }
 
   const counted = stat => HANDLED.has(stat) || NON_DAMAGE.has(stat);
@@ -23448,7 +23464,7 @@ window.BOStartApp = function () {
 
   const st = {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0, gatherFury: 2 }, // gatherFury: Fury charges counted while Gather Fury is linked (owner, 19 Nov 2026: default 2)
-    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: null, hallowCG: false, enemyLife: null, graveCall: null, flashfire: false, otherBleed: '', windburstMoves: null, corpseKind: '', corpsesPerSec: null, leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
+    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: null, hallowCG: false, enemyLife: null, graveCall: null, flashfire: false, otherBleed: '', windburstMoves: null, corpseKind: '', corpsesPerSec: null, legionKind: '', leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
     penFloor: false, potionsOn: store.get('potionsOn', true) !== false, opt: null, optJob: null, last: null,
     keepSup: new Set(), blockSup: new Set(), supMore: false, supMsg: '', // support picker: pinned for the search, "packs" group open, last message
   };
@@ -23731,7 +23747,7 @@ window.BOStartApp = function () {
   const ENEMY_KEYS = ['rarity', 'gElem', 'gWho', 'gStrong', 'gWeak', 'res', 'extraTaken', 'enemyLife', 'leechUptime', 'projOnTarget'];
   const ENEMY_DEF = { rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, extraTaken: 0, enemyLife: null, leechUptime: null, projOnTarget: null };
   const FIGHT_OFF = /^(vow|potion|barshock|barfreeze|charge|companion):/; // st.off keys that are fight settings (not supports, items or granted gems)
-  const FIGHT_DEF = () => ({ enemyLevel: null, vowbreak: [], tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0, gatherFury: 2 }, enemyHallowedGround: null, hallowCG: false, graveCall: null, otherBleed: '', flashfire: false, windburstMoves: null, corpseKind: '', corpsesPerSec: null });
+  const FIGHT_DEF = () => ({ enemyLevel: null, vowbreak: [], tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0, gatherFury: 2 }, enemyHallowedGround: null, hallowCG: false, graveCall: null, otherBleed: '', flashfire: false, windburstMoves: null, corpseKind: '', corpsesPerSec: null, legionKind: '' });
 
   function defaultDread(ch, c) {
     if (!ch || !c || c.Kind !== 'Banner' || !c.Dread || !curseOnBar(ch, c)) return 0;
@@ -23766,7 +23782,7 @@ window.BOStartApp = function () {
     st.vowbreak = new Set(f.vowbreak || []);
     st.tryHeralds = Object.assign({}, f.tryHeralds || {});
     st.charges = Object.assign(FIGHT_DEF().charges, f.charges || {});
-    for (const k of ['enemyHallowedGround', 'hallowCG', 'graveCall', 'otherBleed', 'flashfire', 'windburstMoves', 'corpseKind', 'corpsesPerSec']) st[k] = f[k];
+    for (const k of ['enemyHallowedGround', 'hallowCG', 'graveCall', 'otherBleed', 'flashfire', 'windburstMoves', 'corpseKind', 'corpsesPerSec', 'legionKind']) st[k] = f[k];
     fightSaved = JSON.stringify(fightNow(ch));
     fillEnemyInputs(ch);
   }
@@ -23776,7 +23792,7 @@ window.BOStartApp = function () {
       const cs = st.curses[c.Id] || { on: false, dread: 0 }, onBar = curseOnBar(ch, c);
       if (!!cs.on !== onBar || (+cs.dread || 0) !== (onBar ? defaultDread(ch, c) : 0)) f.curses[c.Id] = { on: !!cs.on, dread: +cs.dread || 0, bar: onBar };
     }
-    for (const k of ['enemyHallowedGround', 'hallowCG', 'graveCall', 'otherBleed', 'flashfire', 'windburstMoves', 'corpseKind', 'corpsesPerSec']) f[k] = st[k];
+    for (const k of ['enemyHallowedGround', 'hallowCG', 'graveCall', 'otherBleed', 'flashfire', 'windburstMoves', 'corpseKind', 'corpsesPerSec', 'legionKind']) f[k] = st[k];
     return f;
   }
 
@@ -23810,13 +23826,24 @@ window.BOStartApp = function () {
     if (ch && ch.id) { store.set('fight:' + ch.id, null); loadFight(st.ch); }
     render();
   }
+
+  function legionSummons(ch) {
+    const out = [];
+    for (const h of (ch && ch.hotbar) || []) {
+      const id = String(h || '').toLowerCase(), k = GD.skills[id];
+      if (k && !out.includes(id) && (k.Delivery === 'Summon' || (k.Minion && !(k.Tags || []).includes('Attack'))) && k.Minion && k.Minion.MonsterId && k.SpellMin) out.push(id);
+    }
+    return out;
+  }
+  const legionPick = () => st.legionKind && legionSummons(st.ch).includes(String(st.legionKind).toLowerCase()) ? String(st.legionKind).toLowerCase() : undefined;
+  const legionKept = () => { const p = legionPick(); return p ? esc(sName(p)) : 'the strongest summon'; };
   function opts(extra) {
     syncCurseBar();
     const res = {};
     for (const d of DT) if (st.res[d] !== '' && st.res[d] != null && isFinite(+st.res[d])) res[d] = +st.res[d];
     return Object.assign({
       off: st.off, vowbreak: st.vowbreak, tryHeralds: st.tryHeralds, charges: st.charges, supportsOverride: st.supports, gemLevel: st.gemLevel || undefined,
-      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: hallowOn(st.ch), hallowedCG: st.hallowCG, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire, enemyBleeding: st.otherBleed === 'yes' ? true : st.otherBleed === 'no' ? false : undefined, windburstMoves: +st.windburstMoves > 0 ? +st.windburstMoves : undefined, corpseKind: st.corpseKind || undefined, corpsesPerSec: +st.corpsesPerSec > 0 ? +st.corpsesPerSec : undefined, leechUptime: st.leechUptime !== null && st.leechUptime !== '' && !isNaN(+st.leechUptime) ? +st.leechUptime / 100 : undefined, mainSkill: st.skill, execSim: st.execOn || {},
+      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: hallowOn(st.ch), hallowedCG: st.hallowCG, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire, enemyBleeding: st.otherBleed === 'yes' ? true : st.otherBleed === 'no' ? false : undefined, windburstMoves: +st.windburstMoves > 0 ? +st.windburstMoves : undefined, corpseKind: st.corpseKind || undefined, corpsesPerSec: +st.corpsesPerSec > 0 ? +st.corpsesPerSec : undefined, legionKind: legionPick(), leechUptime: st.leechUptime !== null && st.leechUptime !== '' && !isNaN(+st.leechUptime) ? +st.leechUptime / 100 : undefined, mainSkill: st.skill, execSim: st.execOn || {},
       projOnTarget: +st.projOnTarget || undefined, totemCount: st.totemCount > 0 ? +st.totemCount : undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, castsPerSecOverride: st.cps > 0 ? +st.cps : undefined, penFloor: st.penFloor,
       conduit: st.conduit == null ? undefined : st.conduit,
       coc: st.coc === false ? false : undefined, cocSource: typeof st.coc === 'string' ? st.coc : undefined,
@@ -24130,6 +24157,12 @@ window.BOStartApp = function () {
     $('#rowCorpseKind').hidden = !(r.corpse || r.kindled || st.corpseKind || (r.skill && r.skill.Delivery === 'CorpseBurst') || (r.supports || []).some(x => /kindled_remains/i.test(x.id || x.Id || x)));
     $('#rowCorpses').hidden = !(r.kindled || st.corpsesPerSec || (r.supports || []).some(x => /kindled_remains/i.test(x.id || x.Id || x)));
     $('#rowGraveCall').hidden = !(r.minion || st.graveCall);
+
+    const legionOn = (() => { try { return S.collectMods(GD, ch, opts()).mods.some(m => m.stat === 'MinionOneKind'); } catch (e) { return false; } })();
+    const kindsOnBar = legionSummons(ch);
+    $('#rowLegionKind').hidden = !(legionOn && kindsOnBar.length);
+    $('#legionKind').innerHTML = '<option value="">Strongest (auto)</option>' + kindsOnBar.map(id => '<option value="' + esc(id) + '">' + esc(sName(id)) + '</option>').join('');
+    $('#legionKind').value = legionPick() || '';
 
     $('#graveCall').checked = r.graveCall ? r.graveCall.on : !!st.graveCall;
 
@@ -24474,7 +24507,7 @@ window.BOStartApp = function () {
     const total = (lost[0] ? 0 : r.totalDps) + more.reduce((a, x, i) => a + (lost[i + 1] ? 0 : x.r.totalDps), 0);
     el.innerHTML =
       (more.length
-        ? stat('Total DPS', num(total), '', 'main', [name + ' ' + num(r.totalDps)].concat(more.map(x => esc(sName(x.id)) + ' ' + num(x.r.totalDps))).filter((x, i) => !lost[i]).join(' + ') + (anyLost ? '<br>Legion of One: one kind of minion at a time, so only the strongest summon is counted' : '') + '<br>Main skill plus the skills ticked under Also count, vs the enemy set on the Damage tab')
+        ? stat('Total DPS', num(total), '', 'main', [name + ' ' + num(r.totalDps)].concat(more.map(x => esc(sName(x.id)) + ' ' + num(x.r.totalDps))).filter((x, i) => !lost[i]).join(' + ') + (anyLost ? '<br>Legion of One: one kind of minion at a time, so only ' + legionKept() + ' is counted' : '') + '<br>Main skill plus the skills ticked under Also count, vs the enemy set on the Damage tab')
         : stat('Total DPS', num(r.totalDps), '', 'main', name + (r.minion ? ': all its minions, before the enemy' : ' vs the enemy set on the Damage tab'))) +
       stat('Tooltip DPS', num(r.panelDps), '', '', 'The number the game\'s skill panel shows') +
       stat('Average hit', num(r.hitAvg), '', '', 'With crits ' + num(r.hitAvgCrit)) +
@@ -25481,7 +25514,7 @@ window.BOStartApp = function () {
   const supName = id => (GD.supports[String(id).toLowerCase()] || { Name: id }).Name;
   function optSig() {
     const o = opts();
-    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.hallowedCG, o.enemyLife, o.graveCall, o.flashfire, o.enemyBleeding, o.windburstMoves, o.corpseKind, o.corpsesPerSec, o.leechUptime, o.execSim, o.mainSkill, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
+    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.hallowedCG, o.enemyLife, o.graveCall, o.flashfire, o.enemyBleeding, o.windburstMoves, o.corpseKind, o.corpsesPerSec, o.legionKind, o.leechUptime, o.execSim, o.mainSkill, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
       off: [...st.off].filter(k => !k.startsWith('support:')).sort(), vb: [...st.vowbreak].sort(), th: o.tryHeralds, ch: o.charges, po: o.potions });
   }
   function runSearch() {
@@ -25834,6 +25867,7 @@ window.BOStartApp = function () {
   $('#leechUptime').addEventListener('input', e => { st.leechUptime = e.target.value === '' ? null : e.target.value; render(); });
   $('#windburstMoves').addEventListener('input', e => { st.windburstMoves = e.target.value === '' ? null : e.target.value; render(); });
   $('#corpseKind').addEventListener('change', e => { st.corpseKind = e.target.value; render(); });
+  $('#legionKind').addEventListener('change', e => { st.legionKind = e.target.value; render(); });
   $('#corpsesPerSec').addEventListener('input', e => { st.corpsesPerSec = e.target.value === '' ? null : e.target.value; render(); });
   $('#flashfire').addEventListener('change', e => { st.flashfire = e.target.checked; render(); });
   $('#graveCall').addEventListener('change', e => { st.graveCall = e.target.checked; render(); });
@@ -27482,7 +27516,7 @@ window.BOStartApp = function () {
       if (!on && !s.swapped && s.via && s.via.length) h += '<div class="tk">With the path: ' + esc(s.via.map(x => GD.nodes[x].Name).join(', ')) + '</div>';
       if (s.def != null) h += '<div class="tk">' + esc(skillName) + ' DPS ' + pct(s.dps) + ' · defence ' + pct(s.def) + ' · ' + esc(gsPrioText(Math.round(heatW() * 100))) + '</div>';
     } else h += '<div class="tk">' + (on ? 'Click to refund' : 'Click to take') + ' · scoring…</div>';
-    if ((n.Mods || []).some(m => m.Stat === 'MinionOneKind') && optExtra().length) h += '<div class="tk" style="margin-top:5px">Only one kind of minion stands with this node: of the summon skills you count, only the strongest is counted, the others as 0.</div>';
+    if ((n.Mods || []).some(m => m.Stat === 'MinionOneKind') && optExtra().length) h += '<div class="tk" style="margin-top:5px">Only one kind of minion stands with this node: of the summon skills you count, only ' + legionKept() + ' is counted, the others as 0 (set the kind in the Damage settings).</div>';
     const tw = s && !s.swapped ? totemWhy(n.Mods, s.d) : '';
     if (tw) h += '<div class="tk tk-note" style="margin-top:5px">' + esc(tw) + '</div>';
     const unc = [n, s && s.swapped ? GD.nodes[s.swapped] : null].filter(Boolean).flatMap(uncounted);
@@ -28033,7 +28067,7 @@ window.BOStartApp = function () {
     let h = (verdict ? '<div class="card cmp-result"><h2>Recommendation <span class="hint">' + gsPrioText(GS.set.prio) + '</span></h2>' + cmpVerdictHtml(verdict) + '</div>' : '') +
       '<div class="card cmp-result"><h2>Damage <span class="hint">vs the configured enemy</span></h2>';
     if (cb) {
-      const label = esc(cb.names.join(' + ')) + (cb.oneKind ? ' (Legion of One: only the strongest summon stands)' : '');
+      const label = esc(cb.names.join(' + ')) + (cb.oneKind ? ' (Legion of One: only ' + legionKept() + ' stands)' : '');
       h += '<div class="headline small">' +
         stat('With your item', num(cb.a), '', '', label + ', total DPS added up') +
         stat(ib ? 'With the new item' : 'With the slot empty', num(cb.b), '', ib ? 'main' : '', label + ', total DPS added up' + (ib ? '' : ': what your item is worth')) +
@@ -28762,7 +28796,7 @@ window.BOStartApp = function () {
       r.rows.map((x, i) => '<tr><td>' + (i + 1) + '</td><td>' + itemCell(x.c) + '</td><td>' + nowCell(x.c) + '</td><td>' + rivenCell(x.c) + '</td><td>' + sp(x.gain) + '</td><td>' + sp(x.lo) + ' to ' + sp(x.hi) + '</td></tr>').join('') + '</tbody></table></div>';
     h += '<p class="hint">A Rivenstone turns one T1 line that dropped on the item into its Riven version, with a new roll in the range shown (the game: "the T1 top ×1.05 to ×1.20"). The game counts most Riven damage lines a little under the number on the item; the sim does the same.' +
       (many ? ' With several stones each next line is picked on top of the ones before.' : '') + (why ? ' Lines that cannot take one here: ' + why + '.' : '') +
-      (r.lostAny ? ' Legion of One: only the strongest summon counts.' : '') + (r.w > 0 ? ' ' + gsDefNote() : '') + '</p>';
+      (r.lostAny ? ' Legion of One: only ' + legionKept() + ' counts.' : '') + (r.w > 0 ? ' ' + gsDefNote() : '') + '</p>';
     return h + '</div>';
   }
   function rvHtml() {

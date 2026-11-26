@@ -2051,11 +2051,12 @@ body.lootfilter-page #buildSummary { display: none !important; } /* the characte
 .ch-col { display: grid; gap: 16px; min-width: 0; }
 .ch-gear h2, .ch-skills h2, .ch-passives h2 { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .ch-doll { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-areas: 'MainHand Helm OffHand' 'MainHand Chest OffHand' 'Ring1 Gloves Ring2' 'Amulet Boots Belt' 'DwarvenRune . .'; }
+  grid-template-areas: 'MainHand Helm OffHand' 'MainHand Chest OffHand' 'Ring1 Gloves Ring2' 'Amulet Boots Belt' 'DwarvenRune DwarvenRune DwarvenRune'; }
 .ch-slot-MainHand { grid-area: MainHand; } .ch-slot-Helm { grid-area: Helm; } .ch-slot-OffHand { grid-area: OffHand; }
 .ch-slot-Chest { grid-area: Chest; } .ch-slot-Ring1 { grid-area: Ring1; } .ch-slot-Gloves { grid-area: Gloves; }
 .ch-slot-Ring2 { grid-area: Ring2; } .ch-slot-Amulet { grid-area: Amulet; } .ch-slot-Boots { grid-area: Boots; }
-.ch-slot-Belt { grid-area: Belt; } .ch-slot-DwarvenRune { grid-area: DwarvenRune; }
+.ch-slot-Belt { grid-area: Belt; }
+.ch-runes { grid-area: DwarvenRune; display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .ch-slot { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 76px; padding: 8px 9px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--panel) 85%, var(--bg)); overflow-wrap: anywhere; }
 .ch-slot.empty { opacity: .55; }
 .ch-slot[data-tip] { cursor: help; }

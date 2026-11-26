@@ -5136,6 +5136,11 @@ window.BOCreator = function (ctx) {
 
 
     if (it.rarity === 'Normal' && (it.affixes || []).length) it = Object.assign({}, it, { rarity: 'Rare' });
+
+
+
+
+    if (it.rarity !== 'Unique' && planner && planner.oathwordForItem) { let w = null; try { const bs = (baseOf(it.base) || {}).Slot; w = planner.oathwordForItem(it, it.slot || (where && where.slot) || (bs === 'Ring' ? 'Ring1' : bs)); } catch (e) { w = null; } if (w) it = Object.assign({}, it, { rarity: 'Normal', affixes: [] }); }
     iset(s, 'BaseID', it.base); iset(s, 'ItemLevel', Math.max(1, Math.min(100, it.level || 1))); iset(s, 'Rarity', it.rarity || 'Normal');
     iset(s, 'UniqueID', u ? u.Id : 'None'); iset(s, 'Name', u ? u.Name : it.name || '');
     iset(s, 'Runes', { items: (it.runes || []).filter(Boolean) }); iset(s, 'Sockets', (it.runes || []).filter(Boolean).length);
@@ -13767,14 +13772,28 @@ window.BOCharacter = function (ctx) {
   const withArt = a => a ? ' has-art' : '';
 
   const rmItemBtn = (idx, name) => '<button class="ch-item-x" type="button" data-rmitem="' + idx + '" aria-label="Remove ' + esc(name) + '">×</button>';
-  function slotCell(ch, slot) {
-    const idx = ch.items.findIndex(i => i.slot === slot), it = ch.items[idx];
-    const label = planner.slotName[slot] || slot;
+
+  function slotCell(ch, slot, at, name) {
+    const idx = at != null ? at : ch.items.findIndex(i => i.slot === slot), it = ch.items[idx];
+    const label = name || planner.slotName[slot] || slot;
     if (!it) return '<div class="ch-slot ch-slot-' + slot + ' empty" data-open="1" data-slot="' + slot + '" data-idx="-1" tabindex="0" role="button" aria-label="Pick an item for ' + esc(label) + '"><span class="ch-slot-label">' + esc(label) + '</span><span class="meta">empty · click to add</span></div>';
     const n = itemName(it, slot), a = itemArt(it, BIG_SLOTS[slot]);
     return '<div class="ch-slot ch-slot-' + slot + ' ' + n.cls + withArt(a) + '"' + (a ? artScale(it, slot) : '') + ' data-open="1" data-tip="item" data-slot="' + slot + '" data-idx="' + idx + '" tabindex="0" role="button">' + rmItemBtn(idx, n.name) + '<span class="ch-slot-label">' + esc(label) + '</span>' + a + '<b class="ch-item-name">' + esc(n.name) + '</b><span class="ch-item-base">' + esc(n.base) + (it.level ? ' · ilvl ' + it.level : '') + '</span>' +
       (it.runes && it.runes.length ? '<span class="ch-item-base">' + it.runes.length + ' rune' + (it.runes.length > 1 ? 's' : '') + '</span>' : '') +
-      (slot === 'DwarvenRune' && unsocketed(ch).length ? '<span class="ch-item-base ch-unsocketed" title="Take a Dwarven Rune Socket on the passive tree for it to count">' + (ch.items.filter(i => i.slot === slot).length > 1 ? unsocketed(ch).length + ' without a socket: not counted' : 'No socket on the tree: not counted') + '</span>' : '') + '</div>';
+      (slot === 'DwarvenRune' && unsocketed(ch).includes(it) ? '<span class="ch-item-base ch-unsocketed" title="Take a Dwarven Rune Socket on the passive tree for it to count">No socket on the tree: not counted</span>' : '') + '</div>';
+  }
+
+
+
+  function runeCells(ch) {
+    const gd = ctx.gd(), at = [];
+    ch.items.forEach((i, n) => { if (i.slot === 'DwarvenRune') at.push(n); });
+    const deep = ch.items.reduce((n, i) => n + ((i.rarity === 'Unique' && (gd.uniques[lc(i.unique || '')] || {}).DwarvenSockets) || 0), 0);
+    const room = Object.values(gd.nodes).filter(n => n.Kind === 'Socket').length + deep;
+    const many = at.length > 1 || at.length < room;
+    let h = at.map((n, k) => slotCell(ch, 'DwarvenRune', n, many ? 'Dwarven rune ' + (k + 1) : '')).join('');
+    if (at.length < room) h += slotCell(ch, 'DwarvenRune', -1, at.length ? 'Dwarven rune ' + (at.length + 1) : '');
+    return '<div class="ch-runes" role="group" aria-label="Dwarven runes">' + h + '</div>';
   }
 
   const unsocketed = ch => { const S = window.BOSim; return S && S.socketedRunes ? (S.socketedRunes(ctx.gd(), ch).runesUnsocketed || []) : []; };
@@ -14010,7 +14029,7 @@ window.BOCharacter = function (ctx) {
     const clip = LS.get('clip:gear', null), has = clip && Array.isArray(clip.items);
     let h = '<div class="card ch-gear"><div class="ch-skills-head"><h2>Gear</h2><span class="ch-acts">' +
       '<button class="btn small ghost" type="button" data-clip="copygear" title="Copies every item here (idols too), to paste on another character or plan"' + (ch.items.length ? '' : ' disabled') + '>Copy gear</button>' +
-      '<button class="btn small ghost" type="button" data-clip="pastegear" title="' + esc(has ? 'Replaces the gear here with the ' + plural(clip.items.length, 'item') + ' copied from ' + clip.from : 'Use Copy gear on another character or plan first') + '"' + (has ? '' : ' disabled') + '>Paste gear</button></span></div><div class="ch-doll">' + SLOTS.map(s => slotCell(ch, s)).join('') + '</div>';
+      '<button class="btn small ghost" type="button" data-clip="pastegear" title="' + esc(has ? 'Replaces the gear here with the ' + plural(clip.items.length, 'item') + ' copied from ' + clip.from : 'Use Copy gear on another character or plan first') + '"' + (has ? '' : ' disabled') + '>Paste gear</button></span></div><div class="ch-doll">' + SLOTS.map(s => s === 'DwarvenRune' ? runeCells(ch) : slotCell(ch, s)).join('') + '</div>';
     h += barCard(ch);
     h += '<div class="ch-idols-head"><h3>Idols <small>' + plural(L.idols.length, 'idol') + ' · ' + L.used.size + ' of ' + FCELLS.length + ' cells</small></h3>' +
       (ctx.openIdolSim ? '<button class="btn small" type="button" data-simidols title="Finds the best idols for the main skill, in a Fossil layout that fits (the Item Simulator\'s Idol Sim)">Sim Idols</button>' : '') + '</div>' + fossilHtml(ch, L);
@@ -14565,7 +14584,12 @@ window.BOCharacter = function (ctx) {
   const H = () => HOST || ctx;
   const rarCls = it => it.rarity === 'Unique' ? 'unique' : lc(it.rarity);
   const safe = f => { try { return f(); } catch (e) { return ''; } };
-  const itemNow = ch => !M ? null : M.slot === 'Idol' ? ((M.shelf ? shelfOf(ch) : ch.items)[M.idx] || null) : (ch.items.find(i => i.slot === M.slot) || null);
+  const itemNow = ch => !M ? null : M.slot === 'Idol' ? ((M.shelf ? shelfOf(ch) : ch.items)[M.idx] || null) : M.slot === 'DwarvenRune' ? (ch.items[M.idx] && ch.items[M.idx].slot === M.slot ? ch.items[M.idx] : null) : (ch.items.find(i => i.slot === M.slot) || null);
+
+  function putGear(ch, item) {
+    if (M.slot === 'DwarvenRune') { if (itemNow(ch)) ch.items[M.idx] = item; else { ch.items.push(item); M.idx = ch.items.length - 1; } return; }
+    const i = ch.items.findIndex(x => x.slot === M.slot); if (i >= 0) ch.items[i] = item; else ch.items.push(item);
+  }
   const baseTypeName = b => b.TypeName || b.Name;
 
   const DEF_ORDER = ['Armour', 'Evasion', 'Energy Shield', 'Armour / Evasion', 'Armour / Energy Shield', 'Evasion / Energy Shield'];
@@ -14656,7 +14680,7 @@ window.BOCharacter = function (ctx) {
 
 
   const UNDO = new Map(), UNDO_MAX = 30;
-  const undoKey = ch => (HOST ? 'host|' : '') + (ch.id || ch.name || '') + '|' + M.slot + (M.slot === 'Idol' ? '|' + (M.shelf ? 's' : 'f') + M.idx : '');
+  const undoKey = ch => (HOST ? 'host|' : '') + (ch.id || ch.name || '') + '|' + M.slot + (M.slot === 'Idol' ? '|' + (M.shelf ? 's' : 'f') + M.idx : M.slot === 'DwarvenRune' ? '|' + M.idx : '');
   const undoList = ch => UNDO.get(undoKey(ch)) || [];
   function undoTake(ch) {
     if (!M || M.undoing || M.seen === undefined) return;
@@ -14676,8 +14700,8 @@ window.BOCharacter = function (ctx) {
       delete prev.gx; delete prev.gy;
       if (!setIdol(ch, prev, cur)) { list.push(s); M.undoing = false; M.msg = noRoom(prev); return renderItem(); }
     } else {
-      const i = ch.items.findIndex(x => x.slot === M.slot);
-      if (prev) { if (i >= 0) ch.items[i] = prev; else ch.items.push(prev); } else if (i >= 0) ch.items.splice(i, 1);
+      if (prev) putGear(ch, prev);
+      else { const cur = itemNow(ch); if (cur) { ch.items.splice(ch.items.indexOf(cur), 1); if (M.slot === 'DwarvenRune') M.idx = -1; } }
     }
     M.tab = prev ? 'edit' : 'select'; M.word = '';
     commit(ch); if (M) M.undoing = false;
@@ -14788,7 +14812,7 @@ window.BOCharacter = function (ctx) {
     if (!r.item) { RD.r = { error: typeof src === 'string' ? 'That text does not look like an item.' : 'No item text found in that image. Crop it to the tooltip and try again.' }; return renderItem(); }
     const item = Object.assign(r.item, { slot: M.slot });
     if (M.slot === 'Idol') { if (!setIdol(ch, item, old)) { RD.r = { error: noRoom(item) }; return renderItem(); } }
-    else { const i = ch.items.findIndex(x => x.slot === M.slot); if (i >= 0) ch.items[i] = item; else ch.items.push(item); }
+    else putGear(ch, item);
     RD.r = r; M.tab = 'edit'; M.word = '';
     commit(ch);
   }
@@ -14905,7 +14929,7 @@ window.BOCharacter = function (ctx) {
     const old = itemNow(ch);
     if (!keepLevel) item.level = (old && old.level) || ch.level;
     if (M.slot === 'Idol') { if (!setIdol(ch, item, old)) { M.msg = noRoom(item); return renderItem(); } }
-    else { const i = ch.items.findIndex(x => x.slot === M.slot); if (i >= 0) ch.items[i] = item; else ch.items.push(item); }
+    else putGear(ch, item);
     M.tab = 'edit'; M.word = ''; M.msg = '';
     commit(ch);
   }
@@ -15297,7 +15321,7 @@ window.BOCharacter = function (ctx) {
     }
     if (act === 'unequip') {
       if (M.slot === 'Idol') { if (!M.shelf) pinIdols(ch, idolLayout(ch)); (M.shelf ? shelfW(ch) : ch.items).splice(M.idx, 1); if (HOST) HOST.commit(ch, null); else ctx.commit(ch); render(); return closeItem(); }
-      ch.items = ch.items.filter(i => i !== it); M.tab = 'select'; return commit(ch);
+      ch.items = ch.items.filter(i => i !== it); if (M.slot === 'DwarvenRune') M.idx = -1; M.tab = 'select'; return commit(ch);
     }
     if (act === 'rmaffix') { it.affixes.splice(+b.dataset.ai, 1); return commit(ch); }
     if (act === 'mvaffix') { if (G.moveAffix(it, +b.dataset.ai, +b.dataset.to)) return commit(ch); return; }
@@ -24159,7 +24183,7 @@ window.BOStartApp = function () {
       return simmable.get(s.id);
     });
     st.pickable = pickable;
-    $('#optSkill').innerHTML = pickable.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('');
+    $('#optSkill').innerHTML = pickable.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('') || '<option value="">No damage skill yet</option>';
     if (st.skill) { $('#skillSelect').value = st.skill; $('#optSkill').value = st.skill; }
     renderOptMulti();
     return { skills, pickable };
@@ -24542,15 +24566,21 @@ window.BOStartApp = function () {
     ch.savedAt = new Date().toISOString();
     keepChars(); fillChars(ch.id);
     $('#enemyLevel').placeholder = ch.level;
-    fillSkills(ch);
+    const { skills, pickable } = fillSkills(ch);
     if (what.select) { selectSkill(what.select); return; }
+
+
+    if ((!st.skill || !skills.some(x => x.id === st.skill)) && skills.length) { selectSkill((pickable[0] || skills[0]).id); return; }
     if (what.skills && st.skill) { st.gemLevel = null; $('#gemLevel').value = ''; resetSupports(); }
     render();
   }
   function buildEdited(ch, what) {
     st.ch = ch; st.pinned = null; stopSearch(); st.opt = null; T.scores = new Map();
-    fillSkills(ch);
+    const { skills, pickable } = fillSkills(ch);
     if (what.select) { selectSkill(what.select); return; }
+
+
+    if ((!st.skill || !skills.some(x => x.id === st.skill)) && skills.length) { selectSkill((pickable[0] || skills[0]).id); return; }
     if (what.skills && st.skill) { st.gemLevel = null; $('#gemLevel').value = ''; resetSupports(); }
     render();
   }
@@ -27723,10 +27753,15 @@ window.BOStartApp = function () {
     $('#treePoints').innerHTML = '<span class="tp-n' + (over > 0 ? ' over' : '') + '">' + nHave + ' / ' + cap + '</span> points taken' + (nHave !== saved || st.ch !== st.chOrig ? ' (save: ' + saved + ')' : '') + ' · level ' + st.ch.level + (free ? ' · ' + free + ' free' : '') + (sw.size ? ' · ' + sw.size + ' Oath' + (sw.size > 1 ? 's' : '') + ' sworn' : '');
     const pp = $('#planPoints'), who = (st.chOrig || st.ch).id + '|' + (st.chOrig || st.ch).level;
     pp.max = Math.max(1, cap - pointsIn([...have]));
-    $('#optSockets').placeholder = runeNeed().need;
+    const os = $('#optSockets'), need = runeNeed().need;
+    os.placeholder = need;
+
+
+    if (pp.dataset.for === who && os.dataset.need !== String(need)) os.value = need;
+    os.dataset.need = need;
     if (pp.dataset.for !== who) {
       pp.dataset.for = who; pp.value = free > 0 ? free : 5;
-      $('#optSockets').value = ''; // a new character starts with "keep the sockets you have"
+      os.value = st.ch.plan && need ? need : ''; // a new character starts with "keep the sockets you have"; a plan's runes ask for theirs
 
       $('#optKeys').checked = (st.chOrig.passives || []).some(id => GD.nodes[id] && GD.nodes[id].Kind === 'Keystone');
     }
@@ -28213,7 +28248,10 @@ window.BOStartApp = function () {
 
 
   function runOptimize(plan, all) {
-    if (!st.ch || !st.skill) return;
+    if (!st.ch) return;
+
+
+    if (!st.skill) { clearOpt(); const c = $('#treeOpt'); c.hidden = false; c.innerHTML = '<p class="hint">Optimize tree and Plan weigh each node by the damage of a skill, and this build has no damage skill yet. Add one on the Character tab (Skills), then press ' + (all ? 'Plan tree' : plan ? 'Plan next points' : 'Optimize tree') + ' again.</p>'; return; }
     clearOpt();
 
     let extra = plan ? Math.max(1, Math.min(Math.max(1, pointsCap() - pointsIn(st.ch.passives)), Math.round(+$('#planPoints').value || 1))) : 0;

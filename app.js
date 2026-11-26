@@ -10647,17 +10647,42 @@ window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Prim
 
 
     const modWords = label => String(label).replace(/\s*\([^)]*\)/g, '').split('#').map(p => p.split(',')[0].replace(/^[\s%+\-–]*(?:(?:to|of)\s+)?/i, '').trim()).sort((a, b) => b.length - a.length)[0] || '';
-    function findMods(l) {
-      if (l._u || runeOfBase(l.base)) return '';
+
+
+    function boxMods(l) {
+      if (l._u || runeOfBase(l.base)) return [];
       const seen = new Set(), out = [];
-      const as = ((l.item || {}).affixes || []).filter(a => a && a.affixId && !isHidden(a.affixId) && !/^unique:/.test(a.affixId)).slice().sort((a, b) => (a.tier || 0) - (b.tier || 0));
-      for (const a of as) {
-        const label = modLabel(a.affixId); if ((label.match(/#/g) || []).length !== 1) continue; // one number only: "Adds # to #" has no single minimum
+      const as = ((l.item || {}).affixes || []).map((a, i) => ({ a, i })).filter(x => x.a && x.a.affixId && !isHidden(x.a.affixId) && !/^unique:/.test(x.a.affixId)).sort((x, y) => (x.a.tier || 0) - (y.a.tier || 0));
+      for (const x of as) {
+        const label = modLabel(x.a.affixId); if ((label.match(/#/g) || []).length !== 1) continue;
         const w = modWords(label); if (w.length < 4 || seen.has(w)) continue;
-        seen.add(w); out.push(w + (+a.value >= 1 ? ' ' + Math.floor(+a.value) + '+' : '')); // a roll under 1 (leech 0.4%) goes without a number
-        if (out.length >= 3) break;
+        seen.add(w); out.push({ i: x.i, a: x.a, text: w + (+x.a.value >= 1 ? ' ' + Math.floor(+x.a.value) + '+' : '') }); // a roll under 1 (leech 0.4%) goes without a number
       }
-      return out.join(', ');
+      return out;
+    }
+    const findMods = l => boxMods(l).slice(0, 3).map(m => m.text).join(', ');
+
+
+
+
+
+
+
+    function weighedMods(l) {
+      const up = ctx.upgrade; if (!up || !up.value || !SIM_SLOTS.has(l.slot)) return null;
+      let who = null; try { who = up.who(); } catch (e) { who = null; } if (!who) return null;
+      const key = who.key + '|' + (ctx.prio ? ctx.prio() : '');
+      if (l._wm && l._wm.key === key) return l._wm;
+      const ms = boxMods(l); if (!ms.length) return null;
+      let full = null; try { full = up.value(itemOf(l)); } catch (e) { full = null; }
+      if (!full || !(full.score > 0)) return null;
+      for (const m of ms) {
+        const it = itemOf(l); it.affixes = it.affixes.filter((_, j) => j !== m.i);
+        let v = null; try { v = up.value(it); } catch (e) { v = null; }
+        m.worth = v && v.score > 0 ? full.score / v.score - 1 : 0;
+      }
+      const ranked = ms.slice().sort((x, y) => ((y.worth > 5e-4) - (x.worth > 5e-4)) || (x.worth > 5e-4 ? y.worth - x.worth : 0) || ((x.a.tier || 0) - (y.a.tier || 0)));
+      return (l._wm = { key, name: who.name, code: ranked.slice(0, 3).map(m => m.text).join(', '), any: ranked.some(m => m.worth > 5e-4) });
     }
     function sellerBit(l) {
 
@@ -10674,7 +10699,7 @@ window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Prim
 
 
         '<button type="button" class="btn ghost mk-copy mk-find" data-code="' + esc(findText(l)) + '" aria-label="Copy the name to search for in the game: ' + esc(findText(l)) + '"><span>Copy search</span></button>' +
-        (findMods(l) ? '<button type="button" class="btn ghost mk-copy mk-find mk-findmods" data-code="' + esc(findMods(l)) + '" aria-label="Copy this item\'s mods for the game\'s Mods box: ' + esc(findMods(l)) + '"><span>Copy mods</span></button>' : '') +
+        (findMods(l) ? '<button type="button" class="btn ghost mk-copy mk-find mk-findmods" data-lid="' + esc(l.id) + '" data-code="' + esc(findMods(l)) + '" aria-label="Copy this item\'s mods for the game\'s Mods box: ' + esc(findMods(l)) + '"><span>Copy mods</span></button>' : '') +
         '<button type="button" class="btn ghost mk-like" data-like="' + esc(l.id) + '">More like this</button>';
     }
     const times = l => esc(['listed ' + ago(l.listed_at), until(l.expires_at)].filter(x => x && x !== 'listed ').join(' · '));
@@ -10722,7 +10747,7 @@ window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Prim
 
     function howTo() {
       return '<details class="card mk-group mk-how" data-g="how"' + (S.open.how !== false ? ' open' : '') + '><summary><b>How to buy</b></summary>' +
-        '<p>Find the item here, then buy it in the game: open the <b>Settler Wagon</b>, go to <b>Market</b>, paste the item\'s name into "Name or base" (<b>Copy search</b> on a listing copies it: a unique\'s name, or the base name for other items) and press <b>Buy</b> on the listing. For a rare or magic item, <b>Copy mods</b> copies its three best mods for the "Mods" box next to it (for example "Fire Resistance 31+, maximum Life 62+"). The price and the seller\'s name tell you which one it is.</p>' +
+        '<p>Find the item here, then buy it in the game: open the <b>Settler Wagon</b>, go to <b>Market</b>, paste the item\'s name into "Name or base" (<b>Copy search</b> on a listing copies it: a unique\'s name, or the base name for other items) and press <b>Buy</b> on the listing. For a rare or magic item, <b>Copy mods</b> copies three of its mods for the "Mods" box next to it (for example "Fire Resistance 31+, maximum Life 62+"): with a character loaded, the three worth the most to it (DPS of the main skill, and EHP when Prioritize weighs defence), else its best-tier mods. The price and the seller\'s name tell you which one it is.</p>' +
         '<p class="hint">To ask a seller something first, copy their seller code, open the <b>Social</b> window in the game, paste it into the box at the top and press <b>Add friend</b> (a hero name works there too). Listings here are a snapshot, so an item may already be sold.</p></details>';
     }
     function paint() {
@@ -10871,8 +10896,14 @@ window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Prim
         if (lk) { const url = linkUrl(); try { await navigator.clipboard.writeText(url); lk.textContent = 'Link copied'; setTimeout(() => { lk.textContent = 'Copy link to this search'; }, 1600); } catch (err) { prompt('Copy this link:', url); } return; }
         const c = t.closest('.mk-copy');
         if (c) {
-          const code = c.dataset.code, lab = c.querySelector('span'), was = c.classList.contains('mk-findmods') ? 'Copy mods' : c.classList.contains('mk-find') ? 'Copy search' : 'Copy';
-          try { await navigator.clipboard.writeText(code); if (lab) { lab.textContent = 'Copied'; setTimeout(() => { lab.textContent = was; }, 1600); } } catch (err) { try { prompt(c.classList.contains('mk-find') ? 'Copy this name:' : 'Copy this seller code:', code); } catch (e2) { /* no prompt here */ } }
+          let code = c.dataset.code, done = 'Copied';
+          const lab = c.querySelector('span'), was = c.classList.contains('mk-findmods') ? 'Copy mods' : c.classList.contains('mk-find') ? 'Copy search' : 'Copy';
+
+          if (c.classList.contains('mk-findmods')) {
+            const l = (S.list || []).find(x => String(x.id) === c.dataset.lid), wm = l ? weighedMods(l) : null;
+            if (wm && wm.any) { code = wm.code; done = 'Copied: best for ' + wm.name; c.setAttribute('aria-label', 'Copy the mods worth the most to ' + wm.name + ' for the game\'s Mods box: ' + code); }
+          }
+          try { await navigator.clipboard.writeText(code); if (lab) { lab.textContent = done; setTimeout(() => { lab.textContent = was; }, 1600); } } catch (err) { try { prompt(c.classList.contains('mk-find') ? 'Copy this name:' : 'Copy this seller code:', code); } catch (e2) { /* no prompt here */ } }
         }
       });
     }
@@ -12515,6 +12546,7 @@ window.BOAdvanced = function (ctx) {
     let h = row('Hit pool (life + energy shield)', num(Math.floor(M.pool)), { strong: true }) +
       '<table class="adv-table"><tr><th>Damage type</th><th>Max hit</th></tr>' +
       M.rows.map(([t, mh]) => '<tr><td style="color:' + ctx.typeColor(t) + '">' + t + '</td><td>' + num(Math.floor(mh)) + '</td></tr>').join('') + '</table>';
+    if (M.guardian) h += row(M.guardian.el + ' Guardian\'s crushing blow', num(Math.floor(M.guardian.max)), { tip: textTip('Crushing blow', 'A Guardian\'s crushing blow and Charge land two thirds physical and one third as the fight\'s element (game log). Armour takes the physical part, your ' + M.guardian.el + ' resistance the rest.') });
     if (M.glancePhys) h += row('Physical attack you cannot evade', num(Math.floor(M.glancePhys)), { tip: textTip('Glancing blows', 'An attack you cannot evade glances off your evasion for ' + Math.round(D.glance * 100) + '% less.') });
     return card('Max hit taken', h + note('The biggest single hit that lands (not evaded, not blocked), after armour or that resistance and your less damage taken. EHP ' + num(D.ehp) + ' (estimate).'), 'maxhit');
   }
@@ -29073,12 +29105,24 @@ window.BOStartApp = function () {
     const pe = (d.physAsEle || 0) / 100, ele3 = ['Fire', 'Cold', 'Lightning'].reduce((a, k) => a + (1 - Math.min(capOf(k), (res[k] || 0) - pen) / 100) * less[k], 0) / 3;
     const physTaken = (1 - pe) * (1 - (L.armour ? armDR : 0)) * less.Physical + pe * ele3;
 
-    const taken = (0.5 * physTaken + 0.5 * eleTaken) * (1 - 0.5 * (L.evasion ? evade : 0)) * (1 - (L.block ? block * blockCut : 0));
+
+
+
+
+
+
+    const fightEl = st.rarity === 'boss' && ['Fire', 'Cold', 'Lightning', 'Poison'].includes(st.gElem) ? st.gElem : null;
+    const fightShare = 1 / 3;
+    const elTaken = k => (1 - Math.min(capOf(k), (res[k] || 0) - pen) / 100) * less[k];
+    const mix = fightEl ? (1 - fightShare) * physTaken + fightShare * elTaken(fightEl) : 0.5 * physTaken + 0.5 * eleTaken;
+
+
+    const taken = mix * (1 - 0.5 * (L.evasion ? evade : 0)) * (1 - (L.block ? block * blockCut : 0));
 
     const s = (d.manaFirst || 0) / 100, lifePool = s > 0 ? Math.min(s < 1 ? d.life / (1 - s) : Infinity, d.life + (d.mana || 0)) : d.life;
     const resCapped = {}; for (const [k, v] of d.resParts) resCapped[k] = Math.min(capOf(k), v - pen);
     const gl = R['r80.BIGHIT.fEvasionGlance'], glance = L.evasion ? Math.min(0.95, evade * (gl != null && isFinite(+gl) ? +gl : 1)) : 0;
-    return { life: d.life, es: d.es, res, resCapped, pen, pool: lifePool + d.es, armHit, armour: d.armour, armDR, evasion: d.evasion, evade, glance, block, manaFirst: d.manaFirst || 0, less, physAsEle: d.physAsEle || 0, caps: Object.fromEntries(d.resParts.map(x => [x[0], capOf(x[0])])), fortify: fortOn ? d.fortify : null, falter, ehp:Math.max(1, (L.life ? lifePool : 0) + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
+    return { life: d.life, es: d.es, res, resCapped, pen, pool: lifePool + d.es, armHit, armour: d.armour, armDR, evasion: d.evasion, evade, glance, block, manaFirst: d.manaFirst || 0, less, physAsEle: d.physAsEle || 0, caps: Object.fromEntries(d.resParts.map(x => [x[0], capOf(x[0])])), fortify: fortOn ? d.fortify : null, falter, fight: fightEl ? { el: fightEl, share: fightShare } : null, ehp:Math.max(1, (L.life ? lifePool : 0) + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
   }
 
 
@@ -29102,7 +29146,14 @@ window.BOStartApp = function () {
       for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (tk(m) < D.pool) lo = m; else hi = m; }
       return lo;
     };
-    return { pool: D.pool, rows: ['Physical', 'Fire', 'Cold', 'Lightning', 'Poison'].map(t => [t, max(t), taken(t, probe)]), glancePhys: D.glance > 0 ? max('Physical', 1 - D.glance) : 0 };
+
+    let guardian = null;
+    if (D.fight) {
+      const s = D.fight.share, el = D.fight.el, tb = h => taken('Physical', h * (1 - s)) + one(el, h * s);
+      const mxB = (f) => { if (!(D.pool > 0)) return 0; let lo = 0, hi = D.pool; while (tb(hi) * f < D.pool && hi < 1e12) hi *= 2; for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (tb(m) * f < D.pool) lo = m; else hi = m; } return lo; };
+      guardian = { el, share: s, max: mxB(1), taken: tb(probe) };
+    }
+    return { pool: D.pool, rows: ['Physical', 'Fire', 'Cold', 'Lightning', 'Poison'].map(t => [t, max(t), taken(t, probe)]), glancePhys: D.glance > 0 ? max('Physical', 1 - D.glance) : 0, guardian };
   }
 
   function ehpCapText(D) {
@@ -29123,12 +29174,13 @@ window.BOStartApp = function () {
   function ehpTipHtml(D) {
     const probe = 5000, M = maxHits(D, probe);
     return '<b>EHP (est.) ' + num(D.ehp) + '</b><span class="pl-tip-sub">An estimate, not a number from the game</span>' +
-      '<span class="pl-tip-desc">Life + energy shield against a boss hit of ' + num((GD.scaling.Hero || {}).ArmourBigHitRef || 1000) + ' or more: half physical, half elemental, half of the hits attacks. Counted: ' + esc(gsLayerNames().join(', ')) + '.</span>' +
+      '<span class="pl-tip-desc">Life + energy shield against a boss hit of ' + num((GD.scaling.Hero || {}).ArmourBigHitRef || 1000) + ' or more: ' + (D.fight ? 'two thirds physical, one third ' + D.fight.el + ' (a ' + D.fight.el + ' Guardian\'s crushing blow)' : 'half physical, half elemental (pick a Guardian element in Configure Enemy to use its blow instead)') + ', half of the hits attacks. Counted: ' + esc(gsLayerNames().join(', ')) + '.</span>' +
       (ehpLessList(D).length ? '<span class="pl-tip-head">Less damage taken</span><span class="pl-tip-desc">' + ehpLessList(D).map(esc).join(' · ') + '. Each one multiplies.</span>' : '') +
       (D.physAsEle ? '<span class="pl-tip-desc">' + +D.physAsEle.toFixed(1) + '% of physical damage taken as Fire, Cold and Lightning: that part meets those resistances (a third each) instead of armour.</span>' : '') +
       '<span class="pl-tip-head">Max hit you survive</span>' +
       '<table class="pl-tip-hits"><tr><th>Damage type</th><th>Max hit</th><th>Taken of a ' + num(probe) + ' hit</th></tr>' +
       M.rows.map(([t, mh, tk]) => '<tr><td style="color:' + typeColor(t) + '">' + t + '</td><td><b>' + num(Math.floor(mh)) + '</b></td><td' + (tk >= M.pool ? ' class="bad"' : '') + '>' + num(Math.round(tk)) + ' <small>(' + (M.pool > 0 ? Math.round(tk / M.pool * 100) : 0) + '% of pool)</small></td></tr>').join('') + '</table>' +
+      (M.guardian ? '<span class="pl-tip-desc">' + esc(M.guardian.el) + ' Guardian\'s crushing blow (two thirds physical, one third ' + esc(M.guardian.el) + '): up to <b>' + num(Math.floor(M.guardian.max)) + '</b>; of a ' + num(probe) + ' blow you take ' + num(Math.round(M.guardian.taken)) + '.</span>' : '') +
       '<span class="pl-tip-desc">The biggest single hit your pool of ' + num(Math.floor(M.pool)) + ' (life + energy shield) takes, after armour (physical) or that resistance (capped at ' + ehpCapText(D) + (D.pen ? ', with the ' + D.pen + '% penalty' : ', no penalty') + ')' + (ehpLessList(D).length ? ' and your less damage taken' : '') + '. A hit that lands: not evaded, not blocked.' +
       (D.glance > 0 ? ' You evade ' + Math.round(D.evade * 100) + '% of attacks. An attack you cannot evade glances for ' + Math.round(D.glance * 100) + '% less: up to ' + num(Math.floor(M.glancePhys)) + ' physical.' : '') + '</span>';
   }
@@ -30565,6 +30617,7 @@ window.BOStartApp = function () {
     api: (new URLSearchParams(location.search).get('ladderapi') === 'local' ? 'http://localhost:8787' : SHARE_API) + '/api/',
     itemLines: (item, classId) => ladderItemLines(item, classId),
     hero: () => (st.ch ? { name: st.ch.name, level: st.ch.level || 1 } : null), // the character on screen, for "Usable now"
+    prio: () => GS.set.prio, // the Prioritize slider (defence weight), for the Market's weighed Copy mods
 
 
 
@@ -30590,6 +30643,27 @@ window.BOStartApp = function () {
           const d = run(Object.assign({}, st.ch, { items }), slot);
           if (d != null && (best == null || d > best)) best = d;
         }
+        return best;
+      },
+
+
+
+
+      value: item => {
+        const w = Math.max(0, Math.min(1, (+GS.set.prio || 0) / 100));
+        const it = marketItem(item), slots = it.slot === 'Ring1' || it.slot === 'Ring2' ? ['Ring1', 'Ring2'] : [it.slot];
+        let best = null;
+        for (const slot of slots) {
+          const items = st.ch.items.filter(i => i.slot !== slot); items.push(Object.assign({}, it, { slot }));
+          const ch = Object.assign({}, st.ch, { items });
+          const o = opts({ off: new Set([...st.off].filter(k => k !== 'item:' + slot)) });
+          const r = S.calcSkill(GD, ch, st.skill, o);
+          const dps = r && !r.error && !r.unsupported && isFinite(r.totalDps) ? Math.max(0, r.totalDps) : 0;
+          if (best && dps <= best.dps) continue;
+          let ehp = 1; if (w > 0) { try { ehp = Math.max(1, gsDefence(ch, o).ehp); } catch (e) { ehp = 1; } }
+          best = { dps, ehp, w };
+        }
+        if (best) best.score = Math.pow(Math.max(1e-9, best.dps), 1 - best.w) * Math.pow(best.ehp, best.w);
         return best;
       },
     },

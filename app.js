@@ -1421,7 +1421,9 @@ window.PAGE_LANGS = {
 
 
 
-  const SHEET_STATS = { MinionDamage: 'minion', MinionKindMore: 'minion', TotemCount: 'totem', TotemSpeed: 'totem', FortifyDamage: '', FocusMain98: '', FocusOther98: '' };
+
+
+  const SHEET_STATS = { MinionDamage: 'minion', MinionKindMore: 'minion', Feed85_TotemCount: 'minion', TotemCount: 'totem', TotemSpeed: 'totem', FortifyDamage: '', FocusMain98: '', FocusOther98: '' };
 
   function uncountedLine(S, m, on) {
     if (m.Mode === 'Trigger') return !(S.trigCounted && S.trigCounted(m));
@@ -15507,7 +15509,20 @@ window.BOCharacter = function (ctx) {
 
     'EsRechargeKeep', 'MarkJump', 'CorpseKeepMinion',
     'MoveUseCostPct124', // The Roadless Stride: each movement use costs life and ES (24 Nov 2026)
-    'DexLife']); // Wind Dancer: "+{v} to maximum Life for every 10 Dexterity" (statText)
+    'DexLife', // Wind Dancer: "+{v} to maximum Life for every 10 Dexterity" (statText)
+
+
+
+
+
+
+
+
+
+
+    'MinionLifeRegen', 'MinionLifeOnKill', 'EnergyShieldLeech', 'LifeCap124', 'ScabEs124', 'NoMoveSkill124', 'PlantedLess124', 'CritRestoreLife113',
+    'SlimeBurst124', 'ReqReduce', 'ManaOnHitPct', 'TrigLifePct', 'ArmourVsElementalPct113', 'WaveCount', 'PoisonRate', 'MarkOnCrit',
+    'ChestArmourMore113', 'ManaAsEnergyShield']);
 
   const HANDLED = new Set(['MinionOneKind', 'GolemLifeMore', 'RepeatOwnDamage', 'StrMeleeMore', 'RuthlessBlow', 'Afterimages', 'MaimOnHit', 'MarkOnHit', 'MarkMax', 'UnravelOnHit', 'MarkEffect', 'Damage', 'AddedDamage', 'Convert', 'DamageAsExtra', 'CritChance', 'CritMulti', 'CastSpeed', 'AttackSpeed',
     'Cooldown', 'Repeats', 'Projectiles', 'Penetration', 'SkillLevel', 'PoisonChance', 'PoisonDamage', 'IgniteChance', 'IgniteDamage', 'BleedChance', 'BleedDamage',
@@ -15545,7 +15560,18 @@ window.BOCharacter = function (ctx) {
 
     'Feed85_FuryCharges', 'Feed85_MaimEffect', 'Feed85_IgniteStacks', 'Feed85_MarkStacks', 'Feed85_ChillEffect', 'Feed85_PoisonChance',
     'Feed85_ExtraProjectiles', 'Feed85_CritChance', 'Feed85_WoeEffectMatch', 'Feed85_BlockChance', 'Feed85_OrbitCount',
-    'Feed85Ail_FuryCharges', 'Feed85Ail_MarkStacks', 'Feed85Ail_RepeatIndex']);
+    'Feed85Ail_FuryCharges', 'Feed85Ail_MarkStacks', 'Feed85Ail_RepeatIndex',
+
+
+
+    'Feed85_MinionCount', 'Feed85Crit_IgniteStacks', 'Feed85Exp_MarkStacks', 'WoeEffectPerMinion', 'CritAilSure', 'FurySpender59', 'FuryOnMoonfallHit113',
+    'RepStackFull', 'StormMore', 'StormLonger', 'WheelBleedMore', 'RentMore', 'RendChop', 'FangStab', 'ShockFromChillPct113', 'PoisonDurVsMaimed113',
+    'WarBanner', 'ReliquaryEffect124', 'CoreSplinter124', 'AlwaysLowLife124', 'SelfLowLifeMore',
+
+
+
+    'HolyElementalMore', 'SkeletalMageMore', 'OrbitStillMore', 'SparkThirdMore', 'CritIgniteSure', 'CritBleedSure', 'CritPoisonSure', 'FuseEcho',
+    'IgniteVsSentenced114', 'CritVsMaimed113', 'FreezeBreak103', 'TrigCooldown', 'TrigDamage', 'MinionStrikes']);
 
 
 
@@ -15668,6 +15694,23 @@ window.BOCharacter = function (ctx) {
     let v = 0; for (const m of mods || []) if (m.stat === 'BannerEffect' && m.mode === 'Inc') v += m.v;
     return v;
   };
+
+
+
+
+
+
+  function cursesWithBanner(GD, ch, mods, o, res) {
+    const cur = o.curses || {};
+    if (o.plantedBanner === false) return cur;
+    const line = modsOf(mods, 'WarBanner').find(m => m.stat === 'WarBanner' && m.v > 0 && !String(m.key || '').startsWith('support:'));
+    const b = line && Object.values(GD.curses || {}).find(c => c.Kind === 'Banner');
+    if (!b || (cur[b.Id] && cur[b.Id].on)) return cur;
+    const full = b.Dread ? Math.max(b.Dread.Cap || 0, b.Dread.BossCap || 0) + bannerValourMax(GD, ch, b, mods) : 0;
+    res.used.set(line, 'War Banner planted');
+    if (!o._barProbe) res.notes.push((line.src || 'A line') + ': your skills plant your War Banner where you stand, so it is counted by the enemy at full Valour (' + full + ') though it is not ticked. Best guess from the line\'s text; not checked in game.');
+    return Object.assign({}, cur, { [b.Id]: { on: true, dread: full } });
+  }
 
   const guardianRL = (GD, o, lvl) => {
     const D = GD.deep || {}, max = D.MapMaxLevel || 80, mls = D.LadderMonsterLevels || [];
@@ -16159,7 +16202,8 @@ window.BOCharacter = function (ctx) {
   const TRIG_SHAPE = new Set(['Nova', 'DawnPillar', 'SkySwords', 'Eruption', 'Whirl', 'StormWolf', 'Afterimage']);
   const TRIG_STATE = new Set(['VsBurning', 'VsBurningOrShocked']);
 
-  const trigCounted = m => { const t = trigParse({ tags: m.tags || m.Tags || [] }); return ['Hit', 'Crit', 'SkillUse'].includes(t.when) && t.pct > 0 && (!t.shape || TRIG_SHAPE.has(t.shape)); };
+
+  const trigCounted = m => { const t = trigParse({ tags: m.tags || m.Tags || [] }); return ['Hit', 'Crit', 'SkillUse'].includes(t.when) && t.pct > 0 && (!t.shape || TRIG_SHAPE.has(t.shape)) || (t.when === 'Hit' && t.conds.includes('Fury')); };
   function trigParse(m) {
     const p = {}; let when = null, shape = null; const conds = [], types = [], state = [];
     for (const t of m.tags || []) {
@@ -16416,12 +16460,37 @@ window.BOCharacter = function (ctx) {
       mods.push(Object.assign({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: v != null ? v : (m.Value || 0), v2: v2 != null ? v2 : (m.Value2 || 0), local: !!m.bLocal, src, key }, extra || {}));
     };
 
+
+
+
+
+
+
+
+
+
+
+    const redLineOf = stat => { let best = 0; for (const it of ch.items) { if (off.has('item:' + it.slot)) continue; const u = it.unique && GD.uniques[lc(it.unique)]; if (!u) continue;
+      (u.Mods || []).forEach((um, i) => { if ((um.Mod || {}).Stat !== stat) return; const a = (it.affixes || []).find(x => x.id === 'unique:' + i); best = Math.max(best, a && typeof a.v === 'number' ? a.v : um.Max || 0); }); } return best; };
+    const relicPct = redLineOf('ReliquaryEffect124'), relicRune = relicPct > 0 ? runeSeats(GD, ch).deep[0] || null : null;
+    const corePct = redLineOf('CoreSplinter124');
     for (const it of ch.items) {
       const key = 'item:' + it.slot; const label = itemLabel(GD, it); const base = GD.bases[lc(it.base)];
       const rw = runewordFor(GD, it, base);
       sources.push({ key, label, group: 'Gear', detail: rw ? 'Runeword: ' + rw.Name : (it.rarity || '') });
       if (off.has(key)) continue;
-      if (base) for (const m of base.Implicits || []) add(m, m.Value, m.Value2, label + ' · implicit', key);
+      const relK = it === relicRune ? 1 + relicPct / 100 : 1; // Gloomsilver Reliquary's rune: every line of it but counts and flags
+      const relOn = m => relK !== 1 && m && m.Mode !== 'Flag' && !RARE_COUNT_STATS.has(m.Stat);
+      if (base) for (const m of base.Implicits || []) add(m, relOn(m) ? (m.Value || 0) * relK : m.Value, m.Value2, label + ' · implicit', key);
+      if (corePct > 0 && it.slot === 'MainHand' && base && /^Core Touched /i.test(base.Name || '')) {
+        const twin = Object.values(GD.bases).find(b => b.Name === base.Name.replace(/^Core Touched /i, '') && !/^ct_/i.test(b.Id));
+        const has = new Set(((twin || {}).Implicits || []).map(m => JSON.stringify(m)));
+        const core = twin ? (base.Implicits || []).filter(m => !has.has(JSON.stringify(m)) && m.Mode !== 'Flag' && !RARE_COUNT_STATS.has(m.Stat)) : [];
+        for (const m of core) add(m, (m.Value || 0) * corePct / 100, (m.Value2 || 0) * corePct / 100, label + ' · Core-touched line again at ' + corePct + '% (Core-Splinter Idol)', key);
+        if (core.length) notes.push('Core-Splinter Idol: ' + label + '\'s Core-touched line counts once more at ' + corePct + '% (best guess from the line\'s text, not checked in game).');
+        else notes.push('Core-Splinter Idol: ' + label + '\'s Core-touched line is a count or level line, so the idol adds nothing to it.');
+      }
+      if (relK !== 1) notes.push('Gloomsilver Reliquary: ' + label + ', set in a Deep-Forged item, has ' + relicPct + '% increased effect (not its counts). Best guess from the line\'s text; not checked in game.');
 
 
       if (base && base.FamilyLine) add(base.FamilyLine, base.FamilyLine.Value, 0, label + ' · family line', key);
@@ -16462,7 +16531,9 @@ window.BOCharacter = function (ctx) {
 
           const flag = !um || (um.Mod || {}).Mode === 'Flag' || (um.Min === 0 && um.Max === 0); // flags and keystones (range 0-0) keep their value
           const fit = (x, lo, hi) => flag || typeof x !== 'number' || lo == null || hi == null || !(+GD.apiBuild >= 83) ? x : clamp(x, Math.min(lo, hi), Math.max(lo, hi));
-          if (um) add(um.Mod, uniqueLineValue(it.unique, ui, fit(a.v, um.Min, um.Max), GD), uniqueLineValue(it.unique, ui, fit(a.v2, um.Min2, um.Max2), GD), label, key, { text: um.Text }); else notes.push('Unknown unique line ' + a.id + ' on ' + label);
+          const rk = um && !flag && relOn(um.Mod) ? relK : 1; // Gloomsilver Reliquary's rune (see relicRune)
+          const rkv = x => rk !== 1 && typeof x === 'number' ? x * rk : x;
+          if (um) add(um.Mod, rkv(uniqueLineValue(it.unique, ui, fit(a.v, um.Min, um.Max), GD)), rkv(uniqueLineValue(it.unique, ui, fit(a.v2, um.Min2, um.Max2), GD)), label + (rk !== 1 ? ' (rune effect x' + rk + ')' : ''), key, { text: um.Text }); else notes.push('Unknown unique line ' + a.id + ' on ' + label);
         } else {
           const af = GD.affixes[lc(a.id)];
           if (!af) { notes.push('Unknown affix ' + a.id + ' on ' + label); continue; }
@@ -16498,7 +16569,8 @@ window.BOCharacter = function (ctx) {
           const ik = it.slot === 'Idol' ? (af.Mod && af.Mod.Mode !== 'Flag' && !RARE_COUNT_STATS.has(af.Mod.Stat) ? idolLineScale(GD, a.id, a.tier, it.level || 0, it.affixes.length) : 1) : af.Mod && af.Mod.Mode !== 'Flag' ? affixLineScale(GD, a.id) : 1;
           const rf = ik < 1 && sh === 1 && it.slot !== 'Idol' ? rivenFloor(GD, a.id) : null;
           const lineV = (x, lo) => { const y = idolRound(cnt(x), ik); return rf && lo > 0 && typeof x === 'number' && x > 0 ? Math.max(y, Math.min(x, Number.isInteger(x) ? Math.round(lo) : Math.round(lo * 10) / 10)) : y; };
-          add(af.Mod, lineV(a.v, rf && rf[0]), lineV(a.v2, rf && rf[1]), label + (ik !== 1 ? (it.slot === 'Idol' ? ' (idol line x' : ' (line x') + +ik.toFixed(2) + ')' : '') + (isVow ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
+          const rkA = relOn(af.Mod) ? relK : 1;
+          add(af.Mod, lineV(a.v, rf && rf[0]) * rkA, lineV(a.v2, rf && rf[1]) * rkA, label + (rkA !== 1 ? ' (rune effect x' + rkA + ')' : '') + (ik !== 1 ? (it.slot === 'Idol' ? ' (idol line x' : ' (line x') + +ik.toFixed(2) + ')' : '') + (isVow ? ' · Vow ' + vowN + (sh < 1 ? ' (' + Math.round(sh * 100) + '%)' : '') : boost ? ' (' + rareKind + ' x' + rareBoost + ')' : ''), key);
         }
       }
 
@@ -16876,14 +16948,42 @@ window.BOCharacter = function (ctx) {
     if (mainBase && (lc(mainBase.Class) === 'staff' || (mainBase.Tags || []).includes('Staff'))) gear.add('wieldingstaff');
     if (!mainBase) gear.add('martial');
     if (mainBase && ['fist', 'claw'].includes(lc(mainBase.Class))) gear.add('martial');
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    const cls = b => lc((b || {}).Class || '');
+    if (cls(offBase) === 'tome') gear.add('holdingtome');
+    if (cls(mainBase) === 'bow') gear.add('wieldingbow');
+    if (cls(mainBase) === 'wand') gear.add('wieldingwand');
+    if (cls(mainBase) === 'scythe') gear.add('wieldingscythe');
+    if (cls(mainBase) === 'onehandsword') gear.add('wieldingonehandsword');
+    if (!offBase) gear.add('freehand');
+    if (!mainBase) gear.add('unarmed');
+    if (sk.bBothHands && mainBase && (gear.has('dualwielding') || cls(mainBase) === 'dualblades')) gear.add('bothhands');
     return { tags, gear, isAttack, isSpell: has(tags, 'Spell'), dealt: new Set() };
   }
 
+
+
+  const WIELD_CONDS = new Set(['dualwielding', 'holdingshield', 'twohanded', 'wieldingstaff',
+    'holdingtome', 'wieldingbow', 'wieldingwand', 'wieldingscythe', 'wieldingonehandsword', 'freehand', 'unarmed', 'bothhands', 'standingstill', 'lowlife']);
   function condsOk(ctx, conds) {
     for (const c of conds) {
       const t = lc(c);
       if (ctx.tags.has(t)) continue;
-      if (t === 'dualwielding' || t === 'holdingshield' || t === 'twohanded' || t === 'wieldingstaff') { if (ctx.gear.has(t)) continue; return false; }
+      if (WIELD_CONDS.has(t)) { if (ctx.gear.has(t)) continue; return false; }
 
 
 
@@ -17023,7 +17123,7 @@ window.BOCharacter = function (ctx) {
     o = o || {};
     ch = socketedRunes(GD, ch); // worn Dwarven runes without a socket give nothing (see socketedRunes)
     const H = GD.scaling.Hero, G = GD.scaling.Gem, A = GD.scaling.Ailments, M = GD.scaling.Monster;
-    const sk = GD.skills[lc(skillId)];
+    let sk = GD.skills[lc(skillId)];
     const res = { skillId, notes: [], used: new Map() };
     if (!sk) return Object.assign(res, { error: 'Unknown skill ' + skillId });
     res.skill = sk;
@@ -17054,6 +17154,37 @@ window.BOCharacter = function (ctx) {
     res.notes.push(...col.notes);
     res.sources = col.sources;
     let mods = col.mods.slice();
+
+
+
+
+
+
+
+    {
+      const tagged = t => col.mods.filter(m => (m.tags || []).includes(t) && m.mode !== 'Flag');
+      if (!o.moving) ctx.gear.add('standingstill');
+      const still = tagged('StandingStill');
+      if (still.length && !o._barProbe) res.notes.push(o.moving ? 'Standing-still lines (' + [...new Set(still.map(m => (m.src || '').replace(/^[^·]*·\s*/, '').replace(/\s*\(.*$/, '')))].join(', ') + ') are not counted in a moving fight.' : 'Standing still: ' + [...new Set(still.map(m => (m.src || '').replace(/^[^·]*·\s*/, '').replace(/\s*\(.*$/, '')))].join(', ') + ' counted as up (you fight standing; from the line text, not checked in game).');
+      const alwaysLow = modsOf(col.mods, 'AlwaysLowLife124').find(m => m.stat === 'AlwaysLowLife124' && m.v > 0);
+      if (alwaysLow || o.lowLife) ctx.gear.add('lowlife');
+      const low = tagged('LowLife');
+      if (low.length && !o._barProbe) res.notes.push(ctx.gear.has('lowlife') ? 'Low Life: ' + (alwaysLow ? (alwaysLow.src || 'Scab of the Wound') + ' makes you count as on Low Life' : 'counted as below half life (your setting)') + ', so your "while below half life" lines count (from the line texts, not checked in game).' : 'Your "while below half life" lines are not counted: the sim takes you above half life.');
+    }
+
+
+
+
+    {
+      const st = { viper_fang: 'FangStab', soul_rend: 'RendChop' }[lc(skillId)];
+      const add = st && sk.Strikes && typeof sk.Strikes === 'object' ? modsOf(col.mods, st).filter(m => m.stat === st && m.v > 0) : [];
+      if (add.length) {
+        const n = add.reduce((s, m) => s + Math.round(m.v), 0);
+        sk = Object.assign({}, sk, { Strikes: Object.assign({}, sk.Strikes, { Count: (sk.Strikes.Count || 1) + n }) });
+        res.skill = sk; add.forEach(m => res.used.set(m, 'one more strike'));
+        res.notes.push(sk.Name + ': ' + sk.Strikes.Count + ' strikes a use (+' + n + ' from ' + [...new Set(add.map(m => m.src))].join(', ') + '). Best guess from the line\'s text; not checked in game.');
+      }
+    }
     const socket = ch.sockets.find(s => s.skill === skillId);
     const host = conduitHost(GD, ch, skillId, col.mods, o.conduit);
     if (host) ctx.tags.add('conduit'); // Wake of Spells: "Conduit spells deal 10% less damage"
@@ -17151,7 +17282,11 @@ window.BOCharacter = function (ctx) {
       for (const m of sd.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: (m.Value || 0) * k, v2: (m.Value2 || 0) * k, local: false, src: 'Support · ' + sd.Name + (engShare ? ' (minions, x' + engShare + ')' : ''), key });
 
 
-      if ((sd.Mods || []).some(m => m.Stat === 'SelfLowLifeMore')) res.notes.push(sd.Name + ': its extra ' + (sd.Mods.find(m => m.Stat === 'SelfLowLifeMore').Value) + '% more while you are below half your life is not counted (the sim takes you above half life).');
+
+      for (const m of sd.Mods || []) if (m.Stat === 'SelfLowLifeMore') {
+        if (ctx.gear.has('lowlife')) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: (m.Value || 0) * k, v2: 0, local: false, src: 'Support · ' + sd.Name + ' (below half life)', key });
+        else res.notes.push(sd.Name + ': its extra ' + m.Value + '% more while you are below half your life is not counted (the sim takes you above half life).');
+      }
 
       if (lc(id) === 'kindling_support' && o._kindle > 0) {
         mods.push({ stat: 'Damage', mode: 'Inc', tags: ['Spell'], v: KINDLE_DMG * o._kindle, v2: 0, local: false, src: 'Support · Kindling (' + o._kindle.toFixed(1) + ' stacks)', key });
@@ -17201,6 +17336,32 @@ window.BOCharacter = function (ctx) {
         for (const m of fb.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: (m.Value || 0) * (m.PerStack ? n : 1), v2: m.Value2 || 0, local: false, src: 'Fury x' + n + ' (Defiant Roar on ' + GD.skills[lc(cry.skill)].Name + ')', key: 'charge:fury' });
         if (!o._gfHeld) res.notes.push('Defiant Roar on ' + GD.skills[lc(cry.skill)].Name + ': counted as ' + FURY_MAX + ' Fury charges held (one per roar, game log 23 Nov 2026).');
       }
+
+
+
+
+
+
+
+
+
+      {
+        const onBar = id => lc(skillId) === id || (ch.hotbar || []).some(h => lc(h) === id);
+        const givers = [];
+        if (modsOf(mods, 'Dragonling').some(m => (m.tags || []).includes('Asc71_JarlsDue')) && onBar('jarls_roar')) givers.push("Jarl's Due on Jarl's Roar");
+        for (const m of modsOf(mods, 'Trigger')) {
+          const tg = m.tags || []; if (!(tg.includes('Hit') && tg.includes('Fury'))) continue;
+          const sid = tg.find(t => GD.skills[lc(t)]);
+          if (sid && onBar(lc(sid))) { givers.push((m.src || 'A line') + ' on ' + GD.skills[lc(sid)].Name); res.used.set(m, 'Fury kept up'); }
+        }
+        const moon = modsOf(mods, 'FuryOnMoonfallHit113').find(m => m.stat === 'FuryOnMoonfallHit113' && m.v > 0);
+        if (moon && onBar('moonfall')) { givers.push((moon.src || 'Moon-Leap Greaves') + ' on Moonfall'); res.used.set(moon, 'Fury kept up'); }
+        if (fb && givers.length && furyHeldN < FURY_MAX && !(o.off && o.off.has('charge:cryfury'))) {
+          const n = FURY_MAX - furyHeldN; furyHeldN = FURY_MAX;
+          for (const m of fb.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: (m.Value || 0) * (m.PerStack ? n : 1), v2: m.Value2 || 0, local: false, src: 'Fury x' + n + ' (' + givers[0] + ')', key: 'charge:fury' });
+          if (!o._gfHeld) res.notes.push(givers.join(', ') + ': counted as ' + FURY_MAX + ' Fury charges held (it gives Fury on a hit, so a lone enemy feeds it; counted like Defiant Roar, which the game log showed building to 5 and holding). From the line text; not checked in game.');
+        }
+      }
     }
 
 
@@ -17225,6 +17386,29 @@ window.BOCharacter = function (ctx) {
         if (!o._gfHeld) res.notes.push(n > 0
           ? 'Fury Unbottled: counted while the potion is up: ' + n + ' Fury spent on the drink for ' + +(per * n).toFixed(1) + '% more damage for 6 s, and those charges\' own lines are gone meanwhile. Fury won back inside the 6 s is not counted (not checked in game).'
           : 'Fury Unbottled: no Fury held to spend (set Fury under Vows, Heralds & charges, or link Gather Fury / Defiant Roar), so it adds nothing.');
+      }
+    }
+
+
+
+
+
+
+
+    {
+      const spend = modsOf(mods, 'FurySpender59').find(m => m.stat === 'FurySpender59' && m.v > 0);
+      const fb = GD.blessings.fury;
+      const cdSkill = spend && [skillId].concat(ch.hotbar || []).map(id => GD.skills[lc(id)]).find(k => k && k.Cooldown > 0 && !dealsNoHits(k));
+      if (spend && fb && cdSkill) {
+        const tx = spend.text || '', cap = +(/at most (\d+)/i.exec(tx) || [0, 3])[1], per = +(/(\d+(?:\.\d+)?)% more damage each/i.exec(tx) || [0, 15])[1];
+        const n = Math.min(cap, fb.Max || 5, furyHeldN);
+        res.used.set(spend, 'Fury Unleashed');
+        if (n > 0) {
+          for (const m of fb.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: -(m.Value || 0) * (m.PerStack ? furyHeldN : 1), v2: 0, local: false, src: 'Fury x' + furyHeldN + ' spent (' + spend.src + ')', key: spend.key });
+          mods.push({ stat: 'Damage', mode: 'More', tags: [], v: per * n, v2: 0, local: false, src: 'Fury Unleashed x' + n + ' (' + spend.src + ')', key: spend.key });
+          if (!o._gfHeld) res.notes.push(spend.src + ': ' + cdSkill.Name + ' has a cooldown, so using it spends your ' + furyHeldN + ' Fury into ' + n + ' Fury Unleashed, ' + per + '% more damage each (' + (per * n) + '% more, counted as kept up; the charges\' own lines are gone). Best guess from the line\'s text: not checked in game.');
+          furyHeldN = 0;
+        } else if (!o._gfHeld) res.notes.push(spend.src + ': no Fury held to spend (set Fury under Vows, Heralds & charges, or link Gather Fury / Defiant Roar), so Fury Unleashed adds nothing.');
       }
     }
 
@@ -17298,6 +17482,7 @@ window.BOCharacter = function (ctx) {
     if (shapeId === 'trap_support' && shapeIds.includes('skyfall')) ctx.tags.add('skyfall');
 
     const ascFlag = f => modsOf(mods, 'Dragonling').some(m => (m.tags || []).includes(f));
+    let deepChillLonger = 0; // Deep Chill: % longer chill (set with the other best-guess Dragonling rules below, read in the chill block)
     const virulence = ascFlag('Asc71_Virulence') ? (GD.dragon.rules || {}).Virulence || { Cap: 60, DurMult: 0.75 } : null;
 
 
@@ -17366,6 +17551,34 @@ window.BOCharacter = function (ctx) {
         mods.push({ stat: 'ShockChance', mode: 'Flat', tags: [], v: 100, v2: 0, local: false, src: 'Dragonling · Eye of the Tempest (always Shock)', key: 'dragon:Tempest' });
         mods.push({ stat: 'ShockEffect', mode: 'More', tags: [], v: (R.Tempest || {}).ShockMore ?? 50, v2: 0, local: false, src: 'Dragonling · Eye of the Tempest (Shocks stronger)', key: 'dragon:Tempest' });
       }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      const dnode = flag => { for (const T of Object.values((GD.dragon || {}).classes || {})) for (const n of Object.values(T)) if ((n.Mods || []).some(m => m.Stat === 'Dragonling' && (m.Tags || []).includes(flag))) return n; return null; };
+      const dnum = (flag, re, d) => { const n = dnode(flag), t = n && re.exec(n.Text || ''); return t ? +t[1] : d; };
+      if (ascFlag('Asc71_Patience112') && slam) asc('Patience112', dnum('Asc71_Patience112', /deal (\d+(?:\.\d+)?)% more damage/i, 12), [], "Mountain's Patience: your Slams on an enemy you hit in the last 2 s (a lasting enemy: counted as always)");
+      if (ascFlag('Asc71_AncestralEcho') && isSpell && ctx.tags.has('totem')) asc('AncestralEcho', (R.AncestralEcho || {}).Share ?? 30, [], 'Ancestral Echo: your Spell Totems cast each spell once more at ' + ((R.AncestralEcho || {}).Share ?? 30) + '% damage');
+      if (ascFlag('Asc71_SheathedFury') && lc(skillId) === 'sheathe') asc('SheathedFury', (R.SheathedFury || {}).More ?? 25, [], 'Sheathed Fury: Sheathe bursts deal more damage');
+      if (ascFlag('Asc71_Shaper112') && ctx.tags.has('fire')) {
+        mods.push({ stat: 'IgniteChance', mode: 'Flat', tags: [], v: 100, v2: 0, local: false, src: 'Dragonling · Shaper of Flames (Fire skills always Ignite)', key: 'dragon:Shaper112' });
+        asc('Shaper112', dnum('Asc71_Shaper112', /deal (\d+(?:\.\d+)?)% more damage to Ignited/i, 15), [], 'Shaper of Flames: your Fire skills always Ignite, and their hits deal more to the Ignited enemy');
+      }
+      if (ascFlag('Asc71_DeepChill')) deepChillLonger = dnum('Asc71_DeepChill', /lasts (\d+(?:\.\d+)?)% longer/i, 50);
+      if (ascFlag('Asc71_DeepChill')) mods.push({ stat: 'ChillEffect', mode: 'Inc', tags: [], v: dnum('Asc71_DeepChill', /slows (\d+(?:\.\d+)?)% more/i, 10), v2: 0, local: false, src: 'Dragonling · Deep Chill (chill slows more)', key: 'dragon:DeepChill' });
+
+
+
 
 
 
@@ -18621,6 +18834,12 @@ window.BOCharacter = function (ctx) {
         count += ob.EmpowerExtra || 0; turns *= ob.EmpowerSpeed;
         if (ob.EmpowerMore) hitFactor *= 1 + ob.EmpowerMore / 100;
         res.notes.push('Hammerstorm (on your bar, counted as always up: 6 s on a ' + ((GD.skills.hammerstorm || {}).Cooldown || 5) + ' s cooldown): +' + (ob.EmpowerExtra || 0) + ' hammers, turning x' + ob.EmpowerSpeed + ', ' + (ob.EmpowerMore || 0) + '% harder.');
+
+
+
+        let sm = 0; for (const m of pickMods(mods, 'StormMore', 'Flat')) { sm += m.v; use(m, 'during Hammerstorm'); }
+        for (const m of pickMods(mods, 'StormLonger', 'Flat')) use(m, 'Hammerstorm already counted as always up');
+        if (sm > 0) { hitFactor *= 1 + sm / 100; res.notes.push('Mainspring Maul: your hammers deal ' + sm + '% more during Hammerstorm (counted as always up). Best guess from the line\'s text; not checked in game.'); }
       }
       usesPerSec = count * turns; useTime = 1 / usesPerSec;
       res.orbitRing = { count, turnsPerSec: turns };
@@ -18812,7 +19031,12 @@ window.BOCharacter = function (ctx) {
 
     const chanRep = ctx.tags.has('channelling') ? pickMods(mods, 'ChannelRepeats', 'Flat').filter(m => applies(ctx, m)) : [];
     if (!noEcho && !cocNoEcho) for (const m of pickMods(mods, 'Repeats', 'Flat').concat(chanRep)) if (applies(ctx, m)) { repeats += m.v; use(m); if (String(m.key || '').startsWith('support:')) { repSup += m.v; repByKey[m.key] = (repByKey[m.key] || 0) + m.v; } else repGear += m.v; }
-    let repeatWeight = is0565(GD) && repSup > 0 && repGear > 0 ? (1 + Math.max(repSup, repGear) + 0.5 * Math.min(repSup, repGear)) / (1 + repeats) : 1;
+
+
+
+    const repFull = repSup > 0 && repGear > 0 && pickMods(mods, 'RepStackFull', 'Flat').some(m => m.v > 0 && (use(m, 'repeats stack in full'), true));
+    if (repFull) res.notes.push('The Mirror Oath: your support repeats and gear repeats stack at full damage (no 50% less on the smaller set). Best guess from the line\'s text; not checked in game.');
+    let repeatWeight = is0565(GD) && repSup > 0 && repGear > 0 && !repFull ? (1 + Math.max(repSup, repGear) + 0.5 * Math.min(repSup, repGear)) / (1 + repeats) : 1;
 
 
 
@@ -18829,7 +19053,7 @@ window.BOCharacter = function (ctx) {
         own += n * f; ownMods.forEach(m => use(m));
       }
       if (undo !== 1) {
-        const supHalf = repSup < repGear ? 0.5 : 1, gearHalf = supHalf === 1 ? 0.5 : 1;
+        const supHalf = repFull ? 1 : repSup < repGear ? 0.5 : 1, gearHalf = repFull ? 1 : supHalf === 1 ? 0.5 : 1;
         repeatWeight = (1 + repGear * gearHalf + (own + plain) * supHalf) / (1 + repeats) / undo;
         res.notes.push('Repeats (patch 73): your gear or tree already repeats this skill, so the support\'s less damage hits only its own repeats.');
       }
@@ -19193,8 +19417,11 @@ window.BOCharacter = function (ctx) {
 
     let curseEffInc = 0;
     for (const m of pickMods(mods, 'CurseEffect', 'Inc')) { curseEffInc += m.v; use(m); }
+
+    const woeMinK = pickMods(mods, 'WoeEffectPerMinion', 'Flat').length && Object.entries(o.curses || {}).some(([id, cfg]) => cfg && cfg.on && (GD.curses[id] || {}).Kind === 'Woe')
+      ? woePerMinionK(GD, mods, minionsHeld(GD, ch, o), use, res) : 1;
     const curseRows = [];
-    for (const [id, cfg] of Object.entries(o.curses || {})) {
+    for (const [id, cfg] of Object.entries(cursesWithBanner(GD, ch, mods, o, res))) { // the ticked curses, plus a War Banner a line plants
       const c = GD.curses[id]; if (!c || !cfg || !cfg.on) continue;
 
       const tough = (rarity === 'rare' || isBoss) && c.Tough && c.Tough.Holds ? (c.Tough.Cap || 0) : 0;
@@ -19213,7 +19440,7 @@ window.BOCharacter = function (ctx) {
       const woeSups = c.Skill && lc(c.Skill) === lc(skillId) && o.supportsOverride ? o.supportsOverride : ((ch.sockets || []).find(s => c.Skill && lc(s.skill) === lc(c.Skill)) || {}).supports || [];
       let curseMore = 0;
       for (const sid of woeSups) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'CurseMore' && m.Mode === 'Flat') curseMore += m.Value;
-      const eff = curseEffK(GD, curseEffInc + bannerEffectInc(c, mods), dreadPct) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
+      const eff = curseEffK(GD, curseEffInc + bannerEffectInc(c, mods), dreadPct) * (1 + curseMore / 100) * (c.Kind === 'Woe' ? woeMinK : 1) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
 
 
       const row = { id, kind: c.Kind || '', name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, dot: (c.DotTakenPct || 0) * eff };
@@ -19265,6 +19492,14 @@ window.BOCharacter = function (ctx) {
     res.marks = markPct ? { pct: markPct } : null;
 
 
+
+    if (markHeld > 0) for (const m of pickMods(mods, 'Feed85Exp_MarkStacks', 'Flat')) {
+      use(m, 'shock effect per Mark');
+      mods.push({ stat: 'ShockEffect', mode: 'Inc', tags: [], v: m.v * markHeld, v2: 0, local: false, src: (m.src || 'Storm Spotter') + ' (' + m.v + '% x ' + markHeld + ' Marks)', key: m.key });
+      res.notes.push('Storm Spotter: your Shocks have ' + +(m.v * markHeld).toFixed(1) + '% increased effect (' + m.v + '% for each of the ' + markHeld + ' Hunter\'s Marks on the enemy). Best guess from the line\'s text; not checked in game.');
+    }
+
+
     const golemB = golemBlessing(GD, ch, sk, o, mods, attr);
     const golemTaken = golemB && golemB.taken > 0 ? 1 + golemB.taken / 100 : 1;
     if (golemTaken !== 1) res.notes.push('Your ' + golemB.name + ' makes enemies near it take ' + +golemB.taken.toFixed(2) + '% more damage (counted as if it is always within 9 m of the enemy).');
@@ -19295,6 +19530,13 @@ window.BOCharacter = function (ctx) {
 
     let maimPct = 0;
     for (const m of pickMods(mods, 'MaimOnHit', 'Flat')) if (applies(ctx, m)) { maimPct += m.v; use(m); }
+
+
+
+    if (ascFlag('Asc71_FaultLines') && ctx.tags.has('slam')) {
+      const fl = +((((GD.dragon || {}).rules || {}).FaultLines || {}).Maim) || 12;
+      if (fl > maimPct) { maimPct = fl; res.notes.push('Fault Lines: your Slams Maim the enemy (best guess from the node text, not checked in game).'); }
+    }
     if (maimPct) res.notes.push('Maim: the enemy takes ' + maimPct + '% more Physical damage from your hits (the game\'s skill panel counts it too).');
 
 
@@ -19702,7 +19944,9 @@ window.BOCharacter = function (ctx) {
 
 
       const coldRate = hitsPerSec * perHitFactor * hitFactor;
-      const up = 1 - Math.exp(-coldRate * 2);
+
+      const chillSec = 2 * (1 + deepChillLonger / 100);
+      const up = 1 - Math.exp(-coldRate * chillSec);
       const chillF = 1 + ruleNum(GD, 'r103.AILMENTS.ChillTakenPer103', 0.5) * chill * up / 100;
       ail.chill = { size: chill, uptime: up, taken: (chillF - 1) * 100, coldPctLife, life: cLife, chillEffect: ce, capped: chillRaw >= 50 };
 
@@ -19720,8 +19964,26 @@ window.BOCharacter = function (ctx) {
         hitDpsVs *= k; res.hitDps = hitDpsVs; shockF += chillPct / 100;
         res.notes.push('Chill: ' + Math.round(chill) + '% chill makes the enemy take ' + (chillPct / Math.max(up, 1e-9)).toFixed(1) + '% more damage from hits (' + ruleNum(GD, 'r103.AILMENTS.ChillTakenPer103', 0.5) + '% per 1% chill), on ' + Math.round(up * 100) + '% of the time, added to your shock (shock, chill and Brittle add together: developer stacking table, game tooltips). Poison, ignite and bleed ticks do not take it. Chill is ' + cMin + '% for a small cold hit up to ' + cMax + '% at a hit worth ' + cFull + '% of the enemy\'s life (game log 19 Nov 2026), chill effect raises it up to 50%; yours is about ' + (coldPctLife < 0.1 ? 'under 0.1' : coldPctLife.toFixed(1)) + '% of its ~' + Math.round(cLife).toLocaleString('en-US') + ' life' + (isBoss || o.enemyLife ? '.' : ' (a typical rare of this level: an estimate).') + (chillRaw >= 50 && ce > 0 ? ' Your +' + Math.round(ce) + '% chill effect would make it ' + Math.round(chillRaw) + '%: it is at the 50% cap, so more chill effect (Oath of the Long Winter, Heartscale, ...) adds nothing here.' : ''));
       }
+
+
+
+
+
+      {
+        let sfc = 0; for (const m of pickMods(mods, 'ShockFromChillPct113', 'Flat')) if (applies(ctx, m)) { sfc += m.v; use(m, 'shock from chill'); }
+        if (sfc > 0) {
+          const size = Math.min(A.ShockMax || 20, chill * sfc / 100), pct = size * up, had = (dotShockF - 1) * 100;
+          if (pct > had) {
+            const add = (pct - had) / 100, k = (shockF + add) / shockF;
+            for (const d of Object.keys(byType)) byType[d] *= k;
+            hitDpsVs *= k; res.hitDps = hitDpsVs; shockF += add; dotShockF += add;
+            ail.chillShock = { size, uptime: up, pct, replaced: had };
+            res.notes.push('The Prismatic Codex: your ' + Math.round(chill) + '% chill also Shocks for ' + sfc + '% of its value = ' + size.toFixed(1) + '% more damage taken, up ' + Math.round(up * 100) + '% of the time' + (had > 0 ? ' (in place of the ' + had.toFixed(1) + '% shock counted before: the stronger shock counts)' : '') + '. Best guess from the line\'s text; not checked in game.');
+          }
+        }
+      }
       let fd = 0; for (const m of pickMods(mods, 'FreezeDuration', 'Inc')) if (applies(ctx, m)) { fd += m.v; use(m, 'Crack'); }
-      const crackK = Math.max(0, 1 + dotMulti / 100) * Math.max(0, 1 + fd / 100);
+      const crackK =Math.max(0, 1 + dotMulti / 100) * Math.max(0, 1 + fd / 100);
 
 
 
@@ -19806,7 +20068,14 @@ window.BOCharacter = function (ctx) {
 
 
         const tipDur = snap(A.PoisonSeconds * (1 + ailDur / 100));
-        const dur = virulence ? tipDur * virulence.DurMult : tipDur;
+
+
+
+
+        let pdm = 0; if (maimPct > 0) for (const m of pickMods(mods, 'PoisonDurVsMaimed113', 'Flat')) if (applies(ctx, m)) { pdm += m.v; use(m, 'poison duration'); }
+        const maimDur = pdm > 0 ? (1 + (ailDur + pdm) / 100) / Math.max(0.01, 1 + ailDur / 100) : 1;
+        if (pdm > 0) res.notes.push('Poisons last ' + pdm + '% longer on the Maimed enemy (x' + maimDur.toFixed(2) + ' duration; best guess from the line\'s text, not checked in game).');
+        const dur = (virulence ? tipDur * virulence.DurMult : tipDur) * maimDur;
         const cap = virulence && (rarity === 'rare' || rarity === 'boss') ? virulence.Cap : A.PoisonMaxStacks;
         const perStack = eligible * A.PoisonFracPerSec * Math.max(0, 1 + pInc / 100) * pMore * Math.max(0, 1 + dotMulti / 100);
 
@@ -19907,10 +20176,31 @@ window.BOCharacter = function (ctx) {
 
 
 
-      const bleedChanceRaw = sumMod('BleedChance', 'Flat');
+      let bleedChanceRaw = sumMod('BleedChance', 'Flat');
+
+
+
+
+
+
+
+      let wheelMore = 1;
+      {
+        const reps = (res.hits.repeats || 0) + (res.hits.afterimages || 0);
+        if (ascFlag('Asc71_WoundEcho') && reps > 0 && hit.Physical) {
+          const add = (+((((GD.dragon || {}).rules || {}).WoundEcho || {}).Chance) || 30) * reps / (1 + reps);
+          bleedChanceRaw += add;
+          res.notes.push('Wound Echo: your repeats have +' + (+((((GD.dragon || {}).rules || {}).WoundEcho || {}).Chance) || 30) + '% chance to cause Bleeding; ' + reps + ' of the ' + (1 + reps) + ' hits a use are repeats, so +' + add.toFixed(1) + '% on average. Best guess from the node text; not checked in game.');
+        }
+        let wb = 0; if (lc(skillId) === 'wheeling_axe' && sk.bReturnFlight) for (const m of pickMods(mods, 'WheelBleedMore', 'Flat')) { wb += m.v; use(m, 'return pass bleed'); }
+        if (wb > 0 && hit.Physical) {
+          bleedChanceRaw = (Math.min(100, bleedChanceRaw) + 100) / 2; wheelMore = 1 + wb / 100;
+          res.notes.push('Jarlsbane: Wheeling Axe\'s return pass always causes Bleeding, and that Bleeding deals ' + wb + '% more (the bleed held is taken as a return-pass one). Best guess from the line\'s text; not checked in game.');
+        }
+      }
       const bleedChance = clamp(bleedChanceRaw, 0, 100);
       if (bleedChance > 0 && hit.Physical) {
-        const bInc = sumMod('BleedDamage', 'Inc') + ailSpill(bleedChanceRaw, 'Bleed'), bMore = sumMod('BleedDamage', 'More');
+        const bInc = sumMod('BleedDamage', 'Inc') + ailSpill(bleedChanceRaw, 'Bleed'), bMore = sumMod('BleedDamage', 'More') * wheelMore;
         let baseDur = 4;
         for (const s of res.supports) { const d = s.ok && GD.supports[lc(s.id)] && /Bleeding[^.]*?for (\d+(?:\.\d+)?) s(?:econds)?\b/i.exec(GD.supports[lc(s.id)].Description || ''); if (d) { baseDur = +d[1]; break; } }
         const dur = snap(baseDur * (1 + ailDur / 100));
@@ -20261,6 +20551,23 @@ window.BOCharacter = function (ctx) {
 
 
 
+      if (ascFlag('Asc71_Thunderclap') && byType.Lightning > 0 && hitsPerSec > 0 && hitDpsNow > 0 && !isSummon(sk)) {
+        const tc = ((GD.dragon || {}).rules || {}).Thunderclap || {};
+        const pct = tc.Pct > 0 ? tc.Pct : 0.3, cap = tc.PerSec > 0 ? tc.PerSec : 10;
+        const events = Math.min(hitsPerSec, cap), size = hitDpsNow / hitsPerSec * pct, mt = mitig.Lightning;
+        let dps = size * events;
+        if (mt) dps *= mt.k * mt.taken * shockF;
+        byType.Lightning += dps; hitDpsVs += dps; res.hitDps = hitDpsVs;
+        (res.triggers = res.triggers || []).push({ src: 'Dragonling · Thunderclap', when: 'Hit', nth: 1, pct: pct * 100, count: 1, element: 'Lightning', perSec: events, dps });
+        res.notes.push('Thunderclap: each Lightning hit also strikes around its target for ' + Math.round(pct * 100) + '% of the damage dealt as Lightning' + (hitsPerSec > cap ? ' (at most ' + cap + ' a second)' : '') + ', ' + events.toFixed(2) + ' a second = +' + Math.round(dps / hitDpsNow * 100) + '% hit damage on one enemy. Best guess: counted on the struck enemy too, as the game log showed for Rain of Bolts (same wording); not checked in game.');
+      }
+
+
+
+
+
+
+
 
 
 
@@ -20332,6 +20639,7 @@ window.BOCharacter = function (ctx) {
 
 
 
+
     if (is085(GD)) {
       const ign = ail.ignite ? ail.ignite.burning : 0, chillOn = ail.chill ? ail.chill.size * ail.chill.uptime : 0;
       const dealt = Object.keys(hit).filter(d => hit[d] && hit[d].avg > 0);
@@ -20343,7 +20651,11 @@ window.BOCharacter = function (ctx) {
         Feed85_ExtraProjectiles: [Math.max(0, (res.hits.projectiles || 1) - 1), 'extra projectiles'], Feed85_CritChance: [critChance, '% crit chance'],
         Feed85_WoeEffectMatch: [woeMatch, '% Woe effect of its element'],
       };
-      const lazy = { Feed85_BlockChance: () => [defenceTotal(GD, ch, mods, attr, 'Block'), '% block, estimated'] };
+
+
+
+
+      const lazy = { Feed85_BlockChance: () => [defenceTotal(GD, ch, mods, attr, 'Block'), '% block, estimated'], Feed85_MinionCount: () => [minionsHeld(GD, ch, o), 'minions (the summons on your bar)'] };
       let F = 0; const why = [];
       for (const st of Object.keys(COUNT).concat(Object.keys(lazy))) for (const m of pickMods(mods, st, 'Flat')) {
         if (splitTags(m.tags).conds.some(t => lc(t) === 'minion') || !applies(ctx, m)) continue;
@@ -20514,6 +20826,79 @@ window.BOCharacter = function (ctx) {
         }
         if (sumOf88('SpikeErupt124') && lc(skillId) === 'earthshatter') res.notes.push('The Avalanche Edict: Earthshatter\'s spikes come from kills, so the second eruption adds nothing against one enemy.');
         if (sumOf88('PierceMore124')) res.notes.push('The Twinfletch Idol: its more damage per enemy already pierced adds nothing against one enemy.');
+      }
+
+
+
+
+
+
+
+
+
+
+
+
+      {
+        const whyB = []; let kB = 1;
+        const ignN = ail.ignite ? ail.ignite.burning || 0 : 0;
+        const kf = sumOf88('Feed85Crit_IgniteStacks');
+        if (kf && ignN > 0 && critChance < 95) {
+          const c3 = Math.min(95, critChance + kf * ignN);
+          kB *= ((1 - c3 / 100) * nonCritMult + c3 / 100 * effectiveMulti / 100) / (critFactor || 1);
+          whyB.push('Kindled Flesh: +' + kf + '% crit chance for each of ' + ignN.toFixed(2) + ' Ignites burning (' + critChance.toFixed(1) + '% -> ' + c3.toFixed(1) + '%)');
+        }
+        const wb = ascFlag('Asc71_WarBringer112') && isAttack && !isSummon(sk) && !(sk.Totem && sk.Totem.Interval > 0) && !ctx.tags.has('totem') && !dealsNoHits(sk)
+          ? (ch.hotbar || []).map(id => GD.skills[lc(id)]).find(k => k && (k.Delivery === 'Cry' || (k.Tags || []).includes('Cry'))) : null;
+        if (wb && usesPerSec > 0) {
+          const node = Object.values(((GD.dragon || {}).classes || {})[lc(ch.classId)] || {}).find(n => (n.Mods || []).some(m => (m.Tags || []).includes('Asc71_WarBringer112'))) || {};
+          const tx = node.Text || '', n = +(/next (\d+) attacks/i.exec(tx) || [0, 2])[1], more = +(/(\d+(?:\.\d+)?)% more damage/i.exec(tx) || [0, 25])[1];
+          const cd = wb.Cooldown > 0 ? wb.Cooldown : 4, share = Math.min(1, n / (usesPerSec * cd));
+          kB *= 1 + more / 100 * share;
+          whyB.push('War Bringer: ' + wb.Name + ' every ' + cd + ' s empowers your next ' + n + ' attacks with ' + more + '% more (' + Math.round(share * 100) + '% of this skill\'s uses)');
+        }
+        if (kB !== 1 && isFinite(kB)) {
+          for (const d of Object.keys(byType)) byType[d] *= kB;
+          hitDpsVs *= kB; res.hitDps = hitDpsVs;
+          if (res.entropy) res.entropy.dps *= kB;
+          res.notes.push(whyB.join('; ') + ' = x' + kB.toFixed(3) + ' on hits (best guess from the texts, not checked in game).');
+        }
+        const sure = pickMods(mods, 'CritAilSure', 'Flat').filter(m => m.v > 0 && applies(ctx, m));
+        if (sure.length && cc > 0) {
+          sure.forEach(m => use(m, 'crits always lay the ailment'));
+          const done = [];
+          for (const [key, name] of [['poison', 'Poison'], ['ignite', 'Ignite']]) {
+            if (!ail[key] || !(ail[key].chance > 0)) continue;
+            const p = clamp(ail[key].chance, 0, 100) / 100, p2 = cc + (1 - cc) * p, k = p2 / p;
+            if (!(k > 1)) continue;
+            if (key === 'poison') { poisonDps *= k; ail.poison.dps = poisonDps; } else { igniteDps *= k; ail.ignite.dps = igniteDps; }
+            done.push(name + ' ' + Math.round(p * 100) + '% -> ' + Math.round(p2 * 100) + '% (x' + k.toFixed(3) + ')');
+          }
+          const s = ail.shock;
+          if (s && s.stacks === 1 && s.rate > 0 && s.chance < 100 && !(ail.barShockPct > 0) && !ail.chillShock) {
+            const p = s.chance / 100, p2 = cc + (1 - cc) * p;
+            const u0 = 1 - Math.exp(-s.rate * s.duration), u1 = 1 - Math.exp(-s.rate * p2 / p * s.duration);
+            const add = u0 > 0 ? s.pct * (u1 / u0 - 1) / 100 : 0;
+            if (add > 0) {
+              const k = (shockF + add) / shockF, kd = (dotShockF + add) / dotShockF;
+              for (const d of Object.keys(byType)) byType[d] *= k;
+              hitDpsVs *= k; res.hitDps = hitDpsVs; if (res.entropy) res.entropy.dps *= k;
+              poisonDps *= kd; igniteDps *= kd; bleedDps *= kd;
+              if (ail.poison) ail.poison.dps = poisonDps; if (ail.ignite) ail.ignite.dps = igniteDps; if (ail.bleed) ail.bleed.dps = bleedDps;
+              done.push('Shock up ' + Math.round(u0 * 100) + '% -> ' + Math.round(u1 * 100) + '% of the time (x' + k.toFixed(3) + ' on hits)');
+            }
+          }
+          if (done.length) res.notes.push('Wand Duelist: your Spell crits always lay the ailment of their element: ' + done.join(', ') + '. Best guess from the node text; not checked in game.');
+        }
+        if (ascFlag('Asc71_CullingDraw') && (rarity === 'rare' || rarity === 'unique') && !isBoss && cc > 0 && !o._barProbe) {
+          const node = Object.values(((GD.dragon || {}).classes || {})[lc(ch.classId)] || {}).find(n => (n.Mods || []).some(m => (m.Tags || []).includes('Asc71_CullingDraw'))) || {};
+          const cut = clamp(+(/under (\d+(?:\.\d+)?)% Life/i.exec(node.Text || '') || [0, 10])[1], 0, 50) / 100, k = 1 / (1 - cut);
+          for (const d of Object.keys(byType)) byType[d] *= k;
+          hitDpsVs *= k; res.hitDps = hitDpsVs; if (res.entropy) res.entropy.dps *= k;
+          poisonDps *= k; igniteDps *= k; bleedDps *= k;
+          if (ail.poison) ail.poison.dps = poisonDps; if (ail.ignite) ail.ignite.dps = igniteDps; if (ail.bleed) ail.bleed.dps = bleedDps;
+          res.notes.push('Culling Draw: your crits kill a Rare or Unique under ' + Math.round(cut * 100) + '% life, so this enemy dies ' + Math.round(cut * 100) + '% sooner, counted as x' + k.toFixed(3) + ' (not on a Guardian). Best guess from the node text; not checked in game.');
+        }
       }
     }
     res.poisonDps = poisonDps; res.igniteDps = igniteDps; res.bleedDps = bleedDps;
@@ -21205,6 +21590,23 @@ window.BOCharacter = function (ctx) {
     for (const [st, sid] of [['HolyElementalMore', 'summon_holy_elemental'], ['SkeletalMageMore', 'summon_skeletal_mage']]) {
       for (const m of pickMods(mods, st, 'Flat')) if (lc(sk.Id) === sid) { minionMore *= 1 + m.v / 100; use(m, 'minion more'); }
     }
+
+
+
+
+
+
+
+    {
+      const ph = modsOf(mods, 'Dragonling').some(m => (m.tags || []).includes('Asc71_PatientHost')) ? (+((((GD.dragon || {}).rules || {}).PatientHost || {}).More) || 8) : 0;
+      if (ph > 0) { minionMore *= 1 + ph / 100; res.notes.push('Patient Host: minions that have lived 10 s deal ' + ph + '% more (a lasting fight: counted as always). Best guess from the node text; not checked in game.'); }
+      const perTotem = pickMods(mods, 'Feed85_TotemCount', 'Flat').filter(m => splitTags(m.tags).conds.some(c => lc(c) === 'minion'));
+      if (perTotem.length) {
+        const n = totemsHeld(GD, ch, o), v = perTotem.reduce((s, m) => s + m.v, 0);
+        perTotem.forEach(m => use(m, n > 0 ? 'minion, per Totem' : 'minion, per Totem: none on your bar'));
+        if (n > 0) { minionMore *= 1 + v * n / 100; res.notes.push('Covenant of Stone and Bone: your minions deal ' + v + '% more for each of your ' + n + ' Totems (x' + (1 + v * n / 100).toFixed(3) + '; the Totems your bar puts up). Best guess from the line\'s text; not checked in game.'); }
+      }
+    }
     for (const m of mods) if (m.stat === 'MinionQuarry103' && m.mode === 'Flat' && fromSupport(m)) { minionMore *= 1 + m.v / 100; use(m, 'minion, vs your quarry'); res.notes.push('Quarry Command: your minions deal ' + m.v + '% more to your quarry, counted as this enemy (you must hit it yourself every 6 s; other enemies take 30% less).'); }
 
 
@@ -21236,7 +21638,13 @@ window.BOCharacter = function (ctx) {
     const golem = oneKind && !mi.GolemAuras ? null : golemBlessing(GD, ch, sk, o, mods, attr);
     if (golem && golem.more > 0) minionMore *= 1 + golem.more / 100;
     const aff = mi.Affinity && mi.AffinityDamage ? 1 + Math.min(mi.AffinityCap || 50, (attr[mi.Affinity] || 0) * mi.AffinityDamage) / 100 : 1;
-    const near = o.minionNear === false ? 1 : 1 + MINION_NEAR / 100;
+
+
+
+    const marchOn = o.minionNear === false && modsOf(mods, 'Dragonling').some(m => (m.tags || []).includes('Asc71_MarchSentenced')) &&
+      Object.entries(o.curses || {}).some(([id, cfg]) => cfg && cfg.on && (GD.curses[id] || {}).Kind === 'Sentence');
+    if (marchOn) res.notes.push('March on the Sentenced: your minions keep the ' + MINION_NEAR + '% more of fighting at your side near the enemy you Sentenced (best guess from the node text, not checked in game).');
+    const near = o.minionNear === false && !marchOn ? 1 : 1 + MINION_NEAR / 100;
     const zoneLevel = o.enemyLevel || ch.level;
     const minionGem = res.gem ? res.gem.own + res.gem.bonus : L;
     const lvlK = minionLevelFactor(GD, sk, zoneLevel, ch.level, minionGem);
@@ -21453,8 +21861,10 @@ window.BOCharacter = function (ctx) {
 
     const rarity = o.enemyRarity || 'rare', isBoss = rarity === 'boss';
     let curseInc = 0; for (const m of pickMods(mods, 'CurseEffect', 'Inc')) { curseInc += m.v; use(m, 'minion, curses'); }
+
+    const woeMinK = woePerMinionK(GD, mods, army ? army.total : alive, use, res, true);
     const curseRows = [];
-    for (const [id, cfg] of Object.entries(o.curses || {})) {
+    for (const [id, cfg] of Object.entries(cursesWithBanner(GD, ch, mods, o, res))) { // the ticked curses, plus a War Banner a line plants
       const c = GD.curses[id]; if (!c || !cfg || !cfg.on) continue;
       const tough = (rarity === 'rare' || isBoss) && c.Tough && c.Tough.Holds ? (c.Tough.Cap || 0) : 0;
       const dread = Math.max(+cfg.dread || 0, tough);
@@ -21468,7 +21878,7 @@ window.BOCharacter = function (ctx) {
       const woeSups = c.Skill && lc(c.Skill) === lc(sk.Id) && o.supportsOverride ? o.supportsOverride : ((ch.sockets || []).find(s => c.Skill && lc(s.skill) === lc(c.Skill)) || {}).supports || [];
       let curseMore = 0;
       for (const sid of woeSups) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'CurseMore' && m.Mode === 'Flat') curseMore += m.Value;
-      const eff = curseEffK(GD, curseInc + bannerEffectInc(c, mods), dreadPct) * (1 + curseMore / 100) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
+      const eff = curseEffK(GD, curseInc + bannerEffectInc(c, mods), dreadPct) * (1 + curseMore / 100) * (c.Kind === 'Woe' ? woeMinK : 1) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
       const row = { id, kind: c.Kind || '', name: c.Name, taken: (c.TakenPct || 0) * eff, elem: {}, eff, dread: dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, resDown: {} };
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
       curseRows.push(row);
@@ -21488,6 +21898,16 @@ window.BOCharacter = function (ctx) {
 
 
     const gExtra = golem && golem.taken > 0 ? [golem.taken] : [];
+
+
+
+
+
+    if ((ch.hotbar || []).some(id => lc(id) === 'soul_rend') && GD.skills.soul_rend && o.rent !== false) {
+      const rm = pickMods(mods, 'RentMore', 'Flat'), rent = rm.length ? Math.max(...rm.map(m => +m.v || 0)) : 10;
+      rm.forEach(m => use(m, 'minion, Rent'));
+      if (rent > 0) { gExtra.push(rent); res.notes.push('Soul Rend (on your bar): the Rent enemy takes ' + rent + '% more damage from your minions' + (rm.length ? ' (Gravetithe, instead of 10%)' : '') + ', counted as kept up. Best guess from the gem and item texts; not checked in game.'); }
+    }
     const aMark = armyMarkPct(GD, ch);
     if (aMark > 0) { gExtra.push({ k: 'mark', v: aMark }); res.notes.push('Hunter\'s Marks from your minions: the enemy takes ' + +aMark.toFixed(1) + '% more damage at 10 Marks (the Marks kind; Guardian debuff in the game, 23 Nov 2026).'); }
     let curseK = 1;
@@ -21646,6 +22066,46 @@ window.BOCharacter = function (ctx) {
   }
 
 
+
+
+
+  const probeOpts = o => { const ho = Object.assign({}, o, { _barProbe: true, _panelPass: true, _risen: true, barShock: false });
+    for (const k of ['supportsOverride', 'gemLevel', 'projOnTarget', 'totemCount', 'hitsPerSecOverride', 'castsPerSecOverride', 'conduit', 'coc', 'cocSource', '_col', '_kindle']) delete ho[k]; return ho; };
+  function minionsHeld(GD, ch, o) {
+    if (o._barProbe || o.armyProbe) return 0;
+    const sid = (ch.hotbar || []).find(id => { const k = GD.skills[lc(id)]; return k && isSummon(k) && k.Minion && k.Minion.MonsterId && k.SpellMin; });
+    if (!sid) return 0;
+    const r = calcSkill(GD, ch, sid, probeOpts(o));
+    return r && r.minion ? (r.minion.army && r.minion.army.total > 0 ? r.minion.army.total : r.minion.alive) || 0 : 0;
+  }
+  function totemsHeld(GD, ch, o) {
+    if (o._barProbe || o.armyProbe) return 0;
+    let n = 0;
+    for (const id of new Set((ch.hotbar || []).filter(Boolean))) {
+      const k = GD.skills[lc(id)]; if (!k) continue;
+      const so = (ch.sockets || []).find(s => lc(s.skill) === lc(id));
+      if (!((k.Totem && k.Totem.Interval > 0) || (so && (so.supports || []).some(x => ['totem_support', 'arrow_totem'].includes(lc(String(x).replace('@granted', ''))))))) continue;
+      const r = calcSkill(GD, ch, id, probeOpts(o));
+      if (r && r.totem && r.totem.count > 0) n += r.totem.count;
+    }
+    return n;
+  }
+
+
+
+
+
+  function woePerMinionK(GD, mods, minions, use, res) {
+    const lines = pickMods(mods, 'WoeEffectPerMinion', 'Flat');
+    if (!lines.length) return 1;
+    const per = lines.reduce((s, m) => s + (+m.v || 0), 0);
+    const tx = (lines.find(m => m.text) || {}).text || ((GD.nodes || {}).r113_persona_necr_hollowcrown || {}).Text || '';
+    const cm = /at most (\d+(?:\.\d+)?)%|(\d+(?:\.\d+)?)% at most/i.exec(tx), cap = cm ? +(cm[1] || cm[2]) : 20;
+    const pct = Math.min(cap, per * Math.max(0, minions));
+    lines.forEach(m => use(m, pct > 0 ? 'Woes stronger per minion' : 'Woes stronger per minion: no minions on your bar'));
+    if (pct > 0) res.notes.push('Your Woes are ' + +pct.toFixed(1) + '% stronger: ' + per + '% for each of your ' + minions + ' minions' + (per * minions > cap ? ', at most ' + cap + '%' : '') + ' (the summons on your bar, counted as standing). Best guess from the line\'s text; not checked in game.');
+    return 1 + pct / 100;
+  }
   function armyBodies(GD, n) { const a = armyRule(GD); return Math.min(n, a.full) + a.past * Math.max(0, n - a.full); }
 
 
@@ -21704,6 +22164,15 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
+    const pyreH = (mods || []).find(m => m.stat === 'Keystone' && (m.tags || []).includes('PyreHallows'));
+    if (pyreH && ids.has('pyre_of_faith')) {
+      const tk = /take (\d+(?:\.\d+)?)% more damage/i.exec(pyreH.text || ''), cr = /\+(\d+(?:\.\d+)?)% chance to be critically/i.exec(pyreH.text || '');
+      out.push({ name: "The Pilgrim's Pyre (Pyre of Faith)", taken: tk ? +tk[1] : 10, crit: cr ? +cr[1] : 5, half: false });
+    }
     if (still !== false && is086(GD) && (mods || []).some(m => m.stat === 'HallowStill')) {
       const t = (((GD.nodes || {}).r113_persona_pala_stride || {}).Text || '');
       const tk = /take (\d+(?:\.\d+)?)% more damage/i.exec(t), cr = /\+(\d+(?:\.\d+)?)% chance to critically/i.exec(t);
@@ -21907,7 +22376,12 @@ window.BOCharacter = function (ctx) {
       const key = 'item:' + it.slot, loc = mods.filter(m => m.local && m.key === key);
       const lf = loc.filter(m => m.stat === stat && m.mode === 'Flat').reduce((x, m) => x + m.v, 0);
       const li = loc.filter(m => m.mode === 'Inc' && (m.stat === stat || m.stat === 'Defences')).reduce((x, m) => x + m.v, 0);
-      flat += (b[stat] * gradeMult(it.grade) + lf) * (1 + (li + armourQuality(it, b)) / 100);
+
+
+
+
+      const chestK = stat === 'Armour' && it.slot === 'Chest' ? 1 + mods.filter(m => m.stat === 'ChestArmourMore113' && m.mode === 'Flat').reduce((x, m) => x + m.v, 0) / 100 : 1;
+      flat += (b[stat] * gradeMult(it.grade) + lf) * (1 + (li + armourQuality(it, b)) / 100) * chestK;
     }
 
 
@@ -21925,7 +22399,12 @@ window.BOCharacter = function (ctx) {
 
     const evaAsEs = stat === 'EnergyShield' ? mods.filter(m => m.stat === 'EvasionAsEnergyShield113' && m.mode === 'Flat').reduce((x, m) => x + m.v, 0) : 0;
     const fromEva = evaAsEs ? evaAsEs / 100 * defenceTotal(GD, ch, mods, attr, 'Evasion') : 0;
-    return Math.max(0, flat * (1 + gi / 100) * more + fromEva);
+
+
+
+    const manaAsEs = stat === 'EnergyShield' ? mods.filter(m => m.stat === 'ManaAsEnergyShield' && m.mode === 'Flat').reduce((x, m) => x + m.v, 0) : 0;
+    const fromMana = manaAsEs ? manaAsEs / 100 * heroMaxMana(H, ch, mods, attr) : 0;
+    return Math.max(0, flat * (1 + gi / 100) * more + fromEva + fromMana);
   }
 
 
@@ -24452,6 +24931,10 @@ window.BOStartApp = function () {
 
     const evaAsEs = mods.filter(m => m.stat === 'EvasionAsEnergyShield113' && m.mode === 'Flat').reduce((x, m) => x + m.v, 0);
     if (evaAsEs) es += evaAsEs / 100 * S.defenceTotal(GD, ch, mods, attr, 'Evasion');
+
+
+    const manaAsEs = mods.filter(m => m.stat === 'ManaAsEnergyShield' && m.mode === 'Flat').reduce((x, m) => x + m.v, 0);
+    if (manaAsEs) es += manaAsEs / 100 * S.heroMaxMana(H, ch, mods, attr);
     const resParts = [['Fire', rs.Fire], ['Cold', rs.Cold], ['Lightning', rs.Lightning], ['Poison', rs.Poison]];
     return { life, es, resParts };
   }
@@ -24907,7 +25390,7 @@ window.BOStartApp = function () {
       { label: 'Potions', keys: activeKeys(sources.filter(source => source.group === 'Potions').map(source => source.key)), color: '#e0896f' }
     ].filter(group => group.keys.length);
 
-    const hasCharges = Object.entries(st.charges || {}).some(([key, value]) => key !== 'gatherFury' && value > 0) || (r.mods || []).some(m => m.key === 'charge:fury' && / \((Gather Fury|Defiant Roar on [^)]*)\)$/.test(m.src || ''));
+    const hasCharges = Object.entries(st.charges || {}).some(([key, value]) => key !== 'gatherFury' && value > 0) || (r.mods || []).some(m => m.key === 'charge:fury' && / \([^)]+\)$/.test(m.src || '')); // any Fury the sheet gave: "Fury xN (Gather Fury)", "(Defiant Roar on ...)", "(Jarl's Due on Jarl's Roar)", ...
     if (hasCharges) sourceGroups.push({ label: 'Other', keys: [], color: '#48b9b1', charges: true });
 
     const currentDps = r.minion ? r.panelDps : r.totalDps;

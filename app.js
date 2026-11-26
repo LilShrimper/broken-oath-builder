@@ -12281,22 +12281,26 @@ window.BOAdvanced = function (ctx) {
 
   function esCard(hd, D, dm, ch, H) {
     const GD = ctx.gd(), loc = {};
-    for (const m of dm) if (m.local && (m.stat === 'EnergyShield' || m.stat === 'Defences')) { const o = loc[m.key] || (loc[m.key] = { es: 0, def: 0 }); if (m.stat === 'EnergyShield' && m.mode === 'Flat') o.es += m.v; else if (m.stat === 'Defences' && m.mode === 'Inc') o.def += m.v; }
+    for (const m of dm) if (m.local && (m.stat === 'EnergyShield' || m.stat === 'Defences')) { const o = loc[m.key] || (loc[m.key] = { es: 0, def: 0 }); if (m.stat === 'EnergyShield' && m.mode === 'Flat') o.es += m.v; else if (m.mode === 'Inc') o.def += m.v; }
     const gearM = [];
     for (const it of ch.items || []) {
-      const bs = GD.bases[String(it.base || '').toLowerCase()] || {}, o = loc['item:' + it.slot] || { es: 0, def: 0 }, v = ((bs.EnergyShield || 0) + o.es) * (1 + o.def / 100);
+      const bs = GD.bases[String(it.base || '').toLowerCase()] || {}, o = loc['item:' + it.slot] || { es: 0, def: 0 };
+
+      const v = ((bs.EnergyShield || 0) * S.gradeMult(it.grade) + o.es) * (1 + (o.def + (bs.EnergyShield ? S.armourQuality(it, bs) : 0)) / 100);
       if (v) gearM.push({ src: (bs.Name || it.base) + ' (' + it.slot + ')', v });
     }
-    const gl = dm.filter(m => !m.local && m.stat === 'EnergyShield');
-    const flatM = gl.filter(m => m.mode === 'Flat'), incM = gl.filter(m => m.mode === 'Inc');
+    const gl = dm.filter(m => !m.local && m.stat === 'EnergyShield' && plain(m));
+    const flatM = gl.filter(m => m.mode === 'Flat'), incM = gl.filter(m => m.mode === 'Inc'), moreM = gl.filter(m => m.mode === 'More');
     const int = hd.attr.Int || 0, fromInt = (H.EsPerInt79 || 0) * int, intInc = (H.IntEsPctPer10 || 0) * int / 10;
     const gear = gearM.reduce((a, m) => a + m.v, 0), flat = flatM.reduce((a, m) => a + m.v, 0), incV = incM.reduce((a, m) => a + m.v, 0);
+    const moreV = moreM.reduce((a, m) => a * (1 + m.v / 100), 1);
     if (!hd.es && !gear && !flat) return card('Energy shield', row('Total', '0', { strong: true }), 'es');
     return card('Energy shield',
-      row('From gear', num(gear, 0), { tip: srcTip('Energy shield from gear', gearM, { unit: '', note: 'Each item\'s base with its own lines' }) }) +
+      row('From gear', num(gear, 0), { tip: srcTip('Energy shield from gear', gearM, { unit: '', note: 'Each item\'s base (with its Base Grade and quality) and its own lines' }) }) +
       row('Flat from tree and other lines', num(flat, 0), { tip: srcTip('Flat energy shield', flatM, { unit: '' }) }) +
       (fromInt ? row('From Intelligence', num(fromInt, 0)) : '') +
       row('Increased', pct(incV + intInc, 0), { tip: srcTip('Increased energy shield', incM.concat(intInc ? [{ src: 'Intelligence ' + int, v: intInc }] : []), { shown: incV + intInc }) }) +
+      (moreM.length ? row('More', times(moreV, 2), { tip: srcTip('More energy shield', moreM, { more: true }) }) : '') +
       row('Total', num(hd.es, 0), { strong: true }), 'es');
   }
 
@@ -12316,7 +12320,7 @@ window.BOAdvanced = function (ctx) {
     const moreM = dm.filter(m => !m.local && m.mode === 'More' && m.stat === stat && plain(m));
     const attr = stat === 'Armour' ? ['Strength', hd.attr.Str || 0, H.StrArmourPctPer10 || 0] : ['Dexterity', hd.attr.Dex || 0, H.DexEvasionPctPer10 || 0];
     const attrInc = attr[2] * attr[1] / 10;
-    const extra = stat === 'Evasion' ? (H.EvasionPerDex79 || 0) * (hd.attr.Dex || 0) + 3.12 * (ch.level || 0) : 0;
+    const extra = stat === 'Evasion' ? (H.EvasionPerDex79 || 0) * (hd.attr.Dex || 0) + S.evasionBase(ch.level) : 0;
     return { gearM, flatM, incM, moreM, attr, attrInc, extra,
       gear: gearM.reduce((a, m) => a + m.v, 0), flat: flatM.reduce((a, m) => a + m.v, 0), inc: incM.reduce((a, m) => a + m.v, 0) + attrInc, more: moreM.reduce((a, m) => a * (1 + m.v / 100), 1) };
   }
@@ -22438,6 +22442,10 @@ window.BOCharacter = function (ctx) {
     }
     return short ? Object.assign({ level, offClass }, short) : { level: own, offClass };
   }
+
+
+
+  const evasionBase = level => level > 0 ? 12 + 3 * level : 0;
   const noEvasion = mods => modsOf(mods, 'Keystone').some(m => m.stat === 'Keystone' && m.mode === 'Flag' && (m.tags || []).includes('NoEvasion'));
   function defenceTotal(GD, ch, mods, attr, stat) {
     const H = GD.scaling.Hero || {};
@@ -22472,7 +22480,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-    if (stat === 'Evasion') flat += (H.EvasionPerDex79 || 0) * (attr.Dex || 0) + 3.12 * (ch.level || 0);
+    if (stat === 'Evasion') flat += (H.EvasionPerDex79 || 0) * (attr.Dex || 0) + evasionBase(ch.level);
     for (const it of ch.items || []) {
       const b = GD.bases[lc(it.base)]; if (!b || !b[stat]) continue;
       const key = 'item:' + it.slot, loc = mods.filter(m => m.local && m.key === key);
@@ -23125,7 +23133,7 @@ window.BOCharacter = function (ctx) {
     for (const id of ch.dragonNodes || []) { const k = T[id] ? id : moved[id]; if (k && T[k] && !out.includes(k)) out.push(k); }
     return out;
   }
-  const api = { socketedRunes, runeSeats, dragonIds, aspectId, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, gradeMult, armourQuality, gemPlayLevel, minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, rampEff, late2K: (GD, id, lvl) => late2K(GD, id, lvl), vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, affixLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, trigCounted, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
+  const api = { socketedRunes, runeSeats, dragonIds, aspectId, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, evasionBase, gradeMult, armourQuality, gemPlayLevel,minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, rampEff, late2K: (GD, id, lvl) => late2K(GD, id, lvl), vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, affixLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, trigCounted, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
 
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;
@@ -25014,15 +25022,11 @@ window.BOStartApp = function () {
   }
   function defenceCore(ch, mods, attr) {
     const life = Math.floor(S.heroMaxLife(GD, ch, mods, attr)); // the game rounds down: 467.5 shows as 467
-    let f = 0, inc = 0;
-    const loc = {}; // per item: local ES flat and local "% increased defences"
 
 
     const rsBy = {};
     for (const m of mods) {
-      if (m.local && (m.stat === 'EnergyShield' || m.stat === 'Defences')) { const o = loc[m.key] || (loc[m.key] = { es: 0, def: 0 }); if (m.stat === 'EnergyShield' && m.mode === 'Flat') o.es += m.v; else if (m.stat === 'Defences' && m.mode === 'Inc') o.def += m.v; }
-      else if (m.stat === 'EnergyShield') { if (m.mode === 'Flat') f += m.v; else if (m.mode === 'Inc') inc += m.v; }
-      else if (m.stat === 'Resist' && m.mode === 'Flat') {
+      if (m.stat === 'Resist' && m.mode === 'Flat') {
         const t = (m.tags || [])[0], o = rsBy[m.key || m.src] || (rsBy[m.key || m.src] = { Fire: 0, Cold: 0, Lightning: 0, Poison: 0 });
         if (t === 'Elemental') { o.Fire += m.v; o.Cold += m.v; o.Lightning += m.v; } else if (t in o) o[t] += m.v;
       }
@@ -25033,20 +25037,16 @@ window.BOStartApp = function () {
 
 
 
-    const H = GD.scaling.Hero || {}, int = (attr || {}).Int || 0;
-    for (const it of ch.items || []) {
-      const bs = GD.bases[String(it.base || '').toLowerCase()] || {}, o = loc['item:' + it.slot] || { es: 0, def: 0 };
-      f += ((bs.EnergyShield || 0) + o.es) * (1 + o.def / 100);
-    }
-    let es = (f + (H.EsPerInt79 || 0) * int) * (1 + (inc + (H.IntEsPctPer10 || 0) * int / 10) / 100); // Int is not rounded: Int 65 gives +26% (not +24%), the sheet's tooltip 8 Nov
 
 
-    const evaAsEs = mods.filter(m => m.stat === 'EvasionAsEnergyShield113' && m.mode === 'Flat').reduce((x, m) => x + m.v, 0);
-    if (evaAsEs) es += evaAsEs / 100 * S.defenceTotal(GD, ch, mods, attr, 'Evasion');
-
-
-    const manaAsEs = mods.filter(m => m.stat === 'ManaAsEnergyShield' && m.mode === 'Flat').reduce((x, m) => x + m.v, 0);
-    if (manaAsEs) es += manaAsEs / 100 * S.heroMaxMana(H, ch, mods, attr);
+    const esMods = mods.map(m => {
+      if (!m.local || m.stat !== 'EnergyShield' || m.mode !== 'Flat') return m;
+      const it = (ch.items || []).find(i => 'item:' + i.slot === m.key), b = it && GD.bases[String(it.base || '').toLowerCase()];
+      if (!b || b.EnergyShield) return m;
+      const own = mods.filter(x => x.local && x.key === m.key && x.mode === 'Inc' && (x.stat === 'EnergyShield' || x.stat === 'Defences')).reduce((a, x) => a + x.v, 0);
+      return Object.assign({}, m, { local: false, v: m.v * (1 + own / 100) });
+    });
+    const es = S.defenceTotal(GD, ch, esMods, attr || {}, 'EnergyShield');
     const resParts = [['Fire', rs.Fire], ['Cold', rs.Cold], ['Lightning', rs.Lightning], ['Poison', rs.Poison]];
     return { life, es, resParts };
   }

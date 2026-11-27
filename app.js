@@ -19797,7 +19797,16 @@ window.BOCharacter = function (ctx) {
 
 
     const chanRep = ctx.tags.has('channelling') ? pickMods(mods, 'ChannelRepeats', 'Flat').filter(m => applies(ctx, m)) : [];
-    if (!noEcho && !cocNoEcho) for (const m of pickMods(mods, 'Repeats', 'Flat').concat(chanRep)) if (applies(ctx, m)) { repeats += m.v; use(m); if (String(m.key || '').startsWith('support:')) { repSup += m.v; repByKey[m.key] = (repByKey[m.key] || 0) + m.v; } else repGear += m.v; }
+
+
+
+
+    const chanNoRep = ctx.tags.has('channelling');
+    let chanDropped = 0;
+    if (!noEcho && !cocNoEcho) for (const m of pickMods(mods, 'Repeats', 'Flat').concat(chanRep)) if (applies(ctx, m)) {
+      if (chanNoRep && m.stat === 'Repeats' && !String(m.key || '').startsWith('support:')) { chanDropped += m.v; use(m, 'channelled skills never repeat'); continue; }
+      repeats += m.v; use(m); if (String(m.key || '').startsWith('support:')) { repSup += m.v; repByKey[m.key] = (repByKey[m.key] || 0) + m.v; } else repGear += m.v; }
+    if (chanDropped) res.notes.push('Repeats: ' + sk.Name + ' is channelled, so the ' + chanDropped + ' repeat' + (chanDropped > 1 ? 's' : '') + ' from your gear or passives add' + (chanDropped > 1 ? '' : 's') + ' nothing (Way of the Blade: "Channelled skills such as Cyclone never repeat").');
 
 
 
@@ -25518,7 +25527,7 @@ window.BOStartApp = function () {
     const w = st.optW || {}, list = optMultiList();
     const main = (st.pickable || []).find(s => s.id === st.skill);
     return (main ? '<div class="opt-multi-row main" title="The main skill always counts, at weight 1. Change it in the ' + boxName + ' box."><label class="check-row"><input type="checkbox" checked disabled><span>' + skillDot(main.id) + esc(main.name) + ' <span class="c">main</span></span></label><input type="number" value="1" disabled title="Weight"></div>' : '') + list.map(s => { const on = w[s.id] > 0;
-      if (!on && cocAuto(s.id)) return '<div class="opt-multi-row" title="Cast on Crit: fires by itself on crits, so it always counts while on the bar. Its DPS is added to the main skill\'s before the % change"><label class="check-row"><input type="checkbox" checked disabled><span>' + skillDot(s.id) + esc(s.name) + ' <span class="c">Cast on Crit</span></span></label><input type="number" value="1" disabled title="Weight"></div>';
+      if (!on && cocAuto(s.id)) return '<div class="opt-multi-row" title="Cast on Crit: fires by itself on crits, so it always counts while on the bar. Its DPS is added to the main skill\'s before the % change"><label class="check-row"><input type="checkbox" checked disabled><span>' + skillDot(s.id) + esc(s.name) + ' <span class="c">Cast on Crit</span></span></label><span class="opt-with-main">with main</span></div>';
       return '<div class="opt-multi-row"><label class="check-row"><input type="checkbox" data-ow="' + esc(s.id) + '"' + (on ? ' checked' : '') + '><span>' + skillDot(s.id) + esc(s.name) + '</span></label>' +
         '<input type="number" min="0.05" max="10" step="0.05" data-oww="' + esc(s.id) + '" value="' + (on ? w[s.id] : 1) + '" title="Weight"' + (on ? '' : ' disabled') + '></div>'; }).join('');
   }

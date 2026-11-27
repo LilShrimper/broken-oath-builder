@@ -626,6 +626,8 @@ body.needs-data main.layout, body.needs-data .top-controls, body.needs-data .dro
 .opt-multi-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 0; }
 .opt-multi-row input[type=number] { width: 58px; }
 .opt-multi-row input[type=number]:disabled { opacity: .4; }
+.opt-multi-row .opt-with-main { width: 58px; flex: none; text-align: center; font-size: 11px; line-height: 1.2; color: var(--muted); }
+.combo-list .opt-multi-row .opt-with-main { width: 64px; }
 .opt-multi-body.right { left: auto; right: 0; }
 .cmp-skill-group { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 tr.cmp-counted td:first-child { box-shadow: inset 3px 0 0 var(--accent); }

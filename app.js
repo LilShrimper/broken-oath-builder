@@ -13173,6 +13173,7 @@ window.BOFaq = function (ctx) {
 
   function curses(GD) {
     const C = Object.values(GD.curses || {}).filter(c => c.Kind && c.Kind !== 'Ailment');
+    const meta = (GD.scaling || {}).Meta || {}, guardRule = !!meta.bGuardianStrongestTaken, guardOthers = +meta.StrongestTakenOthers || 0;
     let h = intro('Curses & Marks', 'Woes, Sentences, Hunter\'s Marks and the War Banner: what stacks with what, and what a Guardian takes.');
     if (!C.length) return needData(h);
     const fx = c => {
@@ -13198,7 +13199,9 @@ window.BOFaq = function (ctx) {
       '<b>Every "takes more damage" effect counts</b>, on every monster, Guardians included (since Patch 84). Effects of the same kind add together and different kinds multiply. The game names five kinds: Woes; Sentences; Hunter\'s Marks with the War Banner; the shock family; vulnerability (we count Maim, the venom golem and hallowed ground here). Example: Death Sentence +25% with a Woe +20% is ×1.25 × 1.20 = ×1.50; add Marks +10% and it is ×1.50 × 1.10.',
 
 
-      '<b>In short: same kind = add, different kind = multiply.</b> Two Woes add. A Woe and a Sentence multiply. Marks and the War Banner add with each other and multiply with curses.',
+      '<b>In short: same kind = add, different kind = multiply.</b> Two Woes add. A Woe and a Sentence multiply' + (guardRule ? ' (not on a Guardian: see below)' : '') + '. Marks and the War Banner add with each other and multiply with curses.',
+
+      ...(guardRule ? ['<b>On a Guardian a Woe and a Sentence do not multiply</b>: only the bigger of the two counts' + (guardOthers > 0 ? ' in full, the other at ' + Math.round(guardOthers * 100) + '%' : '') + '. Marks, the War Banner, shock and vulnerability still multiply on top. This is the Guardian rule in the game data, still switched on after Patch 84. Game log, 26 Nov 2026, on a Guardian Post: Woe of Sundering (18.2% there) next to Death Sentence (33.4%) added nothing; bleed Tears read ×1.51 = the Sentence × the War Banner × shock.'] : []),
       'The five kinds are from the game\'s own log (build 84). The developer\'s stacking table in the public API (build 85) says where the rest belong: "more Fire (Cold, Lightning, Physical) damage taken" lines and Unravel count with the <b>Woes</b>; shock, chill\'s damage taken and Brittle are one kind (they add together; poison, ignite and bleed ticks do not take chill or Brittle); hallowed ground, Maim and the golem\'s blessing are one kind. Lowered resistance is never part of these: it changes the resistance itself.',
       'Some item and support texts still say Marks "add with curses". The game log and the developer\'s table both make Marks their own kind, so they multiply with curses.',
     ] : +GD.apiBuild >= 82 ? [
@@ -15996,13 +15999,17 @@ window.BOCharacter = function (ctx) {
 
 
 
-  function stackRow(c, dread, dreadCap, mods) {
+
+
+
+
+  function stackRow(c, dread, dreadCap, mods, isBoss) {
     if (c.Kind === 'Mark') {
       const n = dread > 0 ? dread : dreadCap;
       let inc = 0; for (const m of mods || []) if (m.stat === 'MarkEffect' && m.mode === 'Inc') inc += m.v;
       return { n, base: (c.TakenPct || 0) * n, inc };
     }
-    if (c.Kind === 'Banner') { const n = Math.min(dread, dreadCap); return { n, base: (c.TakenPct || 0) + n * ((c.Dread || {}).EffectPct || 0) }; }
+    if (c.Kind === 'Banner') { const n = dread > 0 ? Math.min(dread, dreadCap) : isBoss ? 0 : dreadCap; return { n, base: (c.TakenPct || 0) + n * ((c.Dread || {}).EffectPct || 0) }; }
     return null;
   }
 
@@ -16017,10 +16024,10 @@ window.BOCharacter = function (ctx) {
     const line = modsOf(mods, 'WarBanner').find(m => m.stat === 'WarBanner' && m.v > 0 && !String(m.key || '').startsWith('support:'));
     const b = line && Object.values(GD.curses || {}).find(c => c.Kind === 'Banner');
     if (!b || (cur[b.Id] && cur[b.Id].on)) return cur;
-    const full = b.Dread ? Math.max(b.Dread.Cap || 0, b.Dread.BossCap || 0) + bannerValourMax(GD, ch, b, mods) : 0;
+    const full = b.Dread ? Math.max(b.Dread.Cap || 0, b.Dread.BossCap || 0) + bannerValourMax(GD, ch, b, mods) : 0, boss = o.enemyRarity === 'boss';
     res.used.set(line, 'War Banner planted');
-    if (!o._barProbe) res.notes.push((line.src || 'A line') + ': your skills plant your War Banner where you stand, so it is counted by the enemy at full Valour (' + full + ') though it is not ticked. Best guess from the line\'s text; not checked in game.');
-    return Object.assign({}, cur, { [b.Id]: { on: true, dread: full } });
+    if (!o._barProbe) res.notes.push((line.src || 'A line') + ': your skills plant your War Banner where you stand, so it is counted by the enemy though it is not ticked, ' + (boss ? 'with no Valour on a Guardian (nothing dies near it; game log 26 Nov 2026, Guardian Post: 6% x your banner and curse effect)' : 'at full Valour (' + full + ': monsters die near it)') + '. Type a Valour in Configure Enemy to change it.');
+    return Object.assign({}, cur, { [b.Id]: { on: true, dread: 0 } }); // 0 = auto Valour (stackRow): full off a Guardian, 0 on one
   }
 
   const guardianRL = (GD, o, lvl) => {
@@ -16222,6 +16229,11 @@ window.BOCharacter = function (ctx) {
 
 
 
+  const guardTakenOthers = (GD, isBoss) => {
+    if (!isBoss || !guardianStrongestTaken(GD)) return null;
+    const v = +((GD.scaling || {}).Meta || {}).StrongestTakenOthers;
+    return isFinite(v) ? Math.max(0, v) : 0;
+  };
 
 
 
@@ -16229,7 +16241,22 @@ window.BOCharacter = function (ctx) {
 
 
 
-  const curseTakenK = (rows, d, dot, one, extras) => {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const curseTakenK = (rows, d, dot, one, extras, guard) => { // guard: guardTakenOthers (kinds rule on a Guardian), null = none
 
     if (dot && rows.some(r => r.kind === 'Mark')) rows = rows.filter(r => r.kind !== 'Mark');
     const typedOf = r => (d ? r.elem[d] || 0 : 0) + (dot ? r.dot || 0 : 0);
@@ -16246,7 +16273,8 @@ window.BOCharacter = function (ctx) {
         if (r.kind === 'Banner' || r.kind === 'Mark') mk += v; else if (r.kind === 'Sentence') sen += v; else woe += v;
       }
       for (const x of extras || []) { if (x && typeof x === 'object') { if (x.k === 'curse') woe += x.v || 0; else mk += x.v || 0; } else vu += x || 0; }
-      return (1 + woe / 100) * (1 + sen / 100) * (1 + mk / 100) * (1 + vu / 100);
+      const curse = guard != null ? 1 + (Math.max(woe, sen) + guard * Math.min(woe, sen)) / 100 : (1 + woe / 100) * (1 + sen / 100);
+      return curse * (1 + mk / 100) * (1 + vu / 100);
     }
     if (one === 'add') return 1 + (rows.reduce((a, r) => a + (r.taken || 0) + typedOf(r), 0) + (extras || []).reduce((a, x) => a + (x || 0), 0)) / 100;
     if (!one) return rows.reduce((p, r) => p * (1 + (r.taken + typedOf(r)) / 100), 1) * (extras || []).reduce((p, x) => p * (1 + (x || 0) / 100), 1);
@@ -19977,7 +20005,7 @@ window.BOCharacter = function (ctx) {
 
 
       const dreadCap = (isBoss ? Math.max(c.Dread ? c.Dread.BossCap || c.Dread.Cap || 0 : 0, tough) : c.Dread ? c.Dread.Cap : 0) + (c.Dread ? bannerValourMax(GD, ch, c, mods) : 0) + (c.Kind === 'Mark' ? pickMods(mods, 'MarkMax', 'Flat').reduce((a, m) => a + m.v, 0) : 0);
-      const stack = stackRow(c, dread, dreadCap, mods);
+      const stack = stackRow(c, dread, dreadCap, mods, isBoss);
       const dreadPct = !stack && c.Dread && dread ? Math.min(dread, dreadCap) * c.Dread.EffectPct : 0;
 
 
@@ -20108,6 +20136,7 @@ window.BOCharacter = function (ctx) {
 
     const rule = takenRule(GD, isBoss); // 'add' from data build 82; else scaling.json Meta.bGuardianStrongestTaken (true from data build 73)
     const strongestTaken = rule === true;
+    const guardF = rule === 'kinds' ? guardTakenOthers(GD, isBoss) : null; // Guardian: the bigger of the Woe and Sentence kinds (see guardTakenOthers)
 
 
 
@@ -20144,7 +20173,7 @@ window.BOCharacter = function (ctx) {
       if (rule === 'kinds') {
 
         const vuln = [o.extraTakenPct || 0].concat(phys ? [maimPct] : [], golemTaken - 1 ? [(golemTaken - 1) * 100] : [], onHit && groundPct ? [groundPct] : []);
-        return curseTakenK(activeCurses, d, dot, 'kinds', [{ k: 'mark', v: markV }, { k: 'curse', v: onHit && unravel[d] ? unravel[d] : 0 }].concat(vuln));
+        return curseTakenK(activeCurses, d, dot, 'kinds', [{ k: 'mark', v: markV }, { k: 'curse', v: onHit && unravel[d] ? unravel[d] : 0 }].concat(vuln), guardF);
       }
       if (rule === 'add') return curseTakenK(activeCurses, d, dot, 'add',extras.concat(golemTaken - 1 ? [(golemTaken - 1) * 100] : [], onHit && groundPct ? [groundPct] : []));
 
@@ -20159,6 +20188,7 @@ window.BOCharacter = function (ctx) {
     };
     if (rule === 'kinds') {
       res.notes.push('"Takes more damage" effects (patch 84): the same kind adds, different kinds multiply. The game names five kinds: Woes, Sentences, Marks with the War Banner, the shock family, and vulnerability (game log, build 84). We count Maim, the venom golem and hallowed ground as vulnerability and Unravel with the Woes: not checked in game yet.');
+      if (guardF != null && activeCurses.some(r => r.kind === 'Sentence') && activeCurses.some(r => r.kind !== 'Sentence' && r.kind !== 'Mark' && r.kind !== 'Banner')) res.notes.push('Guardian: your Woe and your Sentence do not multiply here. Only the bigger of the two counts' + (guardF > 0 ? ', the other at ' + Math.round(guardF * 100) + '%' : '') + ' (the Guardian rule in the game data, scaling.json bGuardianStrongestTaken; game log 26 Nov 2026: Tears on a Guardian Post read x1.51 with Woe of Sundering and Death Sentence on = the Sentence alone). A Woe counts at half its effect on a Guardian.');
     }
     if (rule === 'add') {
       const n = activeCurses.filter(r => r.taken > 0 || r.dot > 0 || Object.values(r.elem).some(v => v > 0)).length + (o.extraTakenPct > 0) + (markPct > 0) + (maimPct > 0) + (golemTaken > 1) + (groundPct > 0);
@@ -22668,7 +22698,7 @@ window.BOCharacter = function (ctx) {
 
 
       const dreadCap = (isBoss ? Math.max(c.Dread ? c.Dread.BossCap || c.Dread.Cap || 0 : 0, tough) : c.Dread ? c.Dread.Cap : 0) + (c.Dread ? bannerValourMax(GD, ch, c, mods) : 0) + (c.Kind === 'Mark' ? pickMods(mods, 'MarkMax', 'Flat').reduce((a, m) => a + m.v, 0) : 0);
-      const stack = stackRow(c, dread, dreadCap, mods);
+      const stack = stackRow(c, dread, dreadCap, mods, isBoss);
       const dreadPct = !stack && c.Dread && dread ? Math.min(dread, dreadCap) * c.Dread.EffectPct : 0;
       const woeSups = c.Skill && lc(c.Skill) === lc(sk.Id) && o.supportsOverride ? o.supportsOverride : ((ch.sockets || []).find(s => c.Skill && lc(s.skill) === lc(c.Skill)) || {}).supports || [];
       let curseMore = 0;
@@ -22710,7 +22740,7 @@ window.BOCharacter = function (ctx) {
     if ((activeCurses.length || gExtra.length) && avg > 0) {
 
       const one = takenRule(GD, isBoss);
-      curseK = Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTot * curseTakenK(activeCurses, d, false, one, gExtra), 0);
+      curseK = Object.keys(hit).reduce((a, d) => a + hit[d].avg / hitTot * curseTakenK(activeCurses, d, false, one, gExtra, one === 'kinds' ? guardTakenOthers(GD, isBoss) : null), 0);
       res.notes.push('Curses on minion blows: ' + activeCurses.map(r => r.name).join(' + ') + ' make the enemy take x' + curseK.toFixed(3) + ' on these hits. Counted in the vs-enemy DPS only (not the game\'s panel number, which comes before curses, nor the enemy\'s resistances). Checked only in direction against a Guardian fight on 11 Nov 2026.');
     }
     res.enemy = { level: o.enemyLevel || ch.level, rarity, curses: curseRows, activeCurses: activeCurses.map(r => r.id), curseEffInc: curseInc };
@@ -22736,7 +22766,7 @@ window.BOCharacter = function (ctx) {
         let more = 1; for (const m of pickMods(mods, 'EntropyMore')) if (!splitTags(m.tags).conds.length) { more *= 1 + m.v / 100; use(m, 'Entropy more'); }
         const rl = guardianRL(GD, o, o.enemyLevel || ch.level);
         const chaosRes = Math.max(0, (+((GD.scaling || {}).Monster || {}).ChaosResPerRL || 0) * Math.max(0, rl || 0) - pickMods(mods, 'ChaosPen', 'Flat').reduce((a, m) => a + m.v, 0));
-        const taken = curseTakenK(activeCurses, 'Chaos', false, takenRule(GD, isBoss), gExtra);
+        const taken = curseTakenK(activeCurses, 'Chaos', false, takenRule(GD, isBoss), gExtra, guardTakenOthers(GD, isBoss));
         const eDps = dps * gcK * share * Math.max(0, 1 + multi / 100) * more * taken * (1 - Math.min(90, chaosRes) / 100);
         res.hitDps *= 1 - share; res.totalDps = res.hitDps + eDps; res.entropyDps = eDps;
         res.entropy = { share, multi, more, chaosRes, taken, dps: eDps };
@@ -22767,7 +22797,7 @@ window.BOCharacter = function (ctx) {
       const size = avg * critFactor * t.pct / 100 * armyK * gcMore; // gcMore: Grave Call's 30% (pulses keep their own clock)
       const el = t.element && DT.includes(t.element) ? t.element : null;
       const one = takenRule(GD, isBoss);
-      const cK = el ? curseTakenK(activeCurses, el, false, one, gExtra) : curseK;
+      const cK = el ? curseTakenK(activeCurses, el, false, one, gExtra, one === 'kinds' ? guardTakenOthers(GD, isBoss) : null) : curseK;
       const pDps = alive * size / every * cK;
       res.pulses.push({ src: m.src, pct: t.pct, element: el, every, size, dps: pDps });
       res.hitDps += pDps; res.totalDps += pDps;
@@ -22847,7 +22877,7 @@ window.BOCharacter = function (ctx) {
         const stacks = cap - left;
         const remain = R * dur > cap ? dur - cap / R / 2 : dur / 2;
         const one = takenRule(GD, isBoss);
-        const taken = A.bPoisonTakesDamageTaken ? curseTakenK(activeCurses, 'Poison', false, one, gExtra) : 1;
+        const taken = A.bPoisonTakesDamageTaken ? curseTakenK(activeCurses, 'Poison', false, one, gExtra, one === 'kinds' ? guardTakenOthers(GD, isBoss) : null) : 1;
         const poisonDps = mine * taken;
         let burstPct = 0; for (const m of pickMods(mods, 'PoisonBurst76', 'Flat')) { burstPct += m.v; use(m, 'minion poison burst'); }
         const every = Math.max(1, ruleNum(GD, 'r76.UNIQUES.Every', 12));
@@ -25037,11 +25067,8 @@ window.BOStartApp = function () {
   const FIGHT_OFF = /^(vow|potion|barshock|barfreeze|charge|companion):/; // st.off keys that are fight settings (not supports, items or granted gems)
   const FIGHT_DEF = () => ({ enemyLevel: null, vowbreak: [], tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0, gatherFury: 2 }, enemyHallowedGround: null, hallowCG: false, graveCall: null, otherBleed: '', flashfire: false, windburstMoves: null, corpseKind: '', corpsesPerSec: null, legionKind: '', shockPick: '' });
 
-  function defaultDread(ch, c) {
-    if (!ch || !c || c.Kind !== 'Banner' || !c.Dread || !curseOnBar(ch, c)) return 0;
-    let mods; try { mods = S.collectMods(GD, ch, { off: st.off }).mods; } catch (e) { mods = undefined; }
-    return Math.max(c.Dread.Cap || 0, c.Dread.BossCap || 0) + S.bannerValourMax(GD, ch, c, mods);
-  }
+
+  function defaultDread(ch, c) { return 0; }
   function loadEnemy() {
     const e = store.get('enemy', null) || {};
     for (const k of ENEMY_KEYS) st[k] = JSON.parse(JSON.stringify(e[k] !== undefined ? e[k] : ENEMY_DEF[k]));
@@ -25542,11 +25569,11 @@ window.BOStartApp = function () {
           const grows = c.Tough && c.Tough.Holds ? c.Tough.Cap || 0 : 0, autoN = grows && (st.rarity === 'rare' || isBoss) ? Math.min(grows, max) : 0;
 
           const tip = c.Kind === 'Mark' ? 'Hunter\'s Marks on the enemy (' + c.TakenPct + '% more damage taken each; blank = your max, ' + max + '). A bigger number is counted as typed, to test. Hits only, not ailment ticks'
-            : c.Kind === 'Banner' ? 'Valour on the banner (+' + c.Dread.EffectPct + '% more damage taken each, on top of its ' + c.TakenPct + '%; max ' + max + ')'
+            : c.Kind === 'Banner' ? 'Valour on the banner (+' + c.Dread.EffectPct + '% more damage taken each, on top of its ' + c.TakenPct + '%; max ' + max + '). Blank = ' + max + ' off a Guardian (monsters die near it), 0 on a Guardian, where nothing dies near it (game log, 26 Nov 2026). A number you type counts as typed'
             : 'Dread on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + max + ', bosses ' + c.Dread.BossCap + ')' + (grows ? '. Blank = what the Woe builds by itself on a Rare or Guardian: ' + grows + ' (game log, 13 Nov 2026), 0 on others. A number you type counts as typed' : '');
-          const val = c.Kind === 'Mark' || grows ? (cs.dread || '') : (cs.dread || 0);
+          const val = c.Kind === 'Mark' || c.Kind === 'Banner' || grows ? (cs.dread || '') : (cs.dread || 0);
 
-          return '<input class="mini" type="number" min="0"' + (c.Kind === 'Mark' ? '' : ' max="' + max + '"') + ' value="' + val + '"' + (c.Kind === 'Mark' ? ' placeholder="' + max + '"' : grows ? ' placeholder="' + autoN + '"' : '') + ' title="' + esc(tip) + '" data-dread="' + esc(c.Id) + '">';
+          return '<input class="mini" type="number" min="0"' + (c.Kind === 'Mark' ? '' : ' max="' + max + '"') + ' value="' + val + '"' + (c.Kind === 'Mark' ? ' placeholder="' + max + '"' : c.Kind === 'Banner' ? ' placeholder="' + (isBoss ? 0 : max) + '"' : grows ? ' placeholder="' + autoN + '"' : '') + ' title="' + esc(tip) + '" data-dread="' + esc(c.Id) + '">';
         })() : '') + '</li>';
     }).join('') + hallowedItem(r, ch);
   }

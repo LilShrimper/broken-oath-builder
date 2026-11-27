@@ -12761,7 +12761,7 @@ window.BOFaq = function (ctx) {
     const grid = '<div class="faq-minion-grid">' + cards + '</div>';
 
     h += card('How a minion\'s damage is worked out', '<p class="faq-stats faq-formula"><b>Hit</b> = gem hit × 1.19<sup>gem level − 1</sup> × minion multiplier × affinity × near you × zone level × (1 + increased Minion Damage) × (1 + the summon skill\'s own increased damage) × every "more" line</p>' +
-      '<p class="faq-stats faq-formula"><b>DPS</b> = hit × crit (6% chance, ×1.5) × minions standing × strikes ÷ pace &nbsp;·&nbsp; pace = base attack interval × ' + (SIM.MINION_PACE || 0.72) + ' ÷ minion speed</p>' +
+      '<p class="faq-stats faq-formula"><b>DPS</b> = hit × crit (6% chance, ×1.5) × minions standing × strikes ÷ pace &nbsp;·&nbsp; pace = base attack interval × ' + (SIM.MINION_PACE || 0.72) + ' ÷ minion speed, or the attack itself when that takes longer (half the attack animation ÷ minion speed + 0.05 s, or the time until the blow lands + 0.15 s), + 0.06 s (Skeletons, Skeletal Mages, Zombies and golems, from the game log)</p>' +
       '<p class="faq-stats faq-formula"><b>Zone level</b> = 1 + LevelDamage × (gap − 1) &nbsp;·&nbsp; gap = monster life at the pet level ÷ monster life at level 1 ÷ (1 + gem growth)<sup>gem level − 1</sup>, never under 1 &nbsp;·&nbsp; pet level = halfway between the zone\'s level and yours</p>' +
       list([
         '<b>Gem level:</b> levels from gear count like the gem\'s own, ×1.19 each.',
@@ -22066,6 +22066,10 @@ window.BOCharacter = function (ctx) {
   const MINION_PACE = 0.72, MINION_NEAR = 60;
   const MINION_PULSE_STEP = 0.21; // minion pulses from red items: see res.pulses in minionSheet (log 14 Nov 2026)
 
+
+  const MINION_BODY = { skeleton_wizard: { blow: 0.794, clip: 1.13 }, skeleton_warrior: { blow: 0.593, clip: 1.1875 }, zombie: { blow: 0.605, clip: 1.415 }, fire_golem: { blow: 0.414, clip: 1 } };
+  const MINION_ANIM_RATE = 1.45, MINION_SWING_REST = 0.15, MINION_CLIP_SHARE = 0.5, MINION_CLIP_REST = 0.05, MINION_SHEET_REST = 0.06;
+
   function minionLevelFactor(GD, sk, zoneLevel, heroLevel, gemLevel) {
     const mi = sk && sk.Minion;
     if (!mi || !mi.LevelDamage) return 1;
@@ -22503,20 +22507,59 @@ window.BOCharacter = function (ctx) {
     for (const m of pickMods(mods, 'MinionSpeed', 'Inc')) if (fit(m)) { spInc += m.v; use(m, 'minion'); }
 
 
+
+
+
+
+
+
     const casterMinions = is0563(GD) && ranged;
-    for (const m of mods) if ((m.stat === 'MinionSpeed' || (m.stat === 'AttackSpeed' && fromSupport(m)) || (casterMinions && m.stat === 'CastSpeed' && m.key === 'support:faster_casting')) && m.mode === 'More' && fit(m)) { spMore *= 1 + m.v / 100; use(m, 'minion'); }
+    for (const m of mods) if ((m.stat === 'MinionSpeed' || (m.stat === 'AttackSpeed' && fromSupport(m)) || (casterMinions && m.stat === 'CastSpeed' && String(m.key || '').startsWith('support:'))) && m.mode === 'More' && fit(m)) { spMore *= 1 + m.v / 100; use(m, 'minion'); }
     if (golem && golem.speed > 0) spMore *= 1 + golem.speed / 100;
 
-
-
-
-
-
-
-
     const spd = Math.max(0.05, (1 + spInc / 100) * spMore);
-    const skelFit = lc(sk.Id) === 'summon_skeletons';
-    const pace = skelFit ? 0.5917 / spd + 0.0501 : (mi.AttackEvery || 1) * MINION_PACE / spd;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    const body = MINION_BODY[lc(mi.MonsterId || '')] || null;
+    const cadenceAt = s => (mi.AttackEvery || 1) * MINION_PACE / s;
+    const clipAt = s => body.clip * MINION_CLIP_SHARE / s + MINION_CLIP_REST, blowAt = s => body.blow / (MINION_ANIM_RATE * s) + MINION_SWING_REST;
+    const paceAt = s => body ? Math.max(cadenceAt(s), clipAt(s), blowAt(s)) + MINION_SHEET_REST : cadenceAt(s);
+    const pace = paceAt(spd);
+
+    const heldBy = !body || cadenceAt(spd) >= Math.max(clipAt(spd), blowAt(spd)) - 1e-9 ? 'cadence' : clipAt(spd) >= blowAt(spd) ? 'clip' : 'blow';
+    const swingBound = heldBy !== 'cadence';
 
 
     if (mi.ShareBeyond > 0 && mi.SharePerBody > 0 && alive > mi.ShareBeyond) {
@@ -22547,15 +22590,21 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
+
+
+
     const gcOn = o.graveCall === true || (o.graveCall == null && (ch.hotbar || []).some(h => lc(h) === 'grave_call'));
     let gcK = 1, gcMore = 1;
     if (gcOn) {
       const gm = (GD.skills.grave_call || {}).Minion || {};
       gcMore = 1 + (gm.RallyBuff != null ? gm.RallyBuff : 30) / 100;
-      const spd2 = spd * 1.2;
-      const pace2 = skelFit ? 0.5917 / spd2 + 0.0501 : (mi.AttackEvery || 1) * MINION_PACE / spd2;
+      const pace2 = paceAt(spd * 1.2);
       gcK = gcMore * pace / pace2;
-      res.notes.push('Grave Call (on your bar, counted as kept up): minions deal ' + Math.round((gcMore - 1) * 100) + '% more damage and attack 20% faster, x' + gcK.toFixed(3) + ' on the vs-enemy DPS (lasts ' + (gm.RallySeconds || 4) + ' s after each cast; not in the game\'s panel). Untick "Grave Call active" to leave it out.');
+      res.notes.push('Grave Call (on your bar, counted as kept up): minions deal ' + Math.round((gcMore - 1) * 100) + '% more damage and have 20% more attack speed (every ' + pace2.toFixed(3) + ' s), x' + gcK.toFixed(3) + ' on the vs-enemy DPS (lasts ' + (gm.RallySeconds || 4) + ' s after each cast; the game\'s panel shows it only during those seconds, the panel number here is without it; game log, 26 Nov 2026). Untick "Grave Call active" to leave it out.');
     }
     res.graveCall = { on: gcOn, onBar: (ch.hotbar || []).some(h => lc(h) === 'grave_call'), more: gcMore, k: gcK };
     res.attr = attr;
@@ -22692,8 +22741,8 @@ window.BOCharacter = function (ctx) {
       res.notes.push(m.src + ': each of the ' + alive + ' ' + sk.Name.replace(/^(Summon|Raise) /, '') + ' minions pulses about every ' + every.toFixed(2) + ' s for ' + t.pct + '% of its own hit' + (el ? ' as ' + el : '') + ' (' + Math.round(size).toLocaleString('en-US') + ' each), +' + Math.round(pDps).toLocaleString('en-US') + ' DPS on one enemy. Counted in the vs-enemy DPS only: the game\'s panel leaves it out. The timing is from the game log (14 Nov 2026), the size from the item\'s text; the damage itself is not measured yet.');
     }
 
-    res.minion = { specAvg: DT.reduce((a, d) => a + (scaled[d][0] + scaled[d][1]) / 2, 0) * (1 + specInc / 100), specInc, soloK, monster: mi.MonsterId, alive, strikes, pace, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.more > 0 ? 1 + golem.more / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth, oneKind, chosen: !!legionPick && !dismissed, dismissed };
-    res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + (skelFit ? '; Skeletons: 0.592 s / speed + 0.050 s, fitted to the game log' : '') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
+    res.minion = { specAvg: DT.reduce((a, d) => a + (scaled[d][0] + scaled[d][1]) / 2, 0) * (1 + specInc / 100), specInc, soloK, monster: mi.MonsterId, alive, strikes, pace, cadence: cadenceAt(spd), swingBound, heldBy, attackTime: body ? pace - MINION_SHEET_REST : pace, sheetRest: body ? MINION_SHEET_REST : 0, every: mi.AttackEvery, dmgMult: mi.DamageMult || 1, affinity: aff, affinityAttr: mi.Affinity, near, inc: incFor(d0), more: minionMore / (golem && golem.more > 0 ? 1 + golem.more / 100 : 1) * moreFor(d0), kind, kinds, golem, ruthless: ruthK, level: lvlK, growth, oneKind, chosen: !!legionPick && !dismissed, dismissed };
+    res.notes.push('Minions: ' + alive + ' ' + (alive === 1 ? 'stands' : 'stand') + ' at once' + (strikes > 1 ? ', each blow striking ' + strikes + ' times' : '') + ', each attacking every ' + pace.toFixed(3) + ' s (' + mi.AttackEvery + ' s x 0.72' + (spInc || spMore !== 1 ? ' / minion speed x' + ((1 + spInc / 100) * spMore).toFixed(2) : '') + (!body ? '' : ' = ' + cadenceAt(spd).toFixed(3) + ' s' + (heldBy === 'clip' ? '; the attack itself takes longer, ' + clipAt(spd).toFixed(3) + ' s: half of its ' + (+body.clip.toFixed(2)) + ' s animation / the minion speed + ' + MINION_CLIP_REST + ' s' : heldBy === 'blow' ? '; the attack itself takes longer, ' + blowAt(spd).toFixed(3) + ' s: the blow lands ' + body.blow + ' s into the animation, which plays at ' + MINION_ANIM_RATE + ' x the minion speed, + ' + MINION_SWING_REST + ' s' : '') + '; + ' + MINION_SHEET_REST + ' s the game\'s minion sheet adds to every attack; game log 18-26 Nov 2026') + '). The DPS is the game\'s own skill panel number: every minion attacking nonstop, before the enemy\'s resistances and curses. In fights they also walk and pick targets (the log\'s MinionPace counts their real blows).');
     if (dismissed) res.notes.push('Legion of One: you set ' + ((GD.skills[legionPick] || {}).Name || legionPick) + ' as the one kind of minion that stands, so ' + sk.Name + ' is dismissed and counted as 0. Change it under Legion of One in the Damage settings.');
     else if (oneKind) res.notes.push('Legion of One: only one kind of minion stands, counted here as ' + sk.Name + ' alone' + (legionPick ? ' (the kind you set)' : '') + ': ' + alive + ' at once (' + aliveBefore + ' doubled, at least +2), dealing 30% less. Your other summons are dismissed when you raise these' + (mi.GolemAuras ? '' : ', the Grave Golem and its blessing with them') + ' (game log, 12 Nov 2026).');
     if (near > 1) res.notes.push('Counted at your side: minions deal ' + MINION_NEAR + '% more within 7 m of you (fading to none at 12 m), as the game\'s panel counts it.');
@@ -26489,7 +26538,7 @@ window.BOStartApp = function () {
       '<div class="headline">' +
       stat('Skill panel DPS', num(r.panelDps), delta(r.panelDps, pin && pin.sheet), 'main', 'All its minions attacking nonstop, as the game\'s tooltip counts it (before the enemy\'s resistances and curses)') +
       stat('Minions', m.alive + (m.strikes > 1 ? ' × ' + m.strikes + ' strikes' : ''), '', '', 'Standing at once') +
-      stat('Each attacks every', num(m.pace, 3) + ' s', '', '', m.every + ' s × 0.72 ÷ minion speed') +
+      stat('Each attacks every', num(m.pace, 3) + ' s', '', '', (m.swingBound ? 'The attack itself takes ' + num(m.attackTime, 3) + ' s; ' + m.every + ' s × 0.72 ÷ minion speed would be ' + num(m.cadence, 3) + ' s' : m.every + ' s × 0.72 ÷ minion speed') + (m.sheetRest ? ', + ' + m.sheetRest + ' s' : '')) +
       stat('Average hit', num(r.hitAvg), '', '', 'With crits ' + num(r.hitAvgCrit) + ' (' + num(r.crit.chance, 1) + '% × ' + num(r.crit.multi / 100, 2) + ')') +
       '</div>';
     const weights = S.statWeights(GD, st.ch, st.skill, opts(), r);

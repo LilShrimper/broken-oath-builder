@@ -17820,10 +17820,13 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
     if (apiBuildAtLeast(GD, 93, '2026-11-27T00') && (sk.WeaponKinds || []).length) {
-      const kinds = sk.WeaponKinds.map(lc), held = mainBase ? lc(mainBase.Class) : '';
-      if ((held === 'bow' || held === 'wand') && !kinds.includes(held)) res.notes.push(sk.Name + ' cannot be used with a ' + held + ' since patch 93 (skills need their own weapon type again), and your main hand holds ' + mainBase.Name + ': in the game it will not work.');
-      else if (kinds.length === 1 && kinds[0] === 'bow' && held !== 'bow') res.notes.push(sk.Name + ' needs a bow (patch 93: skills need their own weapon type again), and your main hand holds ' + (mainBase ? mainBase.Name : 'nothing') + ': in the game it will not work.');
+      const kinds = sk.WeaponKinds.map(lc).flatMap(k => k === 'twohandsword' ? [k, 'greatsword'] : [k]), held = mainBase ? lc(mainBase.Class) : '';
+      const kindName = k => k === 'twohandsword' ? 'two-handed sword, axe, mace or spear' : k === 'maceshield' ? 'mace and shield' : k === 'dualblades' ? 'dual blades' : k === 'fist' ? 'fist weapon' : k.replace(/^onehand(\w+)/, 'one-handed $1').replace(/^twohand(\w+)/, 'two-handed $1');
+      if (kinds.length === 1 && kinds[0] === 'bow' && held !== 'bow') res.notes.push(sk.Name + ' needs a bow (patch 93: skills need their own weapon type again), and your main hand holds ' + (mainBase ? mainBase.Name : 'nothing') + ': in the game it will not work.');
+      else if (held && !kinds.includes(held)) res.notes.push(sk.Name + ' cannot be used with ' + (mainBase.TypeName ? 'a ' + lc(mainBase.TypeName) : 'this weapon') + ' since patch 93 (skills need their own weapon type again; it takes: ' + sk.WeaponKinds.map(k => kindName(lc(k))).join(', ') + '), and your main hand holds ' + mainBase.Name + ': in the game it will not work.');
     }
 
 
@@ -24112,6 +24115,10 @@ window.BOCharacter = function (ctx) {
   const counted = stat => HANDLED.has(stat) || NON_DAMAGE.has(stat);
 
 
+
+  const ENTROPY_DAMAGE = new Set(['EntropyShare', 'EntropyMore', 'EntropyMulti', 'EntropyMarkedMulti', 'EntropySlamMore', 'EntropyCritMore', 'ChaosPen']);
+
+
   function freePoints(GD, ch) {
     if (ch.bonusPoints == null) return null;
     const per = (GD.scaling.Hero || {}).PassivePointsPerLevel || 1;
@@ -24147,7 +24154,7 @@ window.BOCharacter = function (ctx) {
     for (const id of ch.dragonNodes || []) { const k = T[id] ? id : moved[id]; if (k && T[k] && !out.includes(k)) out.push(k); }
     return out;
   }
-  const api = { curseBossK, socketedRunes, runeSeats, dragonIds, aspectId, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, evasionBase, gradeMult, armourQuality, gemPlayLevel,minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, rampEff, late2K: (GD, id, lvl) => late2K(GD, id, lvl), vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, affixLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => HANDLED.has(stat) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, trigCounted, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
+  const api = { curseBossK, socketedRunes, runeSeats, dragonIds, aspectId, rareBoostOf, fadeSteps: GD => ({ spell: [].concat(spellFade(GD)), minion: [].concat(minionFade(GD)), attack: attackFade(GD, GD.scaling.Gem) }), bannerValourMax, hallowedSources, RARE_COUNT_STATS, oneKindLost, noFitWhy, defenceTotal, evasionBase, gradeMult, armourQuality, gemPlayLevel,minionLevelFactor, MINION_NEAR, MINION_PACE, dealsNoHits, heroMaxLife, heroMaxMana, gemLevelGrowth, rampEff, late2K: (GD, id, lvl) => late2K(GD, id, lvl), vowShare, vowLevelShare, wordPower2H, uniqueLineScale, uniqueLineValue, uniqueLineShown, affixLineShown, cocSource, cocAttacks, freePoints, wardAt, guardianVariantResist, guardianLifeAt, deepZoneAt, guardianIsGate, GUARDIAN_LORDS, counted, damageStat: stat => (HANDLED.has(stat) || ENTROPY_DAMAGE.has(stat)) && !['Str', 'Dex', 'Int', 'Attributes'].includes(stat), extractCharacter, characterFromCode, swornOaths, conduitHost, conduitInterval, collectMods, calcSkill, listSkills, weaponStats: (GD, item, base, mods) => weaponStats(GD, item, base, mods, () => {}), statWeights, modText, hasStatText, trigCounted, skillDesc, splitTags, DT, supportSearch, supportChoices, ownedSupports, socketsFor, execDefaultOn, LEECH_UPTIME, arrangeShapes, shapesClash, NO_SINGLE_TARGET,
 
     minionEngineShare: (GD, id) => MINION_ENGINE.has(lc(id)) ? minionEngShare(GD) : 0 };
   root.BOSim = api;

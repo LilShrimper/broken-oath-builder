@@ -4117,14 +4117,19 @@ window.BOPlanner = function (ctx) {
 
 
     const tLvl = id => Math.max(0, Math.min(5, Math.floor(+((ch.temper || {})[lc(id)]) || 0)));
+
+
+    const tAll = ctx.temperAll ? ctx.temperAll() : 0, tUse = id => /@granted$/.test(String(id)) ? 0 : Math.max(tLvl(id), tAll);
     const tName = id => (GD.supports[lc(id)] || { Name: id }).Name;
-    const tOn = sups.filter(id => tLvl(id) > 0);
+    const tOn = sups.filter(id => tUse(id) > 0);
+    const tCounts = id => tAll && tUse(id) > tLvl(id) ? ' <span class="meta">counts as ' + tUse(id) + '</span>' : '';
     const temper = !sups.length ? '' : edit
-      ? '<details class="sup-more sup-temper"' + grp('temper', tOn.length > 0) + '><summary>Tempering <span class="meta">(the Forge, from Rupture Level 100: up to 5 levels per support gem)</span></summary><div class="sup-row">' +
+      ? '<details class="sup-more sup-temper"' + grp('temper', sups.some(id => tLvl(id) > 0)) + '><summary>Tempering <span class="meta">(the Forge, from Rupture Level 100: up to 5 levels per support gem)</span></summary>' +
+        (ctx.temperAllHtml ? ctx.temperAllHtml() : '') + '<div class="sup-row">' +
         sups.map(id => '<label class="sup-temper-one"><span>' + esc(tName(id)) + '</span><select data-f="temper" data-sup="' + esc(lc(id)) + '" aria-label="' + esc('Tempered level of ' + tName(id)) + '">' +
-          [0, 1, 2, 3, 4, 5].map(n => '<option value="' + n + '"' + (n === tLvl(id) ? ' selected' : '') + '>' + n + ' / 5</option>').join('') + '</select></label>').join('') +
+          [0, 1, 2, 3, 4, 5].map(n => '<option value="' + n + '"' + (n === tLvl(id) ? ' selected' : '') + '>' + n + ' / 5</option>').join('') + '</select>' + tCounts(id) + '</label>').join('') +
         '</div><span class="meta">Each level eases the less damage line of the gem (2% at level 5), or adds a little more damage when it has none (0.5% at level 5), and lowers its mana cost multiplier. The level belongs to the hero: it counts wherever that support is socketed.</span></details>'
-      : tOn.length ? '<div class="sup-row sup-temper"><span class="meta">Tempered:</span> ' + tOn.map(id => '<span class="meta">' + esc(tName(id)) + ' ' + tLvl(id) + ' / 5</span>').join(' ') + '</div>' : '';
+      : tOn.length ? '<div class="sup-row sup-temper"><span class="meta">Tempered:</span> ' + tOn.map(id => '<span class="meta">' + esc(tName(id)) + ' ' + tUse(id) + ' / 5</span>').join(' ') + '</div>' : '';
     return '<div class="sup-picker pl-sups" data-supskill="' + esc(r.skill) + '">' +
       '<input type="search" class="sup-find" data-supfind="' + esc(r.skill) + '" placeholder="Search supports" aria-label="Search supports" autocomplete="off" value="' + esc(supFind[r.skill] || '') + '">' +
       '<span class="meta' + (sups.length > slots ? ' bad' : '') + '">' + sups.length + ' / ' + slots + ' support sockets at gem level ' + lvl + (edit ? ' · click a support to socket it or take it out' : '') + '</span>' +
@@ -15860,6 +15865,14 @@ window.BOCharacter = function (ctx) {
     runSup();
     const f = spBack.querySelector('.io-x'); if (f) f.focus({ preventScroll: true });
   }
+
+
+  document.addEventListener('bo:temperall', () => {
+    if (!ctx.current()) return;
+    const pane = document.getElementById('characterPane'); if (pane && !pane.hidden) render();
+    if (SW && swBack && !swBack.hidden) renderSkill();
+    if (SP && spBack && !spBack.hidden) runSup();
+  });
   function closeSup() {
     if (SP && SP.job) SP.job.cancel();
     const back = SP && SP.back && SW;
@@ -15889,7 +15902,8 @@ window.BOCharacter = function (ctx) {
     h += '<div class="sp-opts"><div class="cmp-modes" role="group" aria-label="Supports to try">' +
       ['all', 'owned'].map(v => '<button type="button" class="cmp-mode' + (SP.pool === v ? ' on' : '') + '" data-sp="pool" data-v="' + v + '" aria-pressed="' + (SP.pool === v) + '">' + (v === 'all' ? 'Every support' : 'Supports you own') + '</button>').join('') + '</div>' +
       '<label class="sp-mana"><input type="checkbox" data-sp="mana"' + (SP.manaOk ? ' checked' : '') + '> Mana sustained</label>' +
-      '<button class="btn small ghost" type="button" data-sp="rerun"' + (SP.job ? ' disabled' : '') + '>Run again</button></div>';
+      '<button class="btn small ghost" type="button" data-sp="rerun"' + (SP.job ? ' disabled' : '') + '>Run again</button></div>' +
+      (ctx.temperAllHtml ? ctx.temperAllHtml() : ''); // "Temper every support gem": a change searches again (bo:temperall below)
     h += '<p class="hint">Against the enemy set on the Damage tab. New supports are highlighted; struck-through ones come out. <b>Use</b> sockets that setup on this skill.</p>';
     const mk = ctx.supMarks ? ctx.supMarks(SP.skill) : null, pins = mk ? [...mk.pin].filter(id => inUse.includes(id)) : [], blks = mk ? [...mk.block] : [];
 
@@ -16407,7 +16421,13 @@ window.BOCharacter = function (ctx) {
 
   const TEMPER = [null, { less: 0.5, more: 0.1, cost: 0.02 }, { less: 1, more: 0.2, cost: 0.04 }, { less: 1.5, more: 0.3, cost: 0.06 }, { less: 1.75, more: 0.4, cost: 0.06 }, { less: 2, more: 0.5, cost: 0.06 }];
   const TEMPER_LESS = new Set(['Damage', 'RepeatOwnDamage', 'TrigDamage']);
-  const temperLevel = (ch, id) => { const t = ch && ch.temper; if (!t) return 0; const n = +(t[lc(id)] ?? t[id]) || 0; return n > 0 ? Math.min(TEMPER.length - 1, Math.floor(n)) : 0; };
+
+
+
+  const temperLevel = (ch, id, o) => {
+    const t = ch && ch.temper, own = t ? +(t[lc(id)] ?? t[id]) || 0 : 0, all = o ? +o.temperAll || 0 : 0;
+    const n = Math.max(own, all); return n > 0 ? Math.min(TEMPER.length - 1, Math.floor(n)) : 0;
+  };
   const temperLessLine = m => TEMPER_LESS.has(m.Stat) && m.Mode === 'More' && (m.Value || 0) < 0;
 
   const temperCost = (sd, n) => sd && sd.ManaMultiplier ? (n > 0 && sd.ManaMultiplier > 1 ? Math.max(1, sd.ManaMultiplier - TEMPER[n].cost) : sd.ManaMultiplier) : 1;
@@ -17816,7 +17836,7 @@ window.BOCharacter = function (ctx) {
 
     {
       const tagged = t => col.mods.filter(m => (m.tags || []).includes(t) && m.mode !== 'Flag');
-      if (!o.moving) ctx.gear.add('standingstill');
+      if (!o.moving && !o._noStill) ctx.gear.add('standingstill');
       const still = tagged('StandingStill');
       if (still.length && !o._barProbe) res.notes.push(o.moving ? 'Standing-still lines (' + [...new Set(still.map(m => (m.src || '').replace(/^[^·]*·\s*/, '').replace(/\s*\(.*$/, '')))].join(', ') + ') are not counted in a moving fight.' : 'Standing still: ' + [...new Set(still.map(m => (m.src || '').replace(/^[^·]*·\s*/, '').replace(/\s*\(.*$/, '')))].join(', ') + ' counted as up (you fight standing; from the line text, not checked in game).');
       const alwaysLow = modsOf(col.mods, 'AlwaysLowLife124').find(m => m.stat === 'AlwaysLowLife124' && m.v > 0);
@@ -17933,7 +17953,7 @@ window.BOCharacter = function (ctx) {
       if (!ok || (o.off && o.off.has(key))) continue;
       const k = engShare || 1;
 
-      const tl = granted ? 0 : temperLevel(ch, id), T = TEMPER[tl], eased = T && (sd.Mods || []).some(temperLessLine);
+      const tl = granted ? 0 : temperLevel(ch, id, o), T = TEMPER[tl], eased = T && (sd.Mods || []).some(temperLessLine);
       for (const m of sd.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: (eased && temperLessLine(m) ? ((1 + m.Value / 100) * (1 + T.less / 100) - 1) * 100 : (m.Value || 0)) * k, v2: (m.Value2 || 0) * k, local: false, src: 'Support · ' + sd.Name + (engShare ? ' (minions, x' + engShare + ')' : ''), key });
       if (T && !eased) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: T.more * k, v2: 0, local: false, src: 'Support · ' + sd.Name + ' (Tempered ' + tl + ')', key });
       if (T) res.supports[res.supports.length - 1].temper = tl;
@@ -18344,7 +18364,11 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const dexSpeed = () => (attr.Dex >= (attr.Str || 0) && attr.Dex >= (attr.Int || 0) ? per10('Dex', 'DexAttackSpeedPer10') : 0);
+
+
+
+
+    const dexSpeed = () => (apiBuildAtLeast(GD, 94, '2026-11-27T12') || (attr.Dex >= (attr.Str || 0) && attr.Dex >= (attr.Int || 0)) ? per10('Dex', 'DexAttackSpeedPer10') : 0);
 
 
 
@@ -18683,6 +18707,17 @@ window.BOCharacter = function (ctx) {
         res.notes.push(sk.Name + ': ' + sk.LifeAsBase + '% of your ~' + Math.round(res.heroLife) + ' maximum life (+' + lifeBase.toFixed(1) + ') joins the weapon\'s base physical damage. Max life here counts level, Strength and life lines on gear and the tree (checked against the game log); temporary life buffs are not counted.');
       }
       weapon = weaponStats(GD, mainItem, mainBase, mods, use, lifeBase, ch.level);
+
+
+
+
+
+      if (offItem && offBase && offBase.DamageMin && ctx.gear.has('dualwielding') && !ctx.gear.has('bothhands')) {
+        const ow = weaponStats(GD, offItem, offBase, mods, use, lifeBase, ch.level), mw = weapon, dm = {};
+        for (const d of DT) dm[d] = [(mw.dmg[d][0] + ow.dmg[d][0]) / 2, (mw.dmg[d][1] + ow.dmg[d][1]) / 2];
+        weapon = Object.assign({}, mw, { name: mw.name + ' / ' + ow.name, dmg: dm, aps: (mw.aps + ow.aps) / 2, crit: (mw.crit + ow.crit) / 2, dual: { main: mw, off: ow } });
+        res.notes.push('Dual wielding: your swings alternate between ' + mw.name + ' and ' + ow.name + ', so the hit is the mean of the two weapons (game log and Copy stats, 27 Nov 2026).');
+      }
       const [fullB, fadedB] = bonusSplit(bonus);
       const levelFactor = (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB);
       attackMult = effAt(sk.Effectiveness != null ? sk.Effectiveness : 1) * levelFactor;
@@ -19085,7 +19120,8 @@ window.BOCharacter = function (ctx) {
       const dw = +((GD.scaling || {}).Hero || {}).DualWieldAttackSpeedMore || 0;
       if (dw > 0) {
         mods.push({ stat: 'AttackSpeed', mode: 'More', tags: ['Attack'], v: dw, v2: 0, local: false, src: 'Dual wielding', key: 'dualwield' });
-        res.notes.push('Dual wielding: ' + dw + '% more attack speed (game data 92; not checked in game).');
+
+        res.notes.push('Dual wielding: ' + dw + '% more attack speed (game data 92, checked in game 27 Nov 2026).');
       }
     }
     const speedStat = isAttack ? 'AttackSpeed' : 'CastSpeed';
@@ -19096,7 +19132,12 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const untaggedTreeLess = m => isAttack && m.key === 'passives' && m.mode === 'More' && m.v < 0 && !(m.tags || []).length;
+
+
+
+
+    const oathPriceOnly = apiBuildAtLeast(GD, 94, '2026-11-27T12');
+    const untaggedTreeLess = m => isAttack && m.key === 'passives' && m.mode === 'More' && m.v < 0 && !(m.tags || []).length && (!oathPriceOnly || /· Oath of /.test(m.src || ''));
     for (const m of pickMods(mods, speedStat)) if (applies(ctx, m)) {
       if (untaggedTreeLess(m)) { use(m, 'not applied to attacks by the game'); continue; }
       if (m.mode === 'Inc') speedInc += m.v; else if (m.mode === 'More') speedMore *= 1 + m.v / 100; use(m);
@@ -19114,6 +19155,16 @@ window.BOCharacter = function (ctx) {
     if (sk.Channel && sk.Channel.Tick) { usesPerSec = rateMult / sk.Channel.Tick; useTime = sk.Channel.Tick / rateMult; }
     else if (isAttack) { const aps = weapon ? weapon.aps : 1.2; usesPerSec = aps * rateMult; useTime = 1 / usesPerSec; }
     else { const ct = sk.CastTime || 0.5; usesPerSec = rateMult / ct; useTime = ct / rateMult; }
+
+
+
+
+
+    const chanPace = isAttack && sk.Channel && sk.Channel.Tick ? 0.1 : 0;
+    if (chanPace && useTime < chanPace) {
+      res.notes.push(sk.Name + ': pulses at most every ' + chanPace + ' s (' + (1 / chanPace).toFixed(0) + ' a second); you have speed for ' + usesPerSec.toFixed(2) + ' a second, and the rest adds nothing (Copy stats, 27 Nov 2026).');
+      usesPerSec = 1 / chanPace; useTime = chanPace; res.speedCapped = true;
+    }
 
 
 
@@ -22167,7 +22218,7 @@ window.BOCharacter = function (ctx) {
       if (!condsOk(ctx, conds)) continue;
       res.notModelled.push(m);
     }
-    if (offBase && offBase.DamageMin && isAttack) res.notes.push('Off-hand weapon found: dual wielding alternates weapons in game; this sheet uses the main hand only.');
+    if (offBase && offBase.DamageMin && isAttack && !(weapon && weapon.dual) && !ctx.gear.has('bothhands')) res.notes.push('Off-hand weapon found: this sheet uses the main hand only.');
 
 
 
@@ -22214,6 +22265,20 @@ window.BOCharacter = function (ctx) {
       if (p && p.hit && isFinite(p.panelDps)) {
         res.echoFight = { hitAvg: res.hitAvg, sheetHitDps: res.sheetHitDps, panelDps: res.panelDps };
         for (const k of ['hit', 'hitAvg', 'hitAvgCrit', 'scaleInfo', 'convertedParts', 'convTrace', 'baseParts', 'sheetHitDps', 'panelDps']) if (p[k] !== undefined) res[k] = p[k];
+      }
+    }
+
+
+
+
+
+
+    if (!o.moving && !o._noStill && !o._barProbe && res.hit && mods.some(m => (m.tags || []).includes('StandingStill') && m.mode !== 'Flag' && res.used.has(m))) {
+      const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { _noStill: true, barShock: false }));
+      if (p && p.hit && isFinite(p.panelDps)) {
+        res.stillFight = { hitAvg: res.hitAvg, sheetHitDps: res.sheetHitDps, panelDps: res.panelDps };
+        for (const k of ['hit', 'hitAvg', 'hitAvgCrit', 'scaleInfo', 'convertedParts', 'convTrace', 'baseParts', 'sheetHitDps', 'panelDps']) if (p[k] !== undefined) res[k] = p[k];
+        res.notes.push('Standing still lines are counted in the vs-enemy DPS only (you fight standing); the hit, its breakdown and the panel DPS are the character sheet\'s, which leaves them out (Copy stats, 27 Nov 2026).');
       }
     }
     if (!o._noFort && !o._barProbe && !(o.off && o.off.has('fortify')) && (res.sources || []).some(s => s.key === 'fortify') && res.hit) {
@@ -24228,10 +24293,12 @@ window.BOCharacter = function (ctx) {
 
 
 
+
 if (typeof require !== 'undefined' && require.main === module) {
   const fs = require('fs'), path = require('path'), ROOT = path.join(__dirname, '..');
   const B = module.exports, S = require('../src/sim.js');
-  const [file, name] = process.argv.slice(2);
+  const argv = process.argv.slice(2), offAt = argv.indexOf('--off'), offSet = new Set(offAt >= 0 ? String(argv[offAt + 1] || '').split(',').filter(Boolean) : []);
+  const [file, name] = argv.filter((a, i) => a !== '--off' && i !== offAt + 1 || offAt < 0 && a !== '--off');
   if (!file) { console.error('node tools/sheet-check.js <file with the copied text> ["Character name"]'); process.exit(1); }
   const GD = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'gamedata.json'), 'utf8'));
   const cs = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'characters.json'), 'utf8')), list = cs.characters || cs;
@@ -24249,7 +24316,7 @@ if (typeof require !== 'undefined' && require.main === module) {
 
     const own = new Set((((ch.sockets || []).find(s => s.skill === b.id) || {}).supports || []).map(low));
     const sups = b.supports.concat(b.granted.filter(g => own.has(low(g)))).filter(s => GD.supports[s]);
-    let r; try { r = S.calcSkill(GD, ch, b.id, { supportsOverride: sups }); } catch (e) { r = { error: e.message }; }
+    let r; try { r = S.calcSkill(GD, ch, b.id, { supportsOverride: sups, off: offSet }); } catch (e) { r = { error: e.message }; }
     if (!GD.skills[b.id] || r.error || r.unsupported) { console.log('\n' + b.id + ': ' + (!GD.skills[b.id] ? 'not a skill the sim knows' : b.f.dps_shown === 0 ? 'no damage of its own (game and sim)' : r.error || r.unsupported)); continue; }
     if (mana == null && r.mana && r.mana.max != null) mana = r.mana.max;
     console.log('\n' + b.id + ' | gem ' + b.gem + ' | ' + (sups.join(', ') || 'no supports') + (b.granted.length ? ' | granted: ' + b.granted.join(', ') : ''));
@@ -24984,7 +25051,10 @@ window.BOStartApp = function () {
   const st = {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0, gatherFury: 2 }, // gatherFury: Fury charges counted while Gather Fury is linked (owner, 19 Nov 2026: default 2)
     enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: null, hallowCG: false, enemyLife: null, graveCall: null, flashfire: false, otherBleed: '', windburstMoves: null, corpseKind: '', corpsesPerSec: null, legionKind: '', shockPick: '', leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
-    penFloor: false, potionsOn: store.get('potionsOn', true) !== false, opt: null, optJob: null, last: null,
+    penFloor: false, potionsOn: store.get('potionsOn', true) !== false,
+
+    temperAllOn: store.get('temperAllOn', true) !== false, temperAllLvl: Math.max(1, Math.min(5, Math.floor(+store.get('temperAllLvl', 5)) || 5)),
+    opt: null, optJob: null, last: null,
     keepSup: new Set(), blockSup: new Set(), supOpen: new Set(), supFind: '', supMsg: '', // support picker: pinned for the search, folded groups opened by hand, search text, last message
   };
   let upgradeOptimizer = { status: 'idle', results: [], key: '', run: 0 };
@@ -25371,9 +25441,23 @@ window.BOStartApp = function () {
       conduit: st.conduit == null ? undefined : st.conduit,
       coc: st.coc === false ? false : undefined, cocSource: typeof st.coc === 'string' ? st.coc : undefined,
       potions: brewery && st.potionsOn ? brewery.simPotions() : [],
+      temperAll: temperAllNow() || undefined, // sim.js temperLevel: every support counts at least at this Tempering level
     }, extra || {});
   }
 
+
+  function temperAllNow() { return st.temperAllOn ? st.temperAllLvl : 0; }
+
+  function temperAllHtml() {
+    return '<div class="temper-all"><label class="check-row"><input type="checkbox" data-tall="on"' + (st.temperAllOn ? ' checked' : '') + '><span>Temper every support gem to level</span></label> ' +
+      '<select data-tall="lvl" aria-label="Tempering level for every support gem"' + (st.temperAllOn ? '' : ' disabled') + '>' +
+      [1, 2, 3, 4, 5].map(n => '<option value="' + n + '"' + (n === st.temperAllLvl ? ' selected' : '') + '>' + n + ' / 5</option>').join('') + '</select>' +
+      ' <span class="meta">Counts each support at this Forge Tempering level in every number and search; a gem tempered higher keeps its own level. Off: only the levels from your save or the Tempering row.</span></div>';
+  }
+  function syncTemperAll() {
+    for (const el of document.querySelectorAll('[data-tall="on"]')) el.checked = st.temperAllOn;
+    for (const el of document.querySelectorAll('[data-tall="lvl"]')) { el.value = String(st.temperAllLvl); el.disabled = !st.temperAllOn; }
+  }
 
 
   function comboOpts(extra) {
@@ -27136,7 +27220,7 @@ window.BOStartApp = function () {
   const supName = id => (GD.supports[String(id).toLowerCase()] || { Name: id }).Name;
   function optSig() {
     const o = opts();
-    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.hallowedCG, o.enemyLife, o.graveCall, o.flashfire, o.enemyBleeding, o.windburstMoves, o.corpseKind, o.corpsesPerSec, o.legionKind, o.leechUptime, o.execSim, o.mainSkill, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel],
+    return JSON.stringify({ e: [o.enemyLevel, o.enemyRarity, o.guardianElement, o.guardianStrong, o.guardianWeak, o.enemyRes, o.curses, o.extraTakenPct, o.enemyHallowedGround, o.hallowedCG, o.enemyLife, o.graveCall, o.flashfire, o.enemyBleeding, o.windburstMoves, o.corpseKind, o.corpsesPerSec, o.legionKind, o.leechUptime, o.execSim, o.mainSkill, o.projOnTarget, o.totemCount, o.hitsPerSecOverride, o.castsPerSecOverride, o.penFloor, o.gemLevel, o.temperAll],
       off: [...st.off].filter(k => !k.startsWith('support:')).sort(), vb: [...st.vowbreak].sort(), th: o.tryHeralds, ch: o.charges, po: o.potions });
   }
   function runSearch() {
@@ -27514,6 +27598,19 @@ window.BOStartApp = function () {
 
   $('#potionsOn').checked = st.potionsOn;
   $('#potionsOn').addEventListener('change', e => { st.potionsOn = e.target.checked; store.set('potionsOn', st.potionsOn); render(); });
+
+
+
+  document.addEventListener('change', e => {
+    const t = e.target, k = t && t.dataset && t.dataset.tall; if (!k) return;
+    if (k === 'on') { st.temperAllOn = t.checked; store.set('temperAllOn', st.temperAllOn); }
+    else if (k === 'lvl') { st.temperAllLvl = Math.max(1, Math.min(5, Math.floor(+t.value) || 5)); store.set('temperAllLvl', st.temperAllLvl); }
+    else return;
+    syncTemperAll();
+    render(); if (planner && !$('#buildPane').hidden) planner.render();
+    document.dispatchEvent(new CustomEvent('bo:temperall'));
+  });
+  $('#temperAllDmg').innerHTML = temperAllHtml();
   resGrid.addEventListener('input', e => { const d = e.target.dataset.res; if (d) { st.res[d] = e.target.value; render(); } });
   document.querySelectorAll('[data-charge]').forEach(el => el.addEventListener('input', e => { st.charges[e.target.dataset.charge] = Math.max(0, +e.target.value || 0); render(); }));
   const controlsChange = e => {
@@ -31193,7 +31290,7 @@ window.BOStartApp = function () {
 
     importCode: async text => { const ch = await importAnyCode(text); if (ch) { showTab('character'); window.scrollTo(0, 0); } return ch; },
     openPlan: () => { showTab('plan'); window.scrollTo(0, 0); }, // the empty Build Planner's "Start fresh", as Start a New Plan
-    bestSupports: bestSupportsFor, supMarks: marksFor,
+    bestSupports: bestSupportsFor, supMarks: marksFor, temperAll: () => temperAllNow(), temperAllHtml,
 
     withTabs: ch => planWithTabs(ch),
     current: () => st.ch, workingCopy: () => st.ch, retree,
@@ -31485,7 +31582,7 @@ window.BOStartApp = function () {
     beltCard: () => brewery ? brewery.beltCard() : '',
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, num, pct, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
     openIdolSim: from => openIdoWin(from), // "Sim Idols" by the Fossil: the Item Simulator's Idol Sim in a window
-    supportSearch: supportSearchFor, supMarks: marksFor, simSkill: () => st.skill, // the main skill: the plan's own, or the one the Damage tab sims
+    supportSearch: supportSearchFor, supMarks: marksFor, temperAllHtml, simSkill: () => st.skill, // the main skill: the plan's own, or the one the Damage tab sims
 
     countable: id => onBarNow(id) && (st.pickable || []).some(s => s.id === id), autoCounted: id => cocAuto(id), optWeights: () => st.optW || {}, setOptWeight: (id, w) => { setOptWeight(id, w); if (planner && !$('#buildPane').hidden) planner.render(); }, execState: sk => execState(st.ch, sk), setExecOn: (id, on) => { setExecOn(id, on); if (planner && !$('#buildPane').hidden) planner.render(); },
 

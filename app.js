@@ -4104,6 +4104,17 @@ window.BOPlanner = function (ctx) {
     const main = now.filter(c => !c.packOnly && !c.inert), more = now.filter(c => c.packOnly), idle = now.filter(c => c.inert && !c.packOnly);
     const moreOn = more.some(c => inSet.has(c.id));
     const grp = (key, open) => ' data-grp="' + key + '"' + (open || supOpen.has(key) ? ' open data-open="1"' : '');
+
+
+    const tLvl = id => Math.max(0, Math.min(5, Math.floor(+((ch.temper || {})[lc(id)]) || 0)));
+    const tName = id => (GD.supports[lc(id)] || { Name: id }).Name;
+    const tOn = sups.filter(id => tLvl(id) > 0);
+    const temper = !sups.length ? '' : edit
+      ? '<details class="sup-more sup-temper"' + grp('temper', tOn.length > 0) + '><summary>Tempering <span class="meta">(the Forge, from Rupture Level 100: up to 5 levels per support gem)</span></summary><div class="sup-row">' +
+        sups.map(id => '<label class="sup-temper-one"><span>' + esc(tName(id)) + '</span><select data-f="temper" data-sup="' + esc(lc(id)) + '" aria-label="' + esc('Tempered level of ' + tName(id)) + '">' +
+          [0, 1, 2, 3, 4, 5].map(n => '<option value="' + n + '"' + (n === tLvl(id) ? ' selected' : '') + '>' + n + ' / 5</option>').join('') + '</select></label>').join('') +
+        '</div><span class="meta">Each level eases the less damage line of the gem (2% at level 5), or adds a little more damage when it has none (0.5% at level 5), and lowers its mana cost multiplier. The level belongs to the hero: it counts wherever that support is socketed.</span></details>'
+      : tOn.length ? '<div class="sup-row sup-temper"><span class="meta">Tempered:</span> ' + tOn.map(id => '<span class="meta">' + esc(tName(id)) + ' ' + tLvl(id) + ' / 5</span>').join(' ') + '</div>' : '';
     return '<div class="sup-picker pl-sups" data-supskill="' + esc(r.skill) + '">' +
       '<input type="search" class="sup-find" data-supfind="' + esc(r.skill) + '" placeholder="Search supports" aria-label="Search supports" autocomplete="off" value="' + esc(supFind[r.skill] || '') + '">' +
       '<span class="meta' + (sups.length > slots ? ' bad' : '') + '">' + sups.length + ' / ' + slots + ' support sockets at gem level ' + lvl + (edit ? ' · click a support to socket it or take it out' : '') + '</span>' +
@@ -4114,6 +4125,7 @@ window.BOPlanner = function (ctx) {
       (more.length ? '<details class="sup-more"' + grp('more', moreOn) + '><summary>Packs and extras <span class="meta">(' + more.length + ', no damage against one enemy)</span></summary><div class="sup-row">' + more.map(tag).join('') + '</div></details>' : '') +
       (idle.length ? '<details class="sup-more"' + grp('idle') + '><summary>No effect in the sim <span class="meta">(' + idle.length + ', can be socketed)</span></summary><div class="sup-row">' + idle.map(tag).join('') + '</div></details>' : '') +
       (later.length ? '<details class="sup-more"' + grp('later', later.some(c => inSet.has(c.id))) + '><summary>Not in the game yet <span class="meta">(' + later.length + ', in the game data but not dropping; Sim Supports leaves them out)</span></summary><div class="sup-row">' + later.map(tag).join('') + '</div></details>' : '') +
+      temper +
       (GD.skills[lc(r.skill)] ? supMissHtml(ch, r.skill, choices, r.sock && r.sock.conduit) : '') +
       '</div>';
   }
@@ -4735,6 +4747,11 @@ window.BOPlanner = function (ctx) {
     const v = t.value;
     if (f === 'readimg') { if (t.files[0]) readInto(t.closest('[data-item]'), t.files[0]); return; }
     switch (f) {
+      case 'temper': { // Support Tempering level of one support gem (0 = not tempered)
+        const id = lc(t.dataset.sup || ''), n = Math.max(0, Math.min(5, Math.floor(+v || 0))); if (!id) return;
+        ch.temper = Object.assign({}, ch.temper); if (n) ch.temper[id] = n; else delete ch.temper[id];
+        return done();
+      }
       case 'name': ch.name = v.trim() || ch.name; return done({ name: true });
       case 'cls': {
 
@@ -16163,6 +16180,27 @@ window.BOCharacter = function (ctx) {
 
   const AIL_BIT = { Bleed: 1, Ignite: 2, Poison: 4 };
   const ailPreCrit = (GD, kind) => (ruleNum(GD, 'r114.META.AilPreCrit114', 0) & AIL_BIT[kind]) !== 0;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  const TEMPER = [null, { less: 0.5, more: 0.1, cost: 0.02 }, { less: 1, more: 0.2, cost: 0.04 }, { less: 1.5, more: 0.3, cost: 0.06 }, { less: 1.75, more: 0.4, cost: 0.06 }, { less: 2, more: 0.5, cost: 0.06 }];
+  const TEMPER_LESS = new Set(['Damage', 'RepeatOwnDamage', 'TrigDamage']);
+  const temperLevel = (ch, id) => { const t = ch && ch.temper; if (!t) return 0; const n = +(t[lc(id)] ?? t[id]) || 0; return n > 0 ? Math.min(TEMPER.length - 1, Math.floor(n)) : 0; };
+  const temperLessLine = m => TEMPER_LESS.has(m.Stat) && m.Mode === 'More' && (m.Value || 0) < 0;
+
+  const temperCost = (sd, n) => sd && sd.ManaMultiplier ? (n > 0 && sd.ManaMultiplier > 1 ? Math.max(1, sd.ManaMultiplier - TEMPER[n].cost) : sd.ManaMultiplier) : 1;
   const VOW_BUILT_IN = 0.15; // every Vow gem's lines x1.15 since patch 82 (gem texts, API game data build 85; see the Vow block)
   const takenRule = (GD, isBoss) => is084(GD) ? 'kinds' : is082(GD) ? 'add' : !!(isBoss && guardianStrongestTaken(GD));
 
@@ -16407,6 +16445,9 @@ window.BOCharacter = function (ctx) {
 
 
       oaths: Object.assign({}, R.OathMasteries95 || {}),
+
+
+      temper: Object.fromEntries(Object.entries(R.SupportTemper126 || {}).filter(([k, v]) => k && +v > 0).map(([k, v]) => [lc(k), +v])),
       supportGems: R.SupportGems || [], // spare support gems in the inventory
 
 
@@ -17655,7 +17696,11 @@ window.BOCharacter = function (ctx) {
       res.supports.push({ id, key, name: sd.Name + (granted ? ' (granted)' : '') + (ok && engShare ? ' (minions, ' + (engShare === 0.5 ? 'half strength' : Math.round(engShare * 100) + '% strength') + ')' : ''), granted, ok, why: ok ? '' : noHitMiss(sd, sk) ? 'no effect: ' + sk.Name + ' deals no hits' : brandTrapMiss(sd, sk) ? 'cannot be thrown as a trap: Brands cannot take it' : meleeOnlyMiss(sd, sk) ? 'the minions of ' + sk.Name + ' cannot use it (melee minions only)' : 'does not support this skill (' + (ex.some(t => ctx.tags.has(lc(t))) ? 'not for ' + ex.filter(t => ctx.tags.has(lc(t))).join(' or ') + ' skills' : 'needs ' + req.join(' or ')) + ')', desc: sd.Description });
       if (!ok || (o.off && o.off.has(key))) continue;
       const k = engShare || 1;
-      for (const m of sd.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: (m.Value || 0) * k, v2: (m.Value2 || 0) * k, local: false, src: 'Support · ' + sd.Name + (engShare ? ' (minions, x' + engShare + ')' : ''), key });
+
+      const tl = granted ? 0 : temperLevel(ch, id), T = TEMPER[tl], eased = T && (sd.Mods || []).some(temperLessLine);
+      for (const m of sd.Mods || []) mods.push({ stat: m.Stat, mode: m.Mode, tags: m.Tags || [], v: (eased && temperLessLine(m) ? ((1 + m.Value / 100) * (1 + T.less / 100) - 1) * 100 : (m.Value || 0)) * k, v2: (m.Value2 || 0) * k, local: false, src: 'Support · ' + sd.Name + (engShare ? ' (minions, x' + engShare + ')' : ''), key });
+      if (T && !eased) mods.push({ stat: 'Damage', mode: 'More', tags: [], v: T.more * k, v2: 0, local: false, src: 'Support · ' + sd.Name + ' (Tempered ' + tl + ')', key });
+      if (T) res.supports[res.supports.length - 1].temper = tl;
 
 
 
@@ -21680,7 +21725,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-      for (const sp of res.supports) if (sp.ok && !sp.hostOnly && !sp.granted && !(o.off && o.off.has(sp.key))) { const sd = GD.supports[lc(sp.id)]; if (sd && sd.ManaMultiplier) mult *= sd.ManaMultiplier; }
+      for (const sp of res.supports) if (sp.ok && !sp.hostOnly && !sp.granted && !(o.off && o.off.has(sp.key))) { const sd = GD.supports[lc(sp.id)]; if (sd && sd.ManaMultiplier) mult *= temperCost(sd, sp.temper || 0); } // sp.temper: Support Tempering eases the cost multiplier (see TEMPER)
       let costInc = 0; for (const m of pickMods(mods, 'ManaCost', 'Inc')) if (applies(ctx, m)) costInc += m.v;
 
 

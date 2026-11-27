@@ -698,6 +698,9 @@ tr.cmp-counted td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 /* Support picker (Supports card) */
 .sup-picker { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
 .sup-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.sup-temper .sup-row { gap: 6px 14px; margin: 6px 0; }
+.sup-temper-one { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; white-space: nowrap; }
+.sup-temper-one select { width: auto; min-width: 0; flex: none; padding: 2px 22px 2px 6px; font-size: 12.5px; min-height: 0; }
 .sup-row.granted .meta { color: var(--faint); font-size: 11.5px; margin-right: 2px; }
 .sup { display: inline-flex; align-items: stretch; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); overflow: hidden; }
 .sup:hover { border-color: var(--faint); }

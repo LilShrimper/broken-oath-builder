@@ -570,7 +570,7 @@ window.PAGE_LANGS = {
     }
 
     const curses = {};
-    for (const c of J('Gameplay/curses.json').curses) curses[c.Id] = pick(c, ['Id', 'Name', 'Kind', 'Skill', 'TakenPct', 'ElementTakenPct', 'ResistDown', 'BossEffect', 'Dread', 'Tough', 'Text', 'DotTakenPct', 'DealtLessPct', 'ChaosTakenPct', 'EntropySoonerSec']); // ChaosTakenPct, EntropySoonerSec: Woe of Entropy (patch 88); DotTakenPct: Sentence of Rot (patch 77); DealtLessPct: Woe of Faltering, Sentence of Chains (shown, not simmed)
+    for (const c of J('Gameplay/curses.json').curses) curses[c.Id] = pick(c, ['Id', 'Name', 'Kind', 'Skill', 'TakenPct', 'ElementTakenPct', 'ResistDown', 'BossEffect', 'Dread', 'Tough', 'Text', 'DotTakenPct', 'DealtLessPct', 'ChaosTakenPct', 'EntropySoonerSec', 'Slow']); // ChaosTakenPct, EntropySoonerSec: Woe of Entropy (patch 88); DotTakenPct: Sentence of Rot (patch 77); DealtLessPct: Woe of Faltering, Sentence of Chains (shown, not simmed)
     const blessings = {};
     for (const b of J('Gameplay/blessings.json').blessings) blessings[b.Id] = pick(b, ['Id', 'Name', 'Kind', 'Skill', 'Mods', 'Text', 'Vowbreak', 'ReserveFlat', 'ReserveFlatPerLevel', 'ReservePct']);
 
@@ -13179,7 +13179,9 @@ window.BOFaq = function (ctx) {
       const t = [];
       if (c.TakenPct) t.push('+' + c.TakenPct + '% damage taken' + (c.Kind === 'Mark' ? ' per Mark' : ''));
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) t.push('+' + v + '% ' + d + ' damage taken');
+      if (c.ChaosTakenPct) t.push('+' + c.ChaosTakenPct + '% Chaos damage taken');
       if (c.DotTakenPct) t.push('+' + c.DotTakenPct + '% damage taken from Bleed, Poison and Ignite');
+      if (c.DealtLessPct) t.push(c.DealtLessPct + '% less damage dealt');
       for (const [d, v] of Object.entries(c.ResistDown || {})) t.push('−' + v + '% ' + d + ' resistance');
       if (c.Slow) t.push(pct(c.Slow) + '% slow');
       return t.join(', ') || (c.Text ? esc(c.Text.replace(/\{\d+\}%\s*/g, '')) : '–');
@@ -25550,7 +25552,7 @@ window.BOStartApp = function () {
       }
       const half = why.length ? '<span class="why"> (' + why.map(esc).join(', ') + ')</span>' : '';
       const effect = row ? (parts.length ? 'now: ' + parts.join(', ') : 'does not change your damage')
-        : (c.Text || '').replace('{0}', c.TakenPct || 0).replace('{1}', Object.values(c.ElementTakenPct || {})[0] || '').replace('{3}', Object.values(c.ResistDown || {})[0] || '').replace(/[;,]? ?[^;]*\{[24]\}[^;]*/g, '').trim() || 'does not change your damage';
+        : curseText(c) || 'does not change your damage';
       return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + '<span class="meta">' + esc(effect) + half + (cs.on && !onBar && curseSkill(c) ? ' · <span class="off-bar">not on your skill bar, counted anyway</span>' : '') + (cs.on && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · not counted: ' + (c.Kind === 'Mark' ? 'your Hunter\'s Mark support lays more (one pool of Marks)' : 'an enemy holds ' + (c.Kind === 'Woe' ? 'two Woes' : 'one ' + c.Kind) + ' at a time') : '') + '</span></span></label>' +
         (c.Dread && c.Dread.Cap && cs.on ? (() => {
           const max = row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c);
@@ -25572,6 +25574,20 @@ window.BOStartApp = function () {
 
 
 
+
+
+
+
+  function curseText(c) {
+    const first = o => Object.values(o || {})[0];
+
+    const val = { 0: c.TakenPct || first(c.ElementTakenPct) || c.TakenPct, 1: first(c.ElementTakenPct), 2: c.Slow != null ? Math.round(c.Slow * 1000) / 10 : null, 3: first(c.ResistDown), 4: c.DealtLessPct, 5: c.DotTakenPct, 6: c.ChaosTakenPct };
+    return String(c.Text || '').split(';').map(p => {
+      let ok = true;
+      const t = p.replace(/\{(\d+)\}/g, (m, k) => { const v = val[k]; if (v == null || v === '') { ok = false; return m; } return +(+v).toFixed(2); });
+      return ok ? t.trim() : '';
+    }).filter(Boolean).join('; ');
+  }
   function hallowOwn(ch) {
     if (!ch) return [];
     try { return S.hallowedSources(GD, ch, S.collectMods(GD, ch, { off: st.off }).mods, false); } catch (e) { return []; }

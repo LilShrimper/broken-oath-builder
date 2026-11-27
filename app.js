@@ -3802,7 +3802,9 @@ window.BOPlanner = function (ctx) {
     let h = fold ? '<details class="card pl-setup"' + (setupOpen ? ' open' : '') + '><summary><h2>Plan setup</h2><span class="hint">' + esc(ch.name + ' · ' + ch.classId + ' · level ' + ch.level) + ' · name, class, level, plan code</span></summary>'
       : '<div class="card"><h2>' + (plan ? 'Build Planner Setup' : 'Build Planner') + '</h2>';
     if (!ch || !plan) {
-      h += '<p class="hint">' + (ch ? 'Edit the skills below to see what they do to your damage; gear is edited on the Character tab (click a slot). Changes stay in this page until you leave it; use <b>Save as plan</b> to keep them. Your save is never changed.' : 'Load a character to see its current setup, or use <b>Plan a new build</b> to start from scratch.') + '</p>';
+      h += '<p class="hint">' + (ch ? 'Edit the skills below to see what they do to your damage; gear is edited on the Character tab (click a slot). Changes stay in this page until you leave it; use <b>Save as plan</b> to keep them. Your save is never changed.' : 'Load a character to see its current setup, start a fresh plan, or open a code you were given.') + '</p>';
+
+      if (!ch) h += '<div class="pl-row pl-fresh"><button class="btn" type="button" data-act="newplan">Start fresh</button><span class="hint">Pick a class and build it from scratch.</span></div>';
       if (ch) h += '<div class="pl-row"><button class="btn small" type="button" id="buildSavePlan" title="Keeps a copy of this build, edits included, as a plan in this browser. The save is not changed.">Save as plan</button>' +
         (ctx.isEdited() ? '<button class="btn small ghost" type="button" id="buildResetSave">Reset to save</button>' : '') + '</div>';
     } else {
@@ -3839,7 +3841,8 @@ window.BOPlanner = function (ctx) {
     importing = false; render();
   }
   async function startNewPlan(classId, level) {
-    if (!await ctx.confirm('Start a new build?', 'A new empty build plan will be started. You can keep any existing plans.', 'Start plan')) return false;
+
+    if (ctx.current() && !await ctx.confirm('Start a new build?','A new empty build plan will be started. You can keep any existing plans.', 'Start plan')) return false;
     if (ctx.leave && !await ctx.leave()) return false; // the open build's unsaved changes: save or discard first
     const current = ctx.current();
     const defaultClass = current && current.classId || Object.values(GD.classes)[0].Id;
@@ -4912,6 +4915,7 @@ window.BOPlanner = function (ctx) {
     const b = e.target.closest('[data-act]'); if (!b) return;
     const act = b.dataset.act;
     if (act === 'importcode') return importCodeBox();
+    if (act === 'newplan') { if (await startNewPlan() && ctx.openPlan) ctx.openPlan(); return; }
     if (!ctx.current()) return;
     if (act === 'resetlinks') { status = ''; return ctx.resetLinks(); }
     if (act === 'suppin' || act === 'supblock') {
@@ -30980,7 +30984,9 @@ window.BOStartApp = function () {
     beltCard: () => brewery ? brewery.beltCard() : '',
     GD, S, $, esc, gemDot, skillDot, confirm: confirmInPage,
 
-    importCode: async text => { const ch = await importAnyCode(text); if (ch) { showTab('character'); window.scrollTo(0, 0); } return ch; }, bestSupports: bestSupportsFor, supMarks: marksFor,
+    importCode: async text => { const ch = await importAnyCode(text); if (ch) { showTab('character'); window.scrollTo(0, 0); } return ch; },
+    openPlan: () => { showTab('plan'); window.scrollTo(0, 0); }, // the empty Build Planner's "Start fresh", as Start a New Plan
+    bestSupports: bestSupportsFor, supMarks: marksFor,
 
     withTabs: ch => planWithTabs(ch),
     current: () => st.ch, workingCopy: () => st.ch, retree,

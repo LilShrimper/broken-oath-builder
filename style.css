@@ -857,7 +857,7 @@ tr.cmp-counted td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
    the Tools bar by src/app.js) and how the numbers are checked. */
 .hero-top { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); padding: 24px; isolation: isolate; }
 body.no-char .hero { display: grid; }
-body.no-char.other-view .hero { display: none; }
+body.no-char.other-view:not(.landing-view) .hero { display: none; } /* Home sits on the Advanced view since 25 Nov 2026 (other-view): keep its landing panel */
 body.no-char .controls, body.no-char #results .empty, body.needs-data .hero { display: none; }
 body.no-char .layout { grid-template-columns: 1fr; }
 body.landing-view .hero { display: grid; }

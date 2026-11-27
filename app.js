@@ -18488,7 +18488,7 @@ window.BOCharacter = function (ctx) {
         lifeBase = res.heroLife * sk.LifeAsBase / 100;
         res.notes.push(sk.Name + ': ' + sk.LifeAsBase + '% of your ~' + Math.round(res.heroLife) + ' maximum life (+' + lifeBase.toFixed(1) + ') joins the weapon\'s base physical damage. Max life here counts level, Strength and life lines on gear and the tree (checked against the game log); temporary life buffs are not counted.');
       }
-      weapon = weaponStats(GD, mainItem, mainBase, mods, use, lifeBase);
+      weapon = weaponStats(GD, mainItem, mainBase, mods, use, lifeBase, ch.level);
       const [fullB, fadedB] = bonusSplit(bonus);
       const levelFactor = (1 + (G.AttackEffectivenessPerLevel || 0) * (own - 1)) * (G.BonusLevelAttackMore > 0 ? Math.pow(G.BonusLevelAttackMore, fullB) : 1 + (G.AttackEffectivenessPerLevel || 0) * fullB) * Math.pow(attackFade(GD, G), fadedB);
       attackMult = effAt(sk.Effectiveness != null ? sk.Effectiveness : 1) * levelFactor;
@@ -23239,14 +23239,25 @@ window.BOCharacter = function (ctx) {
 
 
 
-  function weaponStats(GD, item, base, mods, use, extraBase) {
+  function weaponStats(GD, item, base, mods, use, extraBase, level) {
     const dmg = {}; DT.forEach(d => dmg[d] = [0, 0]);
 
 
 
 
 
-    if (!base || !base.DamageMin) { const xb0 = extraBase || 0; dmg.Physical = [12 + xb0, 27 + xb0]; return { name: 'Unarmed', dmg, aps: 1.6, crit: GD.scaling.Hero.CritBase }; }
+
+
+
+
+
+
+
+    if (!base || !base.DamageMin) {
+      const xb0 = extraBase || 0, lv = Math.max(1, +level || 45);
+      dmg.Physical = [1.8 + 0.229 * lv + xb0, 6.4 + 0.451 * lv + xb0];
+      return { name: 'Unarmed', dmg, aps: 1.6, crit: GD.scaling.Hero.CritBase };
+    }
     const key = 'item:' + item.slot;
     let physInc = 0, asInc = 0, critInc = 0;
     const added = {}; DT.forEach(d => added[d] = [0, 0]);

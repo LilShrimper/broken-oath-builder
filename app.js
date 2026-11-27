@@ -16630,6 +16630,9 @@ window.BOCharacter = function (ctx) {
 
   const COC_ATTACK_GAP = 0.75, COC_ATTACK_LESS = -44;
 
+  const LINK_RAMP = [[9, 0], [10, 0.040], [11, 0.146], [12, 0.286], [13, 0.4325], [14, 0.565], [17, 0.870], [19, 0.966], [20, 1]];
+  const linkRamp = g => { if (g <= 9) return 0; if (g >= 20) return 1; for (let i = 1; i < LINK_RAMP.length; i++) { const [g1, w1] = LINK_RAMP[i], [g0, w0] = LINK_RAMP[i - 1]; if (g <= g1) return w0 + (w1 - w0) * (g - g0) / (g1 - g0); } return 1; };
+
 
 
   const armyRule = GD => ({ total: ruleNum(GD, 'r81.MINIONS.Army', 40), full: ruleNum(GD, 'r81.MINIONS.ShareFrom', 27), past: ruleNum(GD, 'r81.MINIONS.Marginal', 0.5) });
@@ -18582,7 +18585,15 @@ window.BOCharacter = function (ctx) {
 
     if (is079(GD) && sk.Kind === 'Gem' && !o.noLinkRule) {
       const from = ruleNum(GD, 'r103.MAIN-SKILL.fLinkFrom103', 9);
-      const w = clamp((L - from) / Math.max(1, 20 - from), 0, 1);
+
+
+
+
+
+
+
+
+      const w = from === 9 ? linkRamp(L) : clamp((L - from) / Math.max(1, 20 - from), 0, 1);
       const open = Math.min(6, (G.SocketsAtLevel || [1, 2, 5, 12, 15, 20]).filter(l => L >= l).length);
 
 
@@ -18610,11 +18621,11 @@ window.BOCharacter = function (ctx) {
       }
       links = Math.min(open, links);
       const empty = Math.max(0, open - links);
-      const f = 1 - w * empty / 7;
+      const f = 1 - w * empty / (1 + Math.max(1, open));
       res.links = { links, open, empty, ramp: w, factor: f };
       if (f < 1) {
         mods.push({ stat: isSummon(sk) ? 'MinionDamage' : 'Damage', mode: 'More', tags: [], v: (f - 1) * 100, v2: 0, local: false, src: 'Links (patch 79): ' + links + ' of ' + open + ' sockets filled', key: 'links' });
-        res.notes.push('Links (patch 79): ' + links + ' of ' + open + ' open sockets hold a working support, so ' + sk.Name + ' deals x' + f.toFixed(2) + ' (each empty socket costs 1/7' + (w < 1 ? ', ' + Math.round(w * 100) + '% of that at gem level ' + L + ': the rule ramps in from gem ' + from + ' to 20' : '') + '). From the patch notes; not yet checked in game.');
+        res.notes.push('Links (patch 79): ' + links + ' of ' + open + ' open sockets hold a working support, so ' + sk.Name + ' deals x' + f.toFixed(2) + ' (each empty socket costs 1/' + (1 + open) + (w < 1 ? ', ' + Math.round(w * 100) + '% of that at gem level ' + L + ': the rule ramps in from gem ' + from + ' to 20' : '') + '). The game log prints the same number.');
       }
     }
     if (isSummon(sk)) {

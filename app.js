@@ -376,6 +376,13 @@ window.PAGE_LANGS = {
 
 
         const nb = new Set(s.Links || []); for (const y of Object.values(tree.nodes)) if ((y.Links || []).includes(s.Id)) nb.add(y.Id);
+
+
+
+
+
+
+        for (const y of Object.values(tree.nodes)) if (y.Group && y.Group === s.Group && y.Kind === 'Notable' && !/^om103_/.test(y.Id)) nb.add(y.Id);
         masteries[id] = { Id: id, Name: s.Name, X: s.X, Y: s.Y, Notables: [s.Id, ...nb], Class: base.Class || '', Oaths: base.Oaths.slice(), Seat: s.Id };
       }
     }
@@ -29076,7 +29083,7 @@ window.BOStartApp = function () {
 
   function oathBlocked(m, oid, have, sw) {
 
-    if (!masteryOpen(m, have)) return m.Seat ? 'Take the notable next to this Oath seat first (the seat itself costs no point)' : 'Take one of this mastery\'s notables first';
+    if (!masteryOpen(m, have)) return m.Seat ? 'Take a notable of this Oath seat\'s cluster first (the seat itself costs no point)' : 'Take one of this mastery\'s notables first';
     if (OATH_ONCE) for (const [mid, o] of sw) if (mid !== m.Id && o.Id === oid) return 'Already sworn at another ' + GD.masteries[mid].Name + ' socket';
     return '';
   }

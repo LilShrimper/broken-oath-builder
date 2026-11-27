@@ -411,8 +411,9 @@ window.PAGE_LANGS = {
 
 
 
+
       'Mastery of the Reaping': [
-        { Id: 'oath_reapers_tithe', Name: 'Oath of the Reaper\'s Tithe', Text: 'While you wield a two handed weapon: 10% increased Melee damage. Your minions deal 10% increased damage', Vow: '', Mods: [{ Stat: 'Damage', Mode: 'Inc', Tags: ['Melee', 'TwoHanded'], Value: 10 }, { Stat: 'MinionDamage', Mode: 'Inc', Tags: [], Value: 10 }] },
+        { Id: 'oath_reaper_tithe', Name: 'Oath of the Reaper\'s Tithe', Text: 'While you wield a two handed weapon: 10% increased Melee damage. Your minions deal 10% increased damage', Vow: '', Mods: [{ Stat: 'Damage', Mode: 'Inc', Tags: ['Melee', 'TwoHanded'], Value: 10 }, { Stat: 'MinionDamage', Mode: 'Inc', Tags: [], Value: 10 }] },
         { Id: 'oath_grave_harvest', Name: 'Oath of the Grave Harvest', Text: '15% increased Armour and 4% increased maximum Life', Vow: '', Mods: [{ Stat: 'Armour', Mode: 'Inc', Tags: [], Value: 15 }, { Stat: 'Life', Mode: 'Inc', Tags: [], Value: 4 }] },
         { Id: 'oath_rotting_edge', Name: 'Oath of the Rotting Edge', Text: '12% increased Poison and Bleeding damage with Melee', Vow: '', Mods: [{ Stat: 'PoisonDamage', Mode: 'Inc', Tags: ['Melee'], Value: 12 }, { Stat: 'BleedDamage', Mode: 'Inc', Tags: ['Melee'], Value: 12 }] },
         { Id: 'oath_wide_arc', Name: 'Oath of the Wide Arc', Text: 'While you wield a two handed weapon: 10% increased Melee area of effect', Vow: '', Mods: [{ Stat: 'Area', Mode: 'Inc', Tags: ['Melee', 'TwoHanded'], Value: 10 }] },
@@ -15992,9 +15993,12 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
   function stackRow(c, dread, dreadCap, mods) {
     if (c.Kind === 'Mark') {
-      const n = dread > 0 ? Math.min(dread, dreadCap) : dreadCap;
+      const n = dread > 0 ? dread : dreadCap;
       let inc = 0; for (const m of mods || []) if (m.stat === 'MarkEffect' && m.mode === 'Inc') inc += m.v;
       return { n, base: (c.TakenPct || 0) * n, inc };
     }
@@ -16250,6 +16254,18 @@ window.BOCharacter = function (ctx) {
     const top = r => Math.max(r.taken, r.dot || 0, ...Object.values(r.elem || {}));
     const best = Math.max(0, ...general.map(top), ...(extras || []).map(x => x || 0));
     return (1 + best / 100) * typedOnly.reduce((p, r) => p * (1 + typedOf(r) / 100), 1);
+  };
+
+
+
+
+
+  const staticGrowth = (r, room, T, q) => {
+    if (!(r > 0) || !(T > 0) || !(room > 0)) return 0;
+    const tc = Math.min(T, room / r); // seconds to reach the cap
+    const fT = r * tc * tc / 2 + room * (T - tc); // growth x time over a whole life
+    const iF = r * tc * tc * tc / 6 + (r * tc * tc / 2) * (T - tc) + room * (T - tc) * (T - tc) / 2; // the same, summed over every window 0..T
+    return (q * iF / T + (1 - q) * fT) / (q * T / 2 + (1 - q) * T);
   };
 
 
@@ -18990,6 +19006,12 @@ window.BOCharacter = function (ctx) {
 
         cooldown = Math.max(Math.min(cooldown, 0.3), cooldown / moveRecharge);
         res.notes.push('Movement skill: its cooldown recovers with Dexterity (1% per 10), not with ' + (isAttack ? 'attack' : 'cast') + ' speed: ' + cooldown.toFixed(2) + ' s at ' + (attr.Dex || 0) + ' Dexterity.');
+      } else if (sk.Delivery === 'Ground' && sk.Ground && sk.Ground.Duration > 0) {
+
+
+
+
+
       } else if (is0562(GD) && !(META.bRainCooldownBySpeed && isAttack && sk.Delivery === 'Rain') && !(!isAttack && sk.Delivery === 'Brand') && speedRate > 0) {
 
         const cdRaw = cooldown / speedRate, cdFloor = Math.min(sk.MinCooldown || 0, cdBeforeSpeed);
@@ -19393,7 +19415,7 @@ window.BOCharacter = function (ctx) {
       shapeWeight = (icicles + bursts * burstScale) / usesPerSec;
       res.orb = { orbs, every, duration: dur, burstScale };
       res.notes.push(sk.Name + ': ' + orbs + ' orb' + (orbs > 1 ? 's' : '') + (up < 1 ? ' up ' + Math.round(up * 100) + '% of the time' : '') + ', each throwing an icicle every ' + every.toFixed(2) + ' s for ' + dur + ' s, then bursting for ' + Math.round(burstScale * 100) + '% of an icicle. Cast speed quickens the icicles (x' + orbSpeed.toFixed(2) + ' from cast speed, the game\'s speed^0.70' + (speedRate > orbSpeedCap ? ', stopped at the cast speed cap' : '') + ').');
-    } else if (['Orb', 'Orbit', 'Ground', 'Skyfall', 'Rain', 'Totem'].includes(sk.Delivery)) {
+    } else if (['Orb', 'Orbit', 'Ground', 'Skyfall', 'Rain', 'Totem'].includes(sk.Delivery) && !(sk.Delivery === 'Ground' && sk.Ground && sk.Ground.Duration > 0 && sk.Ground.Tick > 0)) { // a ground that stays: its ticks are counted further down
       res.notes.push(sk.Delivery + ' skills hit on their own pattern; this sheet counts one hit per cast. Set "hits per second" by hand if you know the real rate.');
     }
     if (host) {
@@ -19692,6 +19714,29 @@ window.BOCharacter = function (ctx) {
       if (xh.panelOff) res.notes.push('The game\'s own skill panel does not count ' + sk.Name + '\'s extra strike, so its DPS reads about ' + Math.round((1 - 1 / xh.w) * 100) + '% lower than this sheet (tooltip, 11 Nov 2026).');
       res.notes.push(sk.Name + ': ' + xh.t + ' (' + xh.w.toFixed(2) + ' full hits per use). From the game\'s skill ' + (sk.Channel && sk.Channel.bStrike || !/sheathe cut|each landing arrow|cut again for half|come back into that enemy/i.test(desc) ? 'data' : 'text') + '; not checked in a fight.');
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    if (sk.Delivery === 'Ground' && sk.Ground && sk.Ground.Duration > 0 && sk.Ground.Tick > 0 && !(o.hitsPerSecOverride > 0)) {
+      let tickInc = 0; for (const m of pickMods(mods, 'TickRate', 'Inc')) if (applies(ctx, m)) { tickInc += m.v; use(m); }
+      const every = sk.Ground.Tick / Math.max(0.1, 1 + tickInc / 100), ticks = sk.Ground.Duration / every, scale = sk.Ground.TickScale || 1;
+      hitsPerUse *= ticks; perHitFactor *= scale;
+      res.ground = { ticks, every, duration: sk.Ground.Duration, scale };
+      res.notes.push(sk.Name + ': every tick of its ground is a hit, ' + +ticks.toFixed(1) + ' a cast (one every ' + +every.toFixed(2) + ' s for ' + sk.Ground.Duration + ' s' + (scale !== 1 ? ', each ' + Math.round(scale * 100) + '% of the hit' : '') + '; game log 26 Nov 2026). The game\'s skill panel counts one more, so it reads about ' + Math.round(100 / ticks) + '% higher. A ground laid before the last one ended keeps ticking too (game log 26 Nov 2026, two grounds).');
+    }
     if (ownClock && repeats > 0) res.notes.push('Repeats add no hits here: ' + sk.Name + ' strikes on its own clock.');
     if (echoTrap) res.notes.push('Spell Echo on a Trap: the repeat throws another trap, but your traps stand under one cap, so it adds no strikes (Training Post, 11 Nov 2026).');
 
@@ -19942,7 +19987,10 @@ window.BOCharacter = function (ctx) {
       const eff = stack && c.Kind === 'Mark' ? 1 + stack.inc / 100 : curseEffK(GD, curseEffInc + bannerEffectInc(c, mods), dreadPct) * (1 + curseMore / 100) * (c.Kind === 'Woe' ? woeMinK : 1) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
 
 
-      const row = { id, kind: c.Kind || '', name: c.Name, taken: (stack ? stack.base : c.TakenPct || 0) * eff, elem: {}, eff, dread: stack ? stack.n : dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, dot: (c.DotTakenPct || 0) * eff };
+
+
+      const why = stack && c.Kind === 'Mark' ? { per: c.TakenPct || 0, inc: stack.inc } : { inc: curseEffInc + bannerEffectInc(c, mods), dreadPct, more: curseMore, minK: c.Kind === 'Woe' ? woeMinK : 1, boss: isBoss && c.BossEffect != null ? c.BossEffect : 1 };
+      const row = { id, kind: c.Kind || '', name: c.Name, taken: (stack ? stack.base : c.TakenPct || 0) * eff, elem: {}, eff, why, dread: stack ? stack.n : dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, dot: (c.DotTakenPct || 0) * eff };
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
 
       if (c.ChaosTakenPct) row.elem.Chaos = c.ChaosTakenPct * eff;
@@ -20335,41 +20383,63 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+
+
+
+
         const stackLines = Math.max(1, Math.round(1 + sumMod('ShockStacks', 'Flat')));
-        const stacks = isBoss ? 1 : stackLines;
-
-
-
-
-        let staticAvg = 0;
-        if (is079(GD) && (rarity === 'rare' || isBoss)) {
-          const per = p80(GD, 'r103.AILMENTS.StaticPerHit103', 0.5), r = hitsPerSec * perHitFactor * hitFactor * per;
-          const T = A.ShockSeconds * (1 + ailDur / 100);
-          if (r > 0 && T > 0 && size < cap) {
-            const tc = (cap - size) / r; // seconds to reach the cap
-            staticAvg = tc >= T ? size + r * T / 2 : (size * tc + r * tc * tc / 2 + cap * (T - tc)) / T;
-            staticAvg -= size;
-          }
-        }
+        const stacks = isBoss && !is084(GD) ? 1 : stackLines;
 
         const ls = /(?:at most|up to) (\d+)% more damage taken/i.exec((GD.supports.living_storm || {}).Description || '');
 
         const allCap = stacks > 1 ? (ls ? +ls[1] : is0564(GD) ? (A.ShockStackCap || 75) : 60) : cap;
         const dur = snap(A.ShockSeconds * (1 + ailDur / 100));
 
-        const rate = hitsPerSec * perHitFactor * hitFactor * chance / 100;
+        const hps = hitsPerSec * perHitFactor * hitFactor, rate = hps * chance / 100;
 
-        const mu = rate * dur; let avg = 0, p = Math.exp(-mu), cum = 0;
-        for (let k = 0; k < stacks; k++) { cum += p; avg += 1 - cum; p *= mu / (k + 1); }
-        const pct = Math.min(allCap, (size + staticAvg) * avg);
+        const mu = rate * dur; let many = 0, p = Math.exp(-mu), cum = 0;
+        for (let k = 0; k < stacks; k++) { cum += p; many += 1 - cum; p *= mu / (k + 1); }
+
+
+
+
+
+
+
+
+
+
+
+
+        const staticOn = is079(GD) && (rarity === 'rare' || isBoss);
+        const staticPer = staticOn ? p80(GD, 'r103.AILMENTS.StaticPerHit103', 0.5) : 0, growRate = hps * staticPer;
+        const up1 = 1 - Math.exp(-mu);
+        const staticAvg = staticOn ? staticGrowth(growRate, cap - size, A.ShockSeconds * (1 + ailDur / 100), stacks > 1 ? clamp(many - 1, 0, 1) : 0) : 0;
+
+        const up = stacks === 1 && staticAvg > 0 ? mu / (1 + mu) : up1; // share of the time at least one shock is on it
+        const avg = stacks > 1 ? many : up; // shocks on it on average
+        const pct = Math.min(allCap, size * avg + staticAvg * up);
         shockF = 1 + pct / 100;
-        ail.shock = { chance, life, lightHit, raw, size, cap, stacks, allCap, duration: dur, rate, avg, pct, effInc: (effK - 1) * 100, staticBuild: staticAvg };
-        if (staticAvg > 0) res.notes.push('Static Build (patch 79): your lightning hits grow the shock on a rare or Guardian by 1% each up to its ' + Math.round(cap) + '% cap, about +' + staticAvg.toFixed(1) + '% over a shock\'s life. From the patch notes; not checked in game.');
+        ail.shock = { chance, life, lightHit, raw, size, cap, stacks, allCap, duration: dur, rate, avg, up, hps, staticPer, pct, effInc: (effK - 1) * 100, staticBuild: staticAvg };
+        if (staticAvg > 0) res.notes.push('Static Build (patch 79): your lightning hits grow the strongest shock on a rare or Guardian by ' + staticPer + '% each up to its ' + Math.round(cap) + '% cap, about +' + staticAvg.toFixed(1) + '% while it is the strongest (game log 26 Nov 2026: steps of 0.5%, gone when that shock runs out; a weaker new shock does not renew it).');
         for (const d of Object.keys(byType)) byType[d] *= shockF;
         hitDpsVs *= shockF; res.hitDps = hitDpsVs;
-        res.notes.push('Shock: ' + Math.round(chance) + '% chance a hit, each shock ' + size.toFixed(1) + '% more damage taken (' + (raw < floorPct ? "the game's floor, " + (lShare < 0.999 ? A.ShockMin + '% x ' + Math.round(lShare * 100) + '% of the hit being Lightning = ' + floorPct.toFixed(1) + '% (game log 21 Nov 2026)' : A.ShockMin + '%') + ': your lightning hit is small next to its ~' + Math.round(life).toLocaleString('en-US') + ' life' : 'from your lightning hit vs its ~' + Math.round(life).toLocaleString('en-US') + ' life') + (effK !== 1 ? ', shock effect x' + effK.toFixed(2) : '') + '), ' + avg.toFixed(2) + ' of ' + stacks + ' on it on average = +' + pct.toFixed(1) + '%.' + (isBoss ? (stackLines > 1 ? ' On a Guardian only one shock counts (game log 13 Nov), so your extra shock stacks do nothing here.' : '') + (o.enemyLife ? '' : ' Guardian life is an estimate from the Rupture level; type the real one in the life box for an exact shock.') : ' Not checked against the game yet.'));
+        res.notes.push('Shock: ' + Math.round(chance) + '% chance a hit, each shock ' + size.toFixed(1) + '% more damage taken (' + (raw < floorPct ? "the game's floor, " + (lShare < 0.999 ? A.ShockMin + '% x ' + Math.round(lShare * 100) + '% of the hit being Lightning = ' + floorPct.toFixed(1) + '% (game log 21 Nov 2026)' : A.ShockMin + '%') + ': your lightning hit is small next to its ~' + Math.round(life).toLocaleString('en-US') + ' life' : 'from your lightning hit vs its ~' + Math.round(life).toLocaleString('en-US') + ' life') + (effK !== 1 ? ', shock effect x' + effK.toFixed(2) : '') + '), ' + avg.toFixed(2) + ' of ' + stacks + ' on it on average = +' + pct.toFixed(1) + '%.' + (isBoss ? (stackLines > 1 ? (stacks > 1 ? ' Stacked shocks add on a Guardian too (game log 26 Nov 2026, Guardian Post).' : ' On a Guardian only one shock counts (game log 13 Nov), so your extra shock stacks do nothing here.') : '') + (o.enemyLife ? '' : ' Guardian life is an estimate from the Rupture level; type the real one in the life box for an exact shock.') : ' Not checked against the game yet.'));
       }
     }
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -20414,29 +20484,51 @@ window.BOCharacter = function (ctx) {
 
 
 
-        const uptime = 1 - Math.exp(-s.rate * s.duration);
+        const uptime = s.up != null ? s.up : 1 - Math.exp(-s.rate * s.duration);
         const one = Math.min(s.cap, s.size + (s.staticBuild || 0));
         const stacked = s.stacks > 1 && uptime > 0 ? Math.min(s.allCap || 75, s.pct / uptime) : 0;
-        res.barShock.push({ id, key, name: k.Name || id, size: Math.max(one, stacked), stacks: stacked > one ? s.stacks : 1, uptime, coc: !!r.coc, on: !(o.off && o.off.has(key)) });
+        res.barShock.push({ id, key, name: k.Name || id, size: Math.max(one, stacked), stacks: stacked > one ? s.stacks : 1, uptime, coc: !!r.coc, on: !(o.off && o.off.has(key)),
+          src: { size: s.size, cap: s.cap, slots: s.stacks, count: s.avg, up: uptime, hps: s.hps || 0, dur: s.duration, allCap: s.allCap || 75 } }); // its single shock, for the shared slots below
       }
 
 
       if (golemB && golemB.shock > 0 && is088(GD)) {
         const key = 'barshock:' + lc(golemB.id);
-        res.barShock.push({ id: golemB.id, key, name: (GD.skills[lc(golemB.id)] || {}).Name || golemB.name, size: golemB.shock, uptime: 1, golem: true, on: !(o.off && o.off.has(key)) });
+        res.barShock.push({ id: golemB.id, key, name: (GD.skills[lc(golemB.id)] || {}).Name || golemB.name, size: golemB.shock, uptime: 1, golem: true, on: !(o.off && o.off.has(key)), src: { size: golemB.shock, cap: golemB.shock, slots: 1, count: 1, up: 1, hps: 0, dur: 0, allCap: 75 } });
       }
       const helpers = res.barShock.filter(b => b.on && b.size > 0);
       if (helpers.length) {
         const own = ail.shock, ownPct = own ? own.pct : 0;
-        const list = (own ? [{ size: Math.min(own.cap, own.size + (own.staticBuild || 0)), uptime: 1 - Math.exp(-own.rate * own.duration) }] : []).concat(helpers).sort((a, b) => b.size - a.size);
+        const ownUp = own ? (own.up != null ? own.up : 1 - Math.exp(-own.rate * own.duration)) : 0;
+        const srcs = (own ? [{ size: own.size, cap: own.cap, slots: own.stacks, count: own.avg, up: ownUp, hps: own.hps || 0, dur: own.duration, allCap: own.allCap }] : []).concat(helpers.map(b => b.src)).sort((a, b) => b.size - a.size);
+        const slots = Math.max(1, ...srcs.map(x => x.slots || 1));
         let pct = 0, miss = 1;
-        for (const x of list) { pct += x.size * x.uptime * miss; miss *= 1 - x.uptime; }
+        if (slots > 1) {
+
+
+
+
+
+
+
+
+          let left = slots, grow = 0, T = 0;
+          for (const x of srcs) { const take = Math.min(x.count, left); pct += take * x.size; left -= take; miss *= 1 - x.up; grow += x.hps; T = Math.max(T, x.dur); }
+          const top = srcs[0], per = own && own.staticPer ? own.staticPer : (is079(GD) && (rarity === 'rare' || isBoss) ? p80(GD, 'r103.AILMENTS.StaticPerHit103', 0.5) : 0);
+          pct += staticGrowth(grow * per, top.cap - top.size, T, clamp(slots - left - 1, 0, 1)) * (1 - miss);
+          pct = Math.min(Math.max(...srcs.filter(x => x.slots > 1).map(x => x.allCap || 75)), pct);
+        } else {
+
+
+          const list = (own ? [{ size: Math.min(own.cap, own.size + (own.staticBuild || 0)), uptime: ownUp }] : []).concat(helpers).sort((a, b) => b.size - a.size);
+          for (const x of list) { pct += x.size * x.uptime * miss; miss *= 1 - x.uptime; }
+        }
         ail.barShockPct = Math.max(0, pct - ownPct);
         if (pct > ownPct) {
           const k = (1 + pct / 100) / shockF;
           for (const d of Object.keys(byType)) byType[d] *= k;
           hitDpsVs *= k; res.hitDps = hitDpsVs; shockF = 1 + pct / 100;
-          res.notes.push('Shock from your other skills: ' + helpers.map(b => b.name + ' ' + b.size.toFixed(1) + '% up ' + Math.round(b.uptime * 100) + '% of the time').join(', ') + ' -> the enemy takes ' + pct.toFixed(1) + '% more' + (own ? ' (your own shock alone: ' + ownPct.toFixed(1) + '%)' : '') + ', the strongest shock counting (game log 17 Nov 2026). Helpers are taken as kept up; untick them under Vows, Heralds & charges.');
+          res.notes.push('Shock from your other skills: ' + helpers.map(b => b.name + ' ' + b.size.toFixed(1) + '% up ' + Math.round(b.uptime * 100) + '% of the time').join(', ') + ' -> the enemy takes ' + pct.toFixed(1) + '% more' + (own ? ' (your own shock alone: ' + ownPct.toFixed(1) + '%)' : '') + ', ' + (slots > 1 ? 'up to ' + slots + ' shocks on it at once from all your skills, their sizes added, Static Build growing the strongest (game log 26 Nov 2026)' : 'the strongest shock counting (game logs 17 and 26 Nov 2026)') + '. Helpers are taken as kept up; untick them under Vows, Heralds & charges.');
         }
       }
     }
@@ -22499,7 +22591,8 @@ window.BOCharacter = function (ctx) {
       let curseMore = 0;
       for (const sid of woeSups) for (const m of ((GD.supports[lc(sid)] || {}).Mods || [])) if (m.Stat === 'CurseMore' && m.Mode === 'Flat') curseMore += m.Value;
       const eff = stack && c.Kind === 'Mark' ? 1 + stack.inc / 100 : curseEffK(GD, curseInc + bannerEffectInc(c, mods), dreadPct) * (1 + curseMore / 100) * (c.Kind === 'Woe' ? woeMinK : 1) * (isBoss ? (c.BossEffect != null ? c.BossEffect : 1) : 1);
-      const row = { id, kind: c.Kind || '', name: c.Name, taken: (stack ? stack.base : c.TakenPct || 0) * eff, elem: {}, eff, dread: stack ? stack.n : dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, resDown: {} };
+      const why = stack && c.Kind === 'Mark' ? { per: c.TakenPct || 0, inc: stack.inc } : { inc: curseInc + bannerEffectInc(c, mods), dreadPct, more: curseMore, minK: c.Kind === 'Woe' ? woeMinK : 1, boss: isBoss && c.BossEffect != null ? c.BossEffect : 1 }; // for the page's line under the curse, as on the hero's sheet
+      const row = { id, kind: c.Kind || '', name: c.Name, taken: (stack ? stack.base : c.TakenPct || 0) * eff, elem: {}, eff, why, dread: stack ? stack.n : dreadPct ? dreadPct / c.Dread.EffectPct : 0, dreadCap, more: curseMore, resDown: {} };
       for (const [d, v] of Object.entries(c.ElementTakenPct || {})) row.elem[d] = v * eff;
       curseRows.push(row);
     }
@@ -25328,18 +25421,32 @@ window.BOStartApp = function () {
         Object.entries(row.resDown || {}).map(([d, v]) => '-' + num(v, 1) + '% ' + d + ' resistance')) : [];
 
 
-      const half = row && isBoss && c.BossEffect != null && c.BossEffect !== 1 ? ' (x' + c.BossEffect + ' on a Guardian)' : '';
-      const effect = row ? (parts.length ? 'now: ' + parts.join(', ') + half : 'does not change your damage')
+
+
+      const w = row && row.why, why = [];
+      if (w && parts.length) {
+        if (c.Kind === 'Mark') { why.push(num(row.dread, 1) + ' Marks x ' + w.per + '%'); if (w.inc) why.push('+' + num(w.inc, 1) + '% Mark effect'); if (row.dread > row.dreadCap) why.push('above your max of ' + row.dreadCap); }
+        else {
+          if (w.boss !== 1) why.push('x' + w.boss + ' on a Guardian');
+          if (w.inc) why.push('+' + num(w.inc, 1) + '% ' + (c.Kind === 'Banner' ? 'curse and Banner effect' : 'curse effect'));
+          if (w.dreadPct) why.push('+' + num(w.dreadPct, 1) + '% from Dread');
+          if (w.more) why.push('x' + num(1 + w.more / 100, 2) + ' Deepened Woe');
+          if (w.minK && w.minK !== 1) why.push('x' + num(w.minK, 2) + ' from your minions');
+        }
+      }
+      const half = why.length ? '<span class="why"> (' + why.map(esc).join(', ') + ')</span>' : '';
+      const effect = row ? (parts.length ? 'now: ' + parts.join(', ') : 'does not change your damage')
         : (c.Text || '').replace('{0}', c.TakenPct || 0).replace('{1}', Object.values(c.ElementTakenPct || {})[0] || '').replace('{3}', Object.values(c.ResistDown || {})[0] || '').replace(/[;,]? ?[^;]*\{[24]\}[^;]*/g, '').trim() || 'does not change your damage';
-      return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + '<span class="meta">' + esc(effect) + (cs.on && !onBar && curseSkill(c) ? ' · <span class="off-bar">not on your skill bar, counted anyway</span>' : '') + (cs.on && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · not counted: ' + (c.Kind === 'Mark' ? 'your Hunter\'s Mark support lays more (one pool of Marks)' : 'an enemy holds ' + (c.Kind === 'Woe' ? 'two Woes' : 'one ' + c.Kind) + ' at a time') : '') + '</span></span></label>' +
+      return '<li><label><input type="checkbox" data-curse="' + esc(c.Id) + '"' + (cs.on ? ' checked' : '') + '><span class="name">' + esc(c.Name) + '<span class="meta">' + esc(effect) + half + (cs.on && !onBar && curseSkill(c) ? ' · <span class="off-bar">not on your skill bar, counted anyway</span>' : '') + (cs.on && row && r.enemy.activeCurses.indexOf(c.Id) < 0 ? ' · not counted: ' + (c.Kind === 'Mark' ? 'your Hunter\'s Mark support lays more (one pool of Marks)' : 'an enemy holds ' + (c.Kind === 'Woe' ? 'two Woes' : 'one ' + c.Kind) + ' at a time') : '') + '</span></span></label>' +
         (c.Dread && c.Dread.Cap && cs.on ? (() => {
           const max = row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c);
 
-          const tip = c.Kind === 'Mark' ? 'Hunter\'s Marks on the enemy (' + c.TakenPct + '% more damage taken each, max ' + max + '; blank = full). Hits only, not ailment ticks'
+          const tip = c.Kind === 'Mark' ? 'Hunter\'s Marks on the enemy (' + c.TakenPct + '% more damage taken each; blank = your max, ' + max + '). A bigger number is counted as typed, to test. Hits only, not ailment ticks'
             : c.Kind === 'Banner' ? 'Valour on the banner (+' + c.Dread.EffectPct + '% more damage taken each, on top of its ' + c.TakenPct + '%; max ' + max + ')'
             : 'Dread on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + max + ', bosses ' + c.Dread.BossCap + ')';
           const val = c.Kind === 'Mark' ? (cs.dread || '') : (cs.dread || 0);
-          return '<input class="mini" type="number" min="0" max="' + max + '" value="' + val + '"' + (c.Kind === 'Mark' ? ' placeholder="' + max + '"' : '') + ' title="' + esc(tip) + '" data-dread="' + esc(c.Id) + '">';
+
+          return '<input class="mini" type="number" min="0"' + (c.Kind === 'Mark' ? '' : ' max="' + max + '"') + ' value="' + val + '"' + (c.Kind === 'Mark' ? ' placeholder="' + max + '"' : '') + ' title="' + esc(tip) + '" data-dread="' + esc(c.Id) + '">';
         })() : '') + '</li>';
     }).join('') + hallowedItem(r, ch);
   }

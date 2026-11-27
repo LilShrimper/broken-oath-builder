@@ -19968,7 +19968,9 @@ window.BOCharacter = function (ctx) {
       const c = GD.curses[id]; if (!c || !cfg || !cfg.on) continue;
 
       const tough = (rarity === 'rare' || isBoss) && c.Tough && c.Tough.Holds ? (c.Tough.Cap || 0) : 0;
-      const dread = Math.max(+cfg.dread || 0, tough);
+
+
+      const dread = +cfg.dread > 0 ? +cfg.dread : tough;
 
 
 
@@ -20471,12 +20473,18 @@ window.BOCharacter = function (ctx) {
       for (const k of ['supportsOverride', 'gemLevel', 'projOnTarget', 'totemCount', 'hitsPerSecOverride', 'castsPerSecOverride', 'conduit', 'coc', 'cocSource']) delete ho[k];
       const r = calcSkill(GD, ch, id, ho); barSheets.set(lid, r); return r;
     };
+
+
+
+    const shockPick = o.barShockPick ? lc(o.barShockPick) : '';
+    const shockOn = (lid, key) => shockPick ? shockPick !== 'none' && lid === shockPick : !(o.off && o.off.has(key));
+    res.barShockNone = [];
     if (A.bEnabled && A.ShockCoef && o.barShock !== false && !o._barProbe) {
       for (const [lid, id] of barOthers()) {
         const k = GD.skills[lid];
         const r = barSheet(lid, id);
         const s = r && !r.error && !r.unsupported && r.ailments && r.ailments.shock;
-        if (!s || !(s.rate > 0)) continue;
+        if (!s || !(s.rate > 0)) { res.barShockNone.push({ id, name: k.Name || id }); continue; }
         const key = 'barshock:' + lid;
 
 
@@ -20487,14 +20495,14 @@ window.BOCharacter = function (ctx) {
         const uptime = s.up != null ? s.up : 1 - Math.exp(-s.rate * s.duration);
         const one = Math.min(s.cap, s.size + (s.staticBuild || 0));
         const stacked = s.stacks > 1 && uptime > 0 ? Math.min(s.allCap || 75, s.pct / uptime) : 0;
-        res.barShock.push({ id, key, name: k.Name || id, size: Math.max(one, stacked), stacks: stacked > one ? s.stacks : 1, uptime, coc: !!r.coc, on: !(o.off && o.off.has(key)),
+        res.barShock.push({ id, key, name: k.Name || id, size: Math.max(one, stacked), stacks: stacked > one ? s.stacks : 1, uptime, coc: !!r.coc, on: shockOn(lid, key),
           src: { size: s.size, cap: s.cap, slots: s.stacks, count: s.avg, up: uptime, hps: s.hps || 0, dur: s.duration, allCap: s.allCap || 75 } }); // its single shock, for the shared slots below
       }
 
 
       if (golemB && golemB.shock > 0 && is088(GD)) {
         const key = 'barshock:' + lc(golemB.id);
-        res.barShock.push({ id: golemB.id, key, name: (GD.skills[lc(golemB.id)] || {}).Name || golemB.name, size: golemB.shock, uptime: 1, golem: true, on: !(o.off && o.off.has(key)), src: { size: golemB.shock, cap: golemB.shock, slots: 1, count: 1, up: 1, hps: 0, dur: 0, allCap: 75 } });
+        res.barShock.push({ id: golemB.id, key, name: (GD.skills[lc(golemB.id)] || {}).Name || golemB.name, size: golemB.shock, uptime: 1, golem: true, on: shockOn(lc(golemB.id), key), src: { size: golemB.shock, cap: golemB.shock, slots: 1, count: 1, up: 1, hps: 0, dur: 0, allCap: 75 } });
       }
       const helpers = res.barShock.filter(b => b.on && b.size > 0);
       if (helpers.length) {
@@ -20528,7 +20536,7 @@ window.BOCharacter = function (ctx) {
           const k = (1 + pct / 100) / shockF;
           for (const d of Object.keys(byType)) byType[d] *= k;
           hitDpsVs *= k; res.hitDps = hitDpsVs; shockF = 1 + pct / 100;
-          res.notes.push('Shock from your other skills: ' + helpers.map(b => b.name + ' ' + b.size.toFixed(1) + '% up ' + Math.round(b.uptime * 100) + '% of the time').join(', ') + ' -> the enemy takes ' + pct.toFixed(1) + '% more' + (own ? ' (your own shock alone: ' + ownPct.toFixed(1) + '%)' : '') + ', ' + (slots > 1 ? 'up to ' + slots + ' shocks on it at once from all your skills, their sizes added, Static Build growing the strongest (game log 26 Nov 2026)' : 'the strongest shock counting (game logs 17 and 26 Nov 2026)') + '. Helpers are taken as kept up; untick them under Vows, Heralds & charges.');
+          res.notes.push('Shock from your other skills: ' + helpers.map(b => b.name + ' ' + b.size.toFixed(1) + '% up ' + Math.round(b.uptime * 100) + '% of the time').join(', ') + ' -> the enemy takes ' + pct.toFixed(1) + '% more' + (own ? ' (your own shock alone: ' + ownPct.toFixed(1) + '%)' : '') + ', ' + (slots > 1 ? 'up to ' + slots + ' shocks on it at once from all your skills, their sizes added, Static Build growing the strongest (game log 26 Nov 2026)' : 'the strongest shock counting (game logs 17 and 26 Nov 2026)') + '. Helpers are taken as kept up; pick which skill shocks the enemy in Configure Enemy (Vows, Heralds & charges).');
         }
       }
     }
@@ -22064,6 +22072,17 @@ window.BOCharacter = function (ctx) {
 
 
   const MINION_PACE = 0.72, MINION_NEAR = 60;
+
+
+
+
+
+
+
+
+
+
+  const PET_GROW = { summon_skeletons: { to: 21, steps: [1, 1, 3, 7] }, summon_skeletal_mage: { to: 12, steps: [1, 10] }, summon_zombie: { to: 23, steps: [1, 3] } };
   const MINION_PULSE_STEP = 0.21; // minion pulses from red items: see res.pulses in minionSheet (log 14 Nov 2026)
 
 
@@ -22457,10 +22476,25 @@ window.BOCharacter = function (ctx) {
     const chance = Math.min(100, ((mStaff || H.SpellCritBase || 6) + mCritBase) * (1 + mCritInc / 100)), multi = (H.CritMultiBase || 150) + mCritMulti, critFactor = 1 + chance / 100 * (multi / 100 - 1);
     if (mCritInc || mCritMulti || mCritBase) res.notes.push('Minion crit: ' + chance.toFixed(1) + '% chance, x' + (multi / 100).toFixed(2) + ' (your minion crit lines on the base ' + +(mStaff || H.SpellCritBase || 6).toFixed(2) + '%' + (mStaff ? ' of your staff or wand' : '') + ' and x' + ((H.CritMultiBase || 150) / 100).toFixed(1) + '). Checked against an in-game Summon Skeletons tooltip, 18 Nov 2026.');
 
-    let alive = (mi.Cap || mi.Count || 1) + (mi.CountEvery ? Math.floor((L - 1) / mi.CountEvery) : 0) + (mi.PerLevels || []).filter(l => L >= l).length;
+    const dataCount = lv => (mi.Cap || mi.Count || 1) + (mi.CountEvery ? Math.floor((lv - 1) / mi.CountEvery) : 0) + (mi.PerLevels || []).filter(l => lv >= l).length;
+    let alive = dataCount(L);
 
 
     const oneOnly = !!mi.GolemAuras;
+
+
+
+
+
+    const grow = !oneOnly && apiBuildAtLeast(GD, 94, '2026-11-27') ? PET_GROW[lc(sk.Id)] : null;
+    let growK = 1;
+    if (grow && L <= grow.to) {
+      const n = grow.steps.filter(l => L >= l).length;
+      growK = Math.max(1, dataCount(grow.to) / n);
+      alive = n;
+      if (growK !== 1) { for (const d of Object.keys(hit)) { hit[d].min *= growK; hit[d].max *= growK; hit[d].avg *= growK; } avg *= growK; }
+      res.notes.push(sk.Name + ' at gem level ' + L + ': ' + n + ' raised by the gem (patch 94)' + (growK !== 1 ? ', each dealing x' + growK.toFixed(2) + ' (' + dataCount(grow.to) + ' / ' + n + ', fewer minions hit harder until gem level ' + grow.to + ')' : '') + '. Game log, build 94, 27 Nov 2026.');
+    }
 
 
 
@@ -22627,7 +22661,7 @@ window.BOCharacter = function (ctx) {
     for (const [id, cfg] of Object.entries(cursesWithBanner(GD, ch, mods, o, res))) { // the ticked curses, plus a War Banner a line plants
       const c = GD.curses[id]; if (!c || !cfg || !cfg.on) continue;
       const tough = (rarity === 'rare' || isBoss) && c.Tough && c.Tough.Holds ? (c.Tough.Cap || 0) : 0;
-      const dread = Math.max(+cfg.dread || 0, tough);
+      const dread = +cfg.dread > 0 ? +cfg.dread : tough; // typed Dread counts as typed; blank = the Tough growth (see the hero sheet)
 
 
 
@@ -24718,7 +24752,7 @@ window.BOStartApp = function () {
 
   const st = {
     ch: null, skill: null, gemLevel: null, supports: null, off: new Set(), vowbreak: new Set(), tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0, gatherFury: 2 }, // gatherFury: Fury charges counted while Gather Fury is linked (owner, 19 Nov 2026: default 2)
-    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: null, hallowCG: false, enemyLife: null, graveCall: null, flashfire: false, otherBleed: '', windburstMoves: null, corpseKind: '', corpsesPerSec: null, legionKind: '', leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
+    enemyLevel: null, rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, curses: {}, extraTaken: 0, enemyHallowedGround: null, hallowCG: false, enemyLife: null, graveCall: null, flashfire: false, otherBleed: '', windburstMoves: null, corpseKind: '', corpsesPerSec: null, legionKind: '', shockPick: '', leechUptime: null, execOn: {}, projOnTarget: null, totemCount: null, hps: null, cps: null, ingame: null, pinned: null,
     penFloor: false, potionsOn: store.get('potionsOn', true) !== false, opt: null, optJob: null, last: null,
     keepSup: new Set(), blockSup: new Set(), supOpen: new Set(), supFind: '', supMsg: '', // support picker: pinned for the search, folded groups opened by hand, search text, last message
   };
@@ -25001,7 +25035,7 @@ window.BOStartApp = function () {
   const ENEMY_KEYS = ['rarity', 'gElem', 'gWho', 'gStrong', 'gWeak', 'res', 'extraTaken', 'enemyLife', 'leechUptime', 'projOnTarget'];
   const ENEMY_DEF = { rarity: 'boss', gElem: '', gWho: '', gStrong: '', gWeak: '', res: {}, extraTaken: 0, enemyLife: null, leechUptime: null, projOnTarget: null };
   const FIGHT_OFF = /^(vow|potion|barshock|barfreeze|charge|companion):/; // st.off keys that are fight settings (not supports, items or granted gems)
-  const FIGHT_DEF = () => ({ enemyLevel: null, vowbreak: [], tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0, gatherFury: 2 }, enemyHallowedGround: null, hallowCG: false, graveCall: null, otherBleed: '', flashfire: false, windburstMoves: null, corpseKind: '', corpsesPerSec: null, legionKind: '' });
+  const FIGHT_DEF = () => ({ enemyLevel: null, vowbreak: [], tryHeralds: {}, charges: { fury: 0, insight: 0, resolve: 0, gatherFury: 2 }, enemyHallowedGround: null, hallowCG: false, graveCall: null, otherBleed: '', flashfire: false, windburstMoves: null, corpseKind: '', corpsesPerSec: null, legionKind: '', shockPick: '' });
 
   function defaultDread(ch, c) {
     if (!ch || !c || c.Kind !== 'Banner' || !c.Dread || !curseOnBar(ch, c)) return 0;
@@ -25036,7 +25070,7 @@ window.BOStartApp = function () {
     st.vowbreak = new Set(f.vowbreak || []);
     st.tryHeralds = Object.assign({}, f.tryHeralds || {});
     st.charges = Object.assign(FIGHT_DEF().charges, f.charges || {});
-    for (const k of ['enemyHallowedGround', 'hallowCG', 'graveCall', 'otherBleed', 'flashfire', 'windburstMoves', 'corpseKind', 'corpsesPerSec', 'legionKind']) st[k] = f[k];
+    for (const k of ['enemyHallowedGround', 'hallowCG', 'graveCall', 'otherBleed', 'flashfire', 'windburstMoves', 'corpseKind', 'corpsesPerSec', 'legionKind', 'shockPick']) st[k] = f[k];
     fightSaved = JSON.stringify(fightNow(ch));
     fillEnemyInputs(ch);
   }
@@ -25046,7 +25080,7 @@ window.BOStartApp = function () {
       const cs = st.curses[c.Id] || { on: false, dread: 0 }, onBar = curseOnBar(ch, c);
       if (!!cs.on !== onBar || (+cs.dread || 0) !== (onBar ? defaultDread(ch, c) : 0)) f.curses[c.Id] = { on: !!cs.on, dread: +cs.dread || 0, bar: onBar };
     }
-    for (const k of ['enemyHallowedGround', 'hallowCG', 'graveCall', 'otherBleed', 'flashfire', 'windburstMoves', 'corpseKind', 'corpsesPerSec', 'legionKind']) f[k] = st[k];
+    for (const k of ['enemyHallowedGround', 'hallowCG', 'graveCall', 'otherBleed', 'flashfire', 'windburstMoves', 'corpseKind', 'corpsesPerSec', 'legionKind', 'shockPick']) f[k] = st[k];
     return f;
   }
 
@@ -25090,6 +25124,12 @@ window.BOStartApp = function () {
     return out;
   }
   const legionPick = () => st.legionKind && legionSummons(st.ch).includes(String(st.legionKind).toLowerCase()) ? String(st.legionKind).toLowerCase() : undefined;
+
+  function shockPick() {
+    const p = String(st.shockPick || '').toLowerCase();
+    if (!p || p === 'none') return p;
+    return ((st.ch && st.ch.hotbar) || []).some(h => String(h || '').toLowerCase() === p) || /golem/.test(p) ? p : '';
+  }
   const legionKept = () => { const p = legionPick(); return p ? esc(sName(p)) : 'the strongest summon'; };
   function opts(extra) {
     syncCurseBar();
@@ -25097,7 +25137,7 @@ window.BOStartApp = function () {
     for (const d of DT) if (st.res[d] !== '' && st.res[d] != null && isFinite(+st.res[d])) res[d] = +st.res[d];
     return Object.assign({
       off: st.off, vowbreak: st.vowbreak, tryHeralds: st.tryHeralds, charges: st.charges, supportsOverride: st.supports, gemLevel: st.gemLevel || undefined,
-      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: hallowOn(st.ch), hallowedCG: st.hallowCG, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire, enemyBleeding: st.otherBleed === 'yes' ? true : st.otherBleed === 'no' ? false : undefined, windburstMoves: +st.windburstMoves > 0 ? +st.windburstMoves : undefined, corpseKind: st.corpseKind || undefined, corpsesPerSec: +st.corpsesPerSec > 0 ? +st.corpsesPerSec : undefined, legionKind: legionPick(), leechUptime: st.leechUptime !== null && st.leechUptime !== '' && !isNaN(+st.leechUptime) ? +st.leechUptime / 100 : undefined, mainSkill: st.skill, execSim: st.execOn || {},
+      enemyLevel: st.enemyLevel || undefined, enemyRarity: st.rarity, guardianElement: st.gElem || undefined, guardianStrong: st.gStrong || undefined, guardianWeak: st.gWeak || undefined, enemyRes: res, curses: st.curses, extraTakenPct: +st.extraTaken || 0, enemyHallowedGround: hallowOn(st.ch), hallowedCG: st.hallowCG, enemyLife: +st.enemyLife > 0 ? +st.enemyLife : undefined, graveCall: st.graveCall, flashfire: st.flashfire, enemyBleeding: st.otherBleed === 'yes' ? true : st.otherBleed === 'no' ? false : undefined, windburstMoves: +st.windburstMoves > 0 ? +st.windburstMoves : undefined, corpseKind: st.corpseKind || undefined, corpsesPerSec: +st.corpsesPerSec > 0 ? +st.corpsesPerSec : undefined, legionKind: legionPick(), barShockPick: shockPick() || undefined, leechUptime: st.leechUptime !== null && st.leechUptime !== '' && !isNaN(+st.leechUptime) ? +st.leechUptime / 100 : undefined, mainSkill: st.skill, execSim: st.execOn || {},
       projOnTarget: +st.projOnTarget || undefined, totemCount: st.totemCount > 0 ? +st.totemCount : undefined, hitsPerSecOverride: st.hps > 0 ? +st.hps : undefined, castsPerSecOverride: st.cps > 0 ? +st.cps : undefined, penFloor: st.penFloor,
       conduit: st.conduit == null ? undefined : st.conduit,
       coc: st.coc === false ? false : undefined, cocSource: typeof st.coc === 'string' ? st.coc : undefined,
@@ -25413,10 +25453,18 @@ window.BOStartApp = function () {
     $('#echoBox').hidden = !echoes.length;
     $('#echoList').innerHTML = echoes.map(b => '<li><label><input type="checkbox" data-echo="' + esc(b.Id) + '"' + ((st.charges[b.Id] != null ? st.charges[b.Id] : (r.echoAuto || []).includes(b.Id)) ? ' checked' : '') + '><span class="name">' + esc(b.Name) + '</span></label></li>').join('');
 
-    const bsh = r.barShock || [];
-    $('#barShockBox').hidden = !bsh.length;
-    $('#barShockList').innerHTML = bsh.map(b => '<li><label><input type="checkbox" data-src="' + esc(b.key) + '"' + (b.on ? ' checked' : '') + '><span class="name">' + skillDot(b.id) + esc(b.name) +
-      '<span class="meta">' + num(b.size, 1) + '% shock' + (b.stacks > 1 ? ' (up to ' + b.stacks + ' stacked)' : '') + ', up ' + Math.round(b.uptime * 100) + '% of the time' + (b.coc ? ' (Cast on Crit)' : '') + '</span></span></label></li>').join('');   // figures under the name: beside it, the 2-column pop-up squeezed the name to a letter a line (19 Nov 2026)
+
+
+
+    const bsh = r.barShock || [], bnone = r.barShockNone || [], pick = shockPick();
+    $('#barShockBox').hidden = !bsh.length && !pick;
+    $('#barShockPick').innerHTML = '<option value="">Auto: every lightning skill on your bar</option><option value="none">None: only this skill\'s own shock</option>' +
+      bsh.map(b => '<option value="' + esc(String(b.id).toLowerCase()) + '">' + esc(b.name) + '</option>').join('') +
+      (pick && pick !== 'none' && !bsh.some(b => String(b.id).toLowerCase() === pick) ? '<option value="' + esc(pick) + '">' + esc(sName(pick)) + ' (the skill shown: its own shock only)</option>' : '') +
+      bnone.map(b => '<option disabled>' + esc(b.name) + ' (lays no shock in the sim: no lightning hit)</option>').join('');
+    $('#barShockPick').value = pick;
+    $('#barShockList').innerHTML = bsh.map(b => '<li><label><input type="checkbox" data-src="' + esc(b.key) + '"' + (b.on ? ' checked' : '') + (pick ? ' disabled' : '') + '><span class="name">' + skillDot(b.id) + esc(b.name) +
+      '<span class="meta">' + (b.on ? '' : 'not counted · ') + num(b.size, 1) + '% shock' + (b.stacks > 1 ? ' (up to ' + b.stacks + ' stacked)' : '') + ', up ' + Math.round(b.uptime * 100) + '% of the time' + (b.coc ? ' (Cast on Crit)' : '') + '</span></span></label></li>').join('');   // figures under the name: beside it, the 2-column pop-up squeezed the name to a letter a line (19 Nov 2026)
 
 
     const bfr = (r.freeze && r.freeze.helpers) || [];
@@ -25490,12 +25538,15 @@ window.BOStartApp = function () {
         (c.Dread && c.Dread.Cap && cs.on ? (() => {
           const max = row && row.dreadCap ? row.dreadCap : c.Dread.Cap + S.bannerValourMax(GD, ch, c);
 
+
+          const grows = c.Tough && c.Tough.Holds ? c.Tough.Cap || 0 : 0, autoN = grows && (st.rarity === 'rare' || isBoss) ? Math.min(grows, max) : 0;
+
           const tip = c.Kind === 'Mark' ? 'Hunter\'s Marks on the enemy (' + c.TakenPct + '% more damage taken each; blank = your max, ' + max + '). A bigger number is counted as typed, to test. Hits only, not ailment ticks'
             : c.Kind === 'Banner' ? 'Valour on the banner (+' + c.Dread.EffectPct + '% more damage taken each, on top of its ' + c.TakenPct + '%; max ' + max + ')'
-            : 'Dread on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + max + ', bosses ' + c.Dread.BossCap + ')';
-          const val = c.Kind === 'Mark' ? (cs.dread || '') : (cs.dread || 0);
+            : 'Dread on the enemy (+' + c.Dread.EffectPct + '% effect each, max ' + max + ', bosses ' + c.Dread.BossCap + ')' + (grows ? '. Blank = what the Woe builds by itself on a Rare or Guardian: ' + grows + ' (game log, 13 Nov 2026), 0 on others. A number you type counts as typed' : '');
+          const val = c.Kind === 'Mark' || grows ? (cs.dread || '') : (cs.dread || 0);
 
-          return '<input class="mini" type="number" min="0"' + (c.Kind === 'Mark' ? '' : ' max="' + max + '"') + ' value="' + val + '"' + (c.Kind === 'Mark' ? ' placeholder="' + max + '"' : '') + ' title="' + esc(tip) + '" data-dread="' + esc(c.Id) + '">';
+          return '<input class="mini" type="number" min="0"' + (c.Kind === 'Mark' ? '' : ' max="' + max + '"') + ' value="' + val + '"' + (c.Kind === 'Mark' ? ' placeholder="' + max + '"' : grows ? ' placeholder="' + autoN + '"' : '') + ' title="' + esc(tip) + '" data-dread="' + esc(c.Id) + '">';
         })() : '') + '</li>';
     }).join('') + hallowedItem(r, ch);
   }
@@ -27196,6 +27247,7 @@ window.BOStartApp = function () {
   $('#windburstMoves').addEventListener('input', e => { st.windburstMoves = e.target.value === '' ? null : e.target.value; render(); });
   $('#corpseKind').addEventListener('change', e => { st.corpseKind = e.target.value; render(); });
   $('#legionKind').addEventListener('change', e => { st.legionKind = e.target.value; render(); });
+  $('#barShockPick').addEventListener('change', e => { st.shockPick = e.target.value; render(); });
   $('#corpsesPerSec').addEventListener('input', e => { st.corpsesPerSec = e.target.value === '' ? null : e.target.value; render(); });
   $('#flashfire').addEventListener('change', e => { st.flashfire = e.target.checked; render(); });
   $('#graveCall').addEventListener('change', e => { st.graveCall = e.target.checked; render(); });

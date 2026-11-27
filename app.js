@@ -698,7 +698,7 @@ window.PAGE_LANGS = {
 
 
 
-    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK|CRAFT|CURSE|TRUST|TOTEMPOOL|SPARKPOOL)$/; // TOTEMPOOL: fOverflow107, bow engines past the limit (23 Nov 2026); SPARKPOOL: r125 bOn / Kinds, the Spark kinds that share one max (26 Nov 2026)
+    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK|CRAFT|CURSE|TRUST|TOTEMPOOL|SPARKPOOL|SKILLSWEEP|ATTACK3|CHAOS|METAPOSTS)$/; // TOTEMPOOL: fOverflow107, bow engines past the limit (23 Nov 2026); SPARKPOOL: r125 bOn / Kinds, the Spark kinds that share one max (26 Nov 2026); SKILLSWEEP: r82 bRegenFlat, flat mana regen scaled by the increase (26 Nov 2026). After a patch, node tools/new-rules.js lists new sections this list drops
     try { for (const s of (J('Gameplay/switches.json') || {}).switches || []) if (RULE_SECTIONS.test(s.section)) gameRules[s.section + '.' + s.key] = ruleVal(s.value); } catch (e) { /* not served */ }
     try { for (const [k, v] of Object.entries((J('Gameplay/rules.json') || {}).values || {})) gameRules[k] = ruleVal(v && v.value); } catch (e) { /* older game data */ }
     let trapPrice = {};
@@ -8156,12 +8156,17 @@ window.BOLootFilter = function (ctx) {
   const STAGES = [['level', 'Levelling'], ['mid', 'Mid-game'], ['end', 'Endgame']];
 
 
+
+
+
+
   const GAME_PRESETS = [
     [0, 'All loot', 'BOFILTER:1,0|1,13,0,0,0,3,0,0,0,255'],
     [1, 'Tidy', 'BOFILTER:1,1|1,13,0,0,0,3,0,0,0,255|1,4,1,0,0,1,0,0,0,255|1,16,3,0,0,2,0,0,0,255|1,0,1,0,0,0,0,0,0,255'],
     [2, 'Strict', 'BOFILTER:1,2|1,13,0,0,0,3,0,0,0,255|1,4,1,0,0,1,0,0,0,255|1,16,3,6,0,2,0,0,0,255|1,0,3,0,0,0,0,0,0,255|1,0,4,6,0,3,0,0,0,255'],
     [3, 'Very strict', 'BOFILTER:1,3|1,13,0,0,0,3,0,0,0,255|1,4,1,0,0,1,0,0,0,255|1,16,3,6,0,2,0,0,0,255|1,0,3,0,0,0,0,0,0,255|1,0,4,3,0,0,0,0,0,255|1,3,4,6,0,3,2,0,0,255|1,0,4,0,5,3,0,0,0,255'],
-    [4, 'End Game', 'BOFILTER:1,4|1,13,0,0,0,3,0,0,0,255|1,4,1,0,0,1,0,0,0,255|1,16,3,6,0,2,0,0,0,255|1,0,4,7,0,3,0,2,1,255|1,0,4,0,5,3,0,0,0,255|1,0,4,6,0,2,1,1,2,255|1,0,4,4,0,0,0,0,0,255|1,0,3,0,0,0,0,0,0,255']];
+    [4, 'End Game', 'BOFILTER:1,4|1,13,0,0,0,3,0,0,0,255|1,4,1,0,0,1,0,0,0,255|1,16,3,6,0,2,0,0,0,255|1,0,4,7,0,3,0,2,1,255|1,0,4,0,5,3,0,0,0,255|1,0,4,6,0,2,1,1,2,255|1,0,4,4,0,0,0,0,0,255|1,0,3,0,0,0,0,0,0,255'],
+    [5, 'Clear', 'BOFILTER:1,5|1,13,0,0,0,3,0,0,0,255|1,4,1,0,0,1,0,0,0,255|1,16,3,6,0,2,0,0,0,255|1,0,3,0,0,0,0,0,0,255|1,0,4,6,0,2,0,0,0,255', true]];
   const DMG_GROUP = { Fire: 11, Cold: 12, Lightning: 13, Physical: 14, Poison: 15 };
   const RES_GROUP = { Fire: 16, Cold: 17, Lightning: 18, Poison: 19 };
   const BASIC_WANTS = [1, 2]; // Life, Resistance: every build
@@ -8219,7 +8224,7 @@ window.BOLootFilter = function (ctx) {
     if (P.wants == null || P.key !== key) { P.wants = fb.wants.slice(); P.key = key; }
     const lf = L(), groups = (lf.line || []).filter(o => o[0]);
     let h = '<div class="card lf-preset-card"><h2>Start from a preset</h2>';
-    h += '<div class="field"><span>The game\'s own presets</span><div class="lf-row">' + GAME_PRESETS.map(g => '<button class="btn small ghost" type="button" data-lf-game="' + g[0] + '">' + esc(g[1]) + '</button>').join('') + '</div></div>';
+    h += '<div class="field"><span>The game\'s own presets</span><div class="lf-row">' + GAME_PRESETS.map(g => '<button class="btn small ghost' + (g[3] ? ' notranslate' : '') + '" type="button" data-lf-game="' + g[0] + '">' + esc(g[1]) + '</button>').join('') + '</div></div>';
     h += '<h3>Or fit one to a build</h3><p class="hint">Makes a filter from a few choices; edit it like any other afterwards. This part is our own advice, not the game\'s.</p>';
     h += '<div class="field"><span>Stage</span><div class="lf-seg" role="radiogroup" aria-label="Stage">' + STAGES.map(s => '<button type="button" role="radio" aria-checked="' + (P.stage === s[0]) + '" class="' + (P.stage === s[0] ? 'on' : '') + '" data-lfp-stage="' + s[0] + '">' + s[1] + '</button>').join('') + '</div></div>';
     h += '<label class="lf-flag"><input type="checkbox" data-lfp-ssf' + (P.ssf ? ' checked' : '') + '> Solo self-found (keep more bases and rares for crafting)</label>';
@@ -16867,7 +16872,17 @@ window.BOCharacter = function (ctx) {
 
         const twoHand = base.bTwoHanded || (base.Tags || []).includes('TwoHand');
         const power = runewordPower(rw, it.level);
-        for (const mm of power.mods) for (const pm of [wordPower2H(rw, twoHand, GD, mm.Mod)]) add(mm.Mod, (mm.Mod.Value || 0) * pm, (mm.Mod.Value2 || 0) * pm, label + ' · runeword ' + rw.Name + ' (power' + (power.band ? ', item level ' + power.band + '+' : '') + (pm > 1 ? ' x' + pm + ' two-handed' : '') + ')', key);
+
+
+
+
+
+
+        const lowK = bSwitch(GD, 'r113.META.bWordLow238', false) && !power.band && (rw.PowerBandILvl || []).length && rw.Level > 0 && it.level > 0 ? Math.min(1, it.level / rw.Level) : 1;
+        for (const mm of power.mods) {
+          const pm = wordPower2H(rw, twoHand, GD, mm.Mod), lk = mm.Mod.Stat === 'SkillLevel' ? 1 : lowK;
+          add(mm.Mod, (mm.Mod.Value || 0) * pm * lk, (mm.Mod.Value2 || 0) * pm * lk, label + ' · runeword ' + rw.Name + ' (power' + (power.band ? ', item level ' + power.band + '+' : '') + (pm > 1 ? ' x' + pm + ' two-handed' : '') + (lk < 1 ? ', x' + lk.toFixed(2) + ': item level ' + it.level + ' under the word\'s ' + rw.Level : '') + ')', key);
+        }
       }
     }
 
@@ -17067,6 +17082,22 @@ window.BOCharacter = function (ctx) {
         continue;
       }
       for (const m of b.Mods || []) add(m, (m.Value || 0) * (m.PerStack ? n : 1), m.Value2, b.Name + ' x' + n, 'charge:' + id);
+    }
+
+
+
+
+
+
+
+
+
+
+    if (bSwitch(GD, 'r113.ATTACK3.bEchoTough124', false)) {
+      const vow = GD.blessings.ns103_elemental_echo;
+      if (vow && (ch.hotbar || []).includes(vow.Skill) && !off.has('vow:' + vow.Id) && !(o.vowbreak && o.vowbreak.has(vow.Id)))
+        for (const b of Object.values(GD.blessings)) if (/^ns103_echo_/.test(b.Id) && (o.charges || {})[b.Id] == null)
+          for (const m of b.Mods || []) add(m, m.Value || 0, m.Value2, vow.Name + ' · ' + b.Name + ' (left by your hits on a Rare or Guardian)', 'charge:' + b.Id, { echoAuto: (m.Tags || [])[0] || 'all', echoId: b.Id });
     }
 
 
@@ -17464,6 +17495,9 @@ window.BOCharacter = function (ctx) {
     res.notes.push(...col.notes);
     res.sources = col.sources;
     let mods = col.mods.slice();
+
+
+    if (mods.some(m => m.echoAuto) && (o._noEchoAuto || !['rare', 'boss'].includes(o.enemyRarity || 'rare') || isSummon(sk))) mods = mods.filter(m => !m.echoAuto);
 
 
 
@@ -19088,7 +19122,13 @@ window.BOCharacter = function (ctx) {
 
 
         if (host && res.notes) res.notes.push('Convergence: not counted while Channel Conduit casts the Sparks: each conduit cast replaces them, so they never build it (game log, 22 Nov 2026).');
-        if (!host && ruleNum(GD, 'r99.META.bConverge99', 0) && o.convergence !== false && ['rare', 'boss'].includes(o.enemyRarity || 'rare')) {
+
+
+
+
+
+        const convOn = ruleNum(GD, 'r99.META.bConverge99', (GD.rules || {})['r99.META.fConvergeMax99'] != null ? 1 : 0);
+        if (!host && convOn && o.convergence !== false && ['rare', 'boss'].includes(o.enemyRarity || 'rare')) {
           const isSparkSk = id => { const k = GD.skills[lc(id)]; return k && k.Delivery === 'Brand'; };
           const kinds = o.sparkSkills > 0 ? Math.floor(o.sparkSkills) : new Set((ch.hotbar || []).map(lc).filter(isSparkSk).concat(lc(skillId))).size;
           const cMax = ruleNum(GD, 'r99.META.fConvergeMax99', 0.5), cPer = ruleNum(GD, 'r99.META.fConvergePerSec99', 0.02);
@@ -19703,6 +19743,16 @@ window.BOCharacter = function (ctx) {
     res.sheetHitDps = hitAvg * critFactor * hitsPerSec * perHitFactor;
 
 
+    if (mods.some(m => m.echoAuto)) {
+      const kept = new Set();
+      mods = mods.filter(m => !m.echoAuto || (hit[m.echoAuto] && hit[m.echoAuto].avg > 0 && (kept.add(m.echoId), true)));
+      if (kept.size) {
+        res.echoAuto = [...kept];
+        res.notes.push('Elemental Echo: your hits on a Rare or Guardian leave an echo of each element they deal (' + [...kept].map(id => (GD.blessings[id] || {}).Name || id).join(', ') + '), counted as up: 12% more damage of that element (game build 92; untick an echo in the Damage settings to leave it out). The hit and the panel DPS shown are without it, as on the character sheet out of combat.');
+      }
+    }
+
+
     const lvl = o.enemyLevel || ch.level;
     const rarity = o.enemyRarity || 'rare';
     const isBoss = rarity === 'boss';
@@ -19835,7 +19885,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-    let marks = 0, markPct = 0, markHeld = 0;
+    let marks = 0, markPct = 0, markHeld = 0, markAll = 0; // markAll: how many Marks "all your Marks" is for the Marks counted here
     for (const m of pickMods(mods, 'MarkOnHit', 'Flat')) if (applies(ctx, m)) { marks += m.v; use(m); }
     if (marks > 0) {
       const t = markText(GD);
@@ -19846,17 +19896,23 @@ window.BOCharacter = function (ctx) {
 
 
       const held = hitsPerSec * marks >= 1 / 3 ? cap : 0;
-      markHeld = held;
+      markHeld = held; markAll = cap;
       markPct = held * per * (1 + eff / 100);
     }
-    if (!markPct) { const am = armyMarkPct(GD, ch); if (am > 0) { markPct = am; markHeld = 10; res.notes.push('Hunter\'s Marks from your minions (Hunter\'s Mark Support on a summon gem): the enemy takes ' + +am.toFixed(1) + '% more damage at 10 Marks' + (bSwitch(GD, 'r113.META.bMinionMark234', false) ? ' (a minion-laid Mark counts half since game data 92; not checked in game).' : ' (Guardian debuff in the game, 23 Nov 2026).')); } }
+    if (!markPct) { const am = armyMarkPct(GD, ch); if (am > 0) { markPct = am; markHeld = 10; markAll = 10; res.notes.push('Hunter\'s Marks from your minions (Hunter\'s Mark Support on a summon gem): the enemy takes ' + +am.toFixed(1) + '% more damage at 10 Marks' + (bSwitch(GD, 'r113.META.bMinionMark234', false) ? ' (a minion-laid Mark counts half since game data 92; not checked in game).' : ' (Guardian debuff in the game, 23 Nov 2026).')); } }
 
 
     const markRow = activeCurses.find(r => r.kind === 'Mark');
     if (markRow && markPct > 0) {
-      if (markRow.taken >= markPct) { markPct = 0; markHeld = markRow.dread; } else activeCurses = activeCurses.filter(r => r !== markRow);
-    } else if (markRow) markHeld = markRow.dread;
+      if (markRow.taken >= markPct) { markPct = 0; markHeld = markRow.dread; markAll = markRow.dreadCap; } else activeCurses = activeCurses.filter(r => r !== markRow);
+    } else if (markRow) { markHeld = markRow.dread; markAll = markRow.dreadCap; }
     res.marks = markPct ? { pct: markPct } : null;
+
+
+
+
+    if (bSwitch(GD, 'r113.ATTACK3.bTollSentence126', false) && (ch.hotbar || []).some(id => lc(id) === 'toll_of_dread') && activeCurses.some(r => r.kind === 'Sentence'))
+      res.notes.push('Toll of Dread ends your Sentence on the enemies it hits and gives you its charge (game build 92). The Sentence is counted as cast again right away; if you leave it off after a Toll, its bonus is lost for that time.');
 
 
 
@@ -20042,7 +20098,10 @@ window.BOCharacter = function (ctx) {
         const bar = new Set((ch.hotbar || []).filter(Boolean).map(lc));
         const why = [];
         let trig = 1;
-        if (flag('EntropySlam') && ctx.tags.has('slam')) { trig = 1.2 * (1 + sumFlat('EntropySlamMore') / 100); why.push('your Slam implodes it at once (Blood Ledger, x' + trig.toFixed(2) + ')'); }
+
+
+
+        if (flag('EntropySlam') && ctx.tags.has('slam')) { trig = (1 + ruleNum(GD, 'r114.CHAOS.SlamImplodeMorePct', 20) / 100) * (1 + sumFlat('EntropySlamMore') / 100); why.push('your Slam implodes it at once (Blood Ledger, x' + trig.toFixed(2) + ')'); }
         else if (flag('EntropySheathe')) {
           if (bar.has('sheathe')) { trig = 1.3; why.push('Sheathe implodes it at once for 30% more (Quiet Ruin; taken as cast before it fades)'); }
           else if (bar.has('iaido_thrust')) why.push('Iaido Thrust implodes it as it passes (Quiet Ruin)');
@@ -20837,6 +20896,10 @@ window.BOCharacter = function (ctx) {
       for (const d of Object.keys(byType)) { const q = mitig[d] ? mitig[d].k * mitig[d].taken * shockF : 0; rawBy[d] = q > 0 ? byType[d] / q : 0; }
       const rawPerSec = Object.values(rawBy).reduce((a, v) => a + v, 0);
       const hitDpsNow = Object.values(byType).reduce((a, v) => a + v, 0);
+
+
+
+
       const avgHit = hitsPerSec > 0 ? rawPerSec / hitsPerSec : 0; // an average hit (part-hits counted as parts)
       for (const { m, t, share } of trig) {
 
@@ -21086,6 +21149,23 @@ window.BOCharacter = function (ctx) {
         if (ail.poison) ail.poison.dps = poisonDps; if (ail.ignite) ail.ignite.dps = igniteDps; if (ail.bleed) ail.bleed.dps = bleedDps;
         res.feeders = { F, ail: ailF, engineU, hitFactor: kh };
         res.notes.push('Engine feeders (patch 85/86 tree lines): ' + why.join(', ') + ' = +' + F.toFixed(1) + '% added into your damage engine (' + engineU.toFixed(1) + '% before), x' + kh.toFixed(3) + ' on hits' + (ailF.bleed ? ', x' + kOf(F + ailF.bleed).toFixed(3) + ' on bleeds' : '') + (ailF.poison ? ', x' + kOf(F + ailF.poison).toFixed(3) + ' on poisons' : '') + ' (developer stacking table and formulas.md: they add, then the engine multiplies once). From the line texts; not checked in game.');
+      }
+    }
+
+
+
+
+
+
+
+
+    {
+      const csPct = bSwitch(GD, 'r113.ATTACK3.bCalledShot127', false) ? ruleNum(GD, 'r113.ATTACK3.CalledShotMore127', 0) : 0;
+      if (csPct > 0 && !(marks > 0) && markHeld > 0 && markAll > 0 && markHeld >= markAll && hitDpsVs > 0 && o.calledShot !== false) {
+        const k = 1 + csPct / 100;
+        for (const d of Object.keys(byType)) byType[d] *= k;
+        hitDpsVs *= k; res.hitDps = hitDpsVs; res.calledShot = { pct: csPct, marks: markHeld };
+        res.notes.push('Called Shot: the enemy holds all ' + markHeld + ' of your Hunter\'s Marks and this skill has no Hunter\'s Mark support, so its hits deal ' + csPct + '% more (game build 92; game log: "called 10 of 10 Marks ... +15%"). Hits only.');
       }
     }
 
@@ -21351,7 +21431,13 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const coldFloor = is0569(GD) && !(is072(GD) && String(((GD.rules || {})['r95.META.bColdShare69'] || {}).value != null ? GD.rules['r95.META.bColdShare69'].value : GD.rules && GD.rules['r95.META.bColdShare69']).toLowerCase() === 'false');
+
+
+
+
+
+    const coldShare = (() => { const v = (GD.rules || {})['r95.META.bColdShare69'], x = v && typeof v === 'object' ? v.value : v; return x == null ? null : String(x).toLowerCase(); })();
+    const coldFloor = is0569(GD) && !(is072(GD) && (coldShare == null || coldShare === 'false'));
     let chillOk = byType.Cold > 0;
     if (chillOk && coldFloor) {
       const tot = Object.values(byType).reduce((x, y) => x + (+y || 0), 0);
@@ -21535,7 +21621,12 @@ window.BOCharacter = function (ctx) {
     if (!skipMana) {
       const flat = st => pickMods(mods, st, 'Flat').reduce((a, m) => a + m.v, 0), inc = st => pickMods(mods, st, 'Inc').reduce((a, m) => a + m.v, 0);
       const max = heroMaxMana(H, ch, mods, attr);
-      const regen = max * (H.ManaRegenPct || 1.8) / 100 * Math.max(0, 1 + inc('ManaRegen') / 100) + flat('ManaRegen');
+
+
+
+
+      const regenInc = Math.max(0, 1 + inc('ManaRegen') / 100), regenPool = max * (H.ManaRegenPct || 1.8) / 100;
+      const regen = ruleNum(GD, 'r82.SKILLSWEEP.bRegenFlat', 0) ? (regenPool + flat('ManaRegen')) * regenInc : regenPool * regenInc + flat('ManaRegen');
       const pips = (H.AttrPipAt || [100, 200, 300]).filter(t => (attr.Int || 0) >= t).length;
       const refund = pips ? ((H.ClarityRefundPct || [])[pips - 1] || 0) : 0;
       let mult = 1;
@@ -21703,6 +21794,16 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
+    if (res.echoAuto && !o._noEchoAuto && !o._barProbe && res.hit) {
+      const p = calcSkill(GD, ch, skillId, Object.assign({}, o, { _noEchoAuto: true, barShock: false }));
+      if (p && p.hit && isFinite(p.panelDps)) {
+        res.echoFight = { hitAvg: res.hitAvg, sheetHitDps: res.sheetHitDps, panelDps: res.panelDps };
+        for (const k of ['hit', 'hitAvg', 'hitAvgCrit', 'scaleInfo', 'convertedParts', 'convTrace', 'baseParts', 'sheetHitDps', 'panelDps']) if (p[k] !== undefined) res[k] = p[k];
+      }
+    }
     if (!o._noFort && !o._barProbe && !(o.off && o.off.has('fortify')) && (res.sources || []).some(s => s.key === 'fortify') && res.hit) {
 
 
@@ -25068,10 +25169,11 @@ window.BOStartApp = function () {
       : '<li class="hint">No Vows or Heralds on your hotbar, and ' + (st.potionsOn ? 'no potions set in the Brewery.' : 'potions are off (Configure Enemy).') + '</li>';
 
 
+
     const echoVow = GD.blessings.ns103_elemental_echo;
     const echoes = echoVow && ch.hotbar.includes(echoVow.Skill) ? Object.values(GD.blessings).filter(b => /^ns103_echo_/.test(b.Id)) : [];
     $('#echoBox').hidden = !echoes.length;
-    $('#echoList').innerHTML = echoes.map(b => '<li><label><input type="checkbox" data-echo="' + esc(b.Id) + '"' + (st.charges[b.Id] ? ' checked' : '') + '><span class="name">' + esc(b.Name) + '</span></label></li>').join('');
+    $('#echoList').innerHTML = echoes.map(b => '<li><label><input type="checkbox" data-echo="' + esc(b.Id) + '"' + ((st.charges[b.Id] != null ? st.charges[b.Id] : (r.echoAuto || []).includes(b.Id)) ? ' checked' : '') + '><span class="name">' + esc(b.Name) + '</span></label></li>').join('');
 
     const bsh = r.barShock || [];
     $('#barShockBox').hidden = !bsh.length;

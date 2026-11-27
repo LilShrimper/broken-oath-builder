@@ -3427,3 +3427,46 @@ body.stats-folded .stats-panel { padding: 0; border: 0; background: none; overfl
 .ido-key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--panel-2); margin-left: 4px; }
 .ido-key:first-child { margin-left: 0; }
 @media (max-width: 520px) { #comparePane > .cmp-modes .cmp-mode { flex: 1 1 30%; } .ido-col { flex: 1 1 100%; } }
+/* New Players tab (newplayers.js, 27 Nov 2026) */
+.main-tabs .np-tab-btn { color: var(--dashboard-gold); }
+.np-jump { flex-wrap: wrap; margin: 0 0 12px; }
+.np-card { scroll-margin-top: 80px; }
+.np-card p { margin: 6px 0; line-height: 1.5; }
+.np-class-grid, .np-basic-grid, .np-guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.np-class, .np-basic, .np-guide-class { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); }
+.np-class-head { display: flex; align-items: center; gap: 4px; font-size: 16px; }
+.np-class-head .cls-ico { margin: -4px 6px -4px 0; }
+.np-main { margin-left: auto; color: var(--dashboard-gold); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.np-attrs { display: flex; flex-wrap: wrap; gap: 6px; }
+.np-attr { padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.np-attr small { color: var(--faint); }
+.np-attr.main { border-color: var(--dashboard-gold); color: var(--dashboard-gold); }
+.np-row { display: flex; gap: 8px; font-size: 13px; line-height: 1.5; }
+.np-k { flex: 0 0 100px; color: var(--faint); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding-top: 2px; }
+.np-gems { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.np-gem { display: inline-flex; align-items: center; gap: 5px; }
+.np-gem .gem-ico { width: 20px; height: 20px; margin: 0; vertical-align: 0; }
+.np-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 4px; }
+.np-btn { min-height: 32px; padding: 4px 12px; font-size: 13px; }
+.np-basic p { flex: 1; font-size: 13.5px; }
+.np-basic .np-btn { align-self: flex-start; }
+.np-steps { margin: 8px 0 12px; padding-left: 22px; display: flex; flex-direction: column; gap: 8px; line-height: 1.5; }
+.np-first { margin: 0 0 6px; }
+.np-h3 { margin: 16px 0 8px; font-size: 14px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.np-tab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.np-tab { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.np-tab span { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.np-tab:hover, .np-tab:focus-visible { border-color: var(--dashboard-gold); }
+.np-tab:hover b { color: var(--dashboard-gold); }
+.np-guide { display: grid; grid-template-columns: 30px 1fr; align-items: center; gap: 4px 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.np-guide:first-of-type { border-top: 0; }
+.np-guide .gem-ico { width: 30px; height: 30px; margin: 0; border-radius: 5px; }
+.np-guide-name { display: flex; flex-direction: column; min-width: 0; }
+.np-guide-name small { color: var(--faint); font-size: 12px; }
+.np-guide .np-actions { grid-column: 2; padding-top: 2px; }
+.np-kind { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 5px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text); background: var(--line); }
+.np-kind-starter { background: color-mix(in srgb, var(--good) 30%, transparent); }
+.np-kind-clear { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.np-kind-boss { background: color-mix(in srgb, var(--bad) 30%, transparent); }
+@media (max-width: 640px) { .np-class-grid, .np-basic-grid, .np-guide-grid, .np-tab-grid { grid-template-columns: 1fr; } .np-k { flex-basis: 84px; } }
+.np-why { grid-column: 2; margin: 2px 0 0 !important; color: var(--muted); font-size: 12.5px; line-height: 1.45; }

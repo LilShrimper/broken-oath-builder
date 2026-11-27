@@ -290,7 +290,7 @@ window.PAGE_LANGS = {
 
     const classes = {}, classAnims = {};
     for (const c of [...J('Gameplay/classes.json').classes, ...parts('classes.json').flatMap(p => p.classes)]) {
-      const o = pick(c, ['Id', 'Str', 'Dex', 'Int', 'StrPerLevel', 'DexPerLevel', 'IntPerLevel', 'EarlyDamagePct', 'EarlyDamageFullToLevel', 'EarlyDamageEndLevel']);
+      const o = pick(c, ['Id', 'Str', 'Dex', 'Int', 'StrPerLevel', 'DexPerLevel', 'IntPerLevel', 'EarlyDamagePct', 'EarlyDamageFullToLevel', 'EarlyDamageEndLevel', 'WeaponClasses', 'MoveSpeed', 'Gem1', 'Gem2', 'Gem3']); // WeaponClasses, MoveSpeed, Gem1-3 (the gems a new hero starts with): display only (New Players tab), the sim reads none
       classes[c.Id.toLowerCase()] = Object.assign(classes[c.Id.toLowerCase()] || {}, o);
       const a = classAnims[c.Id.toLowerCase()] = classAnims[c.Id.toLowerCase()] || { skill: {}, deliv: {} };
       Object.assign(a.skill, c.SkillAnimSets || {}); Object.assign(a.deliv, c.DeliveryAnimSets || {});
@@ -733,6 +733,12 @@ window.PAGE_LANGS = {
 
 
     const late2 = {};
+
+
+
+
+    const guides = [];
+    try { for (const x of (J('Gameplay/guides_live98.json') || {}).Guides || []) if (x && x.Id && /^BO1./.test(x.Code || '')) guides.push({ id: x.Id, cls: x.Class, role: x.Role, title: x.Title, skill: x.Skill || '', level: +x.HeroLevel || 0, points: +x.Points || 0, bossDps: +x.BossDps || 0, source: x.Source || '', why: x.Why || '', code: x.Code }); } catch (e) { /* not in this data: the tab falls back to names only */ }
     try { for (const [id, x] of Object.entries((J('Gameplay/late2_98.json') || {}).skills || {})) if (x && x.Mult > 0) late2[id.toLowerCase()] = { From: +x.From, At: +x.At, Mult: +x.Mult }; } catch (e) { /* older data: none */ }
     try { for (const x of (J('Gameplay/new_gems85.json') || {}).gems || []) if (x && x.Id && x.PoisonChance > 0) gemPoison[x.Id.toLowerCase()] = +x.PoisonChance; } catch (e) { /* older game data: none */ }
 
@@ -769,7 +775,7 @@ window.PAGE_LANGS = {
 
     return Object.assign({ builtAt: new Date().toISOString(), dataDir: '', schema: SCHEMA }, meta || {}, { loot },
       { skills, classes, supports, nodes, masteries, oaths, moved: tree.Moved || {}, treeVersion: tree.Version, // treeVersion: a save holding an older TreeVersion gets its passives refunded on login (log, 6 Nov 2026: "passive tree v14 - 104 allocations returned")
-        affixes, late2, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, statTextNeg, guardians, sigRuneRule, vowRunes, idolRecipes, archetypes, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, redTierLevels, saveIds, trapPrice, gemPoison, rules: gameRules });
+        affixes, late2, uniques, bases, qualityStones, leagueRules, runes, runeSockets, runeFuse, runewords, dragon, curses, blessings, scaling, statText, statTextNeg, guardians, sigRuneRule, vowRunes, idolRecipes, archetypes, ward, monsterAffixes, guardianMods, minionMonsters, fights, deep, tundra, xpPenalty, animRate, xpLevels, rupture, potions, materials, vowShares, redTierLevels, saveIds, trapPrice, gemPoison, guides, rules: gameRules });
   }
 
   const api = { buildGameData, NEEDED, PART_FILES, OPTIONAL, SCHEMA };
@@ -10081,7 +10087,9 @@ window.BOItemSearch.tierOf = u => !u ? '' : u.Chase ? 'Chase' : u.Primal ? 'Prim
       refresh(async () => { await loadLeagues(); S.league = m[1]; await loadLadder(); await loadHero(path); });
       return true;
     }
-    return { render, charFromApi, openFromHash };
+
+    function filterTo(cls, skill) { S.cls = CLASSES.includes(cls) ? cls : 'All'; S.skill = skill || ''; S.gem = ''; S.item = ''; S.hero = null; S.heroData = null; }
+    return { render, charFromApi, openFromHash, filterTo };
   };
   root.BOLadderChar = charFromApi;
   if (typeof module !== 'undefined') module.exports = { charFromApi, ehpOf, evadeOf };
@@ -13979,7 +13987,193 @@ window.BOFaq = function (ctx) {
   }
 
   const sections = () => ALL.filter(x => x[0] !== 'history').map(([id, label]) => { let html = ''; try { html = RENDER[id](ctx.gd() || {}); } catch (e) { /* a section that needs the page */ } return { id, label, html }; });
-  return { render, renderMinions, renderGemLevels, sections };
+
+  const open = id => { if (!ALL.some(x => x[0] === id)) return; section = id; try { localStorage.setItem('bo_faq_section', id); } catch (x) { /* storage blocked */ } };
+  return { render, renderMinions, renderGemLevels, sections, open };
+};
+
+;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+window.BONewPlayers = function (ctx) {
+  'use strict';
+  const { $, esc } = ctx;
+  const lc = s => String(s || '').toLowerCase();
+
+
+  const GUIDES = [
+    ['Warrior', 'starter', 'Leap Slam Starter'], ['Warrior', 'clear', 'Hallowed Slam Clear'], ['Warrior', 'boss', 'Earthshatter Bossing'],
+    ['Mage', 'starter', 'Zap Starter'], ['Mage', 'clear', 'Ember Spark Clear'], ['Mage', 'boss', 'Chain Lightning Bossing'],
+    ['Necromancer', 'starter', 'Summon Skeletal Mage Starter'], ['Necromancer', 'clear', 'Venom Spark Clear'], ['Necromancer', 'boss', 'Drain Life Bossing'], ['Necromancer', 'corpse', 'Volatile Host'],
+    ['Paladin', 'starter', 'Orbiting Hammers Starter'], ['Paladin', 'clear', 'Earthshatter Clear'], ['Paladin', 'boss', 'Judgement Bossing'],
+    ['Ranger', 'starter', 'Lightning Arrow Starter'], ['Ranger', 'clear', 'Ballista Clear'], ['Ranger', 'boss', 'Piercing Shot Bossing'],
+    ['Samurai', 'starter', 'Flurry Starter'], ['Samurai', 'clear', 'Shuriken Fan Clear'], ['Samurai', 'boss', 'Iaido Thrust Bossing'],
+  ];
+  const KIND = { starter: ['Starter', 'For the first levels'], clear: ['Clear', 'Kills packs fast'], boss: ['Bossing', 'Single target'], corpse: ['Corpses', 'Corpse explosions'] }; // role names of guides_live98.json
+
+  const STYLE = {
+    Warrior: 'Melee with big weapons: slams, leaps and spinning attacks. Tough and simple to start.',
+    Mage: 'Spells from a staff or wand: fire, cold and lightning, from a distance.',
+    Necromancer: 'Minions fight for you (skeletons, golems), plus life drain and poison spells.',
+    Paladin: 'Holy melee with a one-hand mace or sword: Judgement from the sky, hammers that circle you.',
+    Ranger: 'Bows from a distance: arrows, Ballistas and traps.',
+    Samurai: 'Fast blades up close: swords, daggers and claws, plus thrown Shuriken.',
+  };
+  const ATTR = { Str: 'Strength', Dex: 'Dexterity', Int: 'Intelligence' };
+  const weaponName = w => String(w || '').replace(/^OneHand/, 'One-hand ').replace(/^TwoHand/, 'Two-hand ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/ (\w)/g, (m, c) => ' ' + c.toLowerCase());
+
+
+
+
+  function skillOf(GD, title) {
+    const n = lc(title.replace(/ (Starter|Clear|Bossing)$/, ''));
+    const gems = Object.values(GD.skills || {}).filter(s => (s.Kind === 'Gem' || s.Kind === 'Weapon') && s.Name);
+    const hit = gems.find(s => lc(s.Name) === n) || gems.find(s => lc(s.Name).endsWith(' ' + n));
+    return hit || null;
+  }
+
+  const intro = '<div class="cmp-intro"><div class="eyebrow">START HERE</div><h2>New to Broken Oath?</h2><p>A short guide to the classes, the rules you meet first, this site\'s tabs and the builds the game itself suggests. Numbers come from the game data and follow patches.</p></div>';
+  const card = (id, title, body, sub) => '<div class="card faq-card np-card" id="' + id + '"><h2>' + title + (sub ? ' <small>' + sub + '</small>' : '') + '</h2>' + body + '</div>';
+  const btn = (attrs, label, ghost) => '<button type="button" class="btn' + (ghost ? ' ghost' : '') + ' np-btn" ' + attrs + '>' + label + '</button>';
+
+  function classes(GD) {
+    const list = Object.values(GD.classes || {}).filter(c => c.Id);
+    if (!list.length) return card('np-classes', 'The classes', '<p class="hint">Load the game data first.</p>');
+    const cards = list.map(c => {
+      const main = ['Str', 'Dex', 'Int'].slice().sort((a, b) => (c[b + 'PerLevel'] || 0) - (c[a + 'PerLevel'] || 0) || (c[b] || 0) - (c[a] || 0))[0];
+      const start = [c.Gem1, c.Gem2, c.Gem3].map(id => (GD.skills || {})[id]).filter(Boolean); // classes.json Gem1-3: the gems a new hero starts with
+      const attrs = ['Str', 'Dex', 'Int'].map(a => '<span class="np-attr' + (a === main ? ' main' : '') + '" title="' + ATTR[a] + ': ' + (c[a] || 0) + ' at level 1, +' + (c[a + 'PerLevel'] || 0) + ' a level">' + a + ' ' + (c[a] || 0) + ' <small>+' + (c[a + 'PerLevel'] || 0) + '/lvl</small></span>').join('');
+      return '<div class="np-class">' +
+        '<div class="np-class-head">' + (ctx.classIcon ? ctx.classIcon(c.Id) : '') + '<b>' + esc(c.Id) + '</b><span class="np-main">' + ATTR[main] + '</span></div>' +
+        '<p>' + esc(STYLE[c.Id] || '') + '</p>' +
+        '<div class="np-attrs">' + attrs + '</div>' +
+        ((c.WeaponClasses || []).length ? '<div class="np-row"><span class="np-k">Weapons</span>' + c.WeaponClasses.map(w => esc(weaponName(w))).join(', ') + '</div>' : '') +
+        (start.length ? '<div class="np-row"><span class="np-k">Starts with</span><span class="np-gems">' + start.map(s => '<span class="np-gem" data-skill="' + esc(s.Id) + '">' + (ctx.skillIcon ? ctx.skillIcon(s.Id) || '' : '') + esc(s.Name) + '</span>').join('') + '</span></div>' : '') +
+        '<div class="np-actions">' + btn('data-plan="' + esc(c.Id) + '"', 'Start a ' + esc(c.Id) + ' plan', true) + btn('data-ladder="' + esc(c.Id) + '"', 'Top ' + esc(c.Id) + ' builds', true) + '</div>' +
+        '</div>';
+    }).join('');
+    return card('np-classes', 'The classes', '<div class="np-class-grid">' + cards + '</div>' +
+      '<p class="faq-note">Any class can use any skill gem: other classes\' gems are bought from the Gemwright and need more of their attribute. The main attribute is the one that grows fastest per level. See <b>Skill Scaling → Gem Levels</b> for every class\'s gems.</p>');
+  }
+
+
+  const BASICS = [
+    ['Skills and supports', 'Your skill gems sit on the skill bar; support gems link to a skill and change it. Support sockets open as the <b>skill gem</b> levels up, not your hero. Link your main skill\'s supports first: that is most of your damage early on.', 'tips'],
+    ['Increased and more', 'All "increased" lines of a kind add up into one bonus; each "more" line multiplies on its own. Two 50% increased = ×2, two 50% more = ×2.25. When your damage stalls, look for a "more" line.', 'multipliers'],
+    ['Your weapon', 'For attack skills the weapon is most of your damage: swap it as soon as a drop is better for your skill. Spells take crit chance from a staff or wand.', null],
+    ['Resistances', 'Keep fire, cold and lightning resistance at the cap (75%). From Rupture Level 55 monsters cut your resistances more and more, so check them every few levels.', null],
+    ['Rupture Levels and seals', 'Maps go up by Rupture Level, with a Gate boss every 10 levels. Seals at 80, 130 and 180 each make monsters much tougher: better gear, not more kills, gets you past them. After 200 comes the Riven Tier.', 'deep'],
+    ['Real defence', 'From about Rupture Level 110 Guardians hit hard enough that resistances are not enough: add armour or evasion, and life or energy shield.', null],
+    ['Critical strikes', 'A crit deals your hit times the crit multiplier (150% to start). Base crit chance is 5% for attacks and 6% for spells unless the weapon or skill says more. Chance and multiplier work together: raise both.', 'multipliers'],
+    ['Damage over time', 'Poison, ignite and bleed keep ticking while you move. Ticks are not hits, so "on hit" lines and leech do nothing for them; ailment and damage-over-time lines do.', 'ailments'],
+    ['Make enemies take more', 'Curses (Woes), Sentences, Marks, Shock and Brittle make the enemy take more damage, bosses too.', 'curses'],
+    ['Crafting', 'Runes in the right order form an Oathword, a big power step. The Oathstone Cube remakes items, the Forge crafts lines onto them. Do the Oathsworn craft last: a reroll after it erases it.', 'cube'],
+    ['Endgame content', 'The Catacombs (runes and Dust), the Core (Core Sigils, the best items), the Gnome Realms (item quality), the Tundra Desert (wave arena) and the Pinnacle bosses each pay something different: pick the one your build needs.', 'tundra'],
+  ];
+  function basics() {
+    return card('np-basics', 'Game basics', '<div class="np-basic-grid">' + BASICS.map(b =>
+      '<div class="np-basic"><b>' + b[0] + '</b><p>' + b[1] + '</p>' + (b[2] ? btn('data-faq="' + b[2] + '"', 'Read more', true) : '') + '</div>').join('') + '</div>' +
+      '<p class="faq-note">Short versions of the game\'s own Guide (press F1 in the game). The FAQ / Game Mechanics tab has the full rules and numbers.</p>');
+  }
+
+
+  const TABS = [
+    ['build', 'Build Planner', 'Your character: gear, skills, passive tree, Dragonling and damage. Load your saves or start a plan here.'],
+    ['code', 'Load Code', 'Open a build someone shared (a share code or link).'],
+    ['builds', 'Saved Builds', 'Builds you saved in this browser.'],
+    ['ladder', 'Ladder', 'Top heroes per class from the game\'s public ladder. Open any of them in the planner.'],
+    ['compare', 'Item Simulator', 'Try an item on your build and see what it does to your damage.'],
+    ['supports', 'Support Gem Simulator', 'Which support adds the most to a skill.'],
+    ['items', 'Database', 'Every item, unique, base, mod, rune and gem.'],
+    ['market', 'Market', 'Search the in-game Wagon Market listings and find upgrades for your build.'],
+    ['lootfilter', 'Loot Filter', 'Make a loot filter and copy its code into the game.'],
+    ['grail', 'Grail', 'Track which uniques you have found.'],
+    ['brewery', "Brewmaw's Brewery", 'Potions and their recipes.'],
+    ['fossil', 'Fossil Planner', 'Plan fossil crafting.'],
+    ['skillscaling', 'Skill Scaling', 'How each skill grows with level, minions, and when gems and sockets unlock.'],
+    ['patch', 'Recent Patch', 'What the latest game patch changed.'],
+    ['faq', 'FAQ / Game Mechanics', 'How damage, defences, ailments and the endgame work, in detail.'],
+  ];
+  function site() {
+    const steps = [
+      '<b>Bring your character in.</b> Press <b>Load saves folder</b> at the top and pick your SaveGames folder (<b>Save import help</b> shows where it is). Your saves are read in this browser only, never uploaded. No character yet? Press <b>Start a New Plan</b> and build one by hand.',
+      '<b>Character tab.</b> Gear, skills and supports. Hover anything for its numbers.',
+      '<b>Passive tree.</b> Plan your points; <b>Optimize</b> suggests where the next points do the most for your damage.',
+      '<b>Advanced.</b> Every number behind the build: damage, speed, crits, life, armour, resistances.',
+      '<b>Share.</b> <b>Copy share link</b> at the top gives a link to the build as you see it.',
+    ];
+    return card('np-site', 'Using this site', '<ol class="np-steps">' + steps.map(s => '<li>' + s + '</li>').join('') + '</ol>' +
+      '<div class="np-actions np-first">' + btn('data-act="saves"', 'Load saves folder') + btn('data-plan=""', 'Start a New Plan', true) + '</div>' +
+      '<h3 class="np-h3">Every tab</h3><div class="np-tab-grid">' + TABS.map(t => '<button type="button" class="np-tab" data-go="' + t[0] + '"><b>' + esc(t[1]) + '</b><span>' + esc(t[2]) + '</span></button>').join('') + '</div>');
+  }
+
+
+
+  const short = n => n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 1 : 2).replace(/.?0+$/, '') + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(Math.round(n));
+  function guideRows(GD, list) {
+    const classes = [...new Set(list.map(g => g.cls))];
+    return classes.map(c => '<div class="np-guide-class"><div class="np-class-head">' + (ctx.classIcon ? ctx.classIcon(c) : '') + '<b>' + esc(c) + '</b></div>' +
+      list.filter(g => g.cls === c).map(g => {
+        const s = (GD.skills || {})[lc(g.skill)] || skillOf(GD, g.title), k = KIND[g.role] || [g.role, ''];
+        const meta = ['level ' + g.level, g.bossDps ? short(g.bossDps) + ' boss DPS in the game\'s guide' : ''].filter(Boolean).join(' · ');
+        return '<div class="np-guide">' + (s && ctx.skillIcon ? ctx.skillIcon(s.Id) || '<i class="gem-ico gem-none"></i>' : '<i class="gem-ico gem-none"></i>') +
+          '<div class="np-guide-name"><b>' + esc(g.title) + '</b><small><span class="np-kind np-kind-' + esc(g.role) + '">' + esc(k[0]) + '</span>' + esc(meta) + '</small></div>' +
+          (g.why ? '<p class="np-why">' + esc(g.why) + '</p>' : '') +
+          '<div class="np-actions">' + btn('data-guide="' + esc(g.id) + '"', 'Open this build') +
+          btn('data-ladder="' + esc(c) + '"' + (s ? ' data-skill="' + esc(s.Id) + '"' : ''), 'Ladder builds', true) + '</div></div>';
+      }).join('') + '</div>').join('');
+  }
+  function guides(GD) {
+    const list = GD.guides || [];
+    if (list.length) return card('np-guides', 'Builds the game suggests', '<p>The game\'s own Guide (press F1 in the game) suggests these builds, three per class. <b>Open this build</b> loads it here as a plan: passive tree, Dragonling, skill with its supports and the item bases. The guide\'s rare items have no stat lines in the code, so the damage here is lower than the guide\'s figure until you add your own. <b>Ladder builds</b> shows top heroes of that class playing the skill (if any do this season).</p>' +
+      '<div class="np-guide-grid">' + guideRows(GD, list) + '</div>' +
+      '<p class="faq-note">From the game\'s own guide file. Skills, numbers and the meta change with every patch.</p>');
+    const classes = [...new Set(GUIDES.map(g => g[0]))];
+    const rows = classes.map(c => {
+      const items = GUIDES.filter(g => g[0] === c).map(g => {
+        const s = skillOf(GD, g[2]), k = KIND[g[1]] || [g[1], ''], gem = s && s.Kind === 'Gem';
+        return '<div class="np-guide">' + (s && ctx.skillIcon ? ctx.skillIcon(s.Id) || '<i class="gem-ico gem-none"></i>' : '<i class="gem-ico gem-none"></i>') +
+          '<div class="np-guide-name"><b>' + esc(g[2]) + '</b><small><span class="np-kind np-kind-' + g[1] + '">' + k[0] + '</span>' + esc(k[1]) + (s && !gem ? ' · weapon skill: comes with the weapon' : '') + '</small></div>' +
+          '<div class="np-actions">' + btn('data-plan="' + esc(c) + '"' + (gem ? ' data-skill="' + esc(s.Id) + '"' : ''), 'Start a plan', true) +
+          btn('data-ladder="' + esc(c) + '"' + (s ? ' data-skill="' + esc(s.Id) + '"' : ''), 'Ladder builds', true) + '</div></div>';
+      }).join('');
+      return '<div class="np-guide-class"><div class="np-class-head">' + (ctx.classIcon ? ctx.classIcon(c) : '') + '<b>' + esc(c) + '</b></div>' + items + '</div>';
+    }).join('');
+    return card('np-guides', 'Builds the game suggests', '<p>The game\'s own Guide (press F1 in the game) suggests these builds for each class. <b>Start a plan</b> makes a new plan of that class with the skill on it (a weapon skill comes with the weapon you put on); <b>Ladder builds</b> shows top heroes of that class playing the skill (if any do this season).</p>' +
+      '<div class="np-guide-grid">' + rows + '</div>' +
+      '<p class="faq-note">Names from the game\'s Guide text. Skills, numbers and the meta change with every patch.</p>');
+  }
+
+  function render() {
+    const p = $('#newPlayersPane'); if (!p) return;
+    const GD = ctx.gd() || {};
+    const jump = [['np-classes', 'Classes'], ['np-basics', 'Game basics'], ['np-site', 'Using this site'], ['np-guides', 'Suggested builds']];
+    p.innerHTML = intro + '<nav class="cmp-modes np-jump" aria-label="New player sections">' + jump.map(j => '<button type="button" class="cmp-mode" data-jump="' + j[0] + '">' + j[1] + '</button>').join('') + '</nav>' +
+      classes(GD) + basics() + site() + guides(GD);
+    p.onclick = e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.jump) { const el = document.getElementById(b.dataset.jump); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+      if (b.dataset.faq) { ctx.openFaq(b.dataset.faq); return; }
+      if (b.dataset.go) { ctx.showTab(b.dataset.go); window.scrollTo(0, 0); return; }
+      if (b.dataset.ladder) { ctx.ladderFor(b.dataset.ladder, b.dataset.skill || ''); window.scrollTo(0, 0); return; }
+      if (b.dataset.guide) { const g = (GD.guides || []).find(x => x.id === b.dataset.guide); if (g) ctx.openCode(g.code); return; }
+      if (b.dataset.plan != null) { ctx.startPlan(b.dataset.plan, b.dataset.skill || ''); return; }
+      if (b.dataset.act === 'saves') ctx.loadSaves();
+    };
+  }
+  return { render };
 };
 
 ;
@@ -24802,6 +24996,7 @@ window.BOStartApp = function () {
   let lootFilter = null; // the Loot Filter tab (lootfilter.js)
   let scaling = null; // the Skills tab (scaling.js)
   let faq = null; // the FAQ / Game Mechanics tab (faq.js)
+  let newPlayers = null; // the New Players tab (newplayers.js)
   let atlas = null; // the Riven Atlas tab (atlas.js), a Build Planner view
   let advancedTab = null; // the Advanced tab (advanced.js): every number behind the build, a Build Planner view
   let vowsTab = null; // the Vows, Curses, Sentences tab (vows.js), a Build Planner view
@@ -30638,11 +30833,11 @@ window.BOStartApp = function () {
 
 
   const ROUTES = { character: 'build/character', tree: 'build/tree', atlas: 'build/atlas', 'build:skills': 'build/skills', damage: 'build/damage', vows: 'build/vows', advanced: 'build/advanced',
-    compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', market: 'market', patch: 'patch', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', lootfilter: 'lootfilter', faq: 'faq',
+    compare: 'itemsim', items: 'itemsearch', grail: 'grail', ladder: 'ladder', market: 'market', patch: 'patch', supports: 'supportgemsim', fossil: 'fossilplanner', brewery: 'brewery', lootfilter: 'lootfilter', faq: 'faq', newplayers: 'newplayers',
     skillscaling: 'skills', minions: 'skills/minions', gemlevels: 'skills/levels', creator: 'creator', plan: 'plan', code: 'code', builds: 'savedbuilds' };
   const ROUTE_TITLES = { character: 'Character', tree: 'Passive tree', atlas: 'Riven Atlas', 'build:skills': 'Skills', damage: 'Damage Analysis', vows: 'Vows, Curses, Sentences', advanced: 'Advanced',
     compare: 'Item Simulator', items: 'Database', grail: 'Grail', ladder: 'Ladder', market: 'Market', patch: 'Recent Patch', supports: 'Support Gem Simulator', fossil: 'Fossil Planner', brewery: "Brewmaw's Brewery", lootfilter: 'Loot Filter',
-    faq: 'FAQ / Game Mechanics', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', gemlevels: 'Gem Levels', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code', builds: 'Saved Builds' };
+    faq: 'FAQ / Game Mechanics', newplayers: 'New Players?', skillscaling: 'Skill Scaling', minions: 'Minion Scaling', gemlevels: 'Gem Levels', creator: 'Save Creator', plan: 'Start a New Plan', code: 'Load Code', builds: 'Saved Builds' };
 
 
   let skillsView = 'scaling';
@@ -30729,7 +30924,7 @@ window.BOStartApp = function () {
     document.body.classList.toggle('plan-page', tab === 'plan'); // the plan setup page: no Damage-tab controls beside it
     document.body.classList.toggle('support-page', tab === 'supports');
     document.body.classList.toggle('code-page', tab === 'code');
-    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'builds' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'lootfilter' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'market' || tab === 'patch' || tab === 'faq' || tab === 'skillscaling' || tab === 'character' || tab === 'atlas' || tab === 'vows' || tab === 'advanced');
+    document.body.classList.toggle('compare-page', tab === 'compare' || tab === 'builds' || tab === 'creator' || tab === 'fossil' || tab === 'brewery' || tab === 'lootfilter' || tab === 'items' || tab === 'grail' || tab === 'ladder' || tab === 'market' || tab === 'patch' || tab === 'faq' || tab === 'newplayers' || tab === 'skillscaling' || tab === 'character' || tab === 'atlas' || tab === 'vows' || tab === 'advanced');
     document.body.classList.toggle('atlas-page', tab === 'atlas');
     document.body.classList.toggle('vows-page', tab === 'vows');
     document.body.classList.toggle('advanced-page', tab === 'advanced');
@@ -30747,7 +30942,7 @@ window.BOStartApp = function () {
 
     document.querySelectorAll('.tab[data-tab]').forEach(b => { const on = b.dataset.tab === tab || (['tree', 'character', 'atlas', 'damage', 'vows', 'advanced'].includes(tab) && b.dataset.tab === 'build'); b.classList.toggle('active', on); b.setAttribute('aria-selected', on); });
     if (tab === 'tree' || tab === 'damage' || tab === 'character' || tab === 'atlas' || tab === 'vows' || tab === 'advanced') { $('#buildSubtabs').hidden = !st.ch; $('#buildSubtabs').querySelectorAll('[data-sub]').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', false); }); }
-    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#savedBuildsPane').hidden = tab !== 'builds'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#lootFilterPane').hidden = tab !== 'lootfilter'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#marketPane').hidden = tab !== 'market'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character'; $('#atlasPane').hidden = tab !== 'atlas'; $('#vowsPane').hidden = tab !== 'vows'; $('#advancedPane').hidden = tab !== 'advanced';
+    $('#results').hidden = tab !== 'damage'; $('#treePane').hidden = !T.visible; $('#buildPane').hidden = tab !== 'build' && tab !== 'plan'; $('#codePane').hidden = tab !== 'code'; $('#comparePane').hidden = tab !== 'compare'; $('#creatorPane').hidden = tab !== 'creator'; $('#savedBuildsPane').hidden = tab !== 'builds'; $('#fossilPane').hidden = tab !== 'fossil'; $('#breweryPane').hidden = tab !== 'brewery'; $('#lootFilterPane').hidden = tab !== 'lootfilter'; $('#itemSearchPane').hidden = tab !== 'items'; $('#grailPane').hidden = tab !== 'grail'; $('#ladderPane').hidden = tab !== 'ladder'; $('#marketPane').hidden = tab !== 'market'; $('#patchPane').hidden = tab !== 'patch'; $('#faqPane').hidden = tab !== 'faq'; $('#newPlayersPane').hidden = tab !== 'newplayers'; $('#skillsTabPane').hidden = tab !== 'skillscaling'; $('#characterPane').hidden = tab !== 'character'; $('#atlasPane').hidden = tab !== 'atlas'; $('#vowsPane').hidden = tab !== 'vows'; $('#advancedPane').hidden = tab !== 'advanced';
     renderSupportSkillSelect(); renderSupportSearchResults();
     if (tab === 'build' || tab === 'plan') planner.render();
     renderBuildStats();
@@ -30764,6 +30959,7 @@ window.BOStartApp = function () {
     if (tab === 'market') market.render();
     if (tab === 'patch') patches.render();
     if (tab === 'faq') faq.render();
+    if (tab === 'newplayers') newPlayers.render();
     if (tab === 'skillscaling') renderSkillsTab();
     if (tab === 'character') character.render();
     if (tab === 'atlas') atlas.render();
@@ -31273,6 +31469,18 @@ window.BOStartApp = function () {
   vowsTab = window.BOVows({ $, esc, num, planner, gd: () => GD, current: () => st.ch, skillDot, sim: vowSim });
   faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, atlas, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '',
     skillTip: id => planner.skillTip(null, id, false, true), supTip: id => planner.supTip(id) }); // Gem Levels tiles: the Build tab's tooltips
+
+  newPlayers = window.BONewPlayers({ $, esc, gd: () => GD, classIcon, skillIcon, showTab,
+    openFaq: id => { faq.open(id); showTab('faq'); window.scrollTo(0, 0); },
+    ladderFor: (cls, skill) => { ladder.filterTo(cls, skill); showTab('ladder'); },
+    loadSaves: () => $('#saveDirBtn').click(),
+    openCode: async code => { try { const ch = await importAnyCode(code); if (ch) { showTab('character'); window.scrollTo(0, 0); } } catch (err) { alert('Could not open that build: ' + err.message); } },
+    startPlan: async (cls, skill) => {
+      if (!await planner.startNewPlan(cls || undefined)) return;
+      const ch = st.ch;
+      if (skill && ch && ch.plan && planner.addSkill(ch, skill)) planChanged(ch, {});
+      showTab(cls ? 'character' : 'plan'); window.scrollTo(0, 0);
+    } });
   character = window.BOCharacter({ afterRender: () => fillOptimizerSlot(), copyGearLink,
     beltCard: () => brewery ? brewery.beltCard() : '',
     $, esc, planner, sim: S, gd: () => GD, gemDot, skillDot, num, pct, current: () => st.ch, defence: defenceStats, enemyBtn: () => enemyBtn(),
@@ -31482,7 +31690,7 @@ window.BOStartApp = function () {
   chatbox.check(); // the question chat's button, for an account it is open to
 
   const routeKey0 = routeFromPath(); // opened on a page address (/build/tree/ ...): that tab wins
-  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (CHARS.length ? 'character' : 'home'); if (['character', 'tree', 'atlas', 'vows', 'advanced', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'market', 'patch', 'faq', 'skillscaling'].includes(lastTab)) showTab(lastTab);
+  const lastTab = (routeKey0 ? openRoute(routeKey0) : null) || (CHARS.length ? 'character' : 'home'); if (['character', 'tree', 'atlas', 'vows', 'advanced', 'build', 'builds', 'supports', 'compare', 'plan', 'code', 'creator', 'fossil', 'brewery', 'lootfilter', 'items', 'grail', 'ladder', 'market', 'patch', 'faq', 'newplayers', 'skillscaling'].includes(lastTab)) showTab(lastTab);
   else if (lastTab === 'home') goHome(false); // left on the landing page last time (the address stays as opened)
   routingReady = true; // from here on, switching tabs changes the address
 

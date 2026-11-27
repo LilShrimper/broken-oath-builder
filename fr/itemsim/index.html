@@ -53,7 +53,7 @@
   var b = new URL("../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
   window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/fr.json'), langCode: 'fr' };
 })(); } catch (e) { /* no fetch: app.js asks */ }</script>
-<link rel="stylesheet" href="../../style.css?v=554">
+<link rel="stylesheet" href="../../style.css?v=555">
 <script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </head>
 <body class="dashboard-view">
@@ -168,6 +168,9 @@
       </button>
       <button class="tab" type="button" role="tab" data-tab="faq" aria-selected="false" aria-label="FAQ and Game Mechanics">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1 1-1.1 1.8M12 17h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18"/></svg><span>FAQ / Game Mechanics</span>
+      </button>
+      <button class="tab np-tab-btn" type="button" role="tab" data-tab="newplayers" aria-selected="false" aria-label="New Players?">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 4.6 5 .4-3.8 3.2 1.2 4.8L12 13.4 7.7 16l1.2-4.8L5.1 8l5-.4zM5 21h14"/></svg><span>New Players?</span>
       </button>
     </nav>
     <!-- Top right of the Tools bar: the account button (src/cloud.js, testers only: ?cloud=1) and the language menu (src/i18n.js, owner 13 Nov 2026). -->
@@ -392,6 +395,7 @@
     <section class="build-pane compare-pane ladder-pane" id="ladderPane" hidden></section>
     <section class="build-pane compare-pane ladder-pane market-pane" id="marketPane" hidden></section>
     <section class="build-pane compare-pane patch-pane" id="patchPane" hidden></section>
+    <section class="build-pane compare-pane newplayers-pane" id="newPlayersPane" hidden></section>
     <section class="build-pane compare-pane faq-pane" id="skillsTabPane" hidden>
       <nav class="faq-nav" id="skillsNav" role="group" aria-label="Skills sections"></nav>
       <div class="build-pane faq-sec" id="scalingPane"></div>
@@ -680,7 +684,7 @@ Fan-made tool, not affiliated with the developers of <a href="https://playbroken
 window.GD = null;
 window.CHARS = [];
 window.GRAIL_SAVES = [];
-window.SITE_VERSION = {"v":554,"at":"2026-11-27T15:13:08.349Z"};
+window.SITE_VERSION = {"v":555,"at":"2026-11-27T15:56:32.034Z"};
 window.SITE_LANG = 'fr';
 // SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
 window.SITE_BASE = new URL("../../", location.href).pathname.replace(/[^/]*$/, '');
@@ -694,6 +698,10 @@ window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["War
 /*__VOWS__*/
 /*__ADVANCED__*/
 </script>
-<script src="../../app.js?v=554"></script>
+<script>
+/*__FAQ__*/
+/*__NEWPLAYERS__*/
+</script>
+<script src="../../app.js?v=555"></script>
 </body>
 </html>

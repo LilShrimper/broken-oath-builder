@@ -356,6 +356,12 @@ window.PAGE_LANGS = {
 
 
 
+
+
+
+
+
+    const SEAT_BASE = { 'Mastery of the Reaping': 'Mastery of the Legion' };
     const seats = Object.values(tree.nodes || {}).filter(n => /^om103_/.test(n.Id));
     if (seats.length) {
       const old = Object.assign({}, masteries);
@@ -363,7 +369,8 @@ window.PAGE_LANGS = {
       for (const s of seats) {
         const id = 'om_' + s.Id.slice('om103_'.length);
         const cls = (s.Region || '').toLowerCase();
-        const base = old[id] || Object.values(old).find(m => m.Name === s.Name && (m.Class || '').toLowerCase() === cls) || Object.values(old).find(m => m.Name === s.Name);
+        const base = old[id] || Object.values(old).find(m => m.Name === s.Name && (m.Class || '').toLowerCase() === cls) || Object.values(old).find(m => m.Name === s.Name)
+          || (SEAT_BASE[s.Name] && Object.values(old).find(m => m.Name === SEAT_BASE[s.Name]));
         if (!base) continue;
 
 
@@ -399,12 +406,25 @@ window.PAGE_LANGS = {
       'Mastery of Stillness': [
         { Id: 'oath_settled_blade', Name: 'Oath of the Settled Blade', Text: '+10% to critical strike multiplier with Dash skills', Vow: '', Mods: [{ Stat: 'CritMulti', Mode: 'Flat', Tags: ['Dash'], Value: 10 }] },
       ],
+
+
+
+
+
+      'Mastery of the Reaping': [
+        { Id: 'oath_reapers_tithe', Name: 'Oath of the Reaper\'s Tithe', Text: 'While you wield a two handed weapon: 10% increased Melee damage. Your minions deal 10% increased damage', Vow: '', Mods: [{ Stat: 'Damage', Mode: 'Inc', Tags: ['Melee', 'TwoHanded'], Value: 10 }, { Stat: 'MinionDamage', Mode: 'Inc', Tags: [], Value: 10 }] },
+        { Id: 'oath_grave_harvest', Name: 'Oath of the Grave Harvest', Text: '15% increased Armour and 4% increased maximum Life', Vow: '', Mods: [{ Stat: 'Armour', Mode: 'Inc', Tags: [], Value: 15 }, { Stat: 'Life', Mode: 'Inc', Tags: [], Value: 4 }] },
+        { Id: 'oath_rotting_edge', Name: 'Oath of the Rotting Edge', Text: '12% increased Poison and Bleeding damage with Melee', Vow: '', Mods: [{ Stat: 'PoisonDamage', Mode: 'Inc', Tags: ['Melee'], Value: 12 }, { Stat: 'BleedDamage', Mode: 'Inc', Tags: ['Melee'], Value: 12 }] },
+        { Id: 'oath_wide_arc', Name: 'Oath of the Wide Arc', Text: 'While you wield a two handed weapon: 10% increased Melee area of effect', Vow: '', Mods: [{ Stat: 'Area', Mode: 'Inc', Tags: ['Melee', 'TwoHanded'], Value: 10 }] },
+      ],
     };
-    for (const [name, list] of Object.entries(EXTRA_OATHS)) for (const o of list) {
-      if (oaths[o.Id]) continue;
+    const FRONT = new Set(['Mastery of the Reaping']);
+    for (const [name, list] of Object.entries(EXTRA_OATHS)) list.forEach((o, i) => {
+      if (oaths[o.Id]) return;
       oaths[o.Id] = o;
-      for (const m of Object.values(masteries)) if (m.Name === name && !m.Oaths.includes(o.Id)) m.Oaths.push(o.Id);
-    }
+
+      for (const m of Object.values(masteries)) if ((m.Name === name || SEAT_BASE[m.Name] === name) && !m.Oaths.includes(o.Id)) { if (FRONT.has(name) && m.Name === name) m.Oaths.splice(i, 0, o.Id); else m.Oaths.push(o.Id); }
+    });
 
     const affixes = {};
     for (const a of J('Items/affixes.json').affixes) affixes[a.Id.toLowerCase()] = Object.assign(pick(a, ['Id', 'Type', 'Group', 'Mod', 'BaseTags', 'ExcludeTags', 'Weight']), { Tiers: (a.Tiers || []).map(t => pick(t, ['ILvl', 'Min', 'Max', 'Min2', 'Max2', 'Name', 'Weight'])) }); // Weight (affix and tier): Item Search's roll chance only
@@ -15822,7 +15842,9 @@ window.BOCharacter = function (ctx) {
 
 
     'HolyElementalMore', 'SkeletalMageMore', 'OrbitStillMore', 'SparkThirdMore', 'CritIgniteSure', 'CritBleedSure', 'CritPoisonSure', 'FuseEcho',
-    'IgniteVsSentenced114', 'CritVsMaimed113', 'FreezeBreak103', 'TrigCooldown', 'TrigDamage', 'MinionStrikes']);
+    'IgniteVsSentenced114', 'CritVsMaimed113', 'FreezeBreak103', 'TrigCooldown', 'TrigDamage', 'MinionStrikes',
+
+    'CritBleedKeep', 'CritIgniteKeep', 'CritPoisonKeep']);
 
 
 
@@ -17491,6 +17513,16 @@ window.BOCharacter = function (ctx) {
     }
 
 
+
+
+
+    if (apiBuildAtLeast(GD, 93, '2026-11-27T00') && (sk.WeaponKinds || []).length) {
+      const kinds = sk.WeaponKinds.map(lc), held = mainBase ? lc(mainBase.Class) : '';
+      if ((held === 'bow' || held === 'wand') && !kinds.includes(held)) res.notes.push(sk.Name + ' cannot be used with a ' + held + ' since patch 93 (skills need their own weapon type again), and your main hand holds ' + mainBase.Name + ': in the game it will not work.');
+      else if (kinds.length === 1 && kinds[0] === 'bow' && held !== 'bow') res.notes.push(sk.Name + ' needs a bow (patch 93: skills need their own weapon type again), and your main hand holds ' + (mainBase ? mainBase.Name : 'nothing') + ': in the game it will not work.');
+    }
+
+
     const col = o._col || collectMods(GD, ch, o); // _col: reuse when only supports change (search)
     res.notes.push(...col.notes);
     res.sources = col.sources;
@@ -18745,7 +18777,21 @@ window.BOCharacter = function (ctx) {
     const nonCritMult = hallowedCritBonus ? ijNonCrit : 1;
     const critFactor = (1 - critChance / 100) * nonCritMult + critChance / 100 * effectiveMulti / 100;
     res.crit = { base: baseCrit, chance: critChance, multi: effectiveMulti, factor: critFactor, inc: critInc };
-    const ailCrit = kind => ailPreCrit(GD, kind) ? 1 : critFactor; // patch 90: ailments from the hit before crit (AilPreCrit114)
+
+
+
+
+
+
+
+    const ailKeepMemo = {};
+    const ailKeep = kind => {
+      if (ailKeepMemo[kind] != null) return ailKeepMemo[kind];
+      let k = 0;
+      if (bSwitch(GD, 'r114.META.bAilCritKeep140', true)) for (const m of pickMods(mods, 'Crit' + kind + 'Keep', 'Flat')) if (applies(ctx, m)) { k += m.v; use(m, 'crit ' + kind.toLowerCase() + ' keep'); }
+      return ailKeepMemo[kind] = clamp(k, 0, 100) / 100;
+    };
+    const ailCrit = kind => !ailPreCrit(GD, kind) ? critFactor : 1 + ailKeep(kind) * critChance / 100 * Math.max(0, effectiveMulti / 100 - 1); // patch 90: ailments from the hit before crit (AilPreCrit114); patch 93: the Keep lines give a share back
     if (hallowedCritBonus) res.notes.push('Inevitable Judgement: on this enemy your critical strikes keep ' + ijBonus + 'x their critical bonus (' + multi + '% becomes ' + +effectiveMulti.toFixed(1) + '% critical damage) and your non-critical hits deal ' + Math.round((1 - ijNonCrit) * 100) + '% less.');
 
 
@@ -20667,10 +20713,11 @@ window.BOCharacter = function (ctx) {
 
         const P = hit.Physical, shares = rollShares || [1];
         const bPre = ailPreCrit(GD, 'Bleed'); // patch 90: no crit roll in the bleed's size
+        const bKeep = bPre ? ailKeep('Bleed') : 0; // patch 93: a CritBleedKeep line gives a crit's bleed that share of its extra damage back (see ailKeep)
         let kept = P.avg * ailCrit('Bleed');
         if (rollsPerSec > 0 && P.max > 0) {
           const lo = P.min > 0 ? P.min : P.avg, span = Math.max(0, (P.max || P.avg) - lo);
-          const cc = bPre ? 0 : critChance / 100, cm = effectiveMulti / 100, nc = bPre ? 1 : nonCritMult;
+          const cc = bPre && !(bKeep > 0) ? 0 : critChance / 100, cm = bPre ? 1 + bKeep * Math.max(0, effectiveMulti / 100 - 1) : effectiveMulti / 100, nc = bPre ? 1 : nonCritMult;
           const under = v => span > 0 ? clamp((v - lo) / span, 0, 1) : (v >= lo ? 1 : 0); // P(plain hit <= v)
           const mu = rollsPerSec * dur / shares.length;
           const top = (P.max || P.avg) * Math.max(cm, nc, 1) * Math.max(...shares), n = 400, dx = top / n;
@@ -22551,7 +22598,11 @@ window.BOCharacter = function (ctx) {
     {
       const A = GD.scaling.Ailments || {};
       let pChance = 0, dotMulti = 0;
-      const elig = ((hit.Poison ? hit.Poison.avg : 0) + (hit.Physical ? hit.Physical.avg : 0)) * (ailPreCrit(GD, 'Poison') ? 1 : critFactor); // patch 90: AilPreCrit114
+
+
+
+
+      const elig = ((hit.Poison ? hit.Poison.avg : 0) + (hit.Physical ? hit.Physical.avg : 0)) * critFactor;
       if (A.bEnabled && A.bMinionAilments && hit.Poison && elig > 0) {
         pChance = A.PoisonChance || 0;
         for (const m of mods) {

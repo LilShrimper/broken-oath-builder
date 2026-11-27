@@ -2559,7 +2559,11 @@ window.PAGE_LANGS = {
     };
     const at = (items, key) => items.filter(i => i.slot === realSlot(key))[nthOf(key)] || null;
 
-    const kinds = ((GD.skills[lc(mainSkill)] || {}).WeaponKinds || []).map(lc);
+
+
+
+
+    const kinds = ((GD.skills[lc(mainSkill)] || {}).WeaponKinds || []).map(lc).flatMap(k => k === 'twohandsword' ? [k, 'greatsword'] : [k]);
     const mainOk = b => !kinds.length || kinds.includes(lc(b.Class));
     const wordOk = w => !w.Class || lc(w.Class) === lc(ch.classId); // some Oathwords belong to one class
 

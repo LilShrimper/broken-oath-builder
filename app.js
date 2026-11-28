@@ -382,7 +382,19 @@ window.PAGE_LANGS = {
 
 
 
-        for (const y of Object.values(tree.nodes)) if (y.Group && y.Group === s.Group && y.Kind === 'Notable' && !/^om103_/.test(y.Id)) nb.add(y.Id);
+
+
+
+
+
+
+        const fam = id.replace(/_c\d+$/, ''), list = (old[fam] || {}).Notables || [];
+        const famSeats = seats.filter(x => ('om_' + x.Id.slice('om103_'.length)).replace(/_c\d+$/, '') === fam);
+        for (const nid of list) {
+          const y = nodes[nid]; if (!y) continue;
+          const d = x => (x.X - y.X) ** 2 + (x.Y - y.Y) ** 2;
+          if (famSeats.every(x => d(s) <= d(x))) nb.add(nid);
+        }
         masteries[id] = { Id: id, Name: s.Name, X: s.X, Y: s.Y, Notables: [s.Id, ...nb], Class: base.Class || '', Oaths: base.Oaths.slice(), Seat: s.Id };
       }
     }
@@ -29205,7 +29217,7 @@ window.BOStartApp = function () {
     const sw = swornNow();
 
 
-    const unsworn = new Set(Object.values(GD.masteries || {}).filter(m => masteryOpen(m, have) && !sw.has(m.Id) &&
+    const unsworn = new Set(Object.values(GD.masteries || {}).filter(m => masteryOpen(m, have) && classOk(m) && !sw.has(m.Id) &&
       m.Oaths.some(oid => GD.oaths[oid] && !oathBlocked(m, oid, have, sw))).map(m => m.Id));
     T.unsworn = [...unsworn];
     const sb = $('#treeSeats');
@@ -29358,12 +29370,16 @@ window.BOStartApp = function () {
 
   const OATH_ONCE = true;
   const masteryOpen = (m, have) => m.Notables.some(n => have.has(n));
+
+
+  const classOk = m => !m.Class || !st.ch || String(m.Class).toLowerCase() === String(st.ch.classId || '').toLowerCase();
   const swornNow = () => new Map(st.ch ? S.swornOaths(GD, st.ch).map(x => [x.mastery.Id, x.oath]) : []);
   const masteryText = m => (m.Name + ' oath mastery ' + m.Oaths.map(id => { const o = GD.oaths[id] || {}; return (o.Name || '') + ' ' + (o.Text || '') + ' ' + (o.Vow || ''); }).join(' ')).toLowerCase();
 
   function oathBlocked(m, oid, have, sw) {
 
     if (!masteryOpen(m, have)) return m.Seat ? 'Take a notable of this Oath seat\'s cluster first (the seat itself costs no point)' : 'Take one of this mastery\'s notables first';
+    if (!classOk(m)) return m.Name + ' is a ' + m.Class + ' Oath seat: only a ' + m.Class + ' can swear its Oaths';
     if (OATH_ONCE) for (const [mid, o] of sw) if (mid !== m.Id && o.Id === oid) return 'Already sworn at another ' + GD.masteries[mid].Name + ' socket';
     return '';
   }
@@ -29632,7 +29648,7 @@ window.BOStartApp = function () {
 
     const mids = Object.keys(GD.masteries || {}), sw = swornNow(), swornIds = new Set([...sw.values()].map(x => x.Id)); let j = 0;
     const oathScore = m => {
-      if (sw.has(m.Id)) return;
+      if (sw.has(m.Id) || !classOk(m)) return;
       let list = null, cost = 0;
       if (!masteryOpen(m, have)) {
         for (const nid of m.Seat ? [m.Seat] : m.Notables) {

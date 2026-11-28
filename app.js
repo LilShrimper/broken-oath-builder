@@ -20703,7 +20703,15 @@ window.BOCharacter = function (ctx) {
 
 
 
-        const raw = Object.keys(hit).reduce((a, d) => a + hit[d].avg, 0) * layCritFactor * hitsPerSec * perHitFactor / (heroDamage(GD) || 1);
+
+
+
+
+
+
+
+        const layVuln = 1 + (Math.max(0, golemTaken - 1) * 100 + (groundPct || 0)) / 100;
+        const raw = Object.keys(hit).reduce((a, d) => a + hit[d].avg, 0) * layCritFactor * hitsPerSec * perHitFactor / (heroDamage(GD) || 1) * layVuln;
         let multi = 0;
         for (const m of pickMods(mods, 'EntropyMulti', 'Flat')) if (applies(ctx, m)) { multi += m.v; use(m, 'Entropy multiplier'); }
         if (markPct > 0) for (const m of pickMods(mods, 'EntropyMarkedMulti', 'Flat')) if (applies(ctx, m)) { multi += m.v; use(m, 'Entropy multiplier, Marked enemy'); }

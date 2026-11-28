@@ -28279,6 +28279,9 @@ window.BOStartApp = function () {
     const belt = brewery && brewery.belt(st.ch.id); if (belt) ch.potions = belt;
 
     const notes = st.chOrig ? store.get('notes:' + st.chOrig.id, '') : ''; if (notes && String(notes).trim()) ch.notes = String(notes).slice(0, NOTES_MAX);
+
+    const ow = Object.entries(st.optW || {}).filter(([id, w]) => id !== st.skill && w > 0 && (ch.hotbar || []).some(h => lc(h) === lc(id)));
+    if (ow.length) ch.optW = Object.fromEntries(ow);
     return ch;
   }
 
@@ -28341,6 +28344,12 @@ window.BOStartApp = function () {
     delete p.potions;
     if (typeof p.notes === 'string' && p.notes.trim()) store.set('notes:' + p.id, p.notes.slice(0, NOTES_MAX));
     delete p.notes;
+
+    if (p.optW && typeof p.optW === 'object') {
+      const ow = Object.fromEntries(Object.entries(p.optW).filter(([id, w]) => typeof id === 'string' && +w > 0).map(([id, w]) => [id, Math.max(0.05, Math.min(10, +w))]));
+      if (Object.keys(ow).length) store.set('optw:' + p.id, ow);
+    }
+    delete p.optW;
     const t = p.trees; delete p.trees;
     if (t && Array.isArray(t.sets)) {
       const sets = t.sets.filter(s => s && Array.isArray(s.passives)).map(s => ({ name: String(s.name || 'Tree').slice(0, 40), passives: s.passives.filter(x => typeof x === 'string') }));

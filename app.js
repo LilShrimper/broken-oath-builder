@@ -19157,6 +19157,15 @@ window.BOCharacter = function (ctx) {
     }
     const nonCritMult = hallowedCritBonus ? ijNonCrit : 1;
     const critFactor = (1 - critChance / 100) * nonCritMult + critChance / 100 * effectiveMulti / 100;
+
+
+
+
+
+
+
+
+    const layCritFactor = hallowedCritBonus ? (1 - critChance / 100) + critChance / 100 * (effectiveMulti * multi / (100 + (multi - 100) * ijBonus)) / 100 : critFactor;
     res.crit = { base: baseCrit, chance: critChance, multi: effectiveMulti, factor: critFactor, inc: critInc };
 
 
@@ -20503,7 +20512,14 @@ window.BOCharacter = function (ctx) {
 
       if (rule === 'kinds') {
 
-        const vuln = [o.extraTakenPct || 0].concat(phys ? [maimPct] : [], golemTaken - 1 ? [(golemTaken - 1) * 100] : [], onHit && groundPct ? [groundPct] : []);
+
+
+
+
+
+
+
+        const vuln = [o.extraTakenPct || 0].concat(phys ? [maimPct] : [], golemTaken - 1 && !nohit ? [(golemTaken - 1) * 100] : [], onHit && groundPct ? [groundPct] : []);
         return curseTakenK(activeCurses, d, dot, 'kinds', [{ k: 'mark', v: markV }, { k: 'curse', v: onHit && unravel[d] ? unravel[d] : 0 }].concat(vuln));
       }
       if (rule === 'add') return curseTakenK(activeCurses, d, dot, 'add',extras.concat(golemTaken - 1 ? [(golemTaken - 1) * 100] : [], onHit && groundPct ? [groundPct] : []));
@@ -20588,7 +20604,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-        const raw = Object.keys(hit).reduce((a, d) => a + hit[d].avg, 0) * critFactor * hitsPerSec * perHitFactor / (heroDamage(GD) || 1);
+        const raw = Object.keys(hit).reduce((a, d) => a + hit[d].avg, 0) * layCritFactor * hitsPerSec * perHitFactor / (heroDamage(GD) || 1);
         let multi = 0;
         for (const m of pickMods(mods, 'EntropyMulti', 'Flat')) if (applies(ctx, m)) { multi += m.v; use(m, 'Entropy multiplier'); }
         if (markPct > 0) for (const m of pickMods(mods, 'EntropyMarkedMulti', 'Flat')) if (applies(ctx, m)) { multi += m.v; use(m, 'Entropy multiplier, Marked enemy'); }

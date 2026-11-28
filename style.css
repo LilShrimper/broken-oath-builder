@@ -1888,6 +1888,7 @@ body.lootfilter-page #buildSummary { display: none !important; } /* the characte
 .faq-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .faq-group-label { flex: 0 0 120px; color: var(--faint); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
 @media (max-width: 640px) { .faq-group-label { flex-basis: 100%; } }
+.faq-link { display: flex; justify-content: flex-end; }
 .faq-nav .sc-chips { flex-wrap: wrap; } /* nine sections: wrap to a second row instead of squeezing the chips over each other */
 .faq-nav .sc-chip { flex: 0 0 auto; }
 .faq-sec[hidden] { display: none; }

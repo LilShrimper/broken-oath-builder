@@ -12735,6 +12735,7 @@ window.BOAdvanced = function (ctx) {
 window.BOFaq = function (ctx) {
   'use strict';
   const { $, esc } = ctx;
+
   const GROUPS = [
     ['Game mechanics', [['ailments', 'Ailments'], ['multipliers', 'Damage Multipliers'], ['defences', 'Enemy Defences'], ['monsters', 'Monster Level & Rarity'],
       ['affixes', 'Monster Affixes'], ['guardians', 'Guardian Fights'], ['curses', 'Curses & Marks'], ['xp', 'XP'], ['deep', 'Rupture & the Deep'], ['atlas', 'Riven Atlas'], ['tundra', 'Tundra Desert'], ['items', 'Item Quality, Riven & Mythic'], ['attrs', 'Attributes'], ['forge', 'Forge & Crafting'], ['cube', 'Cube, Vows & Runes'], ['drops', 'Drop Chances'], ['leagues', 'Custom Leagues']]],
@@ -13779,7 +13780,9 @@ window.BOFaq = function (ctx) {
   function show() {
     const nav = $('#faqNav'), GD = ctx.gd() || {};
     nav.innerHTML = GROUPS.map(g => '<div class="faq-group"><span class="faq-group-label">' + g[0] + '</span><div class="sc-chips">' +
-      g[1].map(s => '<button type="button" class="chip sc-chip' + (section === s[0] ? ' active' : '') + '" data-s="' + s[0] + '" aria-pressed="' + (section === s[0]) + '">' + s[1] + '</button>').join('') + '</div></div>').join('');
+      g[1].map(s => '<button type="button" class="chip sc-chip' + (section === s[0] ? ' active' : '') + '" data-s="' + s[0] + '" aria-pressed="' + (section === s[0]) + '">' + s[1] + '</button>').join('') + '</div></div>').join('') +
+
+      (ctx.sectionUrl && ctx.sectionUrl(section) ? '<div class="faq-link"><button type="button" class="btn ghost small" id="faqLink">Copy link to this section</button></div>' : '');
     const pane = $('#affixPane'); pane.hidden = false; // the template ships it hidden; nothing else unhides it
     fill(pane, RENDER[section](GD));
     if (section === 'history') wireHistory(pane);
@@ -14054,14 +14057,23 @@ window.BOFaq = function (ctx) {
   function renderGemLevels() { const p = $('#gemLevelsPane'); if (p) fill(p, gemLevels(ctx.gd() || {})); }
   function render() {
     const nav = $('#faqNav'); if (!nav) return;
-    nav.onclick = e => { const b = e.target.closest('[data-s]'); if (!b) return; section = b.dataset.s; try { localStorage.setItem('bo_faq_section', section); } catch (x) { /* storage blocked */ } show(); };
+    nav.onclick = async e => {
+      const lk = e.target.closest('#faqLink');
+      if (lk) { const url = location.origin + ctx.sectionUrl(section); try { await navigator.clipboard.writeText(url); lk.textContent = 'Link copied'; setTimeout(() => { lk.textContent = 'Copy link to this section'; }, 1600); } catch (err) { prompt('Copy this link:', url); } return; }
+      const b = e.target.closest('[data-s]'); if (!b) return;
+      if (e.ctrlKey || e.metaKey) { const url = ctx.sectionUrl && ctx.sectionUrl(b.dataset.s); if (url) { window.open(url, '_blank', 'noopener'); return; } }
+      section = b.dataset.s; try { localStorage.setItem('bo_faq_section', section); } catch (x) { /* storage blocked */ } show(); if (ctx.onSection) ctx.onSection(section);
+    };
+
+    nav.onmousedown = e => { if (e.button === 1 && e.target.closest('[data-s]')) e.preventDefault(); };
+    nav.onauxclick = e => { const b = e.button === 1 && e.target.closest('[data-s]'), url = b && ctx.sectionUrl && ctx.sectionUrl(b.dataset.s); if (url) { e.preventDefault(); window.open(url, '_blank', 'noopener'); } };
     show();
   }
 
   const sections = () => ALL.filter(x => x[0] !== 'history').map(([id, label]) => { let html = ''; try { html = RENDER[id](ctx.gd() || {}); } catch (e) { /* a section that needs the page */ } return { id, label, html }; });
 
   const open = id => { if (!ALL.some(x => x[0] === id)) return; section = id; try { localStorage.setItem('bo_faq_section', id); } catch (x) { /* storage blocked */ } };
-  return { render, renderMinions, renderGemLevels, sections, open };
+  return { render, renderMinions, renderGemLevels, sections, open, current: () => section, label: id => (ALL.find(x => x[0] === id) || [])[1] };
 };
 
 ;
@@ -25276,6 +25288,13 @@ window.BOStartApp = function () {
       extra.map(t => '<p class="conv-line">+' + num(t.pct, t.pct % 1 ? 2 : 0) + '% of ' + chips(t) + ' as extra ' + chip(t.to) + ' <small>' + src(t) + '</small></p>').join('') +
       '<p class="hint">' + (conv.length ? 'Converted damage scales with the lines of both types. ' : '') + 'The Base column below is after this step. Each line is a share of the damage of that type at that point.</p></div>';
   }
+
+
+
+  const tabStore = {
+    get(k, def) { try { const v = sessionStorage.getItem('bods:' + k); return v == null ? def : JSON.parse(v); } catch (e) { return def; } },
+    set(k, v) { try { sessionStorage.setItem('bods:' + k, JSON.stringify(v)); } catch (e) { /* storage off */ } },
+  };
   const NOTES_MAX = 4000; // build notes: short enough to stay inside a share link
   const store = {
     get(k, def) { try { const v = localStorage.getItem('bods:' + k); return v == null ? def : JSON.parse(v); } catch (e) { return def; } },
@@ -25504,7 +25523,7 @@ window.BOStartApp = function () {
     st.enemyHallowedGround = null; // back to "ticked when the build makes its own ground"
     TT = null;
     if (!ch) return;
-    store.set('char', ch.id);
+    store.set('char', ch.id); tabStore.set('char', ch.id);
     if (character && !$('#characterPane').hidden) character.render();
     if (advancedTab && !$('#advancedPane').hidden) setTimeout(() => advancedTab.render(), 0);
     if (vowsTab && !$('#vowsPane').hidden) setTimeout(() => vowsTab.render(), 0); // after the skill and curse ticks are set
@@ -27997,6 +28016,26 @@ window.BOStartApp = function () {
     if (!$('#savedBuildsPane').hidden) renderSavedBuilds();
     return kept;
   }
+
+
+
+  window.addEventListener('storage', e => {
+    if (e.key !== 'bods:chars') return;
+    let now, before; try { now = JSON.parse(e.newValue || '[]') || []; before = JSON.parse(e.oldValue || '[]') || []; } catch (x) { return; }
+    const openId = st.chOrig && st.chOrig.id, nowIds = new Set(now.map(c => c && c.id));
+    let changed = false;
+    for (const c of before) if (c && !nowIds.has(c.id) && c.id !== openId && CHARS.some(x => x.id === c.id && !x.file)) { CHARS = CHARS.filter(x => x.id !== c.id || x.file); changed = true; }
+    for (const c of now) {
+      if (!c || !c.id || c.id === openId) continue;
+      const i = CHARS.findIndex(x => x.id === c.id);
+      if (i < 0) { CHARS.push(c); changed = true; } else if (!CHARS[i].file && (c.savedAt || '') > (CHARS[i].savedAt || '')) { CHARS[i] = c; changed = true; }
+    }
+    if (!changed) return;
+    CHARS.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
+    fillChars(openId);
+    snapSync(); syncUnsaved();
+    if (!$('#savedBuildsPane').hidden) renderSavedBuilds();
+  });
   function addChars(list, from, selectId) {
 
     if (from === 'folder') CHARS = CHARS.filter(c => c.plan || (c.from !== 'folder' && c.from !== 'code' && !c.fromCode));
@@ -31287,25 +31326,30 @@ window.BOStartApp = function () {
     let p = location.pathname; try { p = decodeURIComponent(p); } catch (e) { /* keep as is */ }
     const rel = p.slice(siteRoot().length).toLowerCase().replace(/\/+$/, '').replace(new RegExp('^(' + Object.keys(window.PAGE_LANGS || {}).join('|') + ')(/|$)'), ''); // zh/, es/, de/...: the translated pages (src/i18n.js PAGE_LANGS)
     if (rel === 'build/gear' || rel === 'build/skills') return 'character'; // the old Gear and Skills sub-tabs: gear and skills are edited on the Character tab now (Skills sub-tab removed, owner, 20 Nov 2026: the Character tab's skill list and Add skill cover it)
+    const fq = rel.match(/^faq\/([a-z0-9]+)$/); if (fq && faq && faq.label(fq[1])) return 'faq:' + fq[1]; // one FAQ section (/faq/ailments/)
     return Object.keys(ROUTES).find(k => ROUTES[k] === rel) || null;
   }
+
+  const routeOf = key => ROUTES[key] || (/^faq:/.test(key) && faq && faq.label(key.slice(4)) ? 'faq/' + key.slice(4) : null);
+  const titleOf = key => ROUTE_TITLES[key] || (/^faq:/.test(key) ? faq.label(key.slice(4)) + ' · FAQ' : '');
 
   function openRoute(key) {
     if (key === 'skillscaling' || key === 'minions' || key === 'gemlevels') { skillsView = key === 'skillscaling' ? 'scaling' : key; return 'skillscaling'; }
     const [tab, sub] = key.split(':');
     if (tab === 'build') planner.setSubTab(sub);
+    if (tab === 'faq' && sub) faq.open(sub);
     return tab;
   }
   function syncUrl(tab) {
-    const key = tab === 'build' ? 'build:' + planner.subTab() : tab === 'skillscaling' && skillsView !== 'scaling' ? skillsView : tab, route = ROUTES[key]; if (!route) return;
-    document.title = ROUTE_TITLES[key] + ' · Broken Oath Builder';
+    const key = tab === 'build' ? 'build:' + planner.subTab() : tab === 'skillscaling' && skillsView !== 'scaling' ? skillsView : tab === 'faq' ? 'faq:' + faq.current() : tab, route = routeOf(key); if (!route) return;
+    document.title = titleOf(key) + ' · Broken Oath Builder';
     if (!ROUTING || !routingReady || noPush) return;
     const url = siteRoot() + (window.SITE_LANG && window.PAGE_LANGS && window.PAGE_LANGS[window.SITE_LANG] ? window.SITE_LANG + '/' : '') + route + '/';
     if (location.pathname !== url) history.pushState(null, '', url + location.search);
   }
 
   function routeUrl(key) {
-    const route = ROUTES[key]; if (!ROUTING || !route) return null;
+    const route = routeOf(key); if (!ROUTING || !route) return null;
     return siteRoot() + (window.SITE_LANG && window.PAGE_LANGS && window.PAGE_LANGS[window.SITE_LANG] ? window.SITE_LANG + '/' : '') + route + '/' + location.search;
   }
 
@@ -31896,7 +31940,7 @@ window.BOStartApp = function () {
 
     topCards: r => damageMixCard(r) + upgradeCard(S.statWeights(GD, st.ch, st.skill, opts(), r)), whereFrom: r => whereFromCard(r), bindPie: el => bindSourcePie(el) });
   vowsTab = window.BOVows({ $, esc, num, planner, gd: () => GD, current: () => st.ch, skillDot, sim: vowSim });
-  faq = window.BOFaq({ $, esc, gd: () => GD, scaling, skillIcon, atlas, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '',
+  faq = window.BOFaq({ $, esc, gd: () => GD, scaling, onSection: () => syncUrl('faq'), sectionUrl: id => routeUrl('faq:' + id), skillIcon, atlas, uniqueTip: id => itemSearch && itemSearch.uniqueTip ? itemSearch.uniqueTip(id) : '',
     skillTip: id => planner.skillTip(null, id, false, true), supTip: id => planner.supTip(id) }); // Gem Levels tiles: the Build tab's tooltips
 
   newPlayers = window.BONewPlayers({ $, esc, gd: () => GD, classIcon, skillIcon, showTab,
@@ -32110,7 +32154,7 @@ window.BOStartApp = function () {
   { const hid = store.get('hiddenChars', []) || []; if (hid.length) CHARS = CHARS.filter(c => !(c.file && hid.includes(c.id))); } // removed from the character list (built into the local page)
   if (CHARS.some(c => c.from === 'folder')) $('#saveDirLabel').textContent = 'Reload saves';
   loadEnemy(); fillEnemyInputs(null); // the enemy as last left in this browser
-  const startId = store.get('char', null);
+  const startId = [tabStore.get('char', null), store.get('char', null)].find(id => id && CHARS.some(c => c.id === id)); // this tab's build, else the last opened
   fillChars(CHARS.some(c => c.id === startId) ? startId : (CHARS[0] || {}).id);
   if (CHARS.length) selectChar($('#charSelect').value); else render();
   snapsReady = true; snapSync(); syncUnsaved();

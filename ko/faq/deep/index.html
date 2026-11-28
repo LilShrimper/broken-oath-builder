@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<script>(function () { try {
+  var local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname), API = local ? "http://localhost:8787" : "https://api.lilshrimper.dev";
+  var q = location.search, h = document.documentElement;
+  if (location.hostname === "lilshrimper.github.io" || (local && /[?&]movetest\b/.test(q))) {
+    var NEW = local ? "http://127.0.0.1:" + location.port : "https://builder.lilshrimper.dev";
+    var rest = local ? location.pathname : (location.pathname.replace(/^\/broken-oath-builder/, "") || "/");
+    q = q.replace(/([?&])movetest\b[^&]*&?/, "$1").replace(/[?&]$/, "");
+    h.style.display = "none"; window.BO_MOVING = true;
+    var done = false, go = function (code) { if (done) return; done = true; location.replace(NEW + rest + (code ? (q ? q + "&" : "?") + "migrate=" + code : q) + location.hash); };
+    var data = {}, n = 0;
+    try { if (!localStorage.getItem("bods:moved")) for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf("bods:") === 0) { data[k] = localStorage.getItem(k); n++; } } } catch (e) { /* storage off */ }
+    if (!n) return go("");
+    setTimeout(function () { go(""); }, 8000);
+    fetch(API + "/m", { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(data) })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j && j.code && !done) { try { localStorage.setItem("bods:moved", new Date().toISOString()); } catch (e) { /* off */ } } go(j && j.code); }, function () { go(""); });
+    return;
+  }
+  var m = q.match(/[?&]migrate=([A-Za-z0-9_-]{32,64})/); if (!m) return;
+  history.replaceState(null, "", location.pathname + q.replace(/([?&])migrate=[^&]*&?/, "$1").replace(/[?&]$/, "") + location.hash);
+  var x = new XMLHttpRequest(); x.open("GET", API + "/m/" + m[1], false);
+  try { x.send(); } catch (e) { return; }
+  if (x.status !== 200) return;
+  var d = JSON.parse(x.responseText), byId = function (a) { var o = {}; (a || []).forEach(function (c) { if (c && c.id) o[c.id] = c; }); return o; };
+  for (var k in d) {
+    if (k.indexOf("bods:") !== 0 || k === "bods:moved") continue;
+    var have = localStorage.getItem(k);
+    if (have == null) { localStorage.setItem(k, d[k]); continue; }
+    if (k === "bods:chars") { var a = byId(JSON.parse(have)), b = JSON.parse(d[k]) || [];
+      b.forEach(function (c) { if (c && c.id && (!a[c.id] || (c.savedAt || "") > (a[c.id].savedAt || ""))) a[c.id] = c; });
+      localStorage.setItem(k, JSON.stringify(Object.keys(a).map(function (id) { return a[id]; }))); }
+  }
+  localStorage.setItem("bods:movedIn", new Date().toISOString());
+} catch (e) { /* storage off or bad data: the page starts as it is */ } })();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rupture &amp; the Deep · FAQ · Broken Oath Builder</title>
+<meta name="description" content="Broken Oath Builder FAQ: Rupture &amp; the Deep.">
+<link rel="canonical" href="https://builder.lilshrimper.dev/ko/faq/deep/">
+<link rel="alternate" hreflang="en" href="https://builder.lilshrimper.dev/faq/deep/"><link rel="alternate" hreflang="zh-Hans" href="https://builder.lilshrimper.dev/zh/faq/deep/"><link rel="alternate" hreflang="es" href="https://builder.lilshrimper.dev/es/faq/deep/"><link rel="alternate" hreflang="ru" href="https://builder.lilshrimper.dev/ru/faq/deep/"><link rel="alternate" hreflang="de" href="https://builder.lilshrimper.dev/de/faq/deep/"><link rel="alternate" hreflang="fr" href="https://builder.lilshrimper.dev/fr/faq/deep/"><link rel="alternate" hreflang="ja" href="https://builder.lilshrimper.dev/ja/faq/deep/"><link rel="alternate" hreflang="ko" href="https://builder.lilshrimper.dev/ko/faq/deep/"><link rel="alternate" hreflang="pl" href="https://builder.lilshrimper.dev/pl/faq/deep/"><link rel="alternate" hreflang="pt-BR" href="https://builder.lilshrimper.dev/pt/faq/deep/"><link rel="alternate" hreflang="uk" href="https://builder.lilshrimper.dev/uk/faq/deep/">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Broken Oath Builder">
+<meta property="og:title" content="Rupture &amp; the Deep · FAQ · Broken Oath Builder"><meta property="og:description" content="Broken Oath Builder FAQ: Rupture &amp; the Deep.">
+<meta property="og:url" content="https://builder.lilshrimper.dev/ko/faq/deep/"><meta property="og:image" content="https://builder.lilshrimper.dev/assets/lilshrimper-sigil.png">
+<meta name="twitter:card" content="summary">
+<link rel="icon" type="image/png" sizes="32x32" href="../../../assets/favicon-32.png?v=6fe63894">
+<link rel="icon" type="image/png" sizes="192x192" href="../../../assets/favicon-192.png?v=6703b76b">
+<link rel="apple-touch-icon" href="../../../assets/apple-touch-icon.png?v=66fc15a3">
+<script>try { if (localStorage.getItem('bods:theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) { /* storage off: dark */ }</script>
+<script>if (!window.BO_MOVING && !window.BO_LEAVING) try { (function () {
+  var b = new URL("../../../", location.href).pathname.replace(/[^/]*$/, ''), get = function (u) { var p = fetch(b + u, { cache: 'no-cache' }); p.catch(function () { /* app.js reports it */ }); return p; };
+  window.BO_PRE = { gd: get('gamedata.json'), lang: get('lang/ko.json'), langCode: 'ko' };
+})(); } catch (e) { /* no fetch: app.js asks */ }</script>
+<link rel="stylesheet" href="../../../style.css?v=574">
+<script data-goatcounter="https://shrimper.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
+</head>
+<body class="dashboard-view">
+<header class="top">
+  <div class="nav">
+    <div class="brand">
+      <button class="logo-home" id="homeLink" type="button" aria-label="Open the Build Planner" title="Build Planner">
+        <span class="logo-frame" aria-hidden="true"><img class="logo logo-full" src="../../../assets/lilshrimper-logo-full.webp?v=61a91900" alt="" width="384" height="384" decoding="async"><img class="logo logo-ring" src="../../../assets/lilshrimper-sigil.webp?v=534e80b5" alt="" width="256" height="256" decoding="async"></span>
+      </button>
+      <h1>Broken <span class="notranslate">Oath</span><small><span class="sub-builder notranslate">Builder</span><span class="sub-damage">Damage Simulator</span></small></h1>
+    </div>
+    <nav class="tabs secondary-tabs home-nav" aria-label="Home">
+      <button class="tab" id="homeTab" type="button" aria-current="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg><span>Home</span>
+      </button>
+    </nav>
+    <div class="toolbar">
+      <div class="top-controls">
+        <label class="field inline character-picker"><span>Character</span><select id="charSelect"></select></label>
+        <div class="toolbar-actions" aria-label="Character and build actions">
+        <button class="btn" id="saveDirBtn" type="button" title="Pick your SaveGames folder (%LOCALAPPDATA%\BrokenOath\Saved\SaveGames): every character in it is loaded, newest first. Read in this tab only, never uploaded."><span id="saveDirLabel">Load saves folder</span></button>
+        <input type="file" id="saveDirInput" webkitdirectory directory multiple hidden>
+        <button class="btn ghost" id="saveTutorialHelp" type="button" aria-haspopup="dialog">Save import help</button>
+        <button class="btn ghost" id="copySavePath" type="button" title="Copies %LOCALAPPDATA%\BrokenOath\Saved\SaveGames. Paste it into the file picker's address bar and press Enter.">Copy save path</button>
+        <label class="btn" title="Pick BrokenOath.log from %LOCALAPPDATA%\BrokenOath\Saved\Logs to check the sim against your real fights. It is read in this tab only, never uploaded.">
+          <input type="file" id="logInput" accept=".log,.txt" hidden>Load game log
+        </label>
+        <button class="btn ghost" id="copyLogPath" type="button" title="Copies %LOCALAPPDATA%\BrokenOath\Saved\Logs. Paste it into the file picker's address bar, press Enter, then double-click BrokenOath.log.">Copy log path</button>
+        <button class="btn ghost" id="shareLinkBtn" type="button" title="Copies a short link to this character as you see it: gear, skills and supports, passive tree, Dragonling and Brewery potions. The build is stored so the link works; opening it loads the build as a plan.">Copy share link</button>
+        <button class="btn ghost" id="saveBuildBtn" type="button" title="Saves this character as you see it (gear, skills, tree, potions, notes) as a plan under a name you pick">Save as new build</button>
+        </div>
+      </div>
+    </div>
+    <div class="nav-divider" role="separator" aria-label="Build tools"></div>
+    <nav class="tabs secondary-tabs" role="tablist" aria-label="Build tools">
+      <button class="tab" type="button" role="tab" data-tab="plan" aria-selected="false" aria-label="Start a New Plan">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2zM8 7h8M8 11h6"/></svg><span>Start a New Plan</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="code" aria-selected="false" aria-label="Load Code">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8 4 12l4 4M16 8l4 4-4 4M14 5l-4 14"/></svg><span>Load Code</span>
+      </button>
+    </nav>
+    <div class="nav-divider itemdb-divider" role="separator" aria-hidden="true"></div>
+    <a class="tab nav-external" href="https://2m22.github.io/Oathfilter/" target="_blank" rel="noopener noreferrer">
+      <span>Oathfilter</span><span class="itemdb-credit">(credit demon_2m22 on discord)</span>
+    </a>
+    <div class="nav-end">
+      <div class="nav-support"><a class="bmc-btn" href="https://buymeacoffee.com/Lilshrimper" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h11l-1.3 11.2a2 2 0 0 1-2 1.8H9.3a2 2 0 0 1-2-1.8z" fill="#fff" stroke="#000" stroke-width="1.6" stroke-linejoin="round"/><path d="M5 5.5h13l-.4 2.5H5.4z" fill="#000"/><path d="M7.4 11.5h8.2l-.6 5.5H8z" fill="#FFDD00"/></svg><span class="bmc-btn-text">Buy me a coffee</span></a><a class="kofi-btn" href="https://ko-fi.com/lilshrimper" target="_blank" rel="noopener noreferrer" title="Ko-fi: card or PayPal" aria-label="Support via Ko-fi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h12v6.5A4.5 4.5 0 0 1 11.5 18h-3A4.5 4.5 0 0 1 4 13.5z" fill="#fff"/><path d="M16 8.5h1.5a2.5 2.5 0 0 1 0 5H16" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M10 15.2l-2.6-2.5a1.5 1.5 0 0 1 2.1-2.1l.5.5.5-.5a1.5 1.5 0 0 1 2.1 2.1z" fill="#FF5E5B"/></svg><span class="bmc-btn-text">Support via Ko-fi</span></a></div>
+      <span class="site-version" id="siteVersion"></span>
+      <button class="nav-reset" id="resetLoadedCharacters" type="button" title="Remove characters loaded from saves or codes, and your build plans. Characters built into the page stay.">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 14h12l1-14M9 7V4h6v3"/></svg>
+        <span>Reset loaded characters</span>
+      </button>
+      <span class="sub" id="builtInfo"></span>
+      <div class="nav-icons">
+        <button class="icon-btn theme-btn" id="themeBtn" type="button" title="Switch between dark and light" aria-label="Switch between dark and light">
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="i-sun"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="i-moon"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>
+        </button>
+        <button class="icon-btn" id="reportBtn" type="button" title="Report a problem (no account needed)" aria-label="Report a problem">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4zM12 8v3.5M12 13.6v.1"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</header>
+<div class="view-bar">
+    <div class="view-bar-title">Tools</div>
+    <div class="main-tabs-wrap">
+    <nav class="tabs main-tabs" role="tablist" aria-label="Views">
+      <button class="tab" type="button" role="tab" data-tab="build" aria-selected="false" aria-label="Build Planner">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M6 17V8l6-4 6 4v9M9 17v-5h6v5"/></svg><span>Build Planner</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="builds" aria-selected="false" aria-label="Saved Builds">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span>Saved Builds</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="compare" aria-selected="false" aria-label="Item Simulator">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h13M12 3l4 4-4 4M21 17H8M12 13l-4 4 4 4"/></svg><span>Item Simulator</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="items" aria-selected="false" aria-label="Database">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13M15.2 15.2 21 21"/></svg><span>Database</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="grail" aria-selected="false" aria-label="Grail">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v4a5 5 0 0 1-10 0zM7 5H4v1a3 3 0 0 0 3 3M17 5h3v1a3 3 0 0 1-3 3M12 12v5M8 21h8M9.5 17h5l.5 4h-6z"/></svg><span>Grail</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="ladder" aria-selected="false" aria-label="Ladder">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V13h5v8M9.5 21V8h5v13M15 21v-6h5v6M3 21h18M12 3l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2L9.1 5.1l2-.3z"/></svg><span>Ladder</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="market" aria-selected="false" aria-label="Market">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9v1.5a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0V9M3 9h18M5 13.5V20h14v-6.5M10 20v-4h4v4"/></svg><span>Market</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="supports" aria-selected="false" aria-label="Support Gem Simulator">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 9l-8 12L4 9zM4 9h16M9 9l3 12 3-12"/></svg><span>Support Gem Simulator</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="fossil" aria-selected="false" aria-label="Fossil Planner">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3h8v5h5v8h-5v5H8v-5H3V8h5zM8 8h8v8H8z"/></svg><span>Fossil Planner</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="brewery" aria-selected="false" aria-label="Brewmaw's Brewery">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3h4M10.5 3v5.2L5.6 17a2.6 2.6 0 0 0 2.3 4h8.2a2.6 2.6 0 0 0 2.3-4l-4.9-8.8V3M7.6 14h8.8"/></svg><span>Brewmaw's Brewery</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="lootfilter" aria-selected="false" aria-label="Loot Filter">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h18l-7 8.5V19l-4 2v-8.5z"/></svg><span>Loot Filter</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="creator" aria-selected="false" aria-label="Save Creator">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v15H5zM8 3v5h7V3M8 21v-7h8v7"/></svg><span>Save Creator</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="skillscaling" aria-selected="false" aria-label="Skill Scaling">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.4 5.6L20 9.3l-4.2 3.9 1.2 5.8-5-3-5 3 1.2-5.8L4 9.3l5.6-.7z"/></svg><span>Skill Scaling</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="patch" aria-selected="false" aria-label="Recent Patch">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9M12 7v5l3 2M21 3v5h-5"/></svg><span>Recent Patch</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="faq" aria-selected="false" aria-label="FAQ and Game Mechanics">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1 1-1.1 1.8M12 17h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18"/></svg><span>FAQ / Game Mechanics</span>
+      </button>
+      <button class="tab np-tab-btn" type="button" role="tab" data-tab="newplayers" aria-selected="false" aria-label="New Players?">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.9 4.6 5 .4-3.8 3.2 1.2 4.8L12 13.4 7.7 16l1.2-4.8L5.1 8l5-.4zM5 21h14"/></svg><span>New Players?</span>
+      </button>
+    </nav>
+    <!-- Top right of the Tools bar: the account button (src/cloud.js, testers only: ?cloud=1) and the language menu (src/i18n.js, owner 13 Nov 2026). -->
+    <div class="top-actions">
+    <button class="lang-pick cloud-pick" id="cloudBtn" type="button" hidden></button>
+    <button class="lang-pick notranslate" id="langBtn" type="button">
+      <span class="lang-code">EN</span><span class="lang-word">Language</span>
+    </button>
+    </div>
+    </div>
+    <div class="build-summary" id="buildSummary" hidden aria-label="Build summary">
+      <div class="bs-cell bs-wide"><span class="bs-label">Character name</span><b id="bsClass">–</b><small id="bsSpell"></small></div>
+      <div class="bs-cell" title="Total DPS of the selected skill against the enemy set on the Damage tab"><span class="bs-label">Boss DPS (est)</span><b id="bsDps">–</b></div>
+      <div class="bs-cell bs-pools">
+        <div class="bs-pool" title="Maximum life from level, Strength and life lines on gear and tree"><span class="bs-label">Life</span><b id="bsLife">–</b></div>
+        <div class="bs-pool" title="Maximum mana from level, Intelligence and mana lines on gear and tree"><span class="bs-label">Mana</span><b id="bsMana">–</b></div>
+      </div>
+      <div class="bs-cell" title="Energy shield lines on gear and tree, added up"><span class="bs-label">Energy Shield</span><b id="bsEs">–</b></div>
+      <div class="bs-cell" title="Strength, Dexterity and Intelligence"><span class="bs-label">Strength / Dex / Int</span><b id="bsAttr">–</b></div>
+      <div class="bs-cell"><span class="bs-label">Resistances</span><b id="bsRes">–</b></div>
+      <div class="bs-cell" id="bsEhpCell" tabindex="0"><span class="bs-label">EHP (est.)</span><b id="bsEhp">–</b></div>
+      <div class="bs-cell bs-share" id="bsShare"></div>
+    </div>
+    <nav class="tabs build-subtabs" id="buildSubtabs" role="tablist" aria-label="Build setup" hidden>
+      <button class="tab" type="button" role="tab" data-tab="character" aria-selected="false" aria-label="Character"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><span>Character</span></button>
+      <button class="tab" type="button" role="tab" data-tab="tree" aria-selected="false" aria-label="Passive tree"><svg viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(15 12 12)"><path d="M10.4 21a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0M10.4 14a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0M3.4 9a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0M17.4 9a1.6 1.6 0 1 0 3.2 0a1.6 1.6 0 1 0-3.2 0M9.6 3.4a2.4 2.4 0 1 0 4.8 0a2.4 2.4 0 1 0-4.8 0M12 19.4V15.6M10.7 13.07 6.3 9.93M13.3 13.07 17.7 9.93M12 12.4V5.8"/></g></svg><span>Passive tree</span></button>
+      <button class="tab" type="button" role="tab" data-tab="atlas" aria-selected="false" aria-label="Riven Atlas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 3v4M12 17v4M3 12h4M17 12h4M12 9.5l2.5 2.5-2.5 2.5-2.5-2.5z"/></svg><span>Riven Atlas</span></button>
+      <button class="tab" type="button" role="tab" data-tab="vows" aria-selected="false" aria-label="Vows, Curses, Sentences"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6zM9 12l2 2 4-4"/></svg><span>Vows, Curses, Sentences</span></button>
+      <button class="tab" type="button" role="tab" data-tab="advanced" aria-selected="false" aria-label="Advanced"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM8 7h8M8 11h2M12 11h2M8 15h2M12 15h2M16 11v6"/></svg><span>Advanced</span></button>
+    </nav>
+</div>
+<section class="hero" id="hero">
+  <div class="hero-top">
+  <svg class="hero-art" viewBox="0 0 1200 420" preserveAspectRatio="xMaxYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="hSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="hs-1"/><stop offset=".65" class="hs-2"/><stop offset="1" class="hs-3"/></linearGradient>
+      <radialGradient id="hMoon" cx="0.5" cy="0.5" r="0.5"><stop offset="0" class="hm-1"/><stop offset=".35" class="hm-2"/><stop offset="1" class="hm-3"/></radialGradient>
+      <linearGradient id="hFade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" class="hf-1"/><stop offset=".55" class="hf-2"/><stop offset="1" class="hf-3"/></linearGradient>
+    </defs>
+    <rect width="1200" height="420" fill="url(#hSky)"/>
+    <circle cx="1000" cy="112" r="190" fill="url(#hMoon)"/>
+    <circle cx="1000" cy="112" r="44" class="h-moon"/>
+    <path class="h-far" d="M0 300 L120 250 L210 275 L330 215 L430 262 L540 228 L640 270 L760 214 L860 252 L980 222 L1080 246 L1200 220 L1200 420 L0 420Z"/>
+    <g class="h-castle">
+      <path d="M836 330V206h44v124z M830 208l28-58 28 58z"/>
+      <path d="M880 330v-78h7v-9h9v9h8v-9h9v9h8v-9h9v9h5v78z"/>
+      <path d="M935 330V184h6v-10h10v10h8v-10h10v10h8v-10h10v10h8v-10h10v10h6v146z"/>
+      <path d="M954 176V118h36v58z M948 120l24-84 24 84z"/>
+      <path d="M1011 330v-78h5v-9h9v9h8v-9h9v9h8v-9h9v9h7v78z"/>
+      <path d="M1066 330V220h40v110z M1060 222l26-52 26 52z"/>
+    </g>
+    <g class="h-win">
+      <path d="M967 140a5 5 0 0 1 10 0v12h-10z M852 236a4 4 0 0 1 8 0v10h-8z M1082 246a4 4 0 0 1 8 0v10h-8z M950 214a4 4 0 0 1 8 0v10h-8z M986 214a4 4 0 0 1 8 0v10h-8z"/>
+      <path d="M962 330v-30a10 10 0 0 1 20 0v30z" class="h-gate"/>
+    </g>
+    <path class="h-near" d="M0 352 L90 318 L190 336 L300 300 L420 330 L560 296 L700 326 L790 312 L900 340 L1010 304 L1110 330 L1200 312 L1200 420 L0 420Z"/>
+    <rect width="1200" height="420" fill="url(#hFade)"/>
+  </svg>
+  <div class="hero-main">
+    <div class="hero-body">
+      <h2 class="hero-title">Broken Oath Builder</h2>
+      <p class="hero-text">Damage simulator and build planner for the Broken Oath playtest. See the DPS your character really deals, find upgrades, and plan what's next.</p>
+      <div class="hero-cta">
+        <button class="btn big" type="button" data-hero="saves">Load a character</button>
+        <button class="btn big ghost" type="button" data-hero="plan">Plan a new build</button>
+      </div>
+      <div class="hero-alternatives">
+        <button type="button" data-hero="savehelp">First time? <b>See how to load your saves</b></button>
+        <button type="button" data-hero="savepath">Need your save folder? <b>Copy its path</b></button>
+      </div>
+      <p class="hero-small">Fan-made tool, not affiliated with the developers. Your save and game log are read in this browser tab only; nothing is uploaded.</p>
+    </div>
+    <aside class="onboarding-card" aria-label="Ways to start">
+      <div class="onboarding-heading"><span class="eyebrow">WAYS TO START</span></div>
+      <div class="land-ways">
+        <button class="land-way" type="button" data-hero="saves"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h6l2 2h10v10H3zM12 12v5M9.5 14.5 12 17l2.5-2.5"/></svg></span><span><b>Load your saves</b><small>Pick your SaveGames folder: every character is loaded, newest first.</small></span></button>
+        <button class="land-way" type="button" data-hero="plan"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2zM8 7h8M8 11h6"/></svg></span><span><b>Start a new plan</b><small>Pick a class and build it from scratch.</small></span></button>
+        <button class="land-way" type="button" data-hero="code"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8 4 12l4 4M16 8l4 4-4 4M14 5l-4 14"/></svg></span><span><b>Load a build code</b><small>A tree code, a saved plan, a share link or an ItemDatabase planner link.</small></span></button>
+        <button class="land-way" type="button" data-hero="ladder"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V13h5v8M9.5 21V8h5v13M15 21v-6h5v6M3 21h18"/></svg></span><span><b>Start from a ladder build</b><small>Open any top build from the public ladder in the planner.</small></span></button>
+      </div>
+    </aside>
+  </div>
+  </div>
+  <div class="land-stats" id="landStats" aria-label="Game data on this page"></div>
+  <div class="land-block">
+    <div class="land-head"><h3>Tools</h3><p>Everything on the site. Each tool has its own address, so you can bookmark or share it.</p></div>
+    <div id="landTools"></div>
+  </div>
+  <div class="land-block">
+    <div class="land-head"><h3>How the numbers are checked</h3><p>A sim rule changes only when the game itself shows it.</p></div>
+    <div class="hero-tiles">
+      <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h10l4 4v14H5zM8 9h8M8 13h8M8 17h5"/></svg></span><b>The game log</b><small>Real fights, hit by hit: damage, casts, ailments and marks.</small></div>
+      <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4zM8 9h8M8 12h5"/></svg></span><b>In-game tooltips</b><small>Skill panels and the character sheet's Copy stats, next to the sim's numbers.</small></div>
+      <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9M12 7v5l3 2M21 3v5h-5"/></svg></span><b>Patch notes and rule files</b><small>The developer's notes and the formulas published with each game build.</small></div>
+      <div class="tile"><span class="tile-ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><b>Measured Guardian DPS</b><small>The sim against what ladder builds really deal, from the Broken Oath public API.</small></div>
+    </div>
+    <p class="land-note">Numbers, skills and the meta change with every patch, and the sim is an estimate. <button type="button" class="linkish" data-hero="log">Load your game log</button> to check it against your own fights, or <button type="button" class="linkish" data-hero="faq">read how the game's mechanics work</button>.</p>
+  </div>
+  <div class="land-block" id="landNews" hidden></div>
+</section>
+<section class="fight-check-banner" id="logCheckBanner" aria-live="polite" hidden></section>
+<div class="data-old" id="dataOld" role="status" hidden>
+  <span id="dataOldText"></span>
+  <button class="btn small" type="button" id="dataOldUpdate">Update game data</button>
+  <button class="btn small ghost" type="button" id="dataOldOk">Still current</button>
+</div>
+
+<div class="data-old" id="saveTip" role="status" hidden>
+  <span id="saveTipText"></span>
+  <button class="btn small ghost" type="button" id="saveForget" hidden>Forget loaded characters</button>
+  <button class="btn small ghost" type="button" id="saveTipOk">OK</button>
+</div>
+
+<div class="data-old unsaved-bar" id="unsavedBar" role="status" hidden>
+  <span id="unsavedText"></span>
+  <button class="btn small" type="button" id="unsavedSave">Save</button>
+  <button class="btn small ghost" type="button" id="unsavedDiscard">Discard changes</button>
+</div>
+
+<section class="setup card" id="setup" hidden>
+  <h2>Read the game data from your own install</h2>
+  <p>The sim can read skills, items and the passive tree straight from your own copy of Broken Oath. Nothing is uploaded: every file is read in this browser tab.</p>
+  <ol>
+    <li>Click <b>Pick the Data folder</b>.</li>
+    <li>Go to your game folder, usually <code>C:\Program Files (x86)\Steam\steamapps\common\Broken Oath Playtest</code> (in Steam: right-click the game › Manage › Browse local files).</li>
+    <li>Open <code>BrokenOath</code>, select the <code>Data</code> folder and confirm. Your browser may ask whether to "upload" the files: that only means this page may read them.</li>
+  </ol>
+  <label class="btn"><input type="file" id="dataInput" webkitdirectory directory multiple hidden>Pick the Data folder</label>
+  <button class="btn ghost" id="setupCancel" type="button" hidden>Keep current data</button>
+  <p class="hint" id="setupStatus"></p>
+  <p class="hint">The page remembers your files in this browser while they are newer than the site's data; <b>Use the site's data</b> at the top switches back.</p>
+</section>
+
+<main class="layout">
+  <aside class="controls" id="controls">
+    <details class="build-settings" open>
+      <summary class="build-settings-summary">
+        <span class="eyebrow">BUILD SETUP</span>
+        <strong>Configure Your Build</strong>
+        <span class="settings-summary-hint">Skill, supports and enemy</span>
+      </summary>
+      <div class="build-settings-content">
+    <div class="configure-heading">
+      <div>
+        <div class="eyebrow">BUILD SETUP</div>
+        <h2>Configure Your Build</h2>
+      </div>
+      <p>Change your skill, supports, Vows or enemy to update the results.</p>
+    </div>
+    <div class="support-simulator-heading">
+      <div class="eyebrow">BUILD TOOLS</div>
+      <h2>Support Gem Simulator</h2>
+      <p>Compare support gems and find the strongest setup for your skill.</p>
+    </div>
+    <div class="support-col-title support-col-gems">Gem setup</div>
+    <div class="support-col-title support-col-config">Configuration</div>
+    <div class="config-tabs" role="tablist" aria-label="Build settings">
+      <button class="config-tab active" id="configTabSkill" type="button" role="tab" aria-selected="true" aria-controls="configSkill" tabindex="0" data-config-tab="skill">Skill</button>
+      <button class="config-tab" id="configTabSupports" type="button" role="tab" aria-selected="false" aria-controls="configSupports" tabindex="-1" data-config-tab="supports">Supports</button>
+    </div>
+    <div class="config-panel" id="configSkill" role="tabpanel" aria-labelledby="configTabSkill" data-config-panel="skill">
+    <section class="card">
+      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 19 19 5M14 5h5v5M5 14l5 5"/></svg></span>Skill</h2>
+      <label class="field"><span><span id="skillGem"></span>Skill</span><select id="skillSelect"></select></label>
+      <div class="field combo-field" id="comboField" hidden><span>Also count <span class="meta">skills you use alongside it</span></span><div class="combo-list opt-multi-list" id="comboList"></div><p class="opt-slow">The Damage tab adds these up. The same ticks and weights count on the Skill tree, Item Simulator and Build Planner; each added skill makes the optimizers and gear searches slower (about one more full run per skill).</p></div>
+      <div class="row2">
+        <label class="field"><span>Gem level</span><input type="number" id="gemLevel" min="1" max="40"></label>
+        <div class="field"><span>From gear</span><output id="gemBonus" class="readout">+0</output></div>
+      </div>
+      <p class="skill-desc" id="skillDesc"></p>
+    </section>
+    </div>
+
+    <div class="config-panel" id="configSupports" role="tabpanel" aria-labelledby="configTabSupports" data-config-panel="supports" hidden>
+    <section class="card">
+      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 20 9l-8 12L4 9z M4 9h16 M9 9l3 12 3-12"/></svg></span>Supports <small id="supportCount"></small></h2>
+      <label class="field"><span>Skill or gem to test</span><select id="supportSkillSelect"></select></label>
+      <p class="hint sup-conduit" id="supportConduit" hidden></p>
+      <div class="sup-tools"><input type="search" class="sup-find" id="supportFind" placeholder="Search supports" aria-label="Search supports" autocomplete="off"><button class="btn small ghost" type="button" id="supportPreset" hidden>Socket preset supports</button></div>
+      <div class="sup-picker" id="supportChips"></div>
+      <p class="hint sup-info" id="supportInfo" aria-live="polite"></p>
+      <label class="check-row" title="Off: the search tries every support in the game. On: only supports you own."><input type="checkbox" id="optPool"><span>Only check supports I own</span></label>
+      <div id="temperAllDmg"></div>
+    </section>
+    <section class="card support-search">
+      <div class="opt">
+        <div class="row2">
+          <label class="field"><span>Optimize for</span><select id="optTarget"><option value="enemy">Damage vs Configured Enemy</option><option value="panel">Skill panel DPS</option></select></label>
+        </div>
+        <label class="check-row" title="Skips setups that would run you dry within a minute of nonstop use (this skill alone, after Vow and Herald reservations). Tithe and Siphon join the search."><input type="checkbox" id="optMana"><span>Only setups my mana can sustain</span></label>
+        <button class="btn wide" id="optBtn" type="button">Find best supports</button>
+        <button class="btn wide ghost" id="optReopen" type="button" hidden>Show results</button>
+        <p class="hint">Uses the enemy set under Configuration (the same enemy as Damage Analysis). Tries each valid support combination for this skill; pack-only supports (Chain, Pierce, Fork, area, leech, on-kill) are left out.</p>
+        <div id="supportSearchResults"></div>
+      </div>
+    </section>
+    </div>
+
+    <!-- The enemy settings live in the Configure Enemy dialog (one panel for every page); this row opens it -->
+    <div class="support-enemy" id="supportEnemy">
+    <section class="card" id="supportEnemyRow"></section>
+    </div>
+
+      </div>
+    </details>
+  </aside>
+
+  <div class="results-wrap">
+    <section class="results" id="results" hidden><!-- the old Damage Analysis pane: never shown since 25 Nov 2026 (Advanced took over) -->
+      <div class="empty" id="emptyState">Pick a character to start. Use <b>Load saves folder</b> and pick your SaveGames folder to load every character at once.</div>
+    </section>
+    <aside class="stats-panel" id="statsPanel" aria-label="Character stats" hidden></aside>
+    <section class="headline build-stats" id="buildStats" aria-live="polite" hidden></section>
+    <section class="build-pane" id="buildPane" hidden></section>
+    <section class="build-pane compare-pane" id="comparePane" hidden></section>
+    <section class="build-pane compare-pane creator-pane" id="creatorPane" hidden></section>
+    <section class="build-pane compare-pane builds-pane" id="savedBuildsPane" hidden></section>
+    <section class="build-pane compare-pane fossil-pane" id="fossilPane" hidden></section>
+    <section class="build-pane compare-pane lootfilter-pane" id="lootFilterPane" hidden></section>
+    <section class="build-pane compare-pane brewery-pane" id="breweryPane" hidden></section>
+    <section class="build-pane compare-pane itemsearch-pane" id="itemSearchPane" hidden></section>
+    <section class="build-pane compare-pane grail-pane" id="grailPane" hidden></section>
+    <section class="build-pane compare-pane ladder-pane" id="ladderPane" hidden></section>
+    <section class="build-pane compare-pane ladder-pane market-pane" id="marketPane" hidden></section>
+    <section class="build-pane compare-pane patch-pane" id="patchPane" hidden></section>
+    <section class="build-pane compare-pane newplayers-pane" id="newPlayersPane" hidden></section>
+    <section class="build-pane compare-pane faq-pane" id="skillsTabPane" hidden>
+      <nav class="faq-nav" id="skillsNav" role="group" aria-label="Skills sections"></nav>
+      <div class="build-pane faq-sec" id="scalingPane"></div>
+      <div class="build-pane faq-sec" id="minionsPane" hidden></div>
+      <div class="build-pane faq-sec" id="gemLevelsPane" hidden></div>
+    </section>
+    <section class="build-pane compare-pane faq-pane" id="faqPane" hidden>
+      <nav class="faq-nav" id="faqNav" role="group" aria-label="Game mechanics sections"></nav>
+      <div class="build-pane faq-sec" id="affixPane" hidden></div>
+    </section>
+    <section class="build-pane compare-pane character-pane" id="characterPane" hidden></section>
+    <section class="build-pane compare-pane atlas-pane" id="atlasPane" hidden></section>
+    <section class="build-pane compare-pane vows-pane" id="vowsPane" hidden></section>
+    <section class="build-pane compare-pane advanced-pane" id="advancedPane" hidden></section>
+    <section class="code-pane" id="codePane" hidden>
+      <div class="code-intro">
+        <div class="eyebrow">IMPORT A LOADOUT</div>
+        <h2>Load a build code</h2>
+        <p>Paste a code copied from the passive skill tree (<code>BO1.</code>), a saved build plan (<code>BOP1.</code>) or a link from the ItemDatabase planner (<code>broked-db.pages.dev/planner#b=…</code>, or an older <code>broked-db.vercel.app/b/…</code> link, with its rolled items). The code is decoded in this browser.</p>
+      </div>
+      <form class="code-import card" id="codeForm" title="Load a passive-tree build code (BO1.), a saved plan code (BOP1.), a share link or an ItemDatabase planner link (#b=)">
+        <label class="field"><span>Build code</span><input type="text" id="codeInput" placeholder="Paste a BO1. or BOP1. code, a share link or a planner link" autocomplete="off" spellcheck="false" required></label>
+        <button class="btn" type="submit">Load code</button>
+      </form>
+    </section>
+    <section class="tree-pane" id="treePane" hidden>
+      <p class="warn tree-over" id="treeOver" role="status" hidden></p>
+      <div class="tree-tabs" id="treeTabs" role="tablist" aria-label="Passive trees"></div>
+      <div class="tree-bar">
+        <span class="tree-points" id="treePoints"></span>
+        <label class="field inline tree-search"><input type="text" id="treeSearch" placeholder="Find a node or stat" autocomplete="off"><span class="tree-found-count" id="treeFoundCount" hidden></span></label>
+        <button class="btn small ghost" type="button" id="treeBanClear" hidden title="Nodes you marked never take (right-click a node). Click to allow them all again.">Never take: 0 · clear</button>
+        <button class="btn small ghost" type="button" id="treeKeepClear" hidden title="Nodes you marked keep or must take (right-click a node). Click to clear them all.">Keep: 0 · clear</button>
+        <button class="btn small ghost" type="button" id="treeUndo">Undo</button>
+        <button class="btn small ghost" type="button" id="treeReset">Reset to save</button>
+        <button class="btn small" type="button" id="treeCopy">Copy build code</button>
+      </div>
+      <div class="tree-bar opt-bar">
+        <label class="field inline"><span>Main damage skill</span><select id="optSkill"></select></label>
+        <details class="opt-multi" id="optMulti" hidden><summary id="optMultiSum">Also count</summary>
+          <div class="opt-multi-body"><p class="hint">Tick other skills for the optimizer, Plan and the node values to weigh too. Weight 1 = as much as the main skill, 0.5 = half. Each skill counts by its own % change, so a weak skill is not drowned out by a strong one.</p><div id="optMultiList"></div><p class="opt-slow">Each skill added here is simmed for every option tried, so the tree optimizer, Plan, node values and Gear Set Sim get slower: about one more full run per skill.</p></div>
+        </details>
+        <label class="check-row" title="Notables with no damage lines (life, armour, mana, Skyfall speed ...) stay where they are"><input type="checkbox" id="optKeepDef" checked><span>Keep defence notables</span></label>
+        <label class="check-row" title="Glass Cannon and the like: the sim sees the damage, not the price. Ticked for you when the character already has a keystone."><input type="checkbox" id="optKeys"><span>Allow new keystones</span></label>
+        <label class="check-row" title="Optimize and Plan also choose the Oath for each open Oath seat, and count a seat's best Oath when they weigh the notable that opens it. An Oath you have sworn is only replaced when another one at that seat is worth more; with Keep defence notables ticked, sworn Oaths with no damage line stay."><input type="checkbox" id="optOaths" checked><span>Pick Oaths</span></label>
+        <label class="check-row" title="Optimize and Plan also spend your Dragonling points (one for each Dragon Rupture cleared) on the finished tree. Optimize may move taken Dragonling nodes; Plan only spends the free points. The Aspect stays as chosen. Your first crown is free, each further crown costs 3 points."><input type="checkbox" id="optDragon" checked><span>Plan Dragonling</span></label>
+        <label class="field inline opt-socks" title="How many Dwarven Rune Sockets the tree should hold. Optimize and Plan path to the nearest ones you lack; Optimize may refund sockets past this number. Empty: keep the sockets you have and add none. The grey number is what your worn Dwarven runes need (Deep-Forged gear holds one of its own)."><input type="number" id="optSockets" min="0" max="9" step="1" inputmode="numeric" aria-label="Dwarven Sockets"><span>Dwarven Sockets</span></label>
+        <label class="field gs-prio opt-prio" title="What Optimize tree and Plan value. Defence is an estimate; tick the defences that count next to it. The same setting as in the Item Simulator"><span>Prioritize <b id="optPrioText">DPS only</b></span>
+          <span class="gs-prio-row"><span>DPS</span><input type="range" id="optPrio" min="0" max="100" step="10" value="0" aria-label="Prioritize DPS or defence"><span>Defence</span></span></label>
+        <span class="gs-layers" id="optLayers"></span>
+        <button class="btn small" type="button" id="treeOptimize">Optimize tree</button>
+        <button class="btn small" type="button" id="treePlanAll" title="Spend all your unspent passive points, best pick first, without refunding anything">Plan tree</button>
+        <span class="plan-group" title="Where your next points should go, in order, without refunding anything">
+          <label class="field inline"><span>Points</span><input type="number" id="planPoints" min="1" max="123" value="5"></label>
+          <button class="btn small ghost" type="button" id="treePlan">Plan next points</button>
+        </span>
+      </div>
+      <div class="tree-view" id="treeView">
+        <svg id="treeSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div class="tree-tip" id="treeTip" hidden></div>
+        <span class="tree-full-pts" id="treeFullPts"></span>
+        <div class="tree-legend" id="treeLegend"><button type="button" class="tl-btn" id="treeLegendBtn" aria-expanded="true" aria-controls="treeLegendBody"><span class="tl-arrow" aria-hidden="true"></span><span>Heat map</span></button><div class="tl-body" id="treeLegendBody" hidden></div></div>
+        <button type="button" class="tree-seats" id="treeSeats" title="Go to the seat and pick an Oath" hidden></button>
+        <div class="tree-sheet" id="treeSheet" hidden>
+          <div class="tree-sheet-body tree-tip" id="treeSheetBody"></div>
+          <div class="tree-sheet-acts"><button type="button" class="btn small" id="treeSheetAct">Take</button><button type="button" class="btn small ghost" id="treeSheetKeep">Keep</button><button type="button" class="btn small ghost" id="treeSheetBan">Never take</button><button type="button" class="btn small" id="treeSheetRune" hidden>Set rune</button><button type="button" class="btn small ghost" id="treeSheetRuneOut" hidden>Take rune out</button><button type="button" class="tree-sheet-x" id="treeSheetClose" title="Close" aria-label="Close">×</button></div>
+        </div>
+        <button type="button" class="dragon-btn" id="dragonBtn" title="Dragonling tree" aria-label="Dragonling tree" aria-expanded="false">
+          <span class="dragon-art" id="dragonTile" hidden></span>
+          <svg id="dragonArt" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="27" class="db-ring"/>
+            <path class="db-head" d="M15 44c3-9 9-15 17-17l-4-7 7 5 3-9 3 10 7-3-4 8c4 2 6 6 6 10l-7-2c-2 4-6 7-11 7l3-6-6 2-2 5c-3-1-5-3-6-6l-6 3z"/>
+            <circle cx="40" cy="31" r="2.2" class="db-eye"/></svg>
+          <span class="dragon-badge" id="dragonBadge" hidden></span>
+        </button>
+        <div class="dragon-panel" id="dragonPanel" hidden>
+          <button type="button" class="dragon-close" id="dragonClose" title="Close">×</button>
+          <div id="dragonBody"></div>
+        </div>
+        <div class="tree-tip dragon-tip" id="dragonTip" hidden></div>
+        <div class="tree-zoom"><button type="button" id="treeNames" title="Show or hide node names" aria-pressed="true">Names</button><button type="button" id="treeWays" title="Show or hide the dotted gateway lines" aria-pressed="true">Gateways</button><button type="button" id="treeZoomIn" title="Zoom in">+</button><button type="button" id="treeZoomOut" title="Zoom out">−</button><button type="button" id="treeFit" title="Show the whole tree">Fit</button><button type="button" id="treeFull" title="Show the tree full screen (Esc to leave)" aria-pressed="false">Full screen</button></div>
+      </div>
+      <div class="warn tree-oath-warn" id="treeOathWarn" hidden></div>
+      <p class="hint" id="treeStatus"></p>
+      <div class="card opt-card" id="treeOpt" hidden></div>
+      <p class="hint">Click a node to take it (the shortest path is added) or to refund it (nodes that lose their connection go too). Hover for its stats and what it does to the selected skill's DPS against the enemy set on the left. Right-click a node (on a touch screen: tap it, then Never take) to mark it never take: it gets a red cross, and Optimize, Plan and the node values skip it and never path through it. Right-click again to allow it. Heat map: brighter green = more DPS per point spent. Diamonds are Oath Masteries: one opens when you take any of its notables, then click it to swear one of its Oaths. Changes here apply to the Damage tab until you reset or switch character.</p>
+      <div class="card" id="treeBest"></div>
+      <div class="card" id="treeHistory"></div>
+    </section>
+  </div>
+</main>
+
+<dialog class="confirm-dialog save-tutorial" id="saveTutorial" aria-labelledby="saveTutorialTitle" aria-describedby="saveTutorialIntro">
+  <div class="save-tutorial-content">
+    <div class="save-tutorial-heading">
+      <h2 id="saveTutorialTitle">How to load your saves</h2>
+      <button class="btn ghost" id="saveTutorialClose" type="button" aria-label="Close save import tutorial" autofocus>Close</button>
+    </div>
+    <p id="saveTutorialIntro">Watch the walkthrough, then open the Windows folder picker below.</p>
+    <video id="saveTutorialVideo" controls muted playsinline preload="none" data-src="../../../assets/save-import.webm" aria-label="Animated walkthrough of selecting the SaveGames folder"></video>
+    <ol>
+      <li>Copy the save path, then click <b>Open SaveGames folder</b>.</li>
+      <li>Click the address bar at the top of the picker. Paste the path with <b>Ctrl+V</b>, then press <b>Enter</b>.</li>
+      <li>Stay inside <b>SaveGames</b> and click <b>Select Folder</b>. If the browser asks to upload, confirm to let this page read the files.</li>
+    </ol>
+    <div class="save-tutorial-path"><code>%LOCALAPPDATA%\BrokenOath\Saved\SaveGames</code><button class="btn ghost" id="saveTutorialCopy" type="button">Copy save path</button></div>
+    <p class="hint">All characters in the folder are loaded. Your saves are read in this browser; nothing is uploaded.</p>
+    <label class="check"><input id="saveTutorialSkip" type="checkbox"><span>Don't show tutorial video again</span></label>
+    <p class="hint" id="saveTutorialStatus" role="status"></p>
+    <div class="confirm-actions"><button class="btn" id="saveTutorialPick" type="button">Open SaveGames folder</button></div>
+  </div>
+</dialog>
+
+<dialog class="confirm-dialog enemy-dialog" id="enemyDialog" aria-labelledby="enemyDialogTitle">
+  <div class="enemy-dialog-content">
+    <div class="save-tutorial-heading">
+      <h2 id="enemyDialogTitle">Configure Enemy</h2>
+      <button class="btn ghost" id="enemyDialogClose" type="button">Close</button>
+    </div>
+    <p class="hint enemy-kept">The same enemy on every page: Damage Analysis, Passive tree, Skills, Character, Item Simulator and Support Gem Simulator. Kept in this browser: the enemy for every character, the curses, Vows and charges for each one. <button class="btn ghost small" id="enemyReset" type="button" title="Back to what your build has on its bar: its curses, Vows and shocks counted, a Guardian at your character's level, charges at 0">Reset to build defaults</button></p>
+    <div id="enemyDialogBody">
+    <section class="card">
+      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3a7 7 0 0 0-4 12.7V19h8v-3.3A7 7 0 0 0 12 3zM9.5 11.5h.01M14.5 11.5h.01M10 19v2M14 19v2"/></svg></span>Enemy</h2>
+      <div class="row2">
+        <label class="field"><span>Monster level</span><input type="number" id="enemyLevel" min="1" max="300"></label>
+        <label class="field"><span>Rarity</span>
+          <select id="enemyRarity">
+            <option value="normal">Normal</option><option value="magic">Magic</option>
+            <option value="rare">Rare</option><option value="boss" selected>Guardian / Boss</option>
+          </select></label>
+      </div>
+      <label class="field" id="guardianRow" hidden><span>Guardian's element <span class="meta">its colour: resists that element 30-50% more, plus Ward +25% from Rupture 60, +35% from 80</span></span>
+        <select id="guardianElement">
+          <option value="">Not set</option><option value="Fire">Fire</option><option value="Cold">Cold</option>
+          <option value="Lightning">Lightning</option><option value="Poison">Poison</option>
+        </select></label>
+      <div id="guardianIdRow" hidden>
+        <label class="field"><span>Which Guardian <span class="meta">fills its strong and weak element from the game data</span></span>
+          <select id="guardianWho"><option value="">Pick one (or set below)</option></select></label>
+        <div class="row2">
+          <label class="field"><span>Strong element <span class="meta">+20% resistance</span></span>
+            <select id="guardianStrong"><option value="">Not set</option><option value="Fire">Fire</option><option value="Cold">Cold</option><option value="Lightning">Lightning</option><option value="Poison">Poison</option></select></label>
+          <label class="field"><span>Weak element <span class="meta">−20% resistance</span></span>
+            <select id="guardianWeak"><option value="">Not set</option><option value="Fire">Fire</option><option value="Cold">Cold</option><option value="Lightning">Lightning</option><option value="Poison">Poison</option></select></label>
+        </div>
+      </div>
+      <div class="res-grid" id="resGrid"></div>
+      <p class="hint">Blank = the game's own curve (level × 0.36, at most 25%).</p>
+      <label class="check"><input type="checkbox" id="potionsOn" checked><span>Enable your Brewmaw potions <span class="meta">Counts the potions from your Brewery belt, or your save's, in every damage number and optimizer.</span></span></label>
+      <h3>Curses on the enemy</h3>
+      <ul class="checklist" id="curseList"></ul>
+      <div class="enemy-fields">
+        <label class="field"><span>Other % more dmg taken</span><input type="number" id="extraTaken" value="0" step="5"></label>
+        <label class="field"><span>Enemy life</span><input type="number" id="enemyLife" min="1" step="1000" placeholder="auto"></label>
+        <label class="field"><span>Projectiles hitting it</span><input type="number" id="projOnTarget" min="1" max="20" placeholder="auto"></label>
+        <label class="field" title="Blank = the most you can have, all standing the whole fight"><span>Totems out</span><input type="number" id="totemCount" min="1" max="10" step="1" placeholder="auto"></label>
+        <label class="field"><span>Hits per second</span><input type="number" id="hpsOverride" min="0" step="0.1" placeholder="auto"></label>
+        <label class="field" id="rowLeech" title="Only matters for skills with the Life Leech support: 15% more damage only while you leech, and leech needs you below full life. Default: 40% of the fight (the sim cannot see your life). Raise it to sim higher, 100 = always on."><span>Time spent leeching (%)</span><input type="number" id="leechUptime" min="0" max="100" step="5" placeholder="40"></label>
+        <label class="field" id="rowWindburst" title="Windburst: every third movement skill bursts for 200% of your last Bow hit. How many movement skills you use a second in the fight (0.5 = one every 2 s). Blank = not counted." hidden><span>Movement skills a second</span><input type="number" id="windburstMoves" min="0" step="0.1" placeholder="0"></label>
+        <label class="field" id="rowCorpseKind" title="Which corpse Pyre Burst and Kindled Remains burn. Their extra damage is a share of the corpse's life at this Rupture Level (counted up to 150). A Husk (Gravesown) has 60% of a normal monster's life." hidden><span>Corpse</span><select id="corpseKind"><option value="">Normal monster</option><option value="magic">Magic monster</option><option value="rare">Rare monster</option><option value="husk">Husk (Gravesown)</option><option value="none">None</option></select></label>
+        <label class="field" id="rowCorpses" title="Kindled Remains: how many fresh corpses a second lie next to you or the enemy (it bursts at most 4 a second). Blank = only Gravesown's Husks, if it is linked." hidden><span>Fresh corpses a second</span><input type="number" id="corpsesPerSec" min="0" step="0.1" placeholder="auto"></label>
+        <label class="field" id="rowLegionKind" title="Legion of One: you command only one kind of minion. The kind set here stands, doubled in number and dealing 30% less; your other summons are dismissed and count as 0 in every number. Strongest: each summon is counted as if it stood, and totals keep the strongest." hidden><span>Legion of One kind</span><select id="legionKind"></select></label>
+        <label class="field" id="rowOtherBleed" title="Haemorrhage: 40% more damage to an enemy Bleeding from another of your skills (its own bleeds do not count). Auto counts it when another skill on your bar can bleed. Yes: something the sim cannot see keeps it bleeding (another player, a skill off your bar). No: leave it out." hidden><span>Enemy bleeding from another skill</span><select id="otherBleed"><option value="">Auto</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+        <p class="hint enemy-life-note">Enemy life sets the size of Shock: lower life means a bigger Shock. Blank = the sim's estimate.</p>
+      </div>
+      <div class="enemy-toggles">
+        <label class="check" id="rowFlashfire" title="Flashfire: Fire hits in the 2 s after a Flame Dash deal 40% more. Counts it as always up." hidden><input type="checkbox" id="flashfire"><span>Flame Dash just used</span></label>
+        <label class="check" id="rowGraveCall" title="Minions: 30% more damage and 20% faster for 4 s after each cast. Ticked by itself while Grave Call is on your bar (counted as kept up). Counted against the enemy only: the game's panel leaves it out." hidden><input type="checkbox" id="graveCall"><span>Grave Call active</span></label>
+      </div>
+      <!-- How the selected skill is cast (owner, 19 Nov 2026: everything that configures DPS is in this pop-up); shown only for skills they apply to -->
+      <div class="enemy-casts">
+        <label class="field" id="cocRow" hidden><span>Cast on Crit <span class="meta" id="cocInfo"></span></span><select id="cocSelect"></select></label>
+        <label class="check-row" id="conduitRow" hidden><input type="checkbox" id="conduitToggle"><span id="conduitLabel">Cast by Channel Conduit</span></label>
+      </div>
+    </section>
+    <section class="card">
+      <h2><span class="h-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5 1-8.5z"/></svg></span>Vows, Heralds &amp; charges</h2>
+      <ul class="checklist" id="vowList"></ul>
+      <div id="barShockBox" hidden>
+        <h3>Shock from your other skills <span class="meta">on the enemy: counts for all your damage</span></h3>
+        <label class="field" title="The skill you use to keep the enemy shocked. Its shock counts for every other skill's damage. Auto: every lightning skill on your bar that shocks, each taken as kept up."><span>Skill that shocks</span><select id="barShockPick"></select></label>
+        <ul class="checklist" id="barShockList"></ul>
+      </div>
+      <div id="barFreezeBox" hidden>
+        <h3>Cold from your other skills <span class="meta">fills the Guardian's freeze bar for Frostbreak</span></h3>
+        <ul class="checklist" id="barFreezeList"></ul>
+      </div>
+      <div id="echoBox" hidden>
+        <h3>Elemental Echo: echoes up <span class="meta">12% more damage of that element, from your own kills</span></h3>
+        <ul class="checklist" id="echoList"></ul>
+      </div>
+      <h3>Try a Herald <span class="meta">not on your bar: compare without and with</span></h3>
+      <ul class="checklist" id="heraldTryList"></ul>
+      <div class="row3">
+        <label class="field"><span>Fury</span><input type="number" min="0" max="10" value="0" data-charge="fury"></label>
+        <label class="field"><span>Insight</span><input type="number" min="0" max="10" value="0" data-charge="insight"></label>
+        <label class="field"><span>Resolve</span><input type="number" min="0" max="10" value="0" data-charge="resolve"></label>
+      </div>
+      <label class="field" title="0.5% increased melee damage, 0.2% melee attack speed a stack (0.6% more damage before patch 0.56.8), at most 50 + your maximum Bloodlust lines. Gained on kills (and boss crits with The Wolf's Due), each lasting 5 seconds."><span>Bloodlust stacks <span class="meta">0.5% increased melee damage each, up to 50 + gear and tree</span></span><input type="number" min="0" max="200" value="0" data-charge="bloodlust"></label>
+      <label class="field" title="Melee hits you land give Fortified stacks: 2% increased melee damage and 1% less damage taken from hits each. The sim counts your maximum Fortified lines from gear and the tree as full stacks; the game adds a base we cannot read, so if the game shows more, type your stacks here. 0 = your lines."><span>Fortified stacks <span class="meta">0 = your maximum Fortified lines; type more if the game shows more</span></span><input type="number" min="0" max="200" value="0" data-charge="fortifyStacks"></label>
+      <label class="field" title="Kindling support (patch 0.56.8): each kill with the linked spell gives a stack, 0.5% increased spell damage and 0.2% cast speed each, up to 50, each lasting 5 seconds."><span>Kindling stacks <span class="meta">0.5% increased spell damage and 0.2% cast speed each, up to 50</span></span><input type="number" min="0" max="50" value="0" data-charge="kindling"></label>
+      <label class="field" title="Gather Fury support: kills with the linked skill grant Fury charges (on a Guardian, every 4% of its life counts as a kill). While the gem is linked to a skill on your bar, the sim counts this many Fury charges as held. If the Fury box above is higher, that number counts instead. How many you really hold is not checked in game."><span>Fury from Gather Fury <span class="meta">charges held while the gem is linked</span></span><input type="number" min="0" max="10" value="2" data-charge="gatherFury"></label>
+    </section>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="confirm-dialog" id="confirmDialog" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+  <form method="dialog">
+    <h2 id="confirmTitle"></h2>
+    <p id="confirmMessage"></p>
+    <div class="confirm-actions">
+      <button class="btn ghost" type="submit" value="cancel" autofocus>Cancel</button>
+      <button class="btn ghost" id="confirmAlt" type="submit" value="alt" hidden></button>
+      <button class="btn" id="confirmAction" type="submit" value="confirm"></button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="confirm-dialog pick-chars-dialog" id="pickCharsDialog" aria-labelledby="pickCharsTitle">
+  <form method="dialog">
+    <h2 id="pickCharsTitle">Which characters to load?</h2>
+    <p>This browser remembers your choice for next time.</p>
+    <div class="pick-chars-all"><button class="btn ghost" type="button" id="pickCharsAll">All</button><button class="btn ghost" type="button" id="pickCharsNone">None</button></div>
+    <div class="pick-chars-list" id="pickCharsList"></div>
+    <div class="confirm-actions">
+      <button class="btn ghost" type="submit" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn" type="submit" value="confirm" id="pickCharsLoad">Load</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="confirm-dialog name-dialog" id="nameDialog" aria-labelledby="nameTitle">
+  <form method="dialog">
+    <h2 id="nameTitle">Save as new build</h2>
+    <p>Saves what you see now (gear, skills, tree, potions, notes) as a build in the Saved Builds tab. What you started from stays as it is.</p>
+    <label class="field"><span>Build name</span><input id="nameInput" type="text" maxlength="60" autocomplete="off" spellcheck="false"></label>
+    <p class="hint" id="nameOver" hidden>You already have a saved build with this name. Saving replaces it with what you see now. Type another name to keep both.</p>
+    <div class="confirm-actions">
+      <button class="btn ghost" type="submit" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn" type="submit" value="confirm" id="nameOk">Save build</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="confirm-dialog report-dialog" id="reportDialog" aria-labelledby="reportTitle">
+  <form method="dialog" id="reportForm">
+    <h2 id="reportTitle">Report a problem</h2>
+    <p id="reportIntro">Wrong numbers, something broken, a missing item or skill: describe it here. No account needed. Only what you write is sent, plus the attachments ticked below (the build, and log lines if you loaded your game log).</p>
+    <label class="field"><span id="reportTextLabel">What happened?</span><textarea id="reportText" rows="6" maxlength="4000"></textarea></label>
+    <label class="field"><span>Discord username (optional)</span><input type="text" id="reportContact" maxlength="40" autocomplete="off" spellcheck="false" placeholder="Only if you want a reply when it is fixed"></label>
+    <label class="check"><input type="checkbox" id="reportBuild"><span>Attach the build on screen <span class="meta">Sent as a share link: gear, skills, tree and the character name.</span></span></label>
+    <div id="reportLogWrap" hidden>
+      <label class="check"><input type="checkbox" id="reportLog"><span>Attach log lines <span class="meta" id="reportLogCount"></span> <span class="meta">Fight lines only (hits, casts, ailments, marks). No date or time of day, no character name, no Steam ID or file paths. Look at exactly what is sent below.</span></span></label>
+      <details class="report"><summary>Log lines that would be sent</summary><pre id="reportLogLines"></pre></details>
+    </div>
+    <details class="report" id="reportAttachWrap" hidden><summary>Check report attached (numbers only, no names or IDs)</summary><pre id="reportAttach"></pre></details>
+    <p class="report-status" id="reportStatus" role="status"></p>
+    <div class="confirm-actions">
+      <button class="btn ghost" type="submit" value="cancel" formnovalidate>Close</button>
+      <button class="btn" type="button" id="reportSend">Send report</button>
+    </div>
+  </form>
+</dialog>
+
+<footer class="foot">
+  <nav class="foot-legal" aria-label="Legal and contact"><a href="../../../privacy/index.html">Privacy</a><a href="../../../terms/index.html">Terms</a><a href="../../../disclaimer/index.html">Disclaimer</a><a href="../../../contact/index.html">Contact</a></nav>
+  <button class="linkish" type="button" id="reportFootBtn">Report a problem</button> (no account needed) ·
+Data: <a href="https://api.playbrokenoath.com/" target="_blank" rel="noopener noreferrer">Broken Oath public API</a> ·
+Game icons and art © Crater Studios ·
+Fan-made tool, not affiliated with the developers of <a href="https://playbrokenoath.com/" target="_blank" rel="noopener noreferrer">Broken Oath</a>. <a href="https://discord.gg/sH3QWUBavj" target="_blank" rel="noopener noreferrer">Discord</a>. Your save and log files are read in your browser. GoatCounter counts visits without tracking cookies; see <a href="../../../privacy/index.html">Privacy</a> for details. Sharing sends the build you choose; reports send your message and the attachments shown in the form. Formulas follow the game's tooltips and design notes; damage sims are estimates and changing daily.
+</footer>
+
+<script>
+(function () {
+  const b = document.getElementById('themeBtn'), root = document.documentElement;
+  const show = () => { const t = root.dataset.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'; b.title = t; b.setAttribute('aria-label', t); };
+  b.addEventListener('click', () => {
+    if (root.dataset.theme === 'light') delete root.dataset.theme; else root.dataset.theme = 'light';
+    try { localStorage.setItem('bods:theme', root.dataset.theme === 'light' ? 'light' : 'dark'); } catch (e) { /* storage off */ }
+    show();
+  });
+  show();
+})();
+</script>
+<script>
+window.GD = null;
+window.CHARS = [];
+window.GRAIL_SAVES = [];
+window.SITE_VERSION = {"v":574,"at":"2026-11-28T16:58:01.299Z"};
+window.SITE_LANG = 'ko';
+// SITE_BASE: the site root as an absolute path, worked out now, before any tab click changes the address (relative paths would drift).
+window.SITE_BASE = new URL("../../../", location.href).pathname.replace(/[^/]*$/, '');
+window.TREE_ICONS = {"src":"icons/tree.webp?v=75045a90","T":64,"cols":22,"rows":22,"idx":{"aegis_N":0,"aegis_N_D":1,"aegis_S":2,"aegis_S_D":3,"affliction_N":4,"affliction_N_D":5,"affliction_S":6,"affliction_S_D":7,"anvil_oath_N":8,"anvil_oath_N_D":9,"anvil_oath_S":10,"anvil_oath_S_D":11,"area_N":12,"area_N_D":13,"area_S":14,"area_S_D":15,"armour_N":16,"armour_N_D":17,"armour_S":18,"armour_S_D":19,"artillery_N":20,"artillery_N_D":21,"artillery_S":22,"artillery_S_D":23,"attack_N":24,"attack_N_D":25,"attack_S":26,"attack_S_D":27,"blightword_N":28,"blightword_N_D":29,"bone_N":30,"bone_N_D":31,"bone_S":32,"bone_S_D":33,"bone_choir_N":34,"bone_choir_N_D":35,"bone_choir_S":36,"bone_choir_S_D":37,"bow_N":38,"bow_N_D":39,"bow_S":40,"bow_S_D":41,"bulwark_N":42,"bulwark_N_D":43,"bulwark_S":44,"bulwark_S_D":45,"carrion_hunt_N":46,"carrion_hunt_N_D":47,"carrion_hunt_S":48,"carrion_hunt_S_D":49,"chain_N":50,"chain_N_D":51,"chain_S":52,"chain_S_D":53,"channel_N":54,"channel_N_D":55,"channel_S":56,"channel_S_D":57,"cleave_N":58,"cleave_N_D":59,"cleave_S":60,"cleave_S_D":61,"cold_N":62,"cold_N_D":63,"cold_S":64,"cold_S_D":65,"conduit_N":66,"conduit_N_D":67,"conduit_S":68,"conduit_S_D":69,"crest_Mage":70,"crest_Mage_D":71,"crest_Necromancer":72,"crest_Necromancer_D":73,"crest_Paladin":74,"crest_Paladin_D":75,"crest_Ranger":76,"crest_Ranger_D":77,"crest_Samurai":78,"crest_Samurai_D":79,"crest_Warrior":80,"crest_Warrior_D":81,"crit_N":82,"crit_N_D":83,"crit_S":84,"crit_S_D":85,"crusade_N":86,"crusade_N_D":87,"crusade_S":88,"crusade_S_D":89,"dawn_N":90,"dawn_N_D":91,"dawn_S":92,"dawn_S_D":93,"dawnstorm_N":94,"dawnstorm_N_D":95,"dawnstorm_S":96,"dawnstorm_S_D":97,"dawnsworn_N":98,"dawnsworn_N_D":99,"deadeye_N":100,"deadeye_N_D":101,"deadeye_S":102,"deadeye_S_D":103,"deathknell_N":104,"deathknell_N_D":105,"deathknell_S":106,"deathknell_S_D":107,"edge_N":108,"edge_N_D":109,"edge_S":110,"edge_S_D":111,"elemental_N":112,"elemental_N_D":113,"elemental_S":114,"elemental_S_D":115,"energy_shield_N":116,"energy_shield_N_D":117,"energy_shield_S":118,"energy_shield_S_D":119,"evasion_N":120,"evasion_N_D":121,"evasion_S":122,"evasion_S_D":123,"faith_N":124,"faith_N_D":125,"faith_S":126,"faith_S_D":127,"falling_leaf_N":128,"falling_leaf_N_D":129,"falling_leaf_S":130,"falling_leaf_S_D":131,"fire_N":132,"fire_N_D":133,"fire_S":134,"fire_S_D":135,"fury_N":136,"fury_N_D":137,"fury_S":138,"fury_S_D":139,"grave_N":140,"grave_N_D":141,"grave_S":142,"grave_S_D":143,"holy_N":144,"holy_N_D":145,"holy_S":146,"holy_S_D":147,"iron_tempest_N":148,"iron_tempest_N_D":149,"iron_tempest_S":150,"iron_tempest_S_D":151,"ki_N":152,"ki_N_D":153,"ki_S":154,"ki_S_D":155,"ks_aegis_rebuke":156,"ks_aegis_rebuke_D":157,"ks_ancestral_host":158,"ks_ancestral_host_D":159,"ks_blood_magic":160,"ks_blood_magic_D":161,"ks_cascade_of_ruin":162,"ks_cascade_of_ruin_D":163,"ks_chain_reaction":164,"ks_chain_reaction_D":165,"ks_choir_of_bones":166,"ks_choir_of_bones_D":167,"ks_comet_step":168,"ks_comet_step_D":169,"ks_dawnstorm_covenant":170,"ks_dawnstorm_covenant_D":171,"ks_eagle_eye":172,"ks_eagle_eye_D":173,"ks_earthbreaker_stride":174,"ks_earthbreaker_stride_D":175,"ks_elemental_overload":176,"ks_elemental_overload_D":177,"ks_forked_sky":178,"ks_forked_sky_D":179,"ks_glass_cannon":180,"ks_glass_cannon_D":181,"ks_hammer_of_judgement":182,"ks_hammer_of_judgement_D":183,"ks_hollow_covenant":184,"ks_hollow_covenant_D":185,"ks_iron_resolve":186,"ks_iron_resolve_D":187,"ks_lord_of_the_dead":188,"ks_lord_of_the_dead_D":189,"ks_oath_of_a_thousand_cuts":190,"ks_oath_of_a_thousand_cuts_D":191,"ks_oath_of_many_fires":192,"ks_oath_of_many_fires_D":193,"ks_oath_of_slow_ruin":194,"ks_oath_of_slow_ruin_D":195,"ks_oath_of_the_living_storm":196,"ks_oath_of_the_living_storm_D":197,"ks_oath_of_the_long_night":198,"ks_oath_of_the_long_night_D":199,"ks_oath_of_the_pyre":200,"ks_oath_of_the_pyre_D":201,"ks_oath_of_the_red_harvest":202,"ks_oath_of_the_red_harvest_D":203,"ks_oath_of_the_snare":204,"ks_oath_of_the_snare_D":205,"ks_oath_of_the_white_silence":206,"ks_oath_of_the_white_silence_D":207,"ks_one_breath":208,"ks_one_breath_D":209,"ks_pyre_covenant":210,"ks_pyre_covenant_D":211,"ks_r59_hold_k3":212,"ks_r59_hold_k3_D":213,"ks_r59_mountain_k3":214,"ks_r59_mountain_k3_D":215,"ks_r59_sure_strike_k3":216,"ks_r59_sure_strike_k3_D":217,"ks_r74_bone_sovereign":218,"ks_r74_bone_sovereign_D":219,"ks_radiant_crusade":220,"ks_radiant_crusade_D":221,"ks_rotting_gospel":222,"ks_rotting_gospel_D":223,"ks_sanctified":224,"ks_sanctified_D":225,"ks_siege_pact":226,"ks_siege_pact_D":227,"ks_spellblade":228,"ks_spellblade_D":229,"ks_tempest_vow":230,"ks_tempest_vow_D":231,"ks_the_hunting_dead":232,"ks_the_hunting_dead_D":233,"ks_thousand_hands":234,"ks_thousand_hands_D":235,"ks_twice_fallen_sky":236,"ks_twice_fallen_sky_D":237,"ks_unbroken_wall":238,"ks_unbroken_wall_D":239,"ks_wake_of_spells":240,"ks_wake_of_spells_D":241,"ks_way_of_the_blade":242,"ks_way_of_the_blade_D":243,"ks_wind_and_steel_oath":244,"ks_wind_and_steel_oath_D":245,"leech_N":246,"leech_N_D":247,"leech_S":248,"leech_S_D":249,"lichfire_N":250,"lichfire_N_D":251,"lichfire_S":252,"lichfire_S_D":253,"life_N":254,"life_N_D":255,"life_S":256,"life_S_D":257,"life_big_N":258,"life_big_N_D":259,"life_big_S":260,"life_big_S_D":261,"lightning_N":262,"lightning_N_D":263,"lightning_S":264,"lightning_S_D":265,"lingering_N":266,"lingering_N_D":267,"lingering_S":268,"lingering_S_D":269,"malediction_N":270,"malediction_N_D":271,"malediction_S":272,"malediction_S_D":273,"mana_N":274,"mana_N_D":275,"mana_S":276,"mana_S_D":277,"manasteal_N":278,"manasteal_N_D":279,"manasteal_S":280,"manasteal_S_D":281,"melee_N":282,"melee_N_D":283,"melee_S":284,"melee_S_D":285,"mirrorblade_N":286,"mirrorblade_N_D":287,"mirrorblade_S":288,"mirrorblade_S_D":289,"orbit_N":290,"orbit_N_D":291,"orbit_S":292,"orbit_S_D":293,"ossuary_N":294,"ossuary_N_D":295,"ossuary_S":296,"ossuary_S_D":297,"overcharge_N":298,"overcharge_N_D":299,"overcharge_S":300,"overcharge_S_D":301,"permafrost_N":302,"permafrost_N_D":303,"permafrost_S":304,"permafrost_S_D":305,"plague_quiver_N":306,"plague_quiver_N_D":307,"plague_quiver_S":308,"plague_quiver_S_D":309,"poison_N":310,"poison_N_D":311,"poison_S":312,"poison_S_D":313,"portrait_Mage":314,"portrait_Mage_D":315,"portrait_Necromancer":316,"portrait_Necromancer_D":317,"portrait_Paladin":318,"portrait_Paladin_D":319,"portrait_Ranger":320,"portrait_Ranger_D":321,"portrait_Samurai":322,"portrait_Samurai_D":323,"portrait_Warrior":324,"portrait_Warrior_D":325,"projectile_N":326,"projectile_N_D":327,"projectile_S":328,"projectile_S_D":329,"radiance_N":330,"radiance_N_D":331,"radiance_S":332,"radiance_S_D":333,"radiant_ward_N":334,"radiant_ward_N_D":335,"radiant_ward_S":336,"radiant_ward_S_D":337,"rain_N":338,"rain_N_D":339,"rain_S":340,"rain_S_D":341,"reaper_N":342,"reaper_N_D":343,"reaper_S":344,"reaper_S_D":345,"regrowth_N":346,"regrowth_N_D":347,"regrowth_S":348,"regrowth_S_D":349,"resist_N":350,"resist_N_D":351,"resist_S":352,"resist_S_D":353,"shatter_N":354,"shatter_N_D":355,"shatter_S":356,"shatter_S_D":357,"siege_N":358,"siege_N_D":359,"siege_S":360,"siege_S_D":361,"sigil_N":362,"sigil_N_D":363,"sigil_S":364,"sigil_S_D":365,"slam_N":366,"slam_N_D":367,"slam_S":368,"slam_S_D":369,"souls_N":370,"souls_N_D":371,"souls_S":372,"souls_S_D":373,"speed_N":374,"speed_N_D":375,"speed_S":376,"speed_S_D":377,"spell_N":378,"spell_N_D":379,"spell_S":380,"spell_S_D":381,"spell_crit_N":382,"spell_crit_N_D":383,"spell_crit_S":384,"spell_crit_S_D":385,"spellsword_N":386,"spellsword_N_D":387,"spellsword_S":388,"spellsword_S_D":389,"starfall_N":390,"starfall_N_D":391,"starfall_S":392,"starfall_S_D":393,"stillness_N":394,"stillness_N_D":395,"stillness_S":396,"stillness_S_D":397,"swift_N":398,"swift_N_D":399,"swift_S":400,"swift_S_D":401,"tether_N":402,"tether_N_D":403,"tether_S":404,"tether_S_D":405,"trap_N":406,"trap_N_D":407,"trap_S":408,"trap_S_D":409,"two_storms_N":410,"two_storms_N_D":411,"two_storms_S":412,"two_storms_S_D":413,"vigil_N":414,"vigil_N_D":415,"vigil_S":416,"vigil_S_D":417,"voidbound_N":418,"voidbound_N_D":419,"voidbound_S":420,"voidbound_S_D":421,"vowkeeper_N":422,"vowkeeper_N_D":423,"vowkeeper_S":424,"vowkeeper_S_D":425,"warcaller_N":426,"warcaller_N_D":427,"warcaller_S":428,"warcaller_S_D":429,"warpath_N":430,"warpath_N_D":431,"warpath_S":432,"warpath_S_D":433,"waygate_S":434,"waygate_S_D":435,"wellspring_N":436,"wellspring_N_D":437,"wellspring_S":438,"wellspring_S_D":439,"wind_and_steel_N":440,"wind_and_steel_N_D":441,"wind_and_steel_S":442,"wind_and_steel_S_D":443,"windstep_N":444,"windstep_N_D":445,"windstep_S":446,"windstep_S_D":447,"zeal_N":448,"zeal_N_D":449,"zeal_S":450,"zeal_S_D":451,"ks_r79_intstack_k0":452,"ks_r79_intstack_k0_D":453,"ks_oath_of_the_rolling_thunder":454,"ks_oath_of_the_rolling_thunder_D":455,"ks_r91_tankks_k0":456,"ks_r91_tankks_k0_D":457,"ks_r97_dexstack_k0":458,"ks_r97_dexstack_k0_D":459,"damage_S":460,"damage_S_D":461,"ks_r98_focus_k0":462,"ks_r98_focus_k0_D":463},"dragons":"icons/dragons.webp?v=4f7bf7aa","dragonOrder":["Fire","Lightning","Cold","Arcane","Poison","Physical","Void"]};
+window.GEM_ICONS = {"src":"icons/gems.webp?v=afce7aaa","T":64,"cols":10,"rows":12,"idx":{"punch":0,"slash":1,"strike":2,"arcane_bolt":3,"zap":4,"ground_slam":5,"leap_slam":6,"ember_bolt":7,"frost_nova":8,"arc":9,"move":10,"vow_of_clarity":11,"vow_of_vigor":12,"woe_of_withering":13,"toll_of_dread":14,"death_sentence":15,"jarls_roar":16,"war_banner_skill":17,"woe_of_cinders":18,"woe_of_rime":19,"woe_of_the_tempest":20,"woe_of_sundering":21,"woe_of_faltering":22,"herald_of_embers":23,"herald_of_rime":24,"herald_of_storms":25,"herald_of_rot":26,"vow_of_the_bulwark":27,"vow_of_iron":28,"vow_of_the_wind":29,"vow_of_warding":30,"sentence_of_chains":31,"vow_of_zeal":32,"vow_of_precision":33,"vow_of_judgement":34,"storm_whirl":35,"flame_dash":36,"winter_orb":37,"storm_brand":38,"ember_spark":39,"rime_spark":40,"venom_spark":41,"thunderfall":42,"glacial_shards":43,"wayward_orb":44,"thousand_sparks":45,"reap":46,"death_coil":47,"summon_skeletons":48,"summon_skeletal_mage":49,"drain_life":50,"vampire_dash":51,"summon_bone_golem":52,"summon_zombie":53,"grave_call":54,"unholy_void":55,"grave_reap":56,"soul_rend":57,"marrow_lance":58,"pyre_burst":59,"hammer_blow":60,"holy_slash":61,"judgement":62,"orbiting_hammers":63,"hammerstorm":64,"consecrated_ground":65,"holy_charge":66,"summon_holy_elemental":67,"pyre_of_faith":68,"hallowed_slam":69,"shield_throw":70,"quick_shot":71,"power_shot":72,"split_shot":73,"arrow_rain":74,"wind_vault":75,"lightning_arrow":76,"summon_ballista":77,"caustic_arrow":78,"fuse_arrow":79,"hoarfrost_volley":80,"twin_cuts":81,"flurry":82,"iaido_thrust":83,"crescent_slash":84,"shuriken_fan":85,"blade_vortex":86,"thousand_cuts":87,"sheathe":88,"viper_fang":89,"moonfall":90,"cyclone":91,"shield_charge":92,"earthshatter":93,"rending_slam":94,"wheeling_axe":95,"sentence_of_exposure":96,"ns103_cinder_mites":97,"ns103_rime_sprites":98,"ns103_brass_sentinels":99,"ns103_oath_fallen":100,"ns103_elemental_echo":101,"ns103_ancestral_warrior":102,"ns103_horn_of_jarls":103,"sentence_of_rot":104,"herald_of_steel":105,"gravefeast":106,"woe_of_entropy":107,"summon_flame_golem":108,"summon_ice_golem":109,"summon_storm_golem":110,"summon_venom_golem":111}};
+window.CLASS_ICONS = {"src":"icons/classes.webp?v=63117f4c","T":96,"order":["Warrior","Mage","Ranger","Samurai","Paladin","Necromancer"]};
+(function () { var t = window.TREE_ICONS; if (t) { t.src = window.SITE_BASE + t.src; if (t.dragons) t.dragons = window.SITE_BASE + t.dragons; } var g = window.GEM_ICONS; if (g) g.src = window.SITE_BASE + g.src; var c = window.CLASS_ICONS; if (c) c.src = window.SITE_BASE + c.src; })();
+</script>
+<script>
+/*__ATLAS__*/
+/*__VOWS__*/
+/*__ADVANCED__*/
+</script>
+<script>
+/*__FAQ__*/
+/*__NEWPLAYERS__*/
+</script>
+<script src="../../../app.js?v=574"></script>
+</body>
+</html>

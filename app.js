@@ -11083,11 +11083,18 @@ window.BOPatches = function (ctx) {
   function kwTip(k) { return KW[k] ? '<b>' + esc(k) + '</b><span class="pl-tip-sub">Keyword</span><span class="pl-tip-desc">' + esc(KW[k]) + '</span>' : ''; }
 
   function trend(o, n) {
+    const note = (t, cls) => ' <span class="pt-trend ' + cls + '">(' + t + ')</span>';
+
+    const dm = /^((?:Spell|Damage) (?:Min|Max)): (-?[\d.]+)$/, da = dm.exec(o || ''), db = dm.exec(n || '');
+    if (da && db && da[1] === db[1]) {
+      const x = +da[2], y = +db[2]; if (!(x > 0) || x === y) return '';
+      const p = Math.round(Math.abs(y / x - 1) * 100), up = y > x;
+      return note('about ' + (p || '<1') + '% ' + (up ? 'buff' : 'nerf'), up ? 'pt-buff' : 'pt-nerf');
+    }
     const re = /^(Effectiveness(?: Late From| Late At| Late| Early Hold| Early Full| Early)?): (-?[\d.]+)$/;
     const a = re.exec(o || ''), b = re.exec(n || '');
     if (!a || !b || a[1] !== b[1]) return '';
     const f = a[1], x = +a[2], y = +b[2]; if (!(x > 0) || x === y) return '';
-    const note = (t, cls) => ' <span class="pt-trend ' + cls + '">(' + t + ')</span>';
     if (f === 'Effectiveness' || f === 'Effectiveness Late' || f === 'Effectiveness Early') {
       const p = Math.round(Math.abs(y / x - 1) * 100), up = y > x;
       return note('about ' + (p || '<1') + '% ' + (up ? 'buff' : 'nerf') + (f === 'Effectiveness Late' ? ' at high levels' : f === 'Effectiveness Early' ? ' at low levels' : ''), up ? 'pt-buff' : 'pt-nerf');

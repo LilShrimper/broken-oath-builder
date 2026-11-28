@@ -24076,8 +24076,11 @@ window.BOCharacter = function (ctx) {
       }
       let v = evalSet(cur);
       const better = nv => nv > v * 1.000001 && nv > 0;
-      for (let moved = true; moved;) {
+      for (let moved = true, pass = 0; moved; pass++) {
         moved = false;
+
+
+        if (pass > 0) guess = Math.max(guess, tried + passSize);
         for (let i = 0; i < k && !moved; i++) for (const p of pool) {
           if (cur.includes(p)) continue;
           const n = cur.slice(); n[i] = p; const nv = evalSet(n); yield;
@@ -24092,7 +24095,8 @@ window.BOCharacter = function (ctx) {
       }
     }
 
-    const guess = exact ? combos : k * pool.length + k * (pool.length - k) + k * (k - 1) / 2 * (pool.length - k) * (pool.length - k - 1) / 2;
+    const passSize = k * (pool.length - k) + k * (k - 1) / 2 * (pool.length - k) * (pool.length - k - 1) / 2;
+    let guess = exact ? combos : k * pool.length + passSize;
     const gen = exact ? everySetup() : climb();
     let more = k > 0 || pinned.length > 0;
     const job = {
@@ -31293,11 +31297,12 @@ window.BOStartApp = function () {
       const tick = () => {
         if (stop) return resolve(null);
         const t = performance.now();
-        while (!job.done && performance.now() - t < 40) job.step(150);
+
+        try { while (!job.done && performance.now() - t < 40) job.step(150); } catch (e) { console.error('Sim Supports', e); job.done = true; job.failed = true; }
         if (!job.done) { progress(Math.round(job.tried / Math.max(1, job.total) * 100)); return soon(tick); }
         const id = x => (GD.supports[String(x).toLowerCase()] || { Id: x }).Id;
 
-        if (!job.results.length && opt.manaOk && !job.again) { const o2 = comboOpts(); o2.gemLevel = st.ch.gemLevels[skill] || undefined; const dropped = job.manaDropped || 0; job = S.supportSearch(GD, st.ch, skill, o2, { pool: opt.pool || 'all', target: 'enemy', keep: 8, manaOk: false, pinned: pinsIn(skill, ((st.ch.sockets || []).find(x => String(x.skill).toLowerCase() === String(skill).toLowerCase()) || {}).supports), blocked: [...marksFor(skill).block] }); job.again = true; job.manaAll = dropped; return soon(tick); }
+        if (!job.results.length && opt.manaOk && !job.again && !job.failed) { const o2 = comboOpts(); o2.gemLevel = st.ch.gemLevels[skill] || undefined; const dropped = job.manaDropped || 0; job = S.supportSearch(GD, st.ch, skill, o2, { pool: opt.pool || 'all', target: 'enemy', keep: 8, manaOk: false, pinned: pinsIn(skill, ((st.ch.sockets || []).find(x => String(x.skill).toLowerCase() === String(skill).toLowerCase()) || {}).supports), blocked: [...marksFor(skill).block] }); job.again = true; job.manaAll = dropped; return soon(tick); }
         resolve({ results: job.results.map(r => Object.assign({}, r, { sup: r.sup.map(id) })), current: cur.totalDps, sockets: job.sockets, tried: job.tried, exact: job.exact, poolSize: job.pool.length, manaDropped: job.manaDropped || 0, manaNone: !!job.again });
       };
       soon(tick);

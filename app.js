@@ -1492,9 +1492,14 @@ window.PAGE_LANGS = {
   const dragonTreeOf = (GD, ch) => ((GD.dragon || {}).classes || {})[String(ch.classId).toLowerCase()] || {};
   const dragonOn = (GD, ch, cfg) => !!(cfg && cfg.dragon && ((GD.dragon || {}).tree || {}).asc2 && Object.keys(dragonTreeOf(GD, ch)).length);
   function* optimize(GD, S, ch, skill, simOpt, cfg) {
-    const g = run(GD, S, ch, skill, simOpt, cfg), k = dragonOn(GD, ch, cfg) ? DRAGON_Q : 1;
+    const g = run(GD, S, ch, skill, simOpt, cfg), k = dragonOn(GD, ch, cfg) ? DRAGON_Q : 1, only = !!(cfg && cfg.dragonOnly) && k !== 1;
     let r;
-    while (!(r = g.next()).done) { const v = r.value; yield v && v.q != null && !v.dq && k !== 1 ? Object.assign({}, v, { q: v.q * k }) : v; }
+    while (!(r = g.next()).done) {
+      const v = r.value;
+
+      if (only) yield v && v.q != null && v.dq ? Object.assign({}, v, { q: (v.q - DRAGON_Q) / (1 - DRAGON_Q) }) : v;
+      else yield v && v.q != null && !v.dq && k !== 1 ? Object.assign({}, v, { q: v.q * k }) : v;
+    }
     return r.value;
   }
 
@@ -1809,6 +1814,13 @@ window.PAGE_LANGS = {
     const DEF_STATS = new Set(cfg.defStats || ['Life', 'EnergyShield', 'Resist']);
     const defish = m => scored && m.Mode !== 'Trigger' && m.Mode !== 'Flag' && DEF_STATS.has(m.Stat);
     const statUseful = id => (nodes[id].Mods || []).some(m => dmgish(m) || defish(m));
+
+
+    if (cfg.dragonOnly && dOn) {
+      const pset = new Set(all0), v0 = V(pset);
+      const dragon = yield* dragonStep(pset), v1 = V(pset);
+      return { dragonOnly: true, addOnly: !!cfg.addOnly, base: v0, value: v1, gain: v0 > 0 ? v1 / v0 - 1 : 0, dragon, scored, defWeight: defW, dropped, multi: multi && goals.length > 1, calcs, ms: Date.now() - t0, stats };
+    }
 
 
     const pool = Object.keys(nodes).filter(id => walkable(id) && (cfg.allowKeystones || !changesPlay(nodes[id]) || have.has(id)) && (sockWant == null || !isSock(id) || have.has(id) || sockIds.includes(id)));
@@ -3995,7 +4007,9 @@ window.BOPlanner = function (ctx) {
     let h = '<div class="card dl-card"><div class="dl-side"><h2>Dragonling <small>' + used + ' / ' + pts + ' points' + (paths.length ? ' · ' + esc(paths.join(' + ')) + (paths.length > 1 ? ' paths' : ' path') : '') + '</small></h2>';
     h += '<div class="pl-row">' + (asc2() ? '<label class="field inline" title="' + esc('Points: one for each Dragon Rupture you have cleared, at Rupture Levels ' + (dRules().ruptures || []).join(', ') + ' (' + dExtraMax() + ' at most). This box follows the nodes you take. Your first crown is free, each further crown costs ' + dCrownNeed() + '.') + '"><span>Dragon Ruptures</span><input'
         : '<label class="field inline" title="' + esc('Points: one at levels ' + (dRules().milestones || []).join(', ') + ', +' + (dRules().hatch || 0) + ' once hatched, +1 each for Gates 4 to 7' + (dSeal80() ? ', the Seal of 80' : '') + ' and the Pinnacle (' + (dBase({ level: 100 }) + dExtraMax()) + ' at most). This box follows the nodes you take.') + '"><span>Gate kills + Pinnacle</span><input') + ' type="number" min="0" max="' + dExtraMax() + '" data-f="dextra" value="' + dExtra(ch) + '"' + dis + '></label>' +
-      (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') + '</div>';
+      '<span class="dl-acts">' + (edit && used ? '<button class="btn small ghost" type="button" data-act="dreset">Refund all</button>' : '') +
+
+      (edit && asc2() ? '<button class="btn small ghost" type="button" data-act="dopt" title="Spend the Dragonling points where the selected skill gains the most (nodes may move, every Aspect is tried). The passive tree and Oaths stay as they are.">Optimize</button>' : '') + '</span></div>';
 
 
     if (aspects.length) h += '<div class="dl-asp-h">Aspect</div><div class="cmp-modes dl-asps" role="group" aria-label="Aspect">' + [''].concat(aspects).map(a => {
@@ -19860,10 +19874,17 @@ window.BOCharacter = function (ctx) {
 
 
     const chanNoRep = ctx.tags.has('channelling');
-    let chanDropped = 0;
+
+
+
+
+    const statue = !!(sk.Totem && sk.Totem.Kind === 'Ancestral');
+    let chanDropped = 0, statueDropped = 0;
     if (!noEcho && !cocNoEcho) for (const m of pickMods(mods, 'Repeats', 'Flat').concat(chanRep)) if (applies(ctx, m)) {
       if (chanNoRep && m.stat === 'Repeats' && !String(m.key || '').startsWith('support:')) { chanDropped += m.v; use(m, 'channelled skills never repeat'); continue; }
+      if (statue) { statueDropped += m.v; use(m, 'the statue slams on its own timer'); continue; }
       repeats += m.v; use(m); if (String(m.key || '').startsWith('support:')) { repSup += m.v; repByKey[m.key] = (repByKey[m.key] || 0) + m.v; } else repGear += m.v; }
+    if (statueDropped) res.notes.push('Repeats: ' + sk.Name + ' is slammed by its statue on its own timer, so the ' + statueDropped + ' repeat' + (statueDropped > 1 ? 's' : '') + ' from your gear or passives add' + (statueDropped > 1 ? '' : 's') + ' nothing.');
     if (chanDropped) res.notes.push('Repeats: ' + sk.Name + ' is channelled, so the ' + chanDropped + ' repeat' + (chanDropped > 1 ? 's' : '') + ' from your gear or passives add' + (chanDropped > 1 ? '' : 's') + ' nothing (Way of the Blade: "Channelled skills such as Cyclone never repeat").');
 
 
@@ -20102,7 +20123,8 @@ window.BOCharacter = function (ctx) {
     if (!(o.hitsPerSecOverride > 0) && isAttack && ctx.tags.has('melee')) {
       let n = 0; const ai = pickMods(mods, 'Afterimages', 'Flat').filter(m => applies(ctx, m)); for (const m of ai) n += m.v;
       const META = (GD.scaling && GD.scaling.Meta) || {};
-      if (n > 0 && (ctx.tags.has('channelling') || ctx.tags.has('movement'))) res.notes.push('Afterimages: ' + sk.Name + ' is a ' + (ctx.tags.has('movement') ? 'Movement' : 'Channelling') + ' skill, so it gets none (the game\'s rule).');
+      if (n > 0 && sk.Totem && sk.Totem.Kind === 'Ancestral') { for (const m of ai) use(m, 'the statue slams, not your swing'); res.notes.push('Afterimages: ' + sk.Name + ' is slammed by its statue, not by your swing, so it gets none (the game\'s text).'); }
+      else if (n > 0 && (ctx.tags.has('channelling') || ctx.tags.has('movement'))) res.notes.push('Afterimages: ' + sk.Name + ' is a ' + (ctx.tags.has('movement') ? 'Movement' : 'Channelling') + ' skill, so it gets none (the game\'s rule).');
       else if (n > 0) {
         for (const m of ai) use(m);
         const cap = META.AfterimageCap || 3; afterimages = Math.min(cap, n); let pct = (META.AfterimageDamagePct || 40) / 100;
@@ -23945,8 +23967,15 @@ window.BOCharacter = function (ctx) {
     return '';
   }
 
+
+
+
+
+
+  const statueMiss = (sp, sk) => !!sp && !!sk && !!sk.Totem && sk.Totem.Kind === 'Ancestral' && ['multistrike', 'afterimage'].includes(lc(sp.Id));
   function noFitWhy(sp, sk) {
     if (acceptsSup(sp, sk)) return '';
+    if (statueMiss(sp, sk)) return lc(sp.Id) === 'afterimage' ? sk.Name + ' is slammed by its statue, not by your swing: an Afterimage has nothing to repeat' : sk.Name + ' is slammed by its statue on its own timer: ' + sp.Name + ' would change nothing';
     if (meleeOnlyMiss(sp, sk)) return 'shooting minions cannot use it';
     if (brandTrapMiss(sp, sk)) return 'a Spark cannot be thrown as a trap';
     if (noHitMiss(sp, sk)) return sk.Name + ' deals no hits';
@@ -28689,6 +28718,7 @@ window.BOStartApp = function () {
     if (bt && st.ch) { const p = planner.dragon.plan(st.ch, bt.dataset.dtake); if (p) setDragon({ dragonNodes: p.nodes }); return; }
     const b = e.target.closest('[data-act]'); if (!b || !st.ch) return;
     if (b.dataset.act === 'dreset') return setDragon({ dragonNodes: [] });
+    if (b.dataset.act === 'dopt') return runDragonOptimize();
     if (b.dataset.act === 'daspect') return setDragon({ dragonAspect: b.dataset.asp || '' });
     if (b.dataset.act !== 'dnode') return;
     const r = planner.dragon.toggle(st.ch, b.dataset.id);
@@ -29617,6 +29647,57 @@ window.BOStartApp = function () {
     step();
   }
 
+
+
+  const dOptKey = () => optKey() + '|dOnly|' + JSON.stringify([st.ch.dragonNodes || [], st.ch.dragonAspect || '', planner.dragon.points(st.ch).total]);
+  const dOptBtn = () => document.querySelector('#dragonBody [data-act="dopt"]');
+  function runDragonOptimize() {
+    if (!st.ch) return;
+    const card = $('#treeOpt');
+    if (!st.skill) { clearOpt(); card.hidden = false; card.innerHTML = '<p class="hint">The Dragonling optimizer weighs each node by the damage of a skill, and this build has no damage skill yet. Add one on the Character tab (Skills) first.</p>'; return; }
+    clearOpt();
+    const job = T.optJob, key = dOptKey(), skillName = optLabel(), points = planner.dragon.points(st.ch).total;
+    card.hidden = false; card.innerHTML = '<p class="hint">Optimizing the Dragonling tree for ' + esc(skillName) + '…</p>';
+    const gen = BOTreeOpt.optimize(GD, S, st.ch, optGoals(), opts(), { dragonOnly: true, keepDefence: $('#optKeepDef').checked, dragon: { points, aspects: true },
+      defWeight: GS.set.prio / 100, defStats: gsDefStats(), defence: (list, oaths, dragonNodes, dragonAspect) => gsDefence(Object.assign({}, st.ch, { passives: list }, oaths ? { oaths } : null, dragonNodes ? { dragonNodes } : null, dragonAspect != null ? { dragonAspect } : null)) });
+    let q = 0;
+    const busy = on => { const b = dOptBtn(); if (!b) return; b.disabled = on; b.textContent = on ? 'Optimizing · ' + Math.round(q * 100) + '%' : 'Optimize'; };
+    busy(true);
+    const step = () => {
+      if (job !== T.optJob) { busy(false); return; }
+      const t0 = performance.now(), slice = document.hidden ? 250 : 30; let r;
+      try {
+        do { r = gen.next(); if (r.value && r.value.q > q) q = Math.min(1, r.value.q); }
+        while (!r.done && performance.now() - t0 < slice);
+      } catch (err) { busy(false); clearOpt(); card.hidden = false; card.innerHTML = '<p class="hint">The optimizer failed: ' + esc(err.message) + '</p>'; return; }
+      if (!r.done) { busy(true); soon(step); return; }
+      busy(false);
+      const res = r.value;
+      if (res.error) { card.innerHTML = '<p class="hint">' + esc(res.error) + '</p>'; return; }
+      if (key !== dOptKey()) { card.innerHTML = '<p class="hint">The tree or a setting changed while optimizing: press Optimize on the Dragonling panel again.</p>'; return; }
+      const worth = res.gain > 0.001 && res.dragon;
+      Object.assign(res, { key, skill: st.skill, skillName, dAddSet: new Set(worth ? res.dragon.add.map(x => x.id) : []), dRemSet: new Set(worth ? res.dragon.remove.map(x => x.id) : []) });
+      T.opt = res; showOpt(); paintDragonOpt();
+    };
+    step();
+  }
+  function showDragonOpt(o, card) {
+    const d = o.dragon;
+    if (!d || !(d.points || d.before)) {
+      card.innerHTML = '<p class="hint">No Dragonling points to spend: set Dragon Ruptures (one point for each cleared) on the Dragonling panel first.</p><div class="opt-actions"><button class="btn small ghost" type="button" id="optDismiss">Close</button></div>';
+    } else if (!(o.gain > 0.001) || !optDragonMoves(o)) {
+      card.innerHTML = '<h2>Your Dragonling tree already looks right for ' + esc(o.skillName) + '</h2>' + optDragonHtml(Object.assign({}, o, { dragon: Object.assign({}, d, { add: [], remove: [], aspect: d.aspect && Object.assign({}, d.aspect, { to: d.aspect.from }) }) })) +
+        '<div class="opt-actions"><button class="btn small ghost" type="button" id="optDismiss">Close</button></div>';
+    } else {
+      card.innerHTML = '<h2>Dragonling optimized for ' + esc(o.skillName) + ': <span class="g">' + pct(o.gain) + ' ' + (o.scored ? 'score' : o.multi ? 'weighted DPS' : 'DPS') + '</span>' + (o.multi || o.scored ? '' : ' <span class="hint">' + num(o.base) + ' → ' + num(o.value) + '</span>') + '</h2>' +
+        '<p class="hint">Your passive tree and Oaths stay as they are.</p>' + optDragonHtml(o) +
+        '<div class="opt-actions"><button class="btn small" type="button" id="optApply">Apply to my Dragonling</button><button class="btn small ghost" type="button" id="optDismiss">Dismiss</button></div>';
+      $('#optApply').onclick = () => { clearOpt(); setPassives(st.ch.passives.slice(), true, null, d.list, optAspectMove(o) ? d.aspect.to : null); $('#treeStatus').textContent = 'Optimized Dragonling tree applied. Undo goes back.'; };
+    }
+    $('#optDismiss').onclick = () => { clearOpt(); paintTree(); };
+    optCardClicks(card);
+  }
+
   function optRows(list, sign) {
     const big = [], small = [];
     for (const x of list) (['Notable', 'Keystone', 'Choice', 'Socket'].includes(GD.nodes[x.id].Kind) ? big : small).push(x);
@@ -29650,6 +29731,7 @@ window.BOStartApp = function () {
   function showOpt() {
     const o = T.opt, card = $('#treeOpt'); if (!o) { card.hidden = true; return; }
     card.hidden = false;
+    if (o.dragonOnly) return showDragonOpt(o, card);
     if (o.addOnly) return showPlan(o, card);
     const kept = (o.kept.length ? '<p class="hint">Left where they are: ' + o.kept.map(k => esc(GD.nodes[k.id].Name) + ' (' + esc(k.why) + ')').join(', ') + '.</p>' : '') + keepMissedHtml(o) + runeSocketHtml(o) + optRunNotes(o);
     if (!(o.gain > 0.001)) {
@@ -29762,7 +29844,7 @@ window.BOStartApp = function () {
   }
 
   function treeAfterRender() {
-    if (T.opt && T.opt.key !== optKey()) clearOpt();
+    if (T.opt && T.opt.key !== (T.opt.dragonOnly ? dOptKey() : optKey())) clearOpt();
     if (st.ch) syncTreeTab();
     if (!T.visible || !st.ch) return;
     renderTreeTabs();

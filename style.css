@@ -783,6 +783,9 @@ tr.cmp-counted td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .dl-side .dl-aspect { margin: 8px 0 6px; padding: 6px 9px; font-size: 12.5px; }
 .dl-side .hint { margin: 4px 0; }
 .dl-side .pl-row { flex-wrap: wrap; gap: 8px; }
+/* Refund all and Optimize stay together: beside the Dragon Ruptures box when there is room, both under it when not (28 Nov 2026). */
+.dl-side .dl-acts { display: flex; gap: 8px; align-items: flex-end; }
+.dl-side .pl-row .field.inline { flex: 0 1 108px; }
 .dragon-panel .dl-list { columns: 2 120px; column-gap: 14px; margin: 0; font-size: 12.5px; }
 .dragon-panel .dl-list li { margin: 0 0 2px; }
 .dl-list-h { margin: 10px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }

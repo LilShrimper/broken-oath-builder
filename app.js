@@ -19642,6 +19642,12 @@ window.BOCharacter = function (ctx) {
       let count = (ob.Count || 0) + (ob.CountPerLevels || []).filter(l => own >= l).length;
       for (const m of pickMods(mods, 'OrbitCount', 'Flat')) if (applies(ctx, m)) { count += m.v; use(m); }
 
+
+
+
+
+      for (const m of pickMods(mods, 'Projectiles', 'Flat')) if (applies(ctx, m)) { count += m.v; use(m, 'hammers in the ring'); }
+
       let orbInc = 0; for (const m of pickMods(mods, 'OrbitRate', 'Inc')) if (applies(ctx, m)) { orbInc += m.v; use(m); }
       let turns = ob.AngularSpeed / 360 * Math.max(0.1, 1 + orbInc / 100);
 
@@ -20592,8 +20598,17 @@ window.BOCharacter = function (ctx) {
           why.push(slamOther ? 'your ' + slamOther.Name + ' implodes it at once (Blood Ledger, x' + trig.toFixed(2) + '; taken as used before it ' + (flag('EntropySheathe') ? 'fades' : 'implodes on its own') + ')' : 'your Slam implodes it at once (Blood Ledger, x' + trig.toFixed(2) + ')');
         }
         else if (flag('EntropySheathe')) {
+
+
+
+
+
+          const crit = flag('EntropyCrit') && isSpell && critChance > 0;
+          const pc = crit ? 1 - Math.pow(1 - clamp(critChance, 0, 100) / 100, Math.max(0, hitsPerSec * perHitFactor) * 3) : 0;
+          const kc = 1.2 * (1 + sumFlat('EntropyCritMore') / 100);
           if (bar.has('sheathe')) { trig = 1.3; why.push('Sheathe implodes it at once for 30% more (Quiet Ruin; taken as cast before it fades)'); }
           else if (bar.has('iaido_thrust')) why.push('Iaido Thrust implodes it as it passes (Quiet Ruin)');
+          else if (crit) { trig = kc * pc; why.push('Quiet Ruin holds it, but your spell crits implode it at once for x' + kc.toFixed(2) + ' (Entropic Overload), ' + Math.round(pc * 100) + '% of it; the rest fades'); }
           else { trig = 0; why.push('Quiet Ruin: your Entropy never implodes on its own and neither Sheathe nor Iaido Thrust is on your bar, so it only fades'); }
         } else if (flag('EntropyCrit') && isSpell && critChance > 0) {
           const p = 1 - Math.pow(1 - clamp(critChance, 0, 100) / 100, Math.max(0, hitsPerSec * perHitFactor) * 3);
@@ -21604,7 +21619,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-          const kTxt = /(([d.]+)% below Rupture Level (d+), ([d.]+)% at d+-(d+), ([d.]+)% from d+)/i.exec((GD.supports.kindled_remains || {}).Description || '');
+          const kTxt = /\(([\d.]+)% below Rupture Level (\d+), ([\d.]+)% at \d+-(\d+), ([\d.]+)% from \d+\)/i.exec((GD.supports.kindled_remains || {}).Description || '');
           const grown = !!kTxt && /grown by the skill/i.test(GD.supports.kindled_remains.Description);
           const bands = kTxt ? [[+kTxt[2], +kTxt[1]], [+kTxt[4] + 1, +kTxt[3]], [Infinity, +kTxt[5]]] : KINDLED_BANDS;
           let band = bands.find(b => rl < b[0])[1] * kp / KINDLED_BASE, grow = 1, corpseInc = 0;

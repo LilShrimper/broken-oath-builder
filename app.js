@@ -362,6 +362,7 @@ window.PAGE_LANGS = {
 
 
     const SEAT_BASE = { 'Mastery of the Reaping': 'Mastery of the Legion' };
+    const SEAT_REACH = 600; // tree units from a seat to a notable of its cluster (see the cluster comment below)
     const seats = Object.values(tree.nodes || {}).filter(n => /^om103_/.test(n.Id));
     if (seats.length) {
       const old = Object.assign({}, masteries);
@@ -393,7 +394,11 @@ window.PAGE_LANGS = {
         for (const nid of list) {
           const y = nodes[nid]; if (!y) continue;
           const d = x => (x.X - y.X) ** 2 + (x.Y - y.Y) ** 2;
-          if (famSeats.every(x => d(s) <= d(x))) nb.add(nid);
+
+
+
+
+          if (famSeats.every(x => d(s) <= d(x)) && d(s) <= SEAT_REACH ** 2) nb.add(nid);
         }
         masteries[id] = { Id: id, Name: s.Name, X: s.X, Y: s.Y, Notables: [s.Id, ...nb], Class: base.Class || '', Oaths: base.Oaths.slice(), Seat: s.Id };
       }

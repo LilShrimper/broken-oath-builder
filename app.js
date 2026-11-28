@@ -17706,7 +17706,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-    const atk = id => { const s = GD.skills[lc(id)]; return !!s && (s.Tags || []).includes('Attack') && !isSummon(s); };
+    const atk = id => { const s = GD.skills[lc(id)]; return !!s && (s.Tags || []).includes('Attack') && !isSummon(s) && !pulseNoProc(GD, id); };
 
 
 
@@ -17723,7 +17723,16 @@ window.BOCharacter = function (ctx) {
     };
 
 
-    const hits = id => { const s = GD.skills[lc(id)]; return !!s && !isSummon(s) && ((s.Tags || []).includes('Attack') || s.SpellMin > 0); };
+
+
+
+
+
+
+
+
+
+    const hits = id => { const s = GD.skills[lc(id)]; return !!s && !isSummon(s) && !pulseNoProc(GD, id) && ((s.Tags || []).includes('Attack') || s.SpellMin > 0); };
     const linkS = ch.sockets.find(s => lc(s.skill) !== lc(skillId) && s.conduit && lc(s.conduit) === lc(skillId) && s.supports.some(isCoc));
     let src = null, mode = null;
 
@@ -17774,13 +17783,14 @@ window.BOCharacter = function (ctx) {
     if (m.size > 50) m.clear();
     m.set(key, best); return best;
   }
+  const pulseNoProc = (GD, id) => (['unholy_void', 'pyre_of_faith'].includes(lc(id)) || !!(GD.skills[lc(id)] || {}).Totem) && apiBuildAtLeast(GD, 95, '2026-11-27T23'); // AuraNoProc109 + totem skills (Rangertest test 27 Nov), see cocSource
 
 
   function cocAttacks(GD, ch, skillId) {
     const seen = new Set(skillId ? [lc(skillId)] : []), out = [];
     for (const id of [...(ch.hotbar || []), ...ch.sockets.map(s => s.skill)]) {
       const s = id && GD.skills[lc(id)];
-      if (!s || seen.has(lc(id)) || isSummon(s) || ((s.Tags || []).includes('Movement') && !(s.Tags || []).includes('Attack')) || !((s.Tags || []).includes('Attack') || s.SpellMin > 0)) continue; // Movement attacks too (see cocSource), not dash spells
+      if (!s || seen.has(lc(id)) || isSummon(s) || pulseNoProc(GD, id) || ((s.Tags || []).includes('Movement') && !(s.Tags || []).includes('Attack')) || !((s.Tags || []).includes('Attack') || s.SpellMin > 0)) continue; // Movement attacks too (see cocSource), not dash spells
       seen.add(lc(id)); out.push({ id, name: s.Name, spell: !(s.Tags || []).includes('Attack') });
     }
     return out;
@@ -19745,6 +19755,7 @@ window.BOCharacter = function (ctx) {
     } else if (coc) {
       if (!coc.counted) {
         res.notes.push(coc.attack ? 'Cast on Crit with nothing linked: this attack strikes by itself when your other attacks crit, and there is no other attack on your bar' + (coc.skill ? ' (' + coc.name + ' does not count)' : '') + '. Pick one in the Cast on Crit box.'
+          : coc.skill && pulseNoProc(GD, coc.skill) ? 'Cast on Crit: ' + coc.name + '\'s hits never trigger it (' + ((GD.skills[lc(coc.skill)] || {}).Totem ? 'totem skills, game test 27 Nov 2026' : 'its pulses, game log build 95') + '), so no triggered casts are counted. Arrow Totem shots do trigger it.'
           : coc.skill ? 'Cast on Crit: ' + coc.name + ' has no hit of its own to crit with, so no triggered casts are counted.'
           : 'Cast on Crit in this spell\'s own sockets is cast by your attacks\' crits, and there is no attack on your bar. If it is linked to another skill in game (build codes do not carry links), pick that skill in the Cast on Crit box.');
       } else {
@@ -20656,7 +20667,15 @@ window.BOCharacter = function (ctx) {
 
 
 
-    if (A.bEnabled && hit.Lightning && A.ShockCoef) {
+
+
+
+
+    const pyreTick = lc(sk.Id || skillId) === 'pyre_of_faith';
+    const pyreNoAil = pyreTick && apiBuildAtLeast(GD, 95, '2026-11-27T23'), pyreNoIgnite = pyreTick && apiBuildAtLeast(GD, 91, '2026-11-25T20');
+    if (pyreNoAil) res.notes.push('Pyre of Faith: its burn lays no ailment (no shock, chill, freeze, Ignite, Bleed or Poison: game log, build 95); shocks from your other skills still count.');
+    else if (pyreNoIgnite) res.notes.push('Pyre of Faith: its burn no longer ignites (patch notes, 25 Nov 2026).');
+    if (A.bEnabled && hit.Lightning && A.ShockCoef && !pyreNoAil) {
       const chance = clamp(A.ShockChance + sumMod('ShockChance', 'Flat'), 0, 100);
       if (chance > 0) {
         const ML = M.Life || { Base: 20, K: 0.225, P: 0.7 };
@@ -20861,7 +20880,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-    if (is079(GD) && A.bEnabled && byType.Cold > 0) {
+    if (is079(GD) && A.bEnabled && byType.Cold > 0 && !pyreNoAil) {
       let ce = 0; for (const m of pickMods(mods, 'ChillEffect', 'Inc')) if (applies(ctx, m)) { ce += m.v; use(m, 'chill size'); }
 
 
@@ -20967,7 +20986,7 @@ window.BOCharacter = function (ctx) {
     {
       const takenK = (mitig.Cold ? mitig.Cold.taken : 1) * groundTaken * shockF;
       let fdBar = 0; for (const m of pickMods(mods, 'FreezeDuration', 'Inc')) if (applies(ctx, m)) { fdBar += m.v; use(m, 'freeze bar'); }
-      res.freeze = { buildUp: Math.max(0, 1 + fdBar / 100), coldPerSec: takenK > 0 ? Math.max(0, 1 + fdBar / 100) * Math.max(0, (byType.Cold || 0) - (ail.crack ? ail.crack.dps : 0)) / takenK : 0, coldHitsPerSec: byType.Cold > 0 ? hitsPerSec * perHitFactor * hitFactor : 0 };
+      res.freeze = { buildUp: Math.max(0, 1 + fdBar / 100), coldPerSec: takenK > 0 && !pyreNoAil ? Math.max(0, 1 + fdBar / 100) * Math.max(0, (byType.Cold || 0) - (ail.crack ? ail.crack.dps : 0)) / takenK : 0, coldHitsPerSec: byType.Cold > 0 ? hitsPerSec * perHitFactor * hitFactor : 0 };
     }
 
     let frzHelpers = null;
@@ -20984,7 +21003,7 @@ window.BOCharacter = function (ctx) {
       return frzHelpers;
     };
     let poisonDps = 0, igniteDps = 0, bleedDps = 0;
-    if (A.bEnabled) {
+    if (A.bEnabled && !pyreNoAil) {
       const poisonChanceStat = sumMod('PoisonChance', 'Flat');
       const hasPoison = !!hit.Poison;
 
@@ -21050,7 +21069,7 @@ window.BOCharacter = function (ctx) {
         ail.poison = { chance: pChance, eligible, duration: dur, tipDuration: tipDur, virulence: !!virulence, perStack, stacks, stacksRaw, cap, panelStacks, inc: pInc, more: pMore, dps: poisonDps, burstDps, burstPct, perHitTotal: perStack * dur };
         if (virulence) res.notes.push('Virulence (Dragonling): ' + (dur < tipDur ? 'poisons last ' + dur.toFixed(2) + ' s in combat instead of the tooltip\'s ' + tipDur.toFixed(2) + ' s; ' : 'poisons keep their full time (the game runs the rule without its price: log 16 Nov 2026 "Ascend76: on"); ') + 'Rares and Guardians hold up to ' + virulence.Cap + ' stacks.' + (dur < tipDur ? ' The skill panel DPS uses the tooltip duration, like the game.' : ''));
       }
-      const igChanceRaw = (hit.Fire ? A.IgniteChance : 0) + sumMod('IgniteChance', 'Flat');
+      const igChanceRaw = pyreNoIgnite ? 0 : (hit.Fire ? A.IgniteChance : 0) + sumMod('IgniteChance', 'Flat');
       const igChance = clamp(igChanceRaw, 0, 100);
       if (hit.Fire && igChance > 0) {
         const iInc = sumMod('IgniteDamage', 'Inc') + ailSpill(igChanceRaw, 'Ignite'), iMore = sumMod('IgniteDamage', 'More');

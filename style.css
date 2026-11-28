@@ -2975,6 +2975,9 @@ body.ladder-page #buildSummary { display: none !important; } /* the character st
 .pt-src { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px dashed var(--line); color: var(--faint); white-space: nowrap; }
 .pt-head b[data-ptip] { cursor: help; text-decoration: underline dotted color-mix(in srgb, var(--dashboard-gold) 50%, transparent); text-underline-offset: 3px; }
 .pl-tip .pt-tip-now { color: var(--faint); font-size: 11px; }
+.pl-tip .pt-tip-lines { display: block; margin: 4px 0; }
+.pl-tip .pt-tip-lines .pt-lines { font-size: 12px; }
+.pl-tip .pt-tip-lines .pt-note { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
 
 /* Bar drag (character.js barDown/barMove/barUp) */
 .ch-bar-card .ch-bar-slot.full .cr-bar-put { touch-action: none; cursor: grab; }

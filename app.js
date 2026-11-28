@@ -11377,7 +11377,17 @@ window.BOPatches = function (ctx) {
     const ids = new Map(LOG.changes.filter(c => c.b === cur.b && c.sec === sec && c.kind !== 'removed').map(c => [c.id, c.kind]));
     return { label: /^Patch /.test(cur.label || '') ? cur.label : n ? 'Patch ' + n[1] : cur.label, ids };
   }
-  return { render, load, historyHtml, openHistory, countOf, latestIn, ready: () => !!LOG };
+
+
+  function latestTip(sec, id) {
+    if (!LOG || !LOG.builds.length) return '';
+    const cur = LOG.builds[LOG.builds.length - 1], c = LOG.changes.find(x => x.b === cur.b && x.sec === sec && x.id === id && x.kind !== 'removed');
+    if (!c) return '';
+    const L = latestIn(sec);
+    return '<b>' + esc(c.name) + '</b><span class="pl-tip-sub">' + KIND[c.kind] + ' in ' + esc(L ? L.label : cur.label) + ' · ' + esc(day(cur.day)) + '</span>' +
+      '<div class="pt-tip-lines">' + linesHtml(c, false) + '</div><span class="pl-tip-desc pt-tip-now">Click for the full change history.</span>';
+  }
+  return { render, load, historyHtml, openHistory, countOf, latestIn, latestTip, ready: () => !!LOG };
 };
 
 ;
@@ -11561,7 +11571,7 @@ window.BOScaling = function (ctx) {
     if (tags.has('Projectile') && !(sk.Totem && sk.Totem.Interval > 0) && sk.Delivery !== 'Orbit' && sk.Delivery !== 'Orb') hits.push('extra projectiles fly at other enemies: one hits a lone enemy (with the Orbit support, Focused Volley or Rain more of them strike it)');
     if (tags.has('Chain') && sk.Delivery !== 'Brand' && !(sk.Mirage && sk.Mirage.Hops > 0)) hits.push('chains reach other enemies; a lone enemy is hit once');
     if (sk.Channel && sk.Channel.bStrike && sk.Channel.StrikeScale > 0) hits.push('every turn it also strikes one enemy for ' + pct(sk.Channel.StrikeScale) + ' of the hit');
-    if (hits.length) add('Hits', hits.map((h, i) => i ? h : h[0].toUpperCase() + h.slice(1)).join('. ') + '.');
+    if (hits.length) add('Hits', hits.map(h => h[0].toUpperCase() + h.slice(1)).join('. ') + '.');
 
 
     if (k === 'spell') add('Crit', (H.SpellCritBase || 6) + '% base chance, or your staff\'s or wand\'s own crit chance (its local crit line counts); critical strike multiplier from ' + (H.CritMultiBase || 150) + '%.');
@@ -11619,7 +11629,10 @@ window.BOScaling = function (ctx) {
     if (sk.ManaCost) meta.push('Mana ' + mana(sk, G, 1) + ' → ' + mana(sk, G, max));
     if (meta.length) h += '<p class="sc-meta">' + esc(meta.join(' · ')) + '</p>';
     const sc = scalers(sk, id);
-    if (sc.length) h += '<details class="sc-scale"><summary class="sc-scale-h">How to make it stronger</summary><ul>' + sc.map(([l, t]) => '<li><b>' + esc(l === 'Also' ? 'Also scales' : l) + ':</b> ' + esc(t) + '</li>').join('') + '</ul></details>';
+
+
+    const sentences = t => t.split(/(?<=\.) (?=\S)/).map(x => '<span>' + esc(x) + '</span>').join(' ');
+    if (sc.length) h += '<details class="sc-scale"><summary class="sc-scale-h">How to make it stronger</summary><ul>' + sc.map(([l, t]) => '<li><b>' + esc(l === 'Also' ? 'Also scales' : l) + ':</b> ' + sentences(t) + '</li>').join('') + '</ul></details>';
     if (k === 'attack' || k === 'spell') {
       let rows = '';
       for (let L = 1; L <= max; L++) rows += '<tr><td>' + L + '</td><td>' + at(sk, G, L) + '</td><td>' + (mana(sk, G, L) || '–') + '</td></tr>';
@@ -11686,10 +11699,13 @@ window.BOScaling = function (ctx) {
   function showTip(e) {
     const head = ctx.tip && e.target.closest && e.target.closest('#scGrid .sc-card > header');
     if (!head) return hideTip();
-    const id = head.dataset.skill, html = ctx.tip(id);
+
+    const onPatch = e.target.closest('.sc-patch'), P = onPatch && ctx.patches && ctx.patches();
+    const id = head.dataset.skill, key = (onPatch ? 'patch:' : '') + id;
+    const html = onPatch ? (P && P.latestTip ? P.latestTip('skills', id) : '') : ctx.tip(id);
     if (!html) return hideTip();
     if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'pl-tip'; tipEl.setAttribute('role', 'tooltip'); document.body.appendChild(tipEl); }
-    if (tipEl.dataset.key !== id) { tipEl.innerHTML = html; tipEl.dataset.key = id; }
+    if (tipEl.dataset.key !== key) { tipEl.innerHTML = html; tipEl.dataset.key = key; }
     tipEl.hidden = false;
 
     const c = head.parentElement.getBoundingClientRect(), w = tipEl.offsetWidth, hgt = tipEl.offsetHeight;
@@ -20558,7 +20574,23 @@ window.BOCharacter = function (ctx) {
 
 
 
-        if (flag('EntropySlam') && ctx.tags.has('slam')) { trig = (1 + ruleNum(GD, 'r114.CHAOS.SlamImplodeMorePct', 20) / 100) * (1 + sumFlat('EntropySlamMore') / 100); why.push('your Slam implodes it at once (Blood Ledger, x' + trig.toFixed(2) + ')'); }
+
+
+
+
+
+
+
+
+
+
+
+
+        const slamOther = flag('EntropySlam') && !ctx.tags.has('slam') ? [...bar].map(id => GD.skills[id]).find(s => s && (s.Tags || []).includes('Slam')) : null;
+        if (flag('EntropySlam') && (ctx.tags.has('slam') || slamOther)) {
+          trig = (1 + ruleNum(GD, 'r114.CHAOS.SlamImplodeMorePct', 20) / 100) * (1 + sumFlat('EntropySlamMore') / 100);
+          why.push(slamOther ? 'your ' + slamOther.Name + ' implodes it at once (Blood Ledger, x' + trig.toFixed(2) + '; taken as used before it ' + (flag('EntropySheathe') ? 'fades' : 'implodes on its own') + ')' : 'your Slam implodes it at once (Blood Ledger, x' + trig.toFixed(2) + ')');
+        }
         else if (flag('EntropySheathe')) {
           if (bar.has('sheathe')) { trig = 1.3; why.push('Sheathe implodes it at once for 30% more (Quiet Ruin; taken as cast before it fades)'); }
           else if (bar.has('iaido_thrust')) why.push('Iaido Thrust implodes it as it passes (Quiet Ruin)');
@@ -26158,7 +26190,13 @@ window.BOStartApp = function () {
 
     const manaFirst = +GD.apiBuild >= 79 ? Math.min(100, mods.filter(m => m.stat === 'ManaBeforeLife' && m.mode === 'Flat').reduce((a, m) => a + m.v, 0)) : 0;
     const mana = manaFirst > 0 ? S.heroMaxMana(GD.scaling.Hero || {}, ch, mods, attr) : 0;
-    return Object.assign(defenceCore(ch, mods, attr), { attr, armour: tot('Armour'), evasion: tot('Evasion'), block: tot('Block'), manaFirst, mana }, defenceLess(ch, mods));
+
+
+
+
+
+    const lifeReservedPct = (ch.passives || []).includes('r114_chaos_warr_bloodledger') ? 15 : 0;
+    return Object.assign(defenceCore(ch, mods, attr), { attr, armour: tot('Armour'), evasion: tot('Evasion'), block: tot('Block'), manaFirst, mana, lifeReservedPct }, defenceLess(ch, mods));
   }
 
 
@@ -26424,6 +26462,7 @@ window.BOStartApp = function () {
     if (D) {
       const capOf = k => (D.caps || {})[k];
       let d = spRow('Life', num(D.life, 0), spTip('Maximum life', 'From level, Strength and life lines', null, pick(dmods, ['Life', 'DexLife']))) +
+        (D.lifeReservedPct ? spRow('Life you can use', num(D.lifeUse, 0), spTip('Life you can use', 'Blood Ledger reserves ' + D.lifeReservedPct + '% of your maximum life. The EHP and max hit count this life.', null, [])) : '') +
         spRow('Energy shield', num(D.es, 0), spTip('Energy shield', 'Item bases and lines, Intelligence', null, pick(dmods, ['EnergyShield', 'EvasionAsEnergyShield113']))) +
         (ds ? spRow('Mana', ds.mana, spTip('Maximum mana', 'From level, Intelligence and mana lines', null, pick(dmods, ['Mana']))) : '') +
         spRow('Armour', num(D.armour, 0), spTip('Armour', 'Against a ' + num((GD.scaling.Hero || {}).ArmourBigHitRef || 1000) + ' hit', [['Physical cut', num(D.armDR * 100, 1) + '%']], pick(dmods, ['Armour', 'ArmourMore']))) +
@@ -30049,10 +30088,10 @@ window.BOStartApp = function () {
 
     const taken = mix * (1 - 0.5 * (L.evasion ? evade : 0)) * (1 - (L.block ? block * blockCut : 0));
 
-    const s = (d.manaFirst || 0) / 100, lifePool = s > 0 ? Math.min(s < 1 ? d.life / (1 - s) : Infinity, d.life + (d.mana || 0)) : d.life;
+    const s = (d.manaFirst || 0) / 100, lifeUse = Math.floor(d.life * (1 - (d.lifeReservedPct || 0) / 100) + 0.5), lifePool = s > 0 ? Math.min(s < 1 ? lifeUse / (1 - s) : Infinity, lifeUse + (d.mana || 0)) : lifeUse;
     const resCapped = {}; for (const [k, v] of d.resParts) resCapped[k] = Math.min(capOf(k), v - pen);
     const gl = R['r80.BIGHIT.fEvasionGlance'], glance = L.evasion ? Math.min(0.95, evade * (gl != null && isFinite(+gl) ? +gl : 1)) : 0;
-    return { life: d.life, es: d.es, res, resCapped, pen, pool: lifePool + d.es, armHit, armour: d.armour, armDR, evasion: d.evasion, evade, glance, block, manaFirst: d.manaFirst || 0, less, physAsEle: d.physAsEle || 0, caps: Object.fromEntries(d.resParts.map(x => [x[0], capOf(x[0])])), fortify: fortOn ? d.fortify : null, falter, fight: fightEl ? { el: fightEl, share: fightShare } : null, ehp:Math.max(1, (L.life ? lifePool : 0) + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
+    return { life: d.life, lifeUse, lifeReservedPct: d.lifeReservedPct || 0, es: d.es, res, resCapped, pen, pool: lifePool + d.es, armHit, armour: d.armour, armDR, evasion: d.evasion, evade, glance, block, manaFirst: d.manaFirst || 0, less, physAsEle: d.physAsEle || 0, caps: Object.fromEntries(d.resParts.map(x => [x[0], capOf(x[0])])), fortify: fortOn ? d.fortify : null, falter, fight: fightEl ? { el: fightEl, share: fightShare } : null, ehp:Math.max(1, (L.life ? lifePool : 0) + (L.es ? d.es : 0)) / Math.max(0.02, taken), miss };
   }
 
 

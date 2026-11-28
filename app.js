@@ -726,7 +726,7 @@ window.PAGE_LANGS = {
 
 
 
-    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK|CRAFT|CURSE|TRUST|TOTEMPOOL|SPARKPOOL|SKILLSWEEP|ATTACK3|CHAOS|METAPOSTS)$/; // TOTEMPOOL: fOverflow107, bow engines past the limit (23 Nov 2026); SPARKPOOL: r125 bOn / Kinds, the Spark kinds that share one max (26 Nov 2026); SKILLSWEEP: r82 bRegenFlat, flat mana regen scaled by the increase (26 Nov 2026). After a patch, node tools/new-rules.js lists new sections this list drops
+    const RULE_SECTIONS = /^r\d+b?\.(SPARKS|SPARKTWO|SPARKCAST|CAPS|MINIONS|MINIONENG|METAPLAN|VOWS|METASYS|ARROWFIX|METAFIX|METAALL|METAHOLES|META|SKILLBUGS|TRIGRULES|DEFENCE59|BIGHIT|TRAPBALLISTA|SKYBALLISTA|BUGSE|BUGSB|BUGS-D|AILMENTS|MAIN-SKILL|UNIQUES|BAL|MAGEMARK|CRAFT|CURSE|TRUST|TOTEMPOOL|SPARKPOOL|SKILLSWEEP|ATTACK3|CHAOS|METAPOSTS|TRAPSNAP)$/; // TOTEMPOOL: fOverflow107, bow engines past the limit (23 Nov 2026); SPARKPOOL: r125 bOn / Kinds, the Spark kinds that share one max (26 Nov 2026); SKILLSWEEP: r82 bRegenFlat, flat mana regen scaled by the increase (26 Nov 2026). TRAPSNAP: r79 AmbushMore, a thrown trap's first strike (28 Nov 2026). After a patch, node tools/new-rules.js lists new sections this list drops
     try { for (const s of (J('Gameplay/switches.json') || {}).switches || []) if (RULE_SECTIONS.test(s.section)) gameRules[s.section + '.' + s.key] = ruleVal(s.value); } catch (e) { /* not served */ }
     try { for (const [k, v] of Object.entries((J('Gameplay/rules.json') || {}).values || {})) gameRules[k] = ruleVal(v && v.value); } catch (e) { /* older game data */ }
     let trapPrice = {};
@@ -16370,6 +16370,9 @@ window.BOCharacter = function (ctx) {
   const CORPSE_PACK = { 1: 1, 22: 3.88, 30: 6.121, 42: 16.49, 48: 24.14, 60: 44.2, 62: 47.6, 90: 38.22 };
   const CORPSE_PACK_PTS = tablePts(CORPSE_PACK, v => v);
   const CORPSE_KIND = { normal: 1, magic: 2, rare: 5, husk: 0.6 };
+
+
+
   const corpseLifeAt = (GD, rl, kind, onBoss) => {
     const D = GD.deep || {}, max = D.MapMaxLevel || 80, mls = (D.LadderMonsterLevels || []).length ? D.LadderMonsterLevels : [81, 82, 83, 84];
     const ML = ((GD.scaling || {}).Monster || {}).Life || {};
@@ -17552,9 +17555,12 @@ window.BOCharacter = function (ctx) {
 
 
 
+
+
+
   function totemPastFirstLess(GD, ch, off) {
-    const re = /(?:Totem|Ballista) past the first deals (\d+)% less/i; let best = 0;
-    const scan = t => { const m = re.exec(t || ''); if (m) best = Math.max(best, +m[1]); };
+    const re = /(?:Totem|Ballista|Each one) past the first deals (\d+)% less/i; let best = 0;
+    const scan = t => { const m = re.exec(t || ''); if (m && (!/^each one/i.test(m[0]) || /Ballista|Totem/i.test(t))) best = Math.max(best, +m[1]); };
     if (!(off && off.has('passives'))) for (const id of ch.passives || []) {
       const n = GD.nodes[id] || GD.nodes[(GD.moved || {})[id]]; if (n) { scan(n.Text); scan(n.Price); }
     }
@@ -17779,6 +17785,13 @@ window.BOCharacter = function (ctx) {
       const src2 = o.cocSource || firstAtk(skillId);
       const unlinked = s => s.supports.some(isCoc) && !(s.conduit && lc(s.conduit) !== lc(s.skill)) && atkSelf(s.skill);
       const shared = Math.max(1, new Set(ch.sockets.filter(unlinked).map(s => lc(s.skill)).concat(lc(skillId))).size);
+
+
+
+
+
+
+      if (!src2 && bSwitch(GD, 'r113.TRUST.bCocSelf28', false)) return { skill: skillId, name: (GD.skills[lc(skillId)] || {}).Name || skillId, mode: 'self', why: 'own', attack: true, shared, counted: false, selfRepeat: true };
       return { skill: src2, name: src2 ? (GD.skills[lc(src2)] || {}).Name || src2 : null, mode: o.cocSource ? 'chosen' : 'self', why: pickWhy, attack: true, shared,
         counted: !!src2 && atk(src2) && lc(src2) !== lc(skillId) };
     }
@@ -18218,6 +18231,16 @@ window.BOCharacter = function (ctx) {
 
     if (shapeId === 'trap_support' && shapeIds.includes('skyfall')) ctx.tags.add('skyfall');
 
+
+
+
+    if (shapeIds.includes('trap_support') && (totemAttack || shapeIds.some(id => TRAP_HOSTS.includes(id)))) {
+      for (let i = mods.length - 1; i >= 0; i--) {
+        const m = mods[i];
+        if (m.key === 'support:trap_support' && m.stat === 'Damage' && m.mode === 'More' && m.v < 0 && (m.tags || []).some(t => lc(t) === 'trap')) mods.splice(i, 1);
+      }
+    }
+
     const ascFlag = f => modsOf(mods, 'Dragonling').some(m => (m.tags || []).includes(f));
     let deepChillLonger = 0; // Deep Chill: % longer chill (set with the other best-guess Dragonling rules below, read in the chill block)
     const virulence = ascFlag('Asc71_Virulence') ? (GD.dragon.rules || {}).Virulence || { Cap: 60, DurMult: 0.75 } : null;
@@ -18337,7 +18360,7 @@ window.BOCharacter = function (ctx) {
       for (const m of flag('MomentumOnChannel')) {
         if (!(sk.Channel && ctx.gear.has('twohanded'))) { use(m, 'Iron Momentum: needs a channelled skill with a two-handed weapon'); continue; }
         if (!o.moving) { use(m, 'Iron Momentum: no Momentum while you stand (set a moving fight to count it)'); continue; }
-        const per = num(/(\d+(?:\.\d+)?)% more damage each/i, 'r113_persona_warr_momentum', 2), cap = num(/at most (\d+)\)/i, 'r113_persona_warr_momentum', 10);
+        const per = num(/(\d+(?:\.\d+)?)% more damage each/i, 'r113_persona_warr_momentum', 2), cap = num(/at most (\d+)(?:\)|\.)/i, 'r113_persona_warr_momentum', 10); // data 96: "2% more damage each, at most 10."
         say(m, 'Iron Momentum, ' + cap + ' Momentum while you move', per * cap);
       }
 
@@ -18347,7 +18370,8 @@ window.BOCharacter = function (ctx) {
         if (!isSpell) { use(m, 'Elemental Cadence: spells only'); continue; }
         const els = new Set();
         for (const id of ch.hotbar || []) { const k = GD.skills[lc(id)]; if (k && (k.Tags || []).includes('Spell')) for (const e of ELEMENTS) if ((k.Tags || []).includes(e)) els.add(e); }
-        const per = num(/(\d+(?:\.\d+)?)% more spell damage for each element/i, 'r113_persona_mage_cadence', 4), cap = num(/up to (\d+)\)/i, 'r113_persona_mage_cadence', 2);
+
+        const per = num(/(\d+(?:\.\d+)?)% more spell damage (?:for each|per) element/i, 'r113_persona_mage_cadence', 4), cap = num(/up to (\d+)(?:\)|\.|$)/i, 'r113_persona_mage_cadence', 2);
         const n = Math.min(cap, els.size >= 2 ? els.size : 0);
         if (!n) { use(m, 'Elemental Cadence: your bar has spells of only one element'); continue; }
         say(m, 'Elemental Cadence, ' + n + ' elements counting (' + [...els].join(', ') + ' spells on your bar, cast in turn)', per * n, 'Damage', ['Spell']);
@@ -18770,6 +18794,15 @@ window.BOCharacter = function (ctx) {
         res.heroLife = heroMaxLife(GD, ch, mods, attr);
         lifeBase = res.heroLife * sk.LifeAsBase / 100;
         res.notes.push(sk.Name + ': ' + sk.LifeAsBase + '% of your ~' + Math.round(res.heroLife) + ' maximum life (+' + lifeBase.toFixed(1) + ') joins the weapon\'s base physical damage. Max life here counts level, Strength and life lines on gear and the tree (checked against the game log); temporary life buffs are not counted.');
+
+
+
+
+        if (apiBuildAtLeast(GD, 96, '2026-11-28') && ctx.gear.has('unarmed')) {
+          let fb = 0;
+          for (const m of mods) if (m.stat === 'Damage' && m.mode === 'More' && /facebreaker/i.test(m.src || '') && (m.tags || []).some(t => lc(t) === 'unarmed')) fb += m.v;
+          if (fb > 0) { lifeBase /= 1 + fb / 100; res.notes.push(sk.Name + ': Facebreaker\'s ' + fb + '% more does not raise the life share (patch 96).'); }
+        }
       }
       weapon = weaponStats(GD, mainItem, mainBase, mods, use, lifeBase, ch.level);
 
@@ -19391,7 +19424,8 @@ window.BOCharacter = function (ctx) {
 
     const totemShape = shape === 'totem_support' || (shape === 'arrow_totem' && isAttack);
     if (totemShape) {
-      const t = /every ([\d.]+) seconds/i.exec((GD.supports[shape] || {}).Description || ''); const every = t ? +t[1] : 0.8;
+
+      const t = /every ([\d.]+) s(?:econds)?\b/i.exec((GD.supports[shape] || {}).Description || ''); const every = t ? +t[1] : 0.8;
 
 
 
@@ -19415,7 +19449,7 @@ window.BOCharacter = function (ctx) {
       let tsInc = 0; for (const m of pickMods(mods, 'TotemSpeed', 'Inc')) if (applies(ctx, m)) { tsInc += m.v; use(m); }
       const baseEvery = every, spellEvery = baseEvery / Math.max(0.1, 1 + tsInc / 100);
       usesPerSec = tcount / spellEvery; useTime = 1 / usesPerSec;
-      const tLife = /\(\d+ at a time, ([\d.]+) seconds\)/i.exec((GD.supports[shape] || {}).Description || '');
+      const tLife = /\(\d+ at a time, (?:lasts )?([\d.]+) s(?:econds)?\)/i.exec((GD.supports[shape] || {}).Description || '');
       res.totem = { count: tcount, every: spellEvery, baseLife: tLife ? +tLife[1] : 8, shotsPerSec: 1 / spellEvery }; dropOver();
       res.notes.push('Totem: ' + tcount + ' totem' + (tcount > 1 ? 's' : '') + ', each ' + (isAttack ? 'firing' : 'casting') + ' it every ' + spellEvery.toFixed(2) + ' s' + (tsInc ? ' (' + baseEvery + ' s with ' + Math.round(tsInc) + '% increased totem speed)' : '') + '; your ' + (isAttack ? 'attack' : 'cast') + ' speed only places totems faster; assumes every totem ' + (isAttack ? 'shoots' : 'casts at') + ' this enemy.');
 
@@ -19431,7 +19465,8 @@ window.BOCharacter = function (ctx) {
 
 
 
-      let rearm = re ? +re[1] : /re-arms (?:after )?about a second/i.test(d) ? 1 : 2.5; let traps = n ? +n[1] : 3;
+
+      let rearm = re ? +re[1] : /re-arms (?:after )?about (?:a second|1 s\b)/i.test(d) ? 1 : 2.5; let traps = n ? +n[1] : 3;
 
       if (is0565(GD)) for (const m of pickMods(mods, 'TrapCount', 'Flat')) if (applies(ctx, m)) { traps += m.v; use(m); }
 
@@ -19452,7 +19487,7 @@ window.BOCharacter = function (ctx) {
 
 
 
-      if (!re && /re-arms (?:after )?about a second/i.test(d) && is0565(GD)) { rearm *= 0.9; } // scales the same before or after the re-arm speed division
+      if (!re && /re-arms (?:after )?about (?:a second|1 s\b)/i.test(d) && is0565(GD)) { rearm *= 0.9; } // scales the same before or after the re-arm speed division
       const trapLock = !re && is0565(GD) ? 0.15 : 0;
       usesPerSec = traps / (rearm + trapLock); useTime = 1 / usesPerSec;
       res.notes.push('Trap: ' + traps + ' traps each striking every ' + Math.round((rearm + trapLock) * 1000) / 1000 + ' s once laid (re-arm ' + Math.round(rearm * 1000) / 1000 + ' s + ' + trapLock + ' s lock); assumes the boss stands on them.');
@@ -19488,6 +19523,18 @@ window.BOCharacter = function (ctx) {
         const chainMore = wm / w;
         countFactor *= chainMore;
         res.notes.push('Chain Detonation: your ' + traps + ' traps go off one after another, each ' + link + '% more than the one before (x' + chainMore.toFixed(3) + ', weighted by each trap\'s share; assumes all stand by the enemy). From the support\'s text, not yet checked in game.');
+      }
+
+
+
+
+      const ambush = bSwitch(GD, 'r79.TRAPSNAP.bOn', false) ? ruleNum(GD, 'r79.TRAPSNAP.AmbushMore', 0) : 0;
+      if (ambush > 0) {
+        const lt = /up to \d+, ([\d.]+) s(?:econds)?(?: each)?\)/i.exec(d), life = lt ? +lt[1] : 16;
+        const strikes = Math.max(1, life / (rearm + trapLock));
+        const ambushK = 1 + ambush / 100 / strikes;
+        countFactor *= ambushK;
+        res.notes.push('Trap first strike: each thrown trap\'s first strike deals ' + ambush + '% more (patch 96); over a ' + life + ' s trap life of ' + strikes.toFixed(1) + ' strikes that is x' + ambushK.toFixed(3) + ' (assumes each trap is thrown again when it runs out).');
       }
     }
 
@@ -19797,6 +19844,21 @@ window.BOCharacter = function (ctx) {
 
     if (coc && coc.source) {
       res.notes.push('Cast on Crit: this skill\'s crits cast ' + coc.name + ' (its link). Pick ' + coc.name + ' to see that damage; it is not part of this skill\'s DPS.');
+    } else if (coc && coc.selfRepeat) {
+
+
+
+      const cs = GD.supports.cast_on_crit || {};
+      const trig = (cs.Mods || []).filter(m => m.Stat === 'TrigDamage').reduce((k, m) => k * (1 + m.Value / 100), 1);
+      const price = trig * (1 + COC_ATTACK_LESS / 100);
+      const c = clamp(critChance / 100, 0, 1), lam = usesPerSec * c, T = usesPerSec > 0 ? 1 / usesPerSec : Infinity, tau = COC_ATTACK_GAP;
+      let rate = lam / (1 + lam * Math.max(0, tau - T)); rate = Math.min(rate, 1 / tau) / (coc.shared || 1);
+      if (usesPerSec > 0 && rate > 0) {
+        const k = 1 + price * rate / usesPerSec;
+        usesPerSec *= k; useTime = 1 / usesPerSec;
+        res.coc = { source: skillId, sourceName: coc.name, mode: 'self', attack: true, selfRepeat: true, shared: coc.shared || 1, crit: critChance, rate, tau, price };
+        res.notes.push('Cast on Crit alone in this attack (patch 96): its own crits strike it again, ' + rate.toFixed(2) + ' strikes a second at ' + critChance.toFixed(1) + '% crit (at most one per ' + tau + ' s' + ((coc.shared || 1) > 1 ? ', shared by your ' + coc.shared + ' attacks with it' : '') + '), each x' + price.toFixed(2) + ' damage: x' + k.toFixed(3) + ' on this skill. Counted because no other attack on your bar can strike it; not checked in game.');
+      }
     } else if (coc) {
       if (!coc.counted) {
         res.notes.push(coc.attack ? 'Cast on Crit with nothing linked: this attack strikes by itself when your other attacks crit, and there is no other attack on your bar' + (coc.skill ? ' (' + coc.name + ' does not count)' : '') + '. Pick one in the Cast on Crit box.'
@@ -19990,7 +20052,8 @@ window.BOCharacter = function (ctx) {
 
 
 
-      const orbTxt = /already struck(?: this cast)? deals (\d+)% less[^(]*\([^)]*?(\d+)% less/i.exec((GD.supports.orbit || {}).Description || '');
+
+      const orbTxt = /(?:already struck(?: this cast)? deals|repeat hits on an enemy in the same cast deal) (\d+)% less[^(]*\([^)]*?(\d+)% less/i.exec((GD.supports.orbit || {}).Description || '');
       let orbitLess = isAttack ? (orbTxt ? +orbTxt[2] : 90) : (orbTxt ? +orbTxt[1] : 60);
       if (!isAttack && is056(GD)) orbitLess = Math.max(orbitLess, 75);
       projWeight = orbitOn ? 1 + (projOnTarget - 1) * (1 - orbitLess / 100) : projOnTarget;
@@ -20519,7 +20582,11 @@ window.BOCharacter = function (ctx) {
 
 
 
-        const vuln = [o.extraTakenPct || 0].concat(phys ? [maimPct] : [], golemTaken - 1 && !nohit ? [(golemTaken - 1) * 100] : [], onHit && groundPct ? [groundPct] : []);
+
+
+
+        const golemOnNohit = apiBuildAtLeast(GD, 96, '2026-11-28');
+        const vuln = [o.extraTakenPct || 0].concat(phys ? [maimPct] : [], golemTaken - 1 && (!nohit || golemOnNohit) ? [(golemTaken - 1) * 100] : [], onHit && groundPct ? [groundPct] : []);
         return curseTakenK(activeCurses, d, dot, 'kinds', [{ k: 'mark', v: markV }, { k: 'curse', v: onHit && unravel[d] ? unravel[d] : 0 }].concat(vuln));
       }
       if (rule === 'add') return curseTakenK(activeCurses, d, dot, 'add',extras.concat(golemTaken - 1 ? [(golemTaken - 1) * 100] : [], onHit && groundPct ? [groundPct] : []));
@@ -21658,7 +21725,7 @@ window.BOCharacter = function (ctx) {
 
 
           const kTxt = /\(([\d.]+)% below Rupture Level (\d+), ([\d.]+)% at \d+-(\d+), ([\d.]+)% from \d+\)/i.exec((GD.supports.kindled_remains || {}).Description || '');
-          const grown = !!kTxt && /grown by the skill/i.test(GD.supports.kindled_remains.Description);
+          const grown = !!kTxt && /(?:grown|scaled) by the skill/i.test(GD.supports.kindled_remains.Description); // data 96: "scaled by the skill's increased and more damage"
           const bands = kTxt ? [[+kTxt[2], +kTxt[1]], [+kTxt[4] + 1, +kTxt[3]], [Infinity, +kTxt[5]]] : KINDLED_BANDS;
           let band = bands.find(b => rl < b[0])[1] * kp / KINDLED_BASE, grow = 1, corpseInc = 0;
           if (grown) {
@@ -22265,6 +22332,12 @@ window.BOCharacter = function (ctx) {
       const leechGain = Math.min(leech / 100 * hitDpsVs, max * leechCap / 100);
       const gain = regen + onHit * hitsPerSec + leechGain;
       let reserved = 0; const resInc = inc('Reservation');
+
+
+
+
+      const persistOf = tag => { let v = 0; for (const m of modsOf(mods, 'PersistReservation')) if (m.stat === 'PersistReservation' && m.mode === 'Inc' && (m.tags || []).some(t => lc(t) === tag)) { v += m.v; use(m, 'mana reservation'); } return v; };
+      const auraPersist = apiBuildAtLeast(GD, 96, '2026-11-28') ? persistOf('aura') : 0, orbitPersist = persistOf('orbit');
       for (const b of Object.values(GD.blessings)) {
         const tryLvl = b.Skill && !ch.hotbar.includes(b.Skill) && /herald/i.test(b.Id) && o.tryHeralds && o.tryHeralds[b.Id] > 0 ? +o.tryHeralds[b.Id] : 0;
         if (!b.Skill || !(ch.hotbar.includes(b.Skill) || tryLvl) || (o.off && o.off.has('vow:' + b.Id))) continue;
@@ -22276,7 +22349,7 @@ window.BOCharacter = function (ctx) {
         const resDesc = /^woebringer/i.test(b.Id) ? (GD.supports.woebringer || {}).Description : (GD.skills[lc(b.Skill)] || {}).Description;
         const resTxt = /reserves (\d+(?:\.\d+)?)% of your mana/i.exec(resDesc || '');
         const resPct = resTxt && b.ReservePct ? +resTxt[1] : (b.ReservePct || 0);
-        reserved += Math.round(((b.ReserveFlat || 0) + (b.ReserveFlatPerLevel || 0) * (lvl - 1) + resPct / 100 * max) * Math.max(0, 1 + resInc / 100));
+        reserved += Math.round(((b.ReserveFlat || 0) + (b.ReserveFlatPerLevel || 0) * (lvl - 1) + resPct / 100 * max) * Math.max(0, 1 + resInc / 100) / (1 + auraPersist / 100));
       }
 
 
@@ -22284,7 +22357,7 @@ window.BOCharacter = function (ctx) {
       if (econ) for (const tid of ['orbiting_hammers', 'pyre_of_faith', 'unholy_void']) {
         const ts = GD.skills[tid]; if (!ts || !ch.hotbar.some(h => lc(h) === tid) || (o.off && o.off.has('toggle:' + tid))) continue;
         const home = (ts.StarterClasses || []).some(c => lc(c) === lc(ch.classId || ''));
-        toggleHeld += Math.round(max * ruleNum(GD, 'r98.META.fPersistPct74', 30) / 100 * (home ? ruleNum(GD, 'r98.META.fPersistHomeMult74', 0.35) : 1));
+        toggleHeld += Math.round(max * ruleNum(GD, 'r98.META.fPersistPct74', 30) / 100 * (home ? ruleNum(GD, 'r98.META.fPersistHomeMult74', 0.35) : 1) / (tid === 'orbiting_hammers' ? 1 + orbitPersist / 100 : 1));
       }
       reserved += toggleHeld;
 
@@ -22936,6 +23009,8 @@ window.BOCharacter = function (ctx) {
 
     else for (const m of pickMods(mods, 'MinionCap', 'Flat')) if (fit(m) || ((m.tags || []).length && (m.tags || []).every(t => lc(t) === lc(mi.MonsterId || '')))) { alive += m.v; use(m, 'minion'); }
 
+
+
     const aliveBefore = alive;
     if (oneKind) alive = dismissed ? 0 : Math.max(alive * 2, alive + 2);
 
@@ -23398,7 +23473,7 @@ window.BOCharacter = function (ctx) {
     }
     if (still !== false && is086(GD) && (mods || []).some(m => m.stat === 'HallowStill')) {
       const t = (((GD.nodes || {}).r113_persona_pala_stride || {}).Text || '');
-      const tk = /take (\d+(?:\.\d+)?)% more damage/i.exec(t), cr = /\+(\d+(?:\.\d+)?)% chance to critically/i.exec(t);
+      const tk = /take (\d+(?:\.\d+)?)% more damage/i.exec(t), cr = /\+(\d+(?:\.\d+)?)% (?:chance to critically|critical strike chance)/i.exec(t);
       out.push({ name: 'Hallowed Stand', taken: tk ? +tk[1] : 10, crit: cr ? +cr[1] : 10, half: false });
     }
     return out;
@@ -23893,7 +23968,9 @@ window.BOCharacter = function (ctx) {
 
 
 
-  function markText(GD) { return /([\d.]+)% more damage(?: taken)? (?:for each|per) Mark, up to (\d+)/i.exec((GD.supports.hunters_mark_support || {}).Description || ''); }
+
+
+  function markText(GD) { return /([\d.]+)% more damage(?: taken)?(?: (?:for each|per) Mark)?, up to (\d+)/i.exec((GD.supports.hunters_mark_support || {}).Description || ''); }
   const armyMarkPct = (GD, ch) => {
     if (!(minionEngShare(GD) > 0)) return 0;
     const bar = new Set((ch.hotbar || []).filter(Boolean).map(lc));
@@ -26255,7 +26332,8 @@ window.BOStartApp = function () {
 
 
 
-    const lifeReservedPct = (ch.passives || []).includes('r114_chaos_warr_bloodledger') ? 15 : 0;
+
+    const lifeReservedPct = (ch.passives || []).includes('r114_chaos_warr_bloodledger') && !((GD.apiBuild || 0) >= 96) ? 15 : 0;
     return Object.assign(defenceCore(ch, mods, attr), { attr, armour: tot('Armour'), evasion: tot('Evasion'), block: tot('Block'), manaFirst, mana, lifeReservedPct }, defenceLess(ch, mods));
   }
 

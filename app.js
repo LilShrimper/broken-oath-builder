@@ -11082,11 +11082,29 @@ window.BOPatches = function (ctx) {
     m => '<span class="pt-kw" tabindex="0" data-kw="' + m + '">' + m + '</span>');
   function kwTip(k) { return KW[k] ? '<b>' + esc(k) + '</b><span class="pl-tip-sub">Keyword</span><span class="pl-tip-desc">' + esc(KW[k]) + '</span>' : ''; }
 
-  function trend(o, n) {
+
+
+  const DM = /^((?:Spell|Damage) (?:Min|Max)): (-?[\d.]+)$/;
+  function baseTrend(c) {
+    if (c.kind !== 'changed' || !c.lines) return { html: '', done: new Set() };
+    const v = {};
+    for (const [o, n] of c.lines) { const a = DM.exec(o || ''), b = DM.exec(n || ''); if (a && b && a[1] === b[1]) v[a[1]] = [+a[2], +b[2]]; }
+    const notes = [], done = new Set();
+    for (const k of ['Spell', 'Damage']) {
+      const lo = v[k + ' Min'], hi = v[k + ' Max']; if (!lo || !hi) continue;
+      done.add(k + ' Min'); done.add(k + ' Max');
+      const x = lo[0] + hi[0], y = lo[1] + hi[1]; if (!(x > 0) || x === y) continue;
+      const p = Math.round(Math.abs(y / x - 1) * 100), up = y > x;
+      notes.push('<span class="pt-trend ' + (up ? 'pt-buff' : 'pt-nerf') + '">about ' + (p || '<1') + '% ' + (up ? 'buff' : 'nerf') + ' overall</span>');
+    }
+    return { html: notes.join(''), done };
+  }
+  function trend(o, n, done) {
     const note = (t, cls) => ' <span class="pt-trend ' + cls + '">(' + t + ')</span>';
 
-    const dm = /^((?:Spell|Damage) (?:Min|Max)): (-?[\d.]+)$/, da = dm.exec(o || ''), db = dm.exec(n || '');
+    const da = DM.exec(o || ''), db = DM.exec(n || '');
     if (da && db && da[1] === db[1]) {
+      if (done && done.has(da[1])) return '';
       const x = +da[2], y = +db[2]; if (!(x > 0) || x === y) return '';
       const p = Math.round(Math.abs(y / x - 1) * 100), up = y > x;
       return note('about ' + (p || '<1') + '% ' + (up ? 'buff' : 'nerf'), up ? 'pt-buff' : 'pt-nerf');
@@ -11111,16 +11129,17 @@ window.BOPatches = function (ctx) {
     const many = c.n > 1 ? '<p class="pt-note">' + c.n + ' entries of this name in the game data.</p>' : '';
     if (c.kind === 'added') return compact ? '' : '<p class="pt-note">New in this build.</p>' + many;
     if (c.kind === 'removed') return '<p class="pt-note">Taken out of the game data in this build.</p>' + many;
+    const done = baseTrend(c).done;
     return '<ul class="pt-lines">' + c.lines.map(([o, n]) => {
       if (o && n && (o.length > 60 || n.length > 60)) { const [a, b] = wordDiff(o, n); return '<li class="pt-text"><div class="pt-old">' + kw(a) + '</div><div class="pt-new">' + kw(b) + '</div></li>'; }
-      return '<li>' + (o ? '<span class="pt-old">' + kw(esc(o)) + '</span>' : '') + (o && n ? '<span class="pt-arrow" aria-label="becomes">→</span>' : '') + (n ? '<span class="pt-new">' + (o ? '' : '<b>New line:</b> ') + kw(esc(n)) + trend(o, n) + '</span>' : '<span class="pt-new pt-gone">line removed</span>') + '</li>';
+      return '<li>' + (o ? '<span class="pt-old">' + kw(esc(o)) + '</span>' : '') + (o && n ? '<span class="pt-arrow" aria-label="becomes">→</span>' : '') + (n ? '<span class="pt-new">' + (o ? '' : '<b>New line:</b> ') + kw(esc(n)) + trend(o, n, done) + '</span>' : '<span class="pt-new pt-gone">line removed</span>') + '</li>';
     }).join('') + '</ul>';
   }
   const KIND = { added: 'New', removed: 'Removed', changed: 'Changed' };
   function entryHtml(c, withBuild, compact) {
     const b = withBuild && buildOf(c.b);
     return '<div class="pt-entry pt-' + c.kind + (compact ? ' pt-compact' : '') + '"><div class="pt-head">' + icon(c) + '<b' + tipAttr(c) + '>' + esc(c.name) + '</b><span class="pt-kind">' + KIND[c.kind] + '</span>' +
-      (withBuild && b ? '<span class="meta">' + esc(b.label) + ' · ' + esc(day(b.day)) + '</span>' + (b.src === 'game' ? SRC_TAG : '') : '<span class="meta">' + esc(secName(c.sec).replace(/s$/, '')) + '</span>') +
+      (withBuild && b ? '<span class="meta">' + esc(b.label) + ' · ' + esc(day(b.day)) + '</span>' + (b.src === 'game' ? SRC_TAG : '') : '<span class="meta">' + esc(secName(c.sec).replace(/s$/, '')) + '</span>') + baseTrend(c).html +
       (!withBuild ? '<button type="button" class="btn small ghost pt-hist" data-pt="hist" data-sec="' + esc(c.sec) + '" data-id="' + esc(c.id) + '">History</button>' : '') + '</div>' + linesHtml(c, compact) + '</div>';
   }
   const match = (c, q) => !q || lc(c.name).includes(q) || lc(c.id).includes(q) || c.lines.some(l => lc(l[0]).includes(q) || lc(l[1]).includes(q));
@@ -19035,7 +19054,13 @@ window.BOCharacter = function (ctx) {
 
 
 
-    addExtras(extraRules.filter(r => r.to === 'Fire'), pieces.some(p => p.conv) ? pieces : pieces.concat(extras.slice()));
+
+
+
+
+
+    const fireChain = !apiBuildAtLeast(GD, 96, '2026-11-28') && !pieces.some(p => p.conv);
+    addExtras(extraRules.filter(r => r.to === 'Fire'), fireChain ? pieces.concat(extras.slice()) : pieces);
 
 
 
